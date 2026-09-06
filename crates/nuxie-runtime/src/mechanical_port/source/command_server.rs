@@ -11,10 +11,7 @@ use crate::RuntimeBlobAsset;
 use crate::mechanical_port::source::{
     animation::semantic_listener_group::SemanticActionType,
     animation::state_machine_instance::{RuntimeStateMachineInstanceHandle, StateMachineInstance},
-    assets::{
-        audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset,
-        script_asset::ScriptAsset,
-    },
+    assets::{audio_asset::AudioAsset, font_asset::FontAsset, image_asset::ImageAsset},
     audio::audio_source::{AudioSource, AudioSourceRef},
     bindable_artboard::RuntimeBindableArtboardHandle,
     command_queue::{
@@ -27,6 +24,10 @@ use crate::mechanical_port::source::{
     factory::RuntimeFactoryHandle,
     file::{File, RuntimeFileHandle},
     file_asset_loader::{FileAssetLoader, FileAssetLoaderRef},
+    generated::assets::{
+        blob_asset_base::BlobAssetBase, manifest_asset_base::ManifestAssetBase,
+        text_asset_base::TextAssetBase,
+    },
     generated::core_registry::CoreCapabilities,
     hit_result::HitResult,
     layout::Alignment,
@@ -133,7 +134,11 @@ impl FileAssetLoader for CommandFileAssetLoader {
                 })
                 .unwrap_or(false);
         }
-        if asset.with_downcast::<ScriptAsset, _>(|_| ()).is_some()
+        // These assets cannot be registered externally. Leave in-band decoding
+        // to the importer. TextAsset includes both ScriptAsset and ShaderAsset.
+        if asset.is_type_of(TextAssetBase::TYPE_KEY)
+            || asset.is_type_of(BlobAssetBase::TYPE_KEY)
+            || asset.is_type_of(ManifestAssetBase::TYPE_KEY)
             || asset.with_downcast::<ImageAsset, _>(|_| ()).is_some()
             || asset.with_downcast::<AudioAsset, _>(|_| ()).is_some()
             || asset.with_downcast::<FontAsset, _>(|_| ()).is_some()

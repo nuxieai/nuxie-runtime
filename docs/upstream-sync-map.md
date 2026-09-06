@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `526625850eaf34fc1263d181808ffca10cae6ac1`
+- LAST_SYNCED_SHA: `694c0879279e956e928baa182df6c15e534f0635`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `694c0879279e956e928baa182df6c15e534f0635` | Command-server asset loader quietly delegates TextAsset (including scripts/shaders), BlobAsset, and ManifestAsset to in-band import, matching upstream's type hierarchy. | — |
 | `526625850eaf34fc1263d181808ffca10cae6ac1` | Already satisfied: upstream corrects the new deferred geometry test's stale pointer constructor to empty replay capabilities, exactly as the preceding Rust translation already does. No production change. | — |
 | `498419c45ef2ec48676730d9949b76164b12f4d0` | Prune empty scripted/dash/trim segments at upstream boundaries; filter empty per-verb deferred geometry and its query mirror; translate both new geometry tests. The new C++ benchmark registration is performance harness infrastructure and is not imported; no runtime behavior is excluded. | — |
 | `8a494cedae2db53f15bf85871406aa67b2429448` | Capability-only `DeferredSession` construction; removed device constructor and `bind_real_ore`; migrated translated tests, GMs, and Apple C-API import caller to explicit replay caps. The `.rive_head` pointer is editor-owned. Shader and decoder sources/artifacts are unchanged from the preceding checkpoint; their historical provenance is preserved. | — |

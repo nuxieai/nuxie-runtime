@@ -345,6 +345,20 @@ impl DeferredRenderPath {
             .downcast_ref::<Self>()
             .map_or(INVALID_RENDER_HANDLE, |p| p.resource.base.id)
     }
+    // Start the contour even when the segment itself is empty, matching
+    // RiveRenderPath.
+    fn append_line(path: &mut RawPath, p1: Vec2D) {
+        path.inject_implicit_move_if_needed_for_owner();
+        if path.points().last().copied() != Some(p1) {
+            path.line(p1);
+        }
+    }
+    fn append_cubic(path: &mut RawPath, p1: Vec2D, p2: Vec2D, p3: Vec2D) {
+        path.inject_implicit_move_if_needed_for_owner();
+        if path.points().last().copied() != Some(p1) || p1 != p2 || p2 != p3 {
+            path.cubic(p1, p2, p3);
+        }
+    }
     fn record_add_raw_path(&self, path: &RawPath) {
         self.resource.bump();
         let commands = self.resource.base.commands();
@@ -462,12 +476,15 @@ impl RenderPath for DeferredRenderPath {
         self.query_mirror(|query| query.move_to(x, y));
     }
     fn line_to(&mut self, x: f32, y: f32) {
-        self.scratch.get_mut().line_to(x, y);
-        self.query_mirror(|query| query.line_to(x, y));
+        Self::append_line(self.scratch.get_mut(), Vec2D::new(x, y));
+        self.query_mirror(|query| Self::append_line(query, Vec2D::new(x, y)));
     }
     fn cubic_to(&mut self, ox: f32, oy: f32, ix: f32, iy: f32, x: f32, y: f32) {
-        self.scratch.get_mut().cubic_to(ox, oy, ix, iy, x, y);
-        self.query_mirror(|query| query.cubic_to(ox, oy, ix, iy, x, y));
+        let p1 = Vec2D::new(ox, oy);
+        let p2 = Vec2D::new(ix, iy);
+        let p3 = Vec2D::new(x, y);
+        Self::append_cubic(self.scratch.get_mut(), p1, p2, p3);
+        self.query_mirror(|query| Self::append_cubic(query, p1, p2, p3));
     }
     fn close(&mut self) {
         self.scratch.get_mut().close();

@@ -25,7 +25,7 @@ impl ScriptedPathData {
             self.render_path
                 .as_mut()
                 .unwrap()
-                .add_raw_path(&to_render_raw_path(&self.raw_path));
+                .add_untrusted_raw_path(&to_render_raw_path(&self.raw_path));
         }
         self.render_path.as_deref_mut().unwrap()
     }

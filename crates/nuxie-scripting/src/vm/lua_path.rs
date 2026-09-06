@@ -85,7 +85,7 @@ impl ScriptedPath {
             self.render_path
                 .as_mut()
                 .expect("render path is initialized")
-                .add_raw_path(&to_render_raw_path(&self.raw_path));
+                .add_untrusted_raw_path(&to_render_raw_path(&self.raw_path));
         }
         self.render_path
             .as_ref()

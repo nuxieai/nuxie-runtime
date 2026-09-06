@@ -41,7 +41,7 @@ def main() -> None:
     checksums = {name: digest for digest, name in (
         line.split() for line in Path(__file__).with_name("vulkan-spirv.sha256").read_text().splitlines()
     )}
-    pinned_ref = "f7c22102d5aa505f70ebc03e9f83feb7f52301ab"
+    pinned_ref = "463c59fd91c08538ba37f9cccc14fa3413a0da23"
 
     includes = [
         match.decode("utf-8")

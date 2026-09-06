@@ -146,6 +146,9 @@ impl Line {
 #[derive(Clone, Copy, Debug)]
 struct Edge {
     alive: bool,
+    // Coincident-edge merges clear both upstream endpoint pointers. Keep this
+    // separately from connectivity, since a disconnected edge can retain them.
+    has_endpoints: bool,
     winding: i32,
     top: VertexId,
     bottom: VertexId,
@@ -177,6 +180,7 @@ impl Edge {
     ) -> Self {
         Self {
             alive: true,
+            has_endpoints: true,
             winding,
             top,
             bottom,
@@ -200,7 +204,9 @@ impl Edge {
     }
 
     fn distance(self, point: Vec2D, vertices: &[Vertex]) -> f64 {
-        if point == vertices[self.top].point || point == vertices[self.bottom].point {
+        if self.has_endpoints
+            && (point == vertices[self.top].point || point == vertices[self.bottom].point)
+        {
             0.0
         } else {
             self.line.distance(point)
@@ -271,6 +277,7 @@ struct Mesh {
     breadcrumbs: Vec<[Vec2D; 3]>,
     sorted_head: Option<VertexId>,
     sorted_tail: Option<VertexId>,
+    merge_collinear_stack_count: usize,
 }
 
 pub(crate) struct InnerFanTriangulator {
@@ -544,6 +551,7 @@ impl Mesh {
         ));
         self.insert_edge_below(edge_id, top, direction);
         self.insert_edge_above(edge_id, bottom, direction);
+        self.merge_collinear_stack_count = 0;
         self.merge_collinear_edges(edge_id, direction);
     }
 
@@ -607,36 +615,38 @@ impl Mesh {
             .extend(std::iter::repeat_n([a, b, c], winding as usize));
     }
 
-    fn set_top(&mut self, edge: EdgeId, vertex: VertexId, direction: SweepDirection) {
+    fn set_top(&mut self, edge: EdgeId, vertex: VertexId, direction: SweepDirection) -> bool {
         self.remove_edge_below(edge);
         self.append_breadcrumb(edge, vertex);
         self.edges[edge].top = vertex;
         if self.vertices[vertex].point == self.vertices[self.edges[edge].bottom].point {
             self.remove_edge_above(edge);
             self.edges[edge].alive = false;
-            return;
+            return true;
         }
         self.edges[edge].line = Line::new(
             self.vertices[vertex].point,
             self.vertices[self.edges[edge].bottom].point,
         );
         self.insert_edge_below(edge, vertex, direction);
+        self.merge_collinear_edges(edge, direction)
     }
 
-    fn set_bottom(&mut self, edge: EdgeId, vertex: VertexId, direction: SweepDirection) {
+    fn set_bottom(&mut self, edge: EdgeId, vertex: VertexId, direction: SweepDirection) -> bool {
         self.remove_edge_above(edge);
         self.append_breadcrumb(edge, vertex);
         self.edges[edge].bottom = vertex;
         if self.vertices[self.edges[edge].top].point == self.vertices[vertex].point {
             self.remove_edge_below(edge);
             self.edges[edge].alive = false;
-            return;
+            return true;
         }
         self.edges[edge].line = Line::new(
             self.vertices[self.edges[edge].top].point,
             self.vertices[vertex].point,
         );
         self.insert_edge_above(edge, vertex, direction);
+        self.merge_collinear_edges(edge, direction)
     }
 
     fn split_edge(
@@ -653,17 +663,23 @@ impl Mesh {
         let (top, bottom) =
             if direction.less(self.vertices[vertex].point, self.vertices[record.top].point) {
                 winding = -winding;
-                self.set_top(edge, vertex, direction);
+                if !self.set_top(edge, vertex, direction) {
+                    return None;
+                }
                 (vertex, record.top)
             } else if direction.less(
                 self.vertices[record.bottom].point,
                 self.vertices[vertex].point,
             ) {
                 winding = -winding;
-                self.set_bottom(edge, vertex, direction);
+                if !self.set_bottom(edge, vertex, direction) {
+                    return None;
+                }
                 (record.bottom, vertex)
             } else {
-                self.set_bottom(edge, vertex, direction);
+                if !self.set_bottom(edge, vertex, direction) {
+                    return None;
+                }
                 (vertex, record.bottom)
             };
         let new_edge = self.edges.len();
@@ -676,7 +692,10 @@ impl Mesh {
         ));
         self.insert_edge_below(new_edge, top, direction);
         self.insert_edge_above(new_edge, bottom, direction);
-        self.merge_collinear_edges(new_edge, direction);
+        self.merge_collinear_stack_count = 0;
+        if !self.merge_collinear_edges(new_edge, direction) {
+            return None;
+        }
         Some(new_edge)
     }
 
@@ -698,71 +717,98 @@ impl Mesh {
                 || right.distance(self.vertices[left.bottom].point, &self.vertices) >= 0.0)
     }
 
-    fn merge_edges_above(&mut self, edge: EdgeId, other: EdgeId, direction: SweepDirection) {
+    fn merge_edges_above(
+        &mut self,
+        edge: EdgeId,
+        other: EdgeId,
+        direction: SweepDirection,
+    ) -> bool {
         let (edge_record, other_record) = (self.edges[edge], self.edges[other]);
         if self.vertices[edge_record.top].point == self.vertices[other_record.top].point {
             self.edges[other].winding += edge_record.winding;
             self.disconnect_edge(edge);
             self.edges[edge].alive = false;
+            self.edges[edge].has_endpoints = false;
         } else if direction.less(
             self.vertices[edge_record.top].point,
             self.vertices[other_record.top].point,
         ) {
             self.edges[other].winding += edge_record.winding;
-            self.set_bottom(edge, other_record.top, direction);
+            return self.set_bottom(edge, other_record.top, direction);
         } else {
             self.edges[edge].winding += other_record.winding;
-            self.set_bottom(other, edge_record.top, direction);
+            return self.set_bottom(other, edge_record.top, direction);
         }
+        true
     }
 
-    fn merge_edges_below(&mut self, edge: EdgeId, other: EdgeId, direction: SweepDirection) {
+    fn merge_edges_below(
+        &mut self,
+        edge: EdgeId,
+        other: EdgeId,
+        direction: SweepDirection,
+    ) -> bool {
         let (edge_record, other_record) = (self.edges[edge], self.edges[other]);
         if self.vertices[edge_record.bottom].point == self.vertices[other_record.bottom].point {
             self.edges[other].winding += edge_record.winding;
             self.disconnect_edge(edge);
             self.edges[edge].alive = false;
+            self.edges[edge].has_endpoints = false;
         } else if direction.less(
             self.vertices[edge_record.bottom].point,
             self.vertices[other_record.bottom].point,
         ) {
             self.edges[edge].winding += other_record.winding;
-            self.set_top(other, edge_record.bottom, direction);
+            return self.set_top(other, edge_record.bottom, direction);
         } else {
             self.edges[other].winding += edge_record.winding;
-            self.set_top(edge, other_record.bottom, direction);
+            return self.set_top(edge, other_record.bottom, direction);
         }
+        true
     }
 
-    fn merge_collinear_edges(&mut self, edge: EdgeId, direction: SweepDirection) {
+    fn merge_collinear_edges(&mut self, edge: EdgeId, direction: SweepDirection) -> bool {
+        self.merge_collinear_stack_count += 1;
+        if self.merge_collinear_stack_count > 64 {
+            return false;
+        }
         while self.edges[edge].alive {
             let record = self.edges[edge];
             if let Some(previous) = record.prev_edge_above {
                 if self.top_collinear(previous, edge) {
-                    self.merge_edges_above(previous, edge, direction);
+                    if !self.merge_edges_above(previous, edge, direction) {
+                        return false;
+                    }
                     continue;
                 }
             }
             if let Some(next) = record.next_edge_above {
                 if self.top_collinear(edge, next) {
-                    self.merge_edges_above(next, edge, direction);
+                    if !self.merge_edges_above(next, edge, direction) {
+                        return false;
+                    }
                     continue;
                 }
             }
             if let Some(previous) = record.prev_edge_below {
                 if self.bottom_collinear(previous, edge) {
-                    self.merge_edges_below(previous, edge, direction);
+                    if !self.merge_edges_below(previous, edge, direction) {
+                        return false;
+                    }
                     continue;
                 }
             }
             if let Some(next) = record.next_edge_below {
                 if self.bottom_collinear(edge, next) {
-                    self.merge_edges_below(next, edge, direction);
+                    if !self.merge_edges_below(next, edge, direction) {
+                        return false;
+                    }
                     continue;
                 }
             }
             break;
         }
+        true
     }
 
     fn merge_coincident_vertices(&mut self, direction: SweepDirection) -> bool {
@@ -799,16 +845,12 @@ impl Mesh {
             self.vertices[partner].partner = Some(destination);
         }
         while let Some(edge) = self.vertices[source].first_edge_above {
+            self.merge_collinear_stack_count = 0;
             self.set_bottom(edge, destination, direction);
-            if self.edges[edge].alive {
-                self.merge_collinear_edges(edge, direction);
-            }
         }
         while let Some(edge) = self.vertices[source].first_edge_below {
+            self.merge_collinear_stack_count = 0;
             self.set_top(edge, destination, direction);
-            if self.edges[edge].alive {
-                self.merge_collinear_edges(edge, direction);
-            }
         }
         let (previous, next) = (self.vertices[source].prev, self.vertices[source].next);
         if let Some(previous) = previous {
@@ -960,6 +1002,16 @@ impl Mesh {
                 }
                 left_edge = Some(edge);
                 let top = self.edges[edge].top;
+                if !self.edges[edge].has_endpoints
+                    || self.vertices[top]
+                        .left_enclosing_edge
+                        .is_some_and(|left| !self.edges[left].has_endpoints)
+                    || self.vertices[top]
+                        .right_enclosing_edge
+                        .is_some_and(|right| !self.edges[right].has_endpoints)
+                {
+                    return false;
+                }
                 if direction.less(self.vertices[top].point, self.vertices[destination].point) {
                     let left_bad = self.vertices[top].left_enclosing_edge.is_some_and(|left| {
                         self.edges[left].distance(self.vertices[top].point, &self.vertices) <= 0.0
@@ -1144,7 +1196,9 @@ impl Mesh {
             }
             self.edges[other].winding += edge_record.winding;
             self.disconnect_edge(edge);
+            active.remove(self, edge);
             self.edges[edge].alive = false;
+            self.edges[edge].has_endpoints = false;
         } else if direction.less(
             self.vertices[edge_record.top].point,
             self.vertices[other_record.top].point,
@@ -1179,7 +1233,9 @@ impl Mesh {
             }
             self.edges[other].winding += edge_record.winding;
             self.disconnect_edge(edge);
+            active.remove(self, edge);
             self.edges[edge].alive = false;
+            self.edges[edge].has_endpoints = false;
         } else if direction.less(
             self.vertices[edge_record.bottom].point,
             self.vertices[other_record.bottom].point,
@@ -1206,6 +1262,10 @@ impl Mesh {
         current: &mut VertexId,
         direction: SweepDirection,
     ) -> bool {
+        self.merge_collinear_stack_count += 1;
+        if self.merge_collinear_stack_count > 64 {
+            return false;
+        }
         while self.edges[edge].alive {
             let record = self.edges[edge];
             if let Some(previous) = record.prev_edge_above {
@@ -1289,6 +1349,7 @@ impl Mesh {
         let new_edge = self.allocate_edge(top, bottom, winding, record.edge_type);
         self.insert_edge_below(new_edge, top, direction);
         self.insert_edge_above(new_edge, bottom, direction);
+        self.merge_collinear_stack_count = 0;
         if !self.merge_collinear_edges_sweep(new_edge, active, current, direction) {
             return CheckResult::Failed;
         }
@@ -1432,16 +1493,19 @@ impl Mesh {
     fn simplify(&mut self, direction: SweepDirection) -> Result<bool, ()> {
         self.merge_coincident_vertices(direction);
         let initial_edges = self.edges.len().max(1);
+        let initial_vertices = self.sorted_vertices().count();
+        let mut visited_vertices = 0usize;
         let mut intersection_count = 0usize;
         let mut found_intersection = false;
         let mut active = ActiveEdgeList::default();
         let mut current = self.sorted_head;
         while let Some(mut vertex) = current {
+            visited_vertices += 1;
             if !self.vertices[vertex].is_connected() {
                 current = self.vertices[vertex].next;
                 continue;
             }
-            if self.edges.len() > 170 * initial_edges || intersection_count > 500_000 {
+            if self.edges.len() > 170 * initial_edges || visited_vertices > 170 * initial_vertices {
                 return Err(());
             }
             let (left_enclosing, right_enclosing) = loop {
@@ -1486,6 +1550,9 @@ impl Mesh {
                     CheckResult::FoundIntersection => {
                         found_intersection = true;
                         intersection_count += 1;
+                        if intersection_count > 500_000 {
+                            return Err(());
+                        }
                         continue;
                     }
                     CheckResult::NoIntersection => break (left_enclosing, right_enclosing),
@@ -2187,6 +2254,19 @@ fn recursive_edge_intersection(
 
 #[cfg(test)]
 mod tests {
+    // tests/unit_tests/renderer/triangulator_test.cpp at 463c59fd.
+    #[test]
+    fn gr_triangulator_edge_dist_null_pointer() {
+        let vertices = [
+            Vertex::new(Vec2D::new(0.0, 0.0), 0),
+            Vertex::new(Vec2D::new(0.0, 10.0), 0),
+        ];
+        let mut edge = Edge::new(0, 1, 1, EdgeType::Inner, &vertices);
+        edge.has_endpoints = false;
+        let vertex = Vertex::new(Vec2D::new(1.0, 2.0), 0);
+        assert!(edge.distance(vertex.point, &vertices) > 0.0);
+        assert!(!(edge.distance(vertex.point, &vertices) < 0.0));
+    }
     // tests/unit_tests/renderer/triangulator_test.cpp at f7c22102.
     #[test]
     fn inner_fan_triangulator_retrofitted_cubics() {

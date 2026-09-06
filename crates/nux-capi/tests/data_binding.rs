@@ -175,6 +175,10 @@ fn scalar_fixture() -> Vec<u8> {
 }
 
 fn shared_nested_list_fixture() -> Vec<u8> {
+    shared_nested_list_fixture_with_item_artboard(true)
+}
+
+fn shared_nested_list_fixture_with_item_artboard(item_artboard: bool) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 0x554e_4956, 0] {
         push_var_uint(&mut bytes, value);
@@ -237,11 +241,11 @@ fn shared_nested_list_fixture() -> Vec<u8> {
     object(&mut bytes, "Artboard", |bytes| {
         uint(bytes, "Artboard", "viewModelId", 0)
     });
-    // Exact File::viewModelInstanceListItem resolves the list item's implicit
-    // artboard by the inserted instance's view-model id.
-    object(&mut bytes, "Artboard", |bytes| {
-        uint(bytes, "Artboard", "viewModelId", 1)
-    });
+    if item_artboard {
+        object(&mut bytes, "Artboard", |bytes| {
+            uint(bytes, "Artboard", "viewModelId", 1)
+        });
+    }
     bytes
 }
 
@@ -1249,7 +1253,15 @@ fn flattened_snapshot_preserves_shared_nested_and_list_identity() {
 
 #[test]
 fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology() {
-    let bytes = shared_nested_list_fixture();
+    qualify_structural_mutations(shared_nested_list_fixture());
+}
+
+#[test]
+fn data_only_list_items_support_atomic_structural_mutations_without_an_artboard() {
+    qualify_structural_mutations(shared_nested_list_fixture_with_item_artboard(false));
+}
+
+fn qualify_structural_mutations(bytes: Vec<u8>) {
     let file = import_bytes(&bytes);
     let mut root = std::ptr::null_mut();
     let mut replacement = std::ptr::null_mut();

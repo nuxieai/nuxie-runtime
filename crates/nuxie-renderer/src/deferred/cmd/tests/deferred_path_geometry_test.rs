@@ -1,4 +1,4 @@
-//! tests/unit_tests/renderer/deferred_path_geometry_test.cpp at 498419c4.
+//! tests/unit_tests/renderer/deferred_path_geometry_test.cpp at 52662585.
 //!
 //! A host RawPath re-enters the recorder through the per-verb builders, so they
 //! must drop the same zero-length segments as RiveRenderPath. No GPU.

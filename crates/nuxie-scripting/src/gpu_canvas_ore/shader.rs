@@ -1,7 +1,7 @@
 //! Shader entry selection and binding-map layout construction from
 //! `src/lua/renderer/lua_gpu.cpp` and `ScriptedShader` in rive_lua_libs.hpp.
 use super::*;
-use nuxie_ore_metal::binding_map::{BindingMap, ResourceKind, TextureSampleType, TextureViewDim};
+use nuxie_ore_metal::bind_group_layout::makeBindGroupLayoutFromShader;
 use nuxie_ore_metal::shader_module::ShaderModule;
 use nuxie_render_api::GpuCanvasShaderStage;
 
@@ -136,80 +136,6 @@ pub(super) struct Layout {
 }
 impl UserData for Layout {}
 
-fn entries_from_shader(
-    shader: Option<&ShaderModule>,
-    group: u32,
-    dynamic: &[u32],
-) -> Vec<BindGroupLayoutEntry> {
-    let Some(shader) = shader else {
-        return Vec::new();
-    };
-    let mut entries = Vec::new();
-    for index in 0..shader.m_bindingMap.size() {
-        if entries.len() == 16 {
-            break;
-        }
-        let source = shader.m_bindingMap.at(index);
-        if u32::from(source.group) != group {
-            continue;
-        }
-        let kind = match source.kind {
-            ResourceKind::StorageBufferRO => BindingKind::storageBufferRO,
-            ResourceKind::StorageBufferRW => BindingKind::storageBufferRW,
-            ResourceKind::SampledTexture => BindingKind::sampledTexture,
-            ResourceKind::StorageTexture => BindingKind::storageTexture,
-            ResourceKind::Sampler => BindingKind::sampler,
-            ResourceKind::ComparisonSampler => BindingKind::comparisonSampler,
-            _ => BindingKind::uniformBuffer,
-        };
-        let texture_view = match source.textureViewDim {
-            TextureViewDim::Cube => TextureViewDimension::cube,
-            TextureViewDim::CubeArray => TextureViewDimension::cubeArray,
-            TextureViewDim::D3 => TextureViewDimension::texture3D,
-            TextureViewDim::D2Array => TextureViewDimension::array2D,
-            _ => TextureViewDimension::texture2D,
-        };
-        let sample_type = match source.textureSampleType {
-            TextureSampleType::UnfilterableFloat => SampleType::floatUnfilterable,
-            TextureSampleType::Depth => SampleType::depth,
-            TextureSampleType::Sint => SampleType::sint,
-            TextureSampleType::Uint => SampleType::uint,
-            _ => SampleType::floatFilterable,
-        };
-        let mut visibility = 0;
-        for (source_bit, output_bit) in [
-            (BindingMap::kStageVertex, StageVisibility::kVertex),
-            (BindingMap::kStageFragment, StageVisibility::kFragment),
-            (BindingMap::kStageCompute, StageVisibility::kCompute),
-        ] {
-            if u32::from(source.stageMask) & source_bit != 0 {
-                visibility |= output_bit;
-            }
-        }
-        let native_slot = |slot| {
-            if slot == BindingMap::kAbsent {
-                BindGroupLayoutEntry::kNativeSlotAbsent
-            } else {
-                u32::from(slot)
-            }
-        };
-        entries.push(BindGroupLayoutEntry {
-            binding: u32::from(source.binding),
-            kind,
-            visibility: StageVisibility { mask: visibility },
-            hasDynamicOffset: kind == BindingKind::uniformBuffer
-                && dynamic.contains(&u32::from(source.binding)),
-            textureViewDim: texture_view,
-            textureSampleType: sample_type,
-            textureMultisampled: source.textureMultisampled,
-            nativeSlotVS: native_slot(source.backendSlot[0]),
-            nativeSlotFS: native_slot(source.backendSlot[1]),
-            ..BindGroupLayoutEntry::default()
-        });
-    }
-    entries
-}
-
 pub(super) fn auto_layouts(
     context: &mut dyn ContextApi,
     shader: &Shader,
@@ -232,16 +158,9 @@ pub(super) fn auto_layouts(
         if !seen[group] {
             continue;
         }
-        let entries = entries_from_shader(Some(module), group as u32, &[]);
         // Source does not diagnose allocation here: null is passed to pipeline
         // validation for an automatically reflected layout.
-        layouts[group] = context
-            .makeBindGroupLayout(&BindGroupLayoutDesc {
-                groupIndex: group as u32,
-                entries: Some(&entries),
-                entryCount: entries.len() as u32,
-                ..BindGroupLayoutDesc::default()
-            })
+        layouts[group] = makeBindGroupLayoutFromShader(context, Some(module), group as u32, &[])
             .map(|resource| Layout {
                 resource,
                 group: group as u32,
@@ -285,14 +204,9 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             Error::runtime("GPUBindGroupLayout.new: 'shader' must be a Shader with a loaded module")
         })?;
         let dynamic = dynamic_ubo_bindings(&desc)?;
-        let entries = entries_from_shader(shader.vertex_module(), group, &dynamic);
         let mut context = context.borrow_mut();
-        let resource = context.makeBindGroupLayout(&BindGroupLayoutDesc {
-            groupIndex: group,
-            entries: Some(&entries),
-            entryCount: entries.len() as u32,
-            ..BindGroupLayoutDesc::default()
-        });
+        let resource =
+            makeBindGroupLayoutFromShader(&mut *context, shader.vertex_module(), group, &dynamic);
         let Some(resource) = resource else {
             let error = context.lastError();
             context.clearLastError();

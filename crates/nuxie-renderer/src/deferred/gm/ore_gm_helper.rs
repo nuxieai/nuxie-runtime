@@ -6,10 +6,7 @@ use crate::{
     },
     RenderMode,
 };
-use nuxie_ore_metal::{
-    binding_map::{ResourceKind, TextureSampleType, TextureViewDim},
-    context::FrameDescriptor,
-};
+use nuxie_ore_metal::context::FrameDescriptor;
 pub(super) use nuxie_ore_metal::{
     context::ContextApi, gpu_resource::AnyResourceHandle, render_pass::RenderPassApi, types::*,
 };
@@ -499,65 +496,11 @@ pub(super) fn layout_from_shader(
     shader: &AnyResourceHandle,
     group: u32,
 ) -> AnyResourceHandle {
-    let bm = &shader.shaderModuleBase().unwrap().m_bindingMap;
-    let mut entries = Vec::new();
-    for i in 0..bm.size() {
-        if entries.len() == 16 {
-            break;
-        }
-        let e = bm.at(i);
-        if u32::from(e.group) != group {
-            continue;
-        }
-        let kind = match e.kind {
-            ResourceKind::StorageBufferRO => BindingKind::storageBufferRO,
-            ResourceKind::StorageBufferRW => BindingKind::storageBufferRW,
-            ResourceKind::SampledTexture => BindingKind::sampledTexture,
-            ResourceKind::StorageTexture => BindingKind::storageTexture,
-            ResourceKind::Sampler => BindingKind::sampler,
-            ResourceKind::ComparisonSampler => BindingKind::comparisonSampler,
-            _ => BindingKind::uniformBuffer,
-        };
-        entries.push(BindGroupLayoutEntry {
-            binding: u32::from(e.binding),
-            kind,
-            visibility: StageVisibility {
-                mask: e.stageMask & 7,
-            },
-            hasDynamicOffset: false,
-            textureViewDim: match e.textureViewDim {
-                TextureViewDim::Cube => TextureViewDimension::cube,
-                TextureViewDim::CubeArray => TextureViewDimension::cubeArray,
-                TextureViewDim::D3 => TextureViewDimension::texture3D,
-                TextureViewDim::D2Array => TextureViewDimension::array2D,
-                _ => TextureViewDimension::texture2D,
-            },
-            textureSampleType: match e.textureSampleType {
-                TextureSampleType::UnfilterableFloat => SampleType::floatUnfilterable,
-                TextureSampleType::Depth => SampleType::depth,
-                TextureSampleType::Sint => SampleType::sint,
-                TextureSampleType::Uint => SampleType::uint,
-                _ => SampleType::floatFilterable,
-            },
-            textureMultisampled: e.textureMultisampled,
-            nativeSlotVS: if e.backendSlot[0] == u16::MAX {
-                u32::MAX
-            } else {
-                u32::from(e.backendSlot[0])
-            },
-            nativeSlotFS: if e.backendSlot[1] == u16::MAX {
-                u32::MAX
-            } else {
-                u32::from(e.backendSlot[1])
-            },
-            ..Default::default()
-        });
-    }
-    ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
-        groupIndex: group,
-        entries: Some(&entries),
-        entryCount: entries.len() as u32,
-        ..Default::default()
-    })
+    nuxie_ore_metal::bind_group_layout::makeBindGroupLayoutFromShader(
+        ctx,
+        shader.shaderModuleBase(),
+        group,
+        &[],
+    )
     .expect("GM reflected layout")
 }

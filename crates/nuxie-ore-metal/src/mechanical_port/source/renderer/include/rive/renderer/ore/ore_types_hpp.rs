@@ -893,8 +893,8 @@ pub struct BindGroupLayoutEntry {
     pub minBindingSize: u32,
 
     // Pre-resolved native slots, per-stage. Populated by the caller from
-    // the shader's binding map (typically via the GM helper
-    // `makeLayoutFromShader(ctx, shader, group)`). Used by backends with
+    // the shader's binding map (typically via
+    // `makeBindGroupLayoutFromShader(ctx, shader, group)`). Used by backends with
     // no native layout object (Metal: buffer index; D3D11: per-stage
     // register; GL: global slot). Vulkan and WebGPU ignore — those
     // backends use `binding` directly (per-set namespace).

@@ -37,6 +37,11 @@ use super::ore_types_hpp::BindGroupLayoutEntry;
 // class ContextMetal;
 // class ContextGL;
 // class ContextD3D11;
+// class ShaderModule;
+// populateBindGroupLayoutEntriesFromShader / makeBindGroupLayoutFromShader:
+// implemented in the paired ore_bind_group_layout_cpp.rs and exposed through
+// the public bind_group_layout module. Slices carry the pointer/count pairs;
+// Option<&ShaderModule> preserves the nullable upstream shader argument.
 
 // Public Ore type — created via `Context::makeBindGroupLayout`. Carries the
 // user-supplied entries plus per-backend baked layout handles.

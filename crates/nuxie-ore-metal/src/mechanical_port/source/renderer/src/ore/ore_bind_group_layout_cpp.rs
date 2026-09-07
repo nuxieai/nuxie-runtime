@@ -16,8 +16,79 @@
 #![allow(non_upper_case_globals)]
 use super::*;
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_resource_hpp::AnyResourceHandle;
+use crate::{context::ContextApi, shader_module::ShaderModule};
 
 // namespace rive::ore
+
+#[cfg(all(test, feature = "with-rive-tools"))]
+mod shader_layout_tests {
+    use super::*;
+
+    #[test]
+    fn shared_population_preserves_fields_and_reflects_binding_metadata() {
+        let mut shader = ShaderModule::new();
+        shader.m_bindingMap.push(&BindingMapEntry {
+            group: 1,
+            binding: 7,
+            kind: ResourceKind::UniformBuffer,
+            stageMask: 7,
+            backendSlot: [4, BindingMap::kAbsent, 9],
+            ..Default::default()
+        });
+        shader.m_bindingMap.push(&BindingMapEntry {
+            group: 0,
+            binding: 9,
+            ..Default::default()
+        });
+        shader.m_bindingMap.push(&BindingMapEntry {
+            group: 1,
+            binding: 8,
+            kind: ResourceKind::SampledTexture,
+            textureViewDim: TextureViewDim::CubeArray,
+            textureSampleType: TextureSampleType::Uint,
+            textureMultisampled: true,
+            ..Default::default()
+        });
+        let mut entries = [BindGroupLayoutEntry {
+            minBindingSize: 123,
+            nativeSlotCS: 456,
+            ..Default::default()
+        }; 2];
+        assert_eq!(
+            populateBindGroupLayoutEntriesFromShader(&mut entries, Some(&shader), 1, &[7, 8]),
+            2
+        );
+        assert_eq!(entries[0].binding, 7);
+        assert_eq!(entries[0].visibility.mask, 7);
+        assert!(entries[0].hasDynamicOffset);
+        assert_eq!(entries[0].nativeSlotVS, 4);
+        assert_eq!(
+            entries[0].nativeSlotFS,
+            BindGroupLayoutEntry::kNativeSlotAbsent
+        );
+        assert_eq!(entries[0].minBindingSize, 123);
+        assert_eq!(entries[0].nativeSlotCS, 456);
+        assert_eq!(entries[1].binding, 8);
+        assert!(!entries[1].hasDynamicOffset);
+        assert!(entries[1].textureViewDim == TextureViewDimension::cubeArray);
+        assert!(entries[1].textureSampleType == SampleType::uint);
+        assert!(entries[1].textureMultisampled);
+        assert_eq!(
+            populateBindGroupLayoutEntriesFromShader(&mut entries[..1], Some(&shader), 1, &[]),
+            1
+        );
+        assert!(!entries[0].hasDynamicOffset);
+        assert_eq!(
+            populateBindGroupLayoutEntriesFromShader(&mut entries, None, 1, &[]),
+            0
+        );
+        assert_eq!(entries[0].binding, 7);
+        assert_eq!(
+            populateBindGroupLayoutEntriesFromShader(&mut [], Some(&shader), 1, &[]),
+            0
+        );
+    }
+}
 
 impl BindGroupLayout {
     // const BindGroupLayoutEntry* BindGroupLayout::findEntry(uint32_t binding) const
@@ -39,6 +110,120 @@ impl BindGroupLayout {
             false
         }
     }
+}
+
+// Map binding-map types to layout-entry types.
+fn bindingKindFromResource(kind: ResourceKind) -> BindingKind {
+    match kind {
+        ResourceKind::UniformBuffer => BindingKind::uniformBuffer,
+        ResourceKind::StorageBufferRO => BindingKind::storageBufferRO,
+        ResourceKind::StorageBufferRW => BindingKind::storageBufferRW,
+        ResourceKind::SampledTexture => BindingKind::sampledTexture,
+        ResourceKind::StorageTexture => BindingKind::storageTexture,
+        ResourceKind::Sampler => BindingKind::sampler,
+        ResourceKind::ComparisonSampler => BindingKind::comparisonSampler,
+        _ => BindingKind::uniformBuffer,
+    }
+}
+
+fn viewDimFromBindingMap(dimension: TextureViewDim) -> TextureViewDimension {
+    match dimension {
+        TextureViewDim::Cube => TextureViewDimension::cube,
+        TextureViewDim::CubeArray => TextureViewDimension::cubeArray,
+        TextureViewDim::D3 => TextureViewDimension::texture3D,
+        TextureViewDim::D2Array => TextureViewDimension::array2D,
+        TextureViewDim::D1 | TextureViewDim::D2 | TextureViewDim::Undefined => {
+            TextureViewDimension::texture2D
+        }
+        _ => TextureViewDimension::texture2D,
+    }
+}
+
+fn sampleTypeFromBindingMap(sample: TextureSampleType) -> SampleType {
+    match sample {
+        TextureSampleType::UnfilterableFloat => SampleType::floatUnfilterable,
+        TextureSampleType::Depth => SampleType::depth,
+        TextureSampleType::Sint => SampleType::sint,
+        TextureSampleType::Uint => SampleType::uint,
+        TextureSampleType::Float | TextureSampleType::Undefined => SampleType::floatFilterable,
+        _ => SampleType::floatFilterable,
+    }
+}
+
+/// Fill entries from the shader's binding map, preserving caller-owned fields
+/// not written upstream. The slice length represents `maxEntries`.
+/// `dynamicUBOBindings` contains WGSL binding values within `groupIndex`.
+pub fn populateBindGroupLayoutEntriesFromShader(
+    entries: &mut [BindGroupLayoutEntry],
+    shader: Option<&ShaderModule>,
+    groupIndex: u32,
+    dynamicUBOBindings: &[u32],
+) -> u32 {
+    let Some(shader) = shader else {
+        return 0;
+    };
+    let mut n = 0;
+    for i in 0..shader.m_bindingMap.size() {
+        if n == entries.len() {
+            break;
+        }
+        let e = shader.m_bindingMap.at(i);
+        if u32::from(e.group) != groupIndex {
+            continue;
+        }
+        let out = &mut entries[n];
+        n += 1;
+        out.binding = u32::from(e.binding);
+        out.kind = bindingKindFromResource(e.kind);
+        let mut visibility = 0;
+        for (source, destination) in [
+            (BindingMap::kStageVertex, StageVisibility::kVertex),
+            (BindingMap::kStageFragment, StageVisibility::kFragment),
+            (BindingMap::kStageCompute, StageVisibility::kCompute),
+        ] {
+            if u32::from(e.stageMask) & source != 0 {
+                visibility |= destination;
+            }
+        }
+        out.visibility.mask = visibility;
+        out.hasDynamicOffset =
+            out.kind == BindingKind::uniformBuffer && dynamicUBOBindings.contains(&out.binding);
+        out.textureViewDim = viewDimFromBindingMap(e.textureViewDim);
+        out.textureSampleType = sampleTypeFromBindingMap(e.textureSampleType);
+        out.textureMultisampled = e.textureMultisampled;
+        let native_slot = |slot| {
+            if slot == BindingMap::kAbsent {
+                BindGroupLayoutEntry::kNativeSlotAbsent
+            } else {
+                u32::from(slot)
+            }
+        };
+        out.nativeSlotVS = native_slot(e.backendSlot[0]);
+        out.nativeSlotFS = native_slot(e.backendSlot[1]);
+    }
+    n as u32
+}
+
+/// Derive at most sixteen entries and create the layout through the backend.
+pub fn makeBindGroupLayoutFromShader(
+    ctx: &mut dyn ContextApi,
+    shader: Option<&ShaderModule>,
+    groupIndex: u32,
+    dynamicUBOBindings: &[u32],
+) -> Option<AnyResourceHandle> {
+    let mut entries = [BindGroupLayoutEntry::default(); 16];
+    let n = populateBindGroupLayoutEntriesFromShader(
+        &mut entries,
+        shader,
+        groupIndex,
+        dynamicUBOBindings,
+    );
+    ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
+        groupIndex,
+        entries: Some(&entries),
+        entryCount: n,
+        ..BindGroupLayoutDesc::default()
+    })
 }
 
 // Map ore::BindingKind (public layout API) ↔ ore::ResourceKind (binding-map

@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `64186dc048c7b81aee83a5290a2bb520fdffaa1e`
+- LAST_SYNCED_SHA: `9f1d2ed110a6eda762ecb4716ceb5fecf6772699`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `9f1d2ed110a6eda762ecb4716ceb5fecf6772699` | Move shader-derived bind-group layout population/construction into shared ORE; route Lua and GM callers through that owner, preserving reflection metadata, visibility, dynamic UBO selection, native slots, and entry limits. | — |
 | `64186dc048c7b81aee83a5290a2bb520fdffaa1e` | Port Luau dependency-tree delta f4a8c732→fb6ff089 into retained luaur: unconditional GC/userdata fixes, bounded parser/bytecode-library corrections. Retain disabled experimental classes/JIT and Rust hash storage; no new scripting backend. See luau-fork.md for precise profile limits. | — |
 | `47862791523acad123ef02e3d6d7476c9b615159` | Yoga-only style-storage optimization is inapplicable to retained Taffy. Rust already has one authoritative LayoutData style (moved out/restored for safe applier borrowing), not duplicate YGNode/YGStyle state. Preserve three-phase applier ordering, dirt propagation, child synchronization, and solver-cache projection. | — |
 | `f35441b52a95e542a766debd9d2b3dc21905cdbb` | Already satisfied within approved browser boundaries: WebGL2 PLS passes owned Uint32Array values from Rust slices; scripted image decoding uses the Rust codec with owned bytes. Neither uses Emscripten Module heap-view exports. Do not introduce Emscripten for its heap-view fix. | — |

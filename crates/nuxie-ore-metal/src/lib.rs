@@ -27,6 +27,9 @@ pub mod bind_group {
 }
 pub mod bind_group_layout {
     pub use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_bind_group_layout_hpp::*;
+    pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
+        makeBindGroupLayoutFromShader, populateBindGroupLayoutEntriesFromShader,
+    };
     #[doc(hidden)]
     pub use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
         validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,

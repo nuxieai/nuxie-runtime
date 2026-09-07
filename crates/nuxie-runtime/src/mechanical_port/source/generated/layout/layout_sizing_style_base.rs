@@ -107,7 +107,7 @@ impl LayoutSizingStyleBase {
         if self.min_width() == value {
             return false;
         }
-        self.min_max_sizing.ensure().min_width = value;
+        self.min_max_sizing.ensure_allocated().min_width = value;
         true
     }
     pub fn max_width(&self) -> f32 {
@@ -134,7 +134,7 @@ impl LayoutSizingStyleBase {
         if self.max_width() == value {
             return false;
         }
-        self.min_max_sizing.ensure().max_width = value;
+        self.min_max_sizing.ensure_allocated().max_width = value;
         true
     }
     pub fn min_height(&self) -> f32 {
@@ -161,7 +161,7 @@ impl LayoutSizingStyleBase {
         if self.min_height() == value {
             return false;
         }
-        self.min_max_sizing.ensure().min_height = value;
+        self.min_max_sizing.ensure_allocated().min_height = value;
         true
     }
     pub fn max_height(&self) -> f32 {
@@ -188,7 +188,7 @@ impl LayoutSizingStyleBase {
         if self.max_height() == value {
             return false;
         }
-        self.min_max_sizing.ensure().max_height = value;
+        self.min_max_sizing.ensure_allocated().max_height = value;
         true
     }
     pub fn min_width_units_value(&self) -> u8 {
@@ -215,7 +215,7 @@ impl LayoutSizingStyleBase {
         if self.min_width_units_value() == value {
             return false;
         }
-        self.min_max_sizing.ensure().min_width_units_value = value;
+        self.min_max_sizing.ensure_allocated().min_width_units_value = value;
         true
     }
     pub fn max_width_units_value(&self) -> u8 {
@@ -242,7 +242,7 @@ impl LayoutSizingStyleBase {
         if self.max_width_units_value() == value {
             return false;
         }
-        self.min_max_sizing.ensure().max_width_units_value = value;
+        self.min_max_sizing.ensure_allocated().max_width_units_value = value;
         true
     }
     pub fn min_height_units_value(&self) -> u8 {
@@ -269,7 +269,7 @@ impl LayoutSizingStyleBase {
         if self.min_height_units_value() == value {
             return false;
         }
-        self.min_max_sizing.ensure().min_height_units_value = value;
+        self.min_max_sizing.ensure_allocated().min_height_units_value = value;
         true
     }
     pub fn max_height_units_value(&self) -> u8 {
@@ -296,7 +296,7 @@ impl LayoutSizingStyleBase {
         if self.max_height_units_value() == value {
             return false;
         }
-        self.min_max_sizing.ensure().max_height_units_value = value;
+        self.min_max_sizing.ensure_allocated().max_height_units_value = value;
         true
     }
     pub fn layout_width_scale_type(&self) -> u8 {
@@ -467,35 +467,35 @@ impl LayoutSizingStyleBase {
     ) -> bool {
         match property_key {
             Self::MIN_WIDTH_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().min_width = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.min_max_sizing.ensure_allocated().min_width = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::MAX_WIDTH_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().max_width = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.min_max_sizing.ensure_allocated().max_width = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::MIN_HEIGHT_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().min_height = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.min_max_sizing.ensure_allocated().min_height = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::MAX_HEIGHT_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().max_height = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.min_max_sizing.ensure_allocated().max_height = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::MIN_WIDTH_UNITS_VALUE_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().min_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.min_max_sizing.ensure_allocated().min_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MAX_WIDTH_UNITS_VALUE_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().max_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.min_max_sizing.ensure_allocated().max_width_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MIN_HEIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().min_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.min_max_sizing.ensure_allocated().min_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MAX_HEIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.min_max_sizing.ensure().max_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.min_max_sizing.ensure_allocated().max_height_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::LAYOUT_WIDTH_SCALE_TYPE_PROPERTY_KEY => {

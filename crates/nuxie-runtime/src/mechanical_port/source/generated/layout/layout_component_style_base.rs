@@ -337,7 +337,7 @@ impl LayoutComponentStyleBase {
         if self.border_left() == value {
             return false;
         }
-        self.border.ensure().border_left = value;
+        self.border.ensure_allocated().border_left = value;
         true
     }
     pub fn border_right(&self) -> f32 {
@@ -364,7 +364,7 @@ impl LayoutComponentStyleBase {
         if self.border_right() == value {
             return false;
         }
-        self.border.ensure().border_right = value;
+        self.border.ensure_allocated().border_right = value;
         true
     }
     pub fn border_top(&self) -> f32 {
@@ -389,7 +389,7 @@ impl LayoutComponentStyleBase {
         if self.border_top() == value {
             return false;
         }
-        self.border.ensure().border_top = value;
+        self.border.ensure_allocated().border_top = value;
         true
     }
     pub fn border_bottom(&self) -> f32 {
@@ -416,7 +416,7 @@ impl LayoutComponentStyleBase {
         if self.border_bottom() == value {
             return false;
         }
-        self.border.ensure().border_bottom = value;
+        self.border.ensure_allocated().border_bottom = value;
         true
     }
     pub fn margin_left(&self) -> f32 {
@@ -643,7 +643,7 @@ impl LayoutComponentStyleBase {
         if self.position_left() == value {
             return false;
         }
-        self.absolute_position.ensure().position_left = value;
+        self.absolute_position.ensure_allocated().position_left = value;
         true
     }
     pub fn position_right(&self) -> f32 {
@@ -670,7 +670,7 @@ impl LayoutComponentStyleBase {
         if self.position_right() == value {
             return false;
         }
-        self.absolute_position.ensure().position_right = value;
+        self.absolute_position.ensure_allocated().position_right = value;
         true
     }
     pub fn position_top(&self) -> f32 {
@@ -697,7 +697,7 @@ impl LayoutComponentStyleBase {
         if self.position_top() == value {
             return false;
         }
-        self.absolute_position.ensure().position_top = value;
+        self.absolute_position.ensure_allocated().position_top = value;
         true
     }
     pub fn position_bottom(&self) -> f32 {
@@ -724,7 +724,7 @@ impl LayoutComponentStyleBase {
         if self.position_bottom() == value {
             return false;
         }
-        self.absolute_position.ensure().position_bottom = value;
+        self.absolute_position.ensure_allocated().position_bottom = value;
         true
     }
     pub fn position_left_units_value(&self) -> u8 {
@@ -751,7 +751,7 @@ impl LayoutComponentStyleBase {
         if self.position_left_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure().position_left_units_value = value;
+        self.absolute_position.ensure_allocated().position_left_units_value = value;
         true
     }
     pub fn position_right_units_value(&self) -> u8 {
@@ -778,7 +778,7 @@ impl LayoutComponentStyleBase {
         if self.position_right_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure().position_right_units_value = value;
+        self.absolute_position.ensure_allocated().position_right_units_value = value;
         true
     }
     pub fn position_top_units_value(&self) -> u8 {
@@ -805,7 +805,7 @@ impl LayoutComponentStyleBase {
         if self.position_top_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure().position_top_units_value = value;
+        self.absolute_position.ensure_allocated().position_top_units_value = value;
         true
     }
     pub fn position_bottom_units_value(&self) -> u8 {
@@ -832,7 +832,7 @@ impl LayoutComponentStyleBase {
         if self.position_bottom_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure().position_bottom_units_value = value;
+        self.absolute_position.ensure_allocated().position_bottom_units_value = value;
         true
     }
     pub fn flex_basis(&self) -> f32 {
@@ -1209,7 +1209,7 @@ impl LayoutComponentStyleBase {
         if self.border_left_units_value() == value {
             return false;
         }
-        self.border.ensure().border_left_units_value = value;
+        self.border.ensure_allocated().border_left_units_value = value;
         true
     }
     pub fn border_right_units_value(&self) -> u8 {
@@ -1236,7 +1236,7 @@ impl LayoutComponentStyleBase {
         if self.border_right_units_value() == value {
             return false;
         }
-        self.border.ensure().border_right_units_value = value;
+        self.border.ensure_allocated().border_right_units_value = value;
         true
     }
     pub fn border_top_units_value(&self) -> u8 {
@@ -1263,7 +1263,7 @@ impl LayoutComponentStyleBase {
         if self.border_top_units_value() == value {
             return false;
         }
-        self.border.ensure().border_top_units_value = value;
+        self.border.ensure_allocated().border_top_units_value = value;
         true
     }
     pub fn border_bottom_units_value(&self) -> u8 {
@@ -1290,7 +1290,7 @@ impl LayoutComponentStyleBase {
         if self.border_bottom_units_value() == value {
             return false;
         }
-        self.border.ensure().border_bottom_units_value = value;
+        self.border.ensure_allocated().border_bottom_units_value = value;
         true
     }
     pub fn margin_left_units_value(&self) -> u8 {
@@ -1617,7 +1617,7 @@ impl LayoutComponentStyleBase {
         if self.link_corner_radius() == value {
             return false;
         }
-        self.corner_radius.ensure().link_corner_radius = value;
+        self.corner_radius.ensure_allocated().link_corner_radius = value;
         true
     }
     pub fn corner_radius_tl(&self) -> f32 {
@@ -1644,7 +1644,7 @@ impl LayoutComponentStyleBase {
         if self.corner_radius_tl() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_tl = value;
+        self.corner_radius.ensure_allocated().corner_radius_tl = value;
         true
     }
     pub fn corner_radius_tr(&self) -> f32 {
@@ -1671,7 +1671,7 @@ impl LayoutComponentStyleBase {
         if self.corner_radius_tr() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_tr = value;
+        self.corner_radius.ensure_allocated().corner_radius_tr = value;
         true
     }
     pub fn corner_radius_bl(&self) -> f32 {
@@ -1698,7 +1698,7 @@ impl LayoutComponentStyleBase {
         if self.corner_radius_bl() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_bl = value;
+        self.corner_radius.ensure_allocated().corner_radius_bl = value;
         true
     }
     pub fn corner_radius_br(&self) -> f32 {
@@ -1725,7 +1725,7 @@ impl LayoutComponentStyleBase {
         if self.corner_radius_br() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_br = value;
+        self.corner_radius.ensure_allocated().corner_radius_br = value;
         true
     }
     pub fn clone_into(
@@ -1794,19 +1794,19 @@ impl LayoutComponentStyleBase {
                 true
             }
             Self::BORDER_LEFT_PROPERTY_KEY => {
-                self.border.ensure().border_left = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.border.ensure_allocated().border_left = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::BORDER_RIGHT_PROPERTY_KEY => {
-                self.border.ensure().border_right = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.border.ensure_allocated().border_right = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::BORDER_TOP_PROPERTY_KEY => {
-                self.border.ensure().border_top = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.border.ensure_allocated().border_top = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::BORDER_BOTTOM_PROPERTY_KEY => {
-                self.border.ensure().border_bottom = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.border.ensure_allocated().border_bottom = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::MARGIN_LEFT_PROPERTY_KEY => {
@@ -1842,35 +1842,35 @@ impl LayoutComponentStyleBase {
                 true
             }
             Self::POSITION_LEFT_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_left = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.absolute_position.ensure_allocated().position_left = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::POSITION_RIGHT_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_right = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.absolute_position.ensure_allocated().position_right = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::POSITION_TOP_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_top = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.absolute_position.ensure_allocated().position_top = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::POSITION_BOTTOM_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_bottom = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.absolute_position.ensure_allocated().position_bottom = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_left_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.absolute_position.ensure_allocated().position_left_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::POSITION_RIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_right_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.absolute_position.ensure_allocated().position_right_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::POSITION_TOP_UNITS_VALUE_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_top_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.absolute_position.ensure_allocated().position_top_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::POSITION_BOTTOM_UNITS_VALUE_PROPERTY_KEY => {
-                self.absolute_position.ensure().position_bottom_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.absolute_position.ensure_allocated().position_bottom_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::FLEX_BASIS_PROPERTY_KEY => {
@@ -1930,19 +1930,19 @@ impl LayoutComponentStyleBase {
                 true
             }
             Self::BORDER_LEFT_UNITS_VALUE_PROPERTY_KEY => {
-                self.border.ensure().border_left_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.border.ensure_allocated().border_left_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::BORDER_RIGHT_UNITS_VALUE_PROPERTY_KEY => {
-                self.border.ensure().border_right_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.border.ensure_allocated().border_right_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::BORDER_TOP_UNITS_VALUE_PROPERTY_KEY => {
-                self.border.ensure().border_top_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.border.ensure_allocated().border_top_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::BORDER_BOTTOM_UNITS_VALUE_PROPERTY_KEY => {
-                self.border.ensure().border_bottom_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
+                self.border.ensure_allocated().border_bottom_units_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::MARGIN_LEFT_UNITS_VALUE_PROPERTY_KEY => {
@@ -1994,23 +1994,23 @@ impl LayoutComponentStyleBase {
                 true
             }
             Self::LINK_CORNER_RADIUS_PROPERTY_KEY => {
-                self.corner_radius.ensure().link_corner_radius = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.corner_radius.ensure_allocated().link_corner_radius = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_TL_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_tl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_tl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_TR_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_tr = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_tr = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_BL_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_bl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_bl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_BR_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_br = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_br = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

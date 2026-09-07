@@ -87,7 +87,7 @@ impl RectangleBase {
         if self.link_corner_radius() == value {
             return false;
         }
-        self.corner_radius.ensure().link_corner_radius = value;
+        self.corner_radius.ensure_allocated().link_corner_radius = value;
         true
     }
     pub fn corner_radius_tl(&self) -> f32 {
@@ -114,7 +114,7 @@ impl RectangleBase {
         if self.corner_radius_tl() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_tl = value;
+        self.corner_radius.ensure_allocated().corner_radius_tl = value;
         true
     }
     pub fn corner_radius_tr(&self) -> f32 {
@@ -141,7 +141,7 @@ impl RectangleBase {
         if self.corner_radius_tr() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_tr = value;
+        self.corner_radius.ensure_allocated().corner_radius_tr = value;
         true
     }
     pub fn corner_radius_bl(&self) -> f32 {
@@ -168,7 +168,7 @@ impl RectangleBase {
         if self.corner_radius_bl() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_bl = value;
+        self.corner_radius.ensure_allocated().corner_radius_bl = value;
         true
     }
     pub fn corner_radius_br(&self) -> f32 {
@@ -195,7 +195,7 @@ impl RectangleBase {
         if self.corner_radius_br() == value {
             return false;
         }
-        self.corner_radius.ensure().corner_radius_br = value;
+        self.corner_radius.ensure_allocated().corner_radius_br = value;
         true
     }
     pub fn clone_into(&self, callbacks: &mut impl RectangleBaseCallbacks) -> Rectangle {
@@ -215,23 +215,23 @@ impl RectangleBase {
     ) -> bool {
         match property_key {
             Self::LINK_CORNER_RADIUS_PROPERTY_KEY => {
-                self.corner_radius.ensure().link_corner_radius = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                self.corner_radius.ensure_allocated().link_corner_radius = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_TL_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_tl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_tl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_TR_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_tr = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_tr = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_BL_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_bl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_bl = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             Self::CORNER_RADIUS_BR_PROPERTY_KEY => {
-                self.corner_radius.ensure().corner_radius_br = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
+                self.corner_radius.ensure_allocated().corner_radius_br = crate::mechanical_port::source::core::field_types::core_double_type::CoreDoubleType::deserialize(reader);
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

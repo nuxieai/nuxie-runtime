@@ -16,7 +16,7 @@ pub const EXPECTED_ENTRIES: usize = 261;
 pub const EXPECTED_RUNTIME: usize = 213;
 pub const EXPECTED_SCRIPTED: usize = 45;
 pub const MAX_PROVENANCE_UNKNOWN: usize = 3;
-pub const UPSTREAM_REF: &str = "3f4047a85f11fecfde8c4d906c0c1654aa12b015";
+pub const UPSTREAM_REF: &str = "155b22d887c79e121d1e032c60ef59903c06be1a";
 
 pub use nuxie_sriv::*;
 

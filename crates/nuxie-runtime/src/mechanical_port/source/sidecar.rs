@@ -42,7 +42,7 @@ impl<T> Sidecar<T> {
 
 impl<T: Default> Sidecar<T> {
     /// Allocates the backing object on first use, then returns it.
-    pub fn ensure(&mut self) -> &mut T {
+    pub fn ensure_allocated(&mut self) -> &mut T {
         self.value.get_or_insert_with(|| Box::new(T::default()))
     }
 }
@@ -68,12 +68,12 @@ mod tests {
     }
 
     #[test]
-    fn ensure_reuses_storage_and_reset_releases_it() {
+    fn ensure_allocated_reuses_storage_and_reset_releases_it() {
         let mut sidecar = Sidecar::<Payload>::default();
-        sidecar.ensure().value = 7;
+        sidecar.ensure_allocated().value = 7;
         let allocated = sidecar.get().unwrap() as *const Payload;
 
-        assert_eq!(sidecar.ensure().value, 7);
+        assert_eq!(sidecar.ensure_allocated().value, 7);
         assert_eq!(sidecar.get().unwrap() as *const Payload, allocated);
 
         sidecar.reset();
@@ -92,7 +92,7 @@ mod tests {
     #[test]
     fn cloning_allocated_storage_is_deep() {
         let mut sidecar = Sidecar::<Payload>::default();
-        sidecar.ensure().value = 7;
+        sidecar.ensure_allocated().value = 7;
         let mut cloned = sidecar.clone();
 
         assert_eq!(cloned.get(), sidecar.get());

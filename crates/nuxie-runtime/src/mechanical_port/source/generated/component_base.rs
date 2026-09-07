@@ -55,7 +55,7 @@ impl ComponentBase {
         if self.name() == value {
             return false;
         }
-        self.name.ensure().name = value;
+        self.name.ensure_allocated().name = value;
         true
     }
     pub fn parent_id(&self) -> u32 {
@@ -88,7 +88,7 @@ impl ComponentBase {
     ) -> bool {
         match property_key {
             Self::NAME_PROPERTY_KEY => {
-                self.name.ensure().name = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
+                self.name.ensure_allocated().name = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
                 true
             }
             Self::PARENT_ID_PROPERTY_KEY => {

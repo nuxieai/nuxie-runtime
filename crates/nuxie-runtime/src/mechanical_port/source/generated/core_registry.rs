@@ -8885,6 +8885,9 @@ impl CoreRegistry {
     pub fn is_callback(property_key: u32) -> bool {
         matches!(property_key, 1016 | 869 | 401 | 395)
     }
+    pub fn is_signed_int(property_key: u32) -> bool {
+        u16::try_from(property_key).is_ok_and(nuxie_schema::is_signed_int_property_key)
+    }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
         let owner_type = match property_key {
             118 | 136 | 210 | 218 => return ColorChannelsBase::from(object).is_some(),

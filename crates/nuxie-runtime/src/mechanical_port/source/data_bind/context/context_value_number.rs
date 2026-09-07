@@ -30,6 +30,10 @@ impl DataBindContextValueNumber {
             FieldType::Uint => {
                 if binding.target_is_solo() {
                     binding.solo_update_by_index(value.round() as usize)
+                } else if crate::source::generated::core_registry::CoreRegistry::is_signed_int(
+                    property_key,
+                ) {
+                    binding.set_int(property_key, value.round() as i32)
                 } else {
                     binding.set_uint(
                         property_key,

@@ -2058,6 +2058,15 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
     }
 }
 
+pub fn is_signed_int_property_key(key: u16) -> bool {
+    match key {
+        1047 => true,
+        1048 => true,
+        1068 => true,
+        _ => false,
+    }
+}
+
 pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<FieldKind> {
     match key {
         4 => Some(FieldKind::String),

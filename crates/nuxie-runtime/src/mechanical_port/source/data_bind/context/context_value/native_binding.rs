@@ -421,6 +421,17 @@ impl TargetBinding for CoreBinding {
         )
         .expect("retained target")
     }
+    fn int_value(&self) -> i32 {
+        if CoreRegistry::is_signed_int(self.property_key) {
+            CoreRegistry::get_int_handle(
+                self.target.as_ref().expect("binding target"),
+                self.property_key as i32,
+            )
+            .expect("retained target")
+        } else {
+            self.uint_value() as i32
+        }
+    }
     fn color_value(&self) -> i32 {
         CoreRegistry::get_color_handle(
             self.target.as_ref().expect("binding target"),
@@ -525,6 +536,11 @@ impl ContextApplyBinding for CoreBinding {
     fn set_uint(&mut self, key: u32, value: u32) {
         if let Some(target) = &self.target {
             mutate(|| CoreRegistry::set_uint_handle(target, key as i32, value));
+        }
+    }
+    fn set_int(&mut self, key: u32, value: i32) {
+        if let Some(target) = &self.target {
+            mutate(|| CoreRegistry::set_int_handle(target, key as i32, value));
         }
     }
     fn set_string(&mut self, key: u32, value: String) {

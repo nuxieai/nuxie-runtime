@@ -840,4 +840,6 @@ pub trait LayoutStyleApplier {
     fn apply_base_style(&self, _style: &mut YGStyle, _context: &LayoutSyncContext) {}
     fn apply_container_style(&self, _style: &mut YGStyle, _context: &LayoutSyncContext) {}
     fn apply_item_style(&self, _style: &mut YGStyle, _context: &LayoutSyncContext) {}
+    /// Explicit grid placement follows item-style resets, independent of file order.
+    fn apply_placement_style(&self, _style: &mut YGStyle, _context: &LayoutSyncContext) {}
 }

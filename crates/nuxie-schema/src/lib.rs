@@ -313,6 +313,9 @@ pub fn definition_by_type_key(key: u16) -> Option<&'static Definition> {
 pub fn is_callback_property_key(key: u16) -> bool {
     generated::is_callback_property_key(key)
 }
+pub fn is_signed_int_property_key(key: u16) -> bool {
+    generated::is_signed_int_property_key(key)
+}
 
 pub fn object_supports_property(type_key: u16, property_key: u16) -> bool {
     property_by_key_in_hierarchy(type_key, property_key)

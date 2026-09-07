@@ -66,7 +66,7 @@ impl GridItemPlacement {
             parent.with_mut(|parent| parent.component_add_dependent(this));
         }
     }
-    pub fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+    pub fn apply_placement_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         if context.parent_is_stack || !context.parent_is_grid {
             return;
         }
@@ -100,7 +100,7 @@ impl GridItemPlacement {
 }
 
 impl LayoutStyleApplier for GridItemPlacement {
-    fn apply_item_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
-        GridItemPlacement::apply_item_style(self, style, context);
+    fn apply_placement_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+        GridItemPlacement::apply_placement_style(self, style, context);
     }
 }

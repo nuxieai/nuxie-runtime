@@ -45,7 +45,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
     kMaxBindGroups,
 };
 use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-    validateColorRequiresFragment, validateLayoutsAgainstBindingMap,
+    validatePipelineDesc, NativeSlotScope,
 };
 
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
@@ -903,14 +903,10 @@ impl ContextMetal {
         // --- Validate user-supplied layouts against shader binding map ---
         {
             let mut error = String::new();
-            if !validateLayoutsAgainstBindingMap(
+            if !validatePipelineDesc(
+                desc,
                 &pipeline.base.m_bindingMap,
-                desc.bindGroupLayouts,
-                desc.bindGroupLayoutCount().ok()?,
-                Some(&mut error),
-            ) || !validateColorRequiresFragment(
-                desc.colorCount,
-                desc.fragmentModule.is_some(),
+                NativeSlotScope::perStage,
                 Some(&mut error),
             ) {
                 if let Some(out) = outError.as_deref_mut() {
@@ -2447,7 +2443,7 @@ mod tests {
             return;
         };
         context.base.setLastError("earlier context error");
-        let empty_binding_map = [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+        let empty_binding_map = [3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
         assert!(
             context
                 .makeShaderModule(&ShaderModuleDesc {
@@ -2531,7 +2527,7 @@ vertex float4 vs_main(uint vertex_id [[vertex_id]]) {
 }
 fragment float4 fs_main() { return float4(1.0); }
 "#;
-        let empty_binding_map = [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+        let empty_binding_map = [3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
         let module = context
             .makeShaderModule(&ShaderModuleDesc {
                 code: Some(source),
@@ -2567,7 +2563,7 @@ fragment float4 fs_main() { return float4(1.0); }
 
     #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]
     #[test]
-    fn pipeline_layout_validation_preserves_vertex_reflection_precedence() {
+    fn pipeline_layout_validation_includes_split_fragment_reflection() {
         let Some(mut context) = live_context() else {
             return;
         };
@@ -2579,9 +2575,9 @@ vertex float4 vs_main(uint vertex_id [[vertex_id]]) {
 }
 fragment float4 fs_main() { return float4(1.0); }
 "#;
-        let empty = [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+        let empty = [3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
         let fragment_sampler = [
-            3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, // v3 header
+            3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, // v3, allocator v2 header
             0, 0, 5, 2, 0, 0xff, 0xff, 0, 0, 0xff, 0xff, 0, 0, 0,
         ];
         let vertex = context
@@ -2602,17 +2598,19 @@ fragment float4 fs_main() { return float4(1.0); }
                 ..ShaderModuleDesc::default()
             })
             .expect("fragment module");
+        let mut error = String::new();
         let pipeline = context.makePipeline(
             &PipelineDesc {
                 vertexModule: Some(&vertex),
                 fragmentModule: Some(&fragment),
                 ..PipelineDesc::default()
             },
-            None,
+            Some(&mut error),
         );
-        assert!(
-            pipeline.is_some(),
-            "a non-null vertex module is the binding-map source even when its map is empty"
+        assert!(pipeline.is_none());
+        assert_eq!(
+            error,
+            "@group(0) @binding(0): shader declares sampler but PipelineDesc::bindGroupLayouts has no entry for group 0"
         );
 
         let mut error = String::new();

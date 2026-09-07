@@ -113,6 +113,71 @@ impl BindGroupLayout {
 }
 
 // Map binding-map types to layout-entry types.
+fn sameBakedLayout(a: &BindingMap, b: &BindingMap) -> bool {
+    a.groupLayoutCount() != 0
+        && a.groupLayoutCount() == b.groupLayoutCount()
+        && (0..a.groupLayoutCount()).all(|i| {
+            let ga = a.groupLayoutAt(i);
+            let gb = b.groupLayoutAt(i);
+            ga.group == gb.group
+                && ga.layoutId == gb.layoutId
+                && ga.layoutId != BindingMap::kNoLayoutId
+        })
+}
+
+pub fn bindingMapForStages(
+    vertex: Option<&ShaderModule>,
+    fragment: Option<&ShaderModule>,
+) -> BindingMap {
+    let Some(vertex) = vertex else {
+        return fragment
+            .map(|module| module.m_bindingMap.clone())
+            .unwrap_or_default();
+    };
+    let Some(fragment) = fragment else {
+        return vertex.m_bindingMap.clone();
+    };
+    if std::ptr::eq(vertex, fragment)
+        || sameBakedLayout(&vertex.m_bindingMap, &fragment.m_bindingMap)
+    {
+        return vertex.m_bindingMap.clone();
+    }
+    let mut merged = vertex.m_bindingMap.clone();
+    merged.replaceStage(&fragment.m_bindingMap, Stage::FS);
+    merged
+}
+
+pub fn populateBindGroupLayoutEntriesFromShader(
+    entries: &mut [BindGroupLayoutEntry],
+    shader: Option<&ShaderModule>,
+    groupIndex: u32,
+    dynamicUBOBindings: &[u32],
+) -> u32 {
+    shader.map_or(0, |shader| {
+        populateBindGroupLayoutEntries(
+            entries,
+            &shader.m_bindingMap,
+            groupIndex,
+            dynamicUBOBindings,
+        )
+    })
+}
+
+pub fn makeBindGroupLayoutFromShader(
+    ctx: &mut dyn ContextApi,
+    shader: Option<&ShaderModule>,
+    groupIndex: u32,
+    dynamicUBOBindings: &[u32],
+) -> Option<AnyResourceHandle> {
+    let empty = BindingMap::default();
+    makeBindGroupLayoutFromBindingMap(
+        ctx,
+        shader.map(|shader| &shader.m_bindingMap).unwrap_or(&empty),
+        groupIndex,
+        dynamicUBOBindings,
+    )
+}
+
 fn bindingKindFromResource(kind: ResourceKind) -> BindingKind {
     match kind {
         ResourceKind::UniformBuffer => BindingKind::uniformBuffer,
@@ -154,18 +219,15 @@ fn sampleTypeFromBindingMap(sample: TextureSampleType) -> SampleType {
 /// not written upstream. The slice length represents `maxEntries`.
 /// Returns the required count, which may exceed the provided slice length.
 /// `dynamicUBOBindings` contains WGSL binding values within `groupIndex`.
-pub fn populateBindGroupLayoutEntriesFromShader(
+pub fn populateBindGroupLayoutEntries(
     entries: &mut [BindGroupLayoutEntry],
-    shader: Option<&ShaderModule>,
+    bindingMap: &BindingMap,
     groupIndex: u32,
     dynamicUBOBindings: &[u32],
 ) -> u32 {
-    let Some(shader) = shader else {
-        return 0;
-    };
     let mut n = 0;
-    for i in 0..shader.m_bindingMap.size() {
-        let e = shader.m_bindingMap.at(i);
+    for i in 0..bindingMap.size() {
+        let e = bindingMap.at(i);
         if u32::from(e.group) != groupIndex {
             continue;
         }
@@ -206,16 +268,14 @@ pub fn populateBindGroupLayoutEntriesFromShader(
 }
 
 /// Intern by baked identity, with heap storage for groups wider than sixteen.
-pub fn makeBindGroupLayoutFromShader(
+pub fn makeBindGroupLayoutFromBindingMap(
     ctx: &mut dyn ContextApi,
-    shader: Option<&ShaderModule>,
+    bindingMap: &BindingMap,
     groupIndex: u32,
     dynamicUBOBindings: &[u32],
 ) -> Option<AnyResourceHandle> {
     let layoutId = if dynamicUBOBindings.is_empty() {
-        shader.map_or(BindingMap::kNoLayoutId, |shader| {
-            shader.m_bindingMap.layoutIdForGroup(groupIndex)
-        })
+        bindingMap.layoutIdForGroup(groupIndex)
     } else {
         BindingMap::kNoLayoutId
     };
@@ -225,18 +285,12 @@ pub fn makeBindGroupLayoutFromShader(
         }
     }
     let mut entries = [BindGroupLayoutEntry::default(); 16];
-    let n = populateBindGroupLayoutEntriesFromShader(
-        &mut entries,
-        shader,
-        groupIndex,
-        dynamicUBOBindings,
-    );
+    let n =
+        populateBindGroupLayoutEntries(&mut entries, bindingMap, groupIndex, dynamicUBOBindings);
     let mut spilled = Vec::new();
     let entries = if n > entries.len() as u32 {
         spilled.resize(n as usize, BindGroupLayoutEntry::default());
-        populateBindGroupLayoutEntriesFromShader(
-            &mut spilled, shader, groupIndex, dynamicUBOBindings,
-        );
+        populateBindGroupLayoutEntries(&mut spilled, bindingMap, groupIndex, dynamicUBOBindings);
         spilled.as_slice()
     } else {
         entries.as_slice()
@@ -541,3 +595,172 @@ pub fn validateColorRequiresFragment(
 }
 
 // } // namespace rive::ore
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum NativeSlotScope {
+    perStage,
+    perGroup,
+    perKind,
+}
+
+pub fn validateSplitStageSlots(
+    stagesCompiledApart: bool,
+    mergedMap: &BindingMap,
+    scope: NativeSlotScope,
+    mut outError: Option<&mut String>,
+) -> bool {
+    if !stagesCompiledApart || scope == NativeSlotScope::perStage {
+        return true;
+    }
+    let mut claimed: Vec<(u32, u16, u8, u8)> = Vec::with_capacity(mergedMap.size());
+    for i in 0..mergedMap.size() {
+        let e = mergedMap.at(i);
+        let vs = e.backendSlot[0];
+        let fs = e.backendSlot[1];
+        if vs != BindingMap::kAbsent && fs != BindingMap::kAbsent && vs != fs {
+            if let Some(error) = outError.as_mut() {
+                **error = format!(
+                    "@group({}) @binding({}): the vertex module put it on native slot {vs} and the fragment module on {fs}, and this backend shares one slot namespace between the stages. Declare the same bindings in both files, or compile both stages from one shader",
+                    e.group, e.binding
+                );
+            }
+            return false;
+        }
+        let slot = if vs != BindingMap::kAbsent { vs } else { fs };
+        if slot == BindingMap::kAbsent {
+            continue;
+        }
+        let scope_key = if scope == NativeSlotScope::perGroup {
+            u32::from(e.group)
+        } else {
+            match e.kind {
+                ResourceKind::UniformBuffer
+                | ResourceKind::StorageBufferRO
+                | ResourceKind::StorageBufferRW => 0,
+                ResourceKind::SampledTexture | ResourceKind::StorageTexture => 1,
+                ResourceKind::Sampler | ResourceKind::ComparisonSampler => 2,
+                _ => 0,
+            }
+        };
+        for &(key, previous_slot, group, binding) in &claimed {
+            if key != scope_key || previous_slot != slot {
+                continue;
+            }
+            if let Some(error) = outError.as_mut() {
+                **error = format!(
+                    "@group({}) @binding({}) and @group({group}) @binding({binding}) both land on native slot {slot}: the vertex and fragment modules were compiled apart, and this backend shares one slot namespace between them. Declare the same bindings in both, or compile both stages from one shader",
+                    e.group, e.binding
+                );
+            }
+            return false;
+        }
+        claimed.push((scope_key, slot, e.group, e.binding));
+    }
+    true
+}
+
+pub fn validateStagesAgree(
+    vertexMap: &BindingMap,
+    fragmentMap: &BindingMap,
+    mut outError: Option<&mut String>,
+) -> bool {
+    for f in 0..fragmentMap.size() {
+        let fs = fragmentMap.at(f);
+        for v in 0..vertexMap.size() {
+            let vs = vertexMap.at(v);
+            if vs.group != fs.group || vs.binding != fs.binding {
+                continue;
+            }
+            let both_samplers = matches!(
+                vs.kind,
+                ResourceKind::Sampler | ResourceKind::ComparisonSampler
+            ) && matches!(
+                fs.kind,
+                ResourceKind::Sampler | ResourceKind::ComparisonSampler
+            );
+            let mismatch = if vs.kind != fs.kind && !both_samplers {
+                Some("kind")
+            } else if vs.textureViewDim != TextureViewDim::Undefined
+                && fs.textureViewDim != TextureViewDim::Undefined
+                && vs.textureViewDim != fs.textureViewDim
+            {
+                Some("texture dimension")
+            } else if vs.textureSampleType != TextureSampleType::Undefined
+                && fs.textureSampleType != TextureSampleType::Undefined
+                && vs.textureSampleType != fs.textureSampleType
+            {
+                Some("texture sample type")
+            } else {
+                None
+            };
+            if let Some(what) = mismatch {
+                if let Some(error) = outError.as_mut() {
+                    **error = format!(
+                        "@group({}) @binding({}): the vertex and fragment files declare it with a different {what}. A pipeline carries one declaration per binding, so the stage that loses reads what the other one bound",
+                        fs.group, fs.binding
+                    );
+                }
+                return false;
+            }
+            break;
+        }
+    }
+    true
+}
+
+fn validatePipelineDescWithBases(
+    desc: &PipelineDesc<'_>,
+    mergedMap: &BindingMap,
+    scope: NativeSlotScope,
+    vertex: Option<&ShaderModule>,
+    fragment: Option<&ShaderModule>,
+    layouts: Option<&[Option<&BindGroupLayout>]>,
+    mut outError: Option<&mut String>,
+) -> bool {
+    let stages_compiled_apart = match (desc.vertexModule, desc.fragmentModule) {
+        (Some(v), Some(f)) => !v.ptr_eq(f),
+        _ => false,
+    };
+    if stages_compiled_apart {
+        if let (Some(v), Some(f)) = (vertex, fragment) {
+            if !validateStagesAgree(&v.m_bindingMap, &f.m_bindingMap, outError.as_deref_mut()) {
+                return false;
+            }
+        }
+    }
+    validateLayoutBasesAgainstBindingMap(
+        mergedMap,
+        layouts,
+        desc.bindGroupLayoutCount,
+        outError.as_deref_mut(),
+    ) && validateColorRequiresFragment(
+        desc.colorCount,
+        desc.fragmentModule.is_some(),
+        outError.as_deref_mut(),
+    ) && validateSplitStageSlots(stages_compiled_apart, mergedMap, scope, outError)
+}
+
+pub fn validatePipelineDesc(
+    desc: &PipelineDesc<'_>,
+    mergedMap: &BindingMap,
+    scope: NativeSlotScope,
+    outError: Option<&mut String>,
+) -> bool {
+    let layouts = desc.bindGroupLayouts.map(|layouts| {
+        layouts
+            .iter()
+            .map(|layout| layout.and_then(AnyResourceHandle::bindGroupLayoutBase))
+            .collect::<Vec<_>>()
+    });
+    validatePipelineDescWithBases(
+        desc,
+        mergedMap,
+        scope,
+        desc.vertexModule
+            .and_then(AnyResourceHandle::shaderModuleBase),
+        desc.fragmentModule
+            .and_then(AnyResourceHandle::shaderModuleBase),
+        layouts.as_deref(),
+        outError,
+    )
+}

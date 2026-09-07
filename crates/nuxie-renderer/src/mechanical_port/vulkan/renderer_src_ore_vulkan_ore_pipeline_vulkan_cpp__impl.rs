@@ -10,7 +10,7 @@ use super::ore_shader_module_vulkan_decl::ShaderModuleVulkan;
 use super::ore_vulkan_dsl::kVkMaxGroups;
 use ash::vk;
 use nuxie_ore_metal::bind_group_layout::{
-    BindGroupLayout, validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
+    validatePipelineDesc, NativeSlotScope,
 };
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::types::{
@@ -198,36 +198,14 @@ pub(crate) fn makePipeline(
     pipeline.m_vkDevice = context.m_vk.device;
     pipeline.m_vkTopology = oreTopologyToVk(desc.topology);
 
-    // Pipeline's backend-independent constructor cannot know this sibling
-    // crate's concrete shader subclass, so copy the same source binding map at
-    // the concrete boundary.
-    let sourceModule = desc.vertexModule.or(desc.fragmentModule)?;
-    let sourceModule = sourceModule.downcast_ref::<ShaderModuleVulkan>()?;
-    *pipeline.base.m_bindingMap = sourceModule.m_bindingMap.clone();
-
     let layoutHandles = desc.bindGroupLayouts.unwrap_or(&[]);
     let layoutHandles = layoutHandles.get(..desc.bindGroupLayoutCount as usize)?;
-    let layoutBases = layoutHandles
-        .iter()
-        .map(|layout| {
-            layout.map(|layout| {
-                let concrete = layout
-                    .downcast_ref::<BindGroupLayoutVulkan>()
-                    .expect("Vulkan pipeline requires Vulkan bind-group layouts");
-                &**concrete as &BindGroupLayout
-            })
-        })
-        .collect::<Vec<_>>();
 
     let mut error = String::new();
-    if !validateLayoutBasesAgainstBindingMap(
+    if !validatePipelineDesc(
+        desc,
         &pipeline.base.m_bindingMap,
-        desc.bindGroupLayouts.map(|_| layoutBases.as_slice()),
-        desc.bindGroupLayoutCount,
-        Some(&mut error),
-    ) || !validateColorRequiresFragment(
-        desc.colorCount,
-        desc.fragmentModule.is_some(),
+        NativeSlotScope::perGroup,
         Some(&mut error),
     ) {
         if let Some(out) = outError.as_deref_mut() {

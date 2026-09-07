@@ -52,6 +52,56 @@ fn recording_vm() -> ScriptVm {
 }
 
 #[test]
+fn bind_group_layout_fragment_requires_an_actual_fragment_entry() {
+    let vm = recording_vm();
+    let data: AnyUserData = vm.lua().globals().get("shader").unwrap();
+    let mut vertex_only = data.borrow::<Shader>().unwrap().clone();
+    vertex_only.entries.retain(|entry| entry.stage == 0);
+    vm.lua().globals().set("vertexOnly", vm.lua().create_userdata(vertex_only).unwrap()).unwrap();
+    vm.lua().load(r#"
+        for _, fragment in {false, {}, vertexOnly} do
+            local ok, err = pcall(function()
+                GPUBindGroupLayout.new {shader = shader, fragment = fragment}
+            end)
+            assert(not ok)
+            assert(string.find(err, "'fragment' must be a Shader with a @fragment entry point", 1, true))
+        end
+        assert(GPUBindGroupLayout.new {shader = shader, fragment = shader} ~= nil)
+    "#).exec().unwrap();
+}
+
+#[test]
+fn split_stage_fragment_bindings_reach_explicit_and_auto_layouts() {
+    let vm = recording_vm();
+    let ore = context(vm.lua()).unwrap();
+    let map = [3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0,
+        0, 7, 0, 2, 0, 255, 255, 1, 0, 255, 255, 0, 0, 0];
+    let module = ore.borrow_mut().makeShaderModule(&ShaderModuleDesc {
+        code: Some(b"fragment test module"), codeSize: 20,
+        bindingMapBytes: Some(&map), bindingMapSize: map.len() as u32,
+        ..ShaderModuleDesc::default()
+    }).unwrap();
+    vm.lua().globals().set("fragment", vm.lua().create_userdata(Shader {
+        entries: vec![ShaderEntry {stage: 1, logical: "fragment".into(), physical: "fragment".into(), module}],
+    }).unwrap()).unwrap();
+    vm.lua().load(r#"
+        explicitSplitLayout = GPUBindGroupLayout.new {shader = shader, fragment = fragment}
+        splitPipeline = GPUPipeline.new {vertex = shader, fragment = fragment, vertexLayout = {}}
+        autoSplitLayout = splitPipeline:getBindGroupLayout(0)
+    "#).exec().unwrap();
+    for name in ["explicitSplitLayout", "autoSplitLayout"] {
+        let data: AnyUserData = vm.lua().globals().get(name).unwrap();
+        let layout = data.borrow::<Layout>().unwrap();
+        let entries = layout.resource.bindGroupLayoutBase().unwrap().entries();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].binding, 7);
+        assert_eq!(entries[0].nativeSlotFS, 1);
+        assert_eq!(entries[0].nativeSlotVS, u32::MAX);
+        assert_eq!(entries[0].visibility.mask, 2);
+    }
+}
+
+#[test]
 fn integer_and_lua_numeric_string_descriptor_values_are_preserved() {
     let vm = recording_vm();
     let desc: Table = vm.lua().load("return { integer = 16, decimal = 1.5, numericString = ' 0x10 ', invalid = false, dynamicUBOs = { 0, ' 0x2 ', false, 3 } }").eval().unwrap();

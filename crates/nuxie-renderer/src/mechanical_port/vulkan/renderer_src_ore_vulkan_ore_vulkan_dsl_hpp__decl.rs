@@ -47,6 +47,8 @@ pub(crate) fn oreVisibilityToVk(visibility: StageVisibility) -> vk::ShaderStageF
 /// # Safety
 /// `pfnCreateDSL` and `device` must be the live function/device pair supplied
 /// by the owning Vulkan context, matching the source function-pointer contract.
+// Read the allocator's native slot, not an assumed compact slot. Allocator v2
+// assigns the WGSL binding, but the map remains authoritative across versions.
 pub(crate) unsafe fn createDSLFromLayoutDesc(
     pfnCreateDSL: vk::PFN_vkCreateDescriptorSetLayout,
     device: vk::Device,

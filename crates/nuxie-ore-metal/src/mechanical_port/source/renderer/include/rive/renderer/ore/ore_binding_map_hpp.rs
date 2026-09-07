@@ -33,6 +33,222 @@
 #[cfg(all(test, feature = "with-rive-tools"))]
 mod tests {
     use super::*;
+    use crate::bind_group_layout::{NativeSlotScope, validateSplitStageSlots, validateStagesAgree};
+
+    fn split_entry(
+        group: u8,
+        binding: u8,
+        kind: ResourceKind,
+        vs: u16,
+        fs: u16,
+        mask: u8,
+    ) -> BindingMapEntry {
+        make_entry(group, binding, kind, vs, fs, BindingMap::kAbsent, mask, 0)
+    }
+    fn split_map(entries: &[BindingMapEntry]) -> BindingMap {
+        let mut map = BindingMap::default();
+        for entry in entries {
+            map.push(entry);
+        }
+        map.finalize();
+        map
+    }
+    #[test]
+    fn replace_stage_takes_fragment_from_other_map() {
+        let absent = BindingMap::kAbsent;
+        let vertex = split_map(&[
+            split_entry(0, 0, ResourceKind::UniformBuffer, 0, 0, 3),
+            split_entry(0, 1, ResourceKind::SampledTexture, 0, absent, 1),
+        ]);
+        let fragment = split_map(&[
+            split_entry(0, 0, ResourceKind::UniformBuffer, absent, 3, 2),
+            split_entry(0, 2, ResourceKind::SampledTexture, absent, 4, 2),
+        ]);
+        let mut merged = vertex.clone();
+        merged.replaceStage(&fragment, Stage::FS);
+        assert_eq!(merged.size(), 3);
+        for (binding, kind, vs, fs) in [
+            (0, ResourceKind::UniformBuffer, 0, 3),
+            (1, ResourceKind::SampledTexture, 0, absent),
+            (2, ResourceKind::SampledTexture, absent, 4),
+        ] {
+            assert_eq!(merged.lookup(0, binding, kind, Stage::VS), vs);
+            assert_eq!(merged.lookup(0, binding, kind, Stage::FS), fs);
+        }
+    }
+    #[test]
+    fn replace_stage_drops_unclaimed_rows() {
+        let mut vertex = split_map(&[split_entry(
+            0,
+            0,
+            ResourceKind::Sampler,
+            BindingMap::kAbsent,
+            0,
+            2,
+        )]);
+        assert_eq!(vertex.layoutIdForGroup(0), BindingMap::kNoLayoutId);
+        vertex.replaceStage(&split_map(&[]), Stage::FS);
+        assert_eq!(vertex.size(), 0);
+    }
+    #[test]
+    fn allocator_v1_blob_is_rejected() {
+        let source = split_map(&[split_entry(0, 0, ResourceKind::UniformBuffer, 0, 0, 3)]);
+        let mut blob = source.toBlob();
+        assert_eq!(blob[1], 2);
+        blob[1] = 1;
+        let mut output = BindingMap::default();
+        assert!(!BindingMap::fromBlob(
+            Some(&blob),
+            blob.len(),
+            Some(&mut output)
+        ));
+        assert!(output.empty());
+    }
+    #[test]
+    fn replace_stage_clears_baked_layout_ids() {
+        let mut vertex = split_map(&[split_entry(0, 0, ResourceKind::UniformBuffer, 0, 0, 3)]);
+        vertex.computeLayoutIds();
+        assert_ne!(vertex.layoutIdForGroup(0), BindingMap::kNoLayoutId);
+        vertex.replaceStage(
+            &split_map(&[split_entry(
+                0,
+                0,
+                ResourceKind::UniformBuffer,
+                BindingMap::kAbsent,
+                2,
+                2,
+            )]),
+            Stage::FS,
+        );
+        assert_eq!(vertex.layoutIdForGroup(0), BindingMap::kNoLayoutId);
+    }
+    #[test]
+    fn split_stage_collisions_rejected_per_scope() {
+        let map = split_map(&[
+            split_entry(0, 0, ResourceKind::UniformBuffer, 0, BindingMap::kAbsent, 1),
+            split_entry(1, 0, ResourceKind::UniformBuffer, BindingMap::kAbsent, 0, 2),
+        ]);
+        let mut error = String::new();
+        assert!(validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perStage,
+            Some(&mut error)
+        ));
+        assert!(validateSplitStageSlots(
+            false,
+            &map,
+            NativeSlotScope::perKind,
+            Some(&mut error)
+        ));
+        assert!(!validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perKind,
+            Some(&mut error)
+        ));
+        assert!(error.contains("@binding(0)"));
+        assert!(validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perGroup,
+            Some(&mut error)
+        ));
+    }
+    #[test]
+    fn split_stage_files_agree_on_kind() {
+        let vertex = split_map(&[split_entry(0, 0, ResourceKind::UniformBuffer, 0, 0, 3)]);
+        let fragment = split_map(&[split_entry(
+            0,
+            0,
+            ResourceKind::SampledTexture,
+            BindingMap::kAbsent,
+            0,
+            2,
+        )]);
+        let mut error = String::new();
+        assert!(!validateStagesAgree(&vertex, &fragment, Some(&mut error)));
+        assert!(error.contains("@binding(0)"));
+        assert!(error.contains("kind"));
+        let elsewhere = split_map(&[split_entry(
+            1,
+            0,
+            ResourceKind::SampledTexture,
+            BindingMap::kAbsent,
+            0,
+            2,
+        )]);
+        assert!(validateStagesAgree(&vertex, &elsewhere, Some(&mut error)));
+    }
+    #[test]
+    fn split_stage_files_agree_on_texture_shape() {
+        let texture = |dim, vs| {
+            let mut e = split_entry(0, 0, ResourceKind::SampledTexture, vs, 0, 3);
+            e.textureViewDim = dim;
+            e
+        };
+        let vertex = split_map(&[texture(TextureViewDim::D2, 0)]);
+        let fragment = split_map(&[texture(TextureViewDim::Cube, BindingMap::kAbsent)]);
+        let mut error = String::new();
+        assert!(!validateStagesAgree(&vertex, &fragment, Some(&mut error)));
+        assert!(error.contains("dimension"));
+        let unreflected = split_map(&[texture(TextureViewDim::Undefined, BindingMap::kAbsent)]);
+        assert!(validateStagesAgree(&vertex, &unreflected, Some(&mut error)));
+    }
+    #[test]
+    fn split_stage_shared_binding_different_numbers_rejected() {
+        let map = split_map(&[
+            split_entry(0, 0, ResourceKind::UniformBuffer, 0, BindingMap::kAbsent, 1),
+            split_entry(0, 1, ResourceKind::UniformBuffer, 1, 0, 3),
+        ]);
+        let mut error = String::new();
+        assert!(validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perStage,
+            Some(&mut error)
+        ));
+        assert!(!validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perKind,
+            Some(&mut error)
+        ));
+        assert!(error.contains("@binding(1)"));
+        assert!(!validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perGroup,
+            Some(&mut error)
+        ));
+    }
+    #[test]
+    fn split_stage_different_kinds_do_not_collide() {
+        let map = split_map(&[
+            split_entry(0, 0, ResourceKind::UniformBuffer, 0, BindingMap::kAbsent, 1),
+            split_entry(
+                0,
+                1,
+                ResourceKind::SampledTexture,
+                BindingMap::kAbsent,
+                0,
+                2,
+            ),
+        ]);
+        let mut error = String::new();
+        assert!(validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perKind,
+            Some(&mut error)
+        ));
+        assert!(!validateSplitStageSlots(
+            true,
+            &map,
+            NativeSlotScope::perGroup,
+            Some(&mut error)
+        ));
+    }
 
     fn push_entry(map: &mut BindingMap, entry: BindingMapEntry) {
         map.push(&entry);
@@ -837,7 +1053,55 @@ impl BindingMap {
     // with a clear error.
     //
     // WebGPU-aligned global-counter-per-kind allocation.
-    pub const kAllocatorVersion: u8 = 1;
+    pub const kAllocatorVersion: u8 = 2;
+
+    pub fn replaceStage(&mut self, other: &BindingMap, stage: Stage) {
+        let slot = stage as usize;
+        let bit = 1u8 << slot;
+        for entry in &mut self.m_entries {
+            entry.stageMask &= !bit;
+            entry.backendSlot[slot] = Self::kAbsent;
+        }
+        self.m_entries.retain(|entry| entry.stageMask != 0);
+        for source in &other.m_entries {
+            if source.stageMask & bit == 0 {
+                continue;
+            }
+            match self
+                .m_entries
+                .binary_search_by_key(&(source.group, source.binding), |entry| {
+                    (entry.group, entry.binding)
+                }) {
+                Ok(index) => {
+                    let entry = &mut self.m_entries[index];
+                    entry.stageMask |= bit;
+                    entry.backendSlot[slot] = source.backendSlot[slot];
+                    if entry.textureViewDim == TextureViewDim::Undefined {
+                        entry.textureViewDim = source.textureViewDim;
+                    }
+                    if entry.textureSampleType == TextureSampleType::Undefined {
+                        entry.textureSampleType = source.textureSampleType;
+                    }
+                    entry.textureMultisampled |= source.textureMultisampled;
+                }
+                Err(index) => {
+                    let mut entry = *source;
+                    entry.stageMask = bit;
+                    for s in 0..3 {
+                        if s != slot {
+                            entry.backendSlot[s] = Self::kAbsent;
+                        }
+                    }
+                    self.m_entries.insert(index, entry);
+                }
+            }
+        }
+        self.m_groupLayouts.clear();
+        #[cfg(feature = "with-rive-tools")]
+        {
+            self.m_finalized = true;
+        }
+    }
 
     // Parse a blob produced by `toBlob` (or by the RSTB-emit path in
     // scripting_workspace). Returns a populated `BindingMap` + `true` on

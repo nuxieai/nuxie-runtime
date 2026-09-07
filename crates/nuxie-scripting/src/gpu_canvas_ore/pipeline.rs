@@ -314,7 +314,11 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             (values, false)
         } else {
             (
-                auto_layouts(&mut *context.borrow_mut(), &vertex_shader)?,
+                auto_layouts(
+                    &mut *context.borrow_mut(),
+                    desc.vertexModule.and_then(|module| module.shaderModuleBase()),
+                    desc.fragmentModule.and_then(|module| module.shaderModuleBase()),
+                )?,
                 true,
             )
         };

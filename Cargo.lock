@@ -1018,6 +1018,7 @@ dependencies = [
  "nuxie",
  "nuxie-binary",
  "nuxie-image-codec",
+ "nuxie-ore-metal",
  "nuxie-project-data",
  "nuxie-project-data-scripting",
  "nuxie-render-api",

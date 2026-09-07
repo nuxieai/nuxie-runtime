@@ -65,7 +65,7 @@ fn ore_layouts_intern_by_baked_id() {
 fn wide_reflected_layout_spills_without_losing_bindings() {
     let host = GmHost::new(0xff000000);
     let mut module = nuxie_ore_metal::new_shader_module_backend_base();
-    let mut blob = vec![3, 1, 14, 0, 17, 0, 0, 0, 9, 0, 0, 0];
+    let mut blob = vec![3, 2, 14, 0, 17, 0, 0, 0, 9, 0, 0, 0];
     for binding in 0..17 {
         blob.extend_from_slice(&[
             0, binding, 0, 3, 0, binding, 0, binding, 0, 255, 255, 0, 0, 0,

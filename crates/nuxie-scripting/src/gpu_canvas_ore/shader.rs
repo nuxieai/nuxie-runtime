@@ -1,7 +1,7 @@
 //! Shader entry selection and binding-map layout construction from
 //! `src/lua/renderer/lua_gpu.cpp` and `ScriptedShader` in rive_lua_libs.hpp.
 use super::*;
-use nuxie_ore_metal::bind_group_layout::makeBindGroupLayoutFromShader;
+use nuxie_ore_metal::bind_group_layout::{bindingMapForStages, makeBindGroupLayoutFromBindingMap};
 use nuxie_ore_metal::shader_module::ShaderModule;
 use nuxie_render_api::GpuCanvasShaderStage;
 
@@ -138,15 +138,14 @@ impl UserData for Layout {}
 
 pub(super) fn auto_layouts(
     context: &mut dyn ContextApi,
-    shader: &Shader,
+    vertex: Option<&ShaderModule>,
+    fragment: Option<&ShaderModule>,
 ) -> Result<Vec<Option<Layout>>> {
-    let module = shader
-        .vertex_module()
-        .expect("resolved vertex entry retains a module");
+    let binding_map = bindingMapForStages(vertex, fragment);
     let mut seen = [false; kMaxBindGroups as usize];
     let mut max_group = 0;
-    for index in 0..module.m_bindingMap.size() {
-        let group = usize::from(module.m_bindingMap.at(index).group);
+    for index in 0..binding_map.size() {
+        let group = usize::from(binding_map.at(index).group);
         if group >= seen.len() {
             continue;
         }
@@ -160,7 +159,7 @@ pub(super) fn auto_layouts(
         }
         // Source does not diagnose allocation here: null is passed to pipeline
         // validation for an automatically reflected layout.
-        layouts[group] = makeBindGroupLayoutFromShader(context, Some(module), group as u32, &[])
+        layouts[group] = makeBindGroupLayoutFromBindingMap(context, &binding_map, group as u32, &[])
             .map(|resource| Layout {
                 resource,
                 group: group as u32,
@@ -204,9 +203,26 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             Error::runtime("GPUBindGroupLayout.new: 'shader' must be a Shader with a loaded module")
         })?;
         let dynamic = dynamic_ubo_bindings(&desc)?;
+        let fragment = match desc.get::<Value>("fragment")? {
+            Value::Nil => None,
+            Value::UserData(value) if value.is::<Shader>() => {
+                Some(value.borrow::<Shader>()?.clone())
+            }
+            _ => return Err(Error::runtime("GPUBindGroupLayout.new: 'fragment' must be a Shader with a @fragment entry point")),
+        };
+        let fragment_module = if let Some(fragment) = &fragment {
+            Some(fragment.first_of_stage(ShaderStage::fragment).ok_or_else(||
+                Error::runtime("GPUBindGroupLayout.new: 'fragment' must be a Shader with a @fragment entry point"))?)
+                .and_then(|entry| entry.module.shaderModuleBase())
+        } else {
+            shader.first_of_stage(ShaderStage::fragment)
+                .or_else(|| shader.first_of_stage(ShaderStage::vertex))
+                .and_then(|entry| entry.module.shaderModuleBase())
+        };
+        let binding_map = bindingMapForStages(shader.vertex_module(), fragment_module);
         let mut context = context.borrow_mut();
         let resource =
-            makeBindGroupLayoutFromShader(&mut *context, shader.vertex_module(), group, &dynamic);
+            makeBindGroupLayoutFromBindingMap(&mut *context, &binding_map, group, &dynamic);
         let Some(resource) = resource else {
             let error = context.lastError();
             context.clearLastError();

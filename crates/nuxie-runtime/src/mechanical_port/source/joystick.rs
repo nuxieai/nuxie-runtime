@@ -1,7 +1,9 @@
 use crate::mechanical_port::source::{
     animation::{
+        interpolating_keyframe::KeyFrameValueContext,
         keyed_object::KeyedObject,
         linear_animation::{LinearAnimation, LinearAnimationArtboard},
+        linear_animation_instance::LinearAnimationInstance,
         nested_remap_animation::NestedRemapAnimation,
     },
     artboard::Artboard,
@@ -26,6 +28,9 @@ pub struct Joystick {
     inverse_world_transform: Mat2D,
     x_animation: Option<CoreHandle>,
     y_animation: Option<CoreHandle>,
+    // Playback contexts exist only on artboard instances, not source artboards.
+    x_animation_instance: Option<LinearAnimationInstance>,
+    y_animation_instance: Option<LinearAnimationInstance>,
     handle_source: Option<CoreHandle>,
     dependents: Vec<CoreHandle>,
 }
@@ -38,6 +43,8 @@ impl Default for Joystick {
             inverse_world_transform: Mat2D::default(),
             x_animation: None,
             y_animation: None,
+            x_animation_instance: None,
+            y_animation_instance: None,
             handle_source: None,
             dependents: Vec::new(),
         }
@@ -78,6 +85,29 @@ impl Joystick {
                     artboard.animation_handle_at(self.base.y_id() as usize)
                 })
                 .flatten();
+            let instance = artboard
+                .with_downcast::<Artboard, _>(|artboard| {
+                    artboard
+                        .is_instance()
+                        .then(|| artboard.runtime_weak_handle())
+                })
+                .flatten();
+            if let Some(instance) = instance {
+                if let Some(animation) = &self.x_animation {
+                    self.x_animation_instance = Some(LinearAnimationInstance::new(
+                        animation.clone(),
+                        instance.clone(),
+                        1.0,
+                    ));
+                }
+                if let Some(animation) = &self.y_animation {
+                    self.y_animation_instance = Some(LinearAnimationInstance::new(
+                        animation.clone(),
+                        instance,
+                        1.0,
+                    ));
+                }
+            }
         }
         StatusCode::Ok
     }
@@ -150,7 +180,14 @@ impl Joystick {
             };
             animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
                 let time = (x + 1.0) / 2.0 * animation.duration_seconds();
-                animation.apply(artboard, time, 1.0, None);
+                animation.apply(
+                    artboard,
+                    time,
+                    1.0,
+                    self.x_animation_instance
+                        .as_ref()
+                        .map(|instance| instance as &dyn KeyFrameValueContext),
+                );
             });
         }
         if let Some(animation) = &self.y_animation {
@@ -161,7 +198,14 @@ impl Joystick {
             };
             animation.with_downcast_mut::<LinearAnimation, _>(|animation| {
                 let time = (y + 1.0) / 2.0 * animation.duration_seconds();
-                animation.apply(artboard, time, 1.0, None);
+                animation.apply(
+                    artboard,
+                    time,
+                    1.0,
+                    self.y_animation_instance
+                        .as_ref()
+                        .map(|instance| instance as &dyn KeyFrameValueContext),
+                );
             });
         }
         for dependent in &self.dependents {

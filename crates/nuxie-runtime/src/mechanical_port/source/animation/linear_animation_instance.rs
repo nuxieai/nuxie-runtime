@@ -4,13 +4,26 @@ use crate::mechanical_port::source::{
         keyed_callback_reporter::KeyedCallbackReporter, linear_animation::LinearAnimation,
         r#loop::Loop, nested_animation::NestedEventNotifier,
     },
-    artboard::RuntimeArtboardInstanceWeakHandle,
+    artboard::{Artboard, RuntimeArtboardInstanceWeakHandle},
     core::{CoreHandle, field_types::core_callback_type::CallbackContext},
     data_bind::{
         bindable_property_boolean::BindablePropertyBoolean,
         bindable_property_color::BindablePropertyColor,
         bindable_property_number::BindablePropertyNumber,
         bindable_property_string::BindablePropertyString,
+        data_bind_container::DataBindContainerWeak,
+    },
+    generated::{
+        animation::{
+            keyframe_bool_base::KeyFrameBoolBase, keyframe_color_base::KeyFrameColorBase,
+            keyframe_double_base::KeyFrameDoubleBase, keyframe_string_base::KeyFrameStringBase,
+        },
+        data_bind::{
+            bindable_property_boolean_base::BindablePropertyBooleanBase,
+            bindable_property_color_base::BindablePropertyColorBase,
+            bindable_property_number_base::BindablePropertyNumberBase,
+            bindable_property_string_base::BindablePropertyStringBase,
+        },
     },
     scripted::scripted_interpolator::ScriptedInterpolator,
 };
@@ -44,7 +57,10 @@ pub struct LinearAnimationInstance {
     loop_value: i32,
     scripted_interpolators: RefCell<Option<HashMap<CoreHandle, CoreHandle>>>,
     cloned_artboard_data_binds: RefCell<Vec<CoreHandle>>,
-    keyframe_value_holders: Option<HashMap<CoreHandle, CoreHandle>>,
+    keyframe_value_holders: RefCell<Option<HashMap<CoreHandle, CoreHandle>>>,
+    keyframe_value_binds: RefCell<HashMap<CoreHandle, CoreHandle>>,
+    // Retained field projection for teardown while Artboard itself is borrowed.
+    keyframe_bind_container: RefCell<DataBindContainerWeak>,
 }
 impl LinearAnimationInstance {
     pub fn new(
@@ -109,7 +125,9 @@ impl LinearAnimationInstance {
             loop_value: -1,
             scripted_interpolators: RefCell::new(None),
             cloned_artboard_data_binds: RefCell::new(Vec::new()),
-            keyframe_value_holders: None,
+            keyframe_value_holders: RefCell::new(None),
+            keyframe_value_binds: RefCell::new(HashMap::new()),
+            keyframe_bind_container: RefCell::new(DataBindContainerWeak::default()),
         }
     }
 
@@ -257,37 +275,95 @@ impl LinearAnimationInstance {
             }
         })
     }
-    pub fn add_keyframe_value_holder(&mut self, key: CoreHandle, holder: CoreHandle) {
-        self.keyframe_value_holders
-            .get_or_insert_with(HashMap::new)
-            .insert(key, holder);
-    }
-    pub fn keyframes(&self) -> Vec<CoreHandle> {
-        self.with_animation(|animation| {
-            animation
-                .keyed_objects()
-                .iter()
-                .flat_map(|keyed_object| {
-                    keyed_object
-                        .with_downcast::<
-                            crate::mechanical_port::source::animation::keyed_object::KeyedObject,
-                            _,
-                        >(|keyed_object| keyed_object.keyed_properties().to_vec())
-                        .unwrap_or_default()
-                })
-                .flat_map(|keyed_property| {
-                    keyed_property
-                        .with_downcast::<
-                            crate::mechanical_port::source::animation::keyed_property::KeyedProperty,
-                            _,
-                        >(|keyed_property| keyed_property.keyframes().to_vec())
-                        .unwrap_or_default()
-                })
-                .collect()
-        })
-    }
     pub fn keyframe_value_holder(&self, key: &CoreHandle) -> Option<CoreHandle> {
-        self.keyframe_value_holders.as_ref()?.get(key).cloned()
+        let holder = self
+            .keyframe_value_holders
+            .borrow()
+            .as_ref()
+            .and_then(|holders| holders.get(key).cloned());
+        if let Some(holder) = holder {
+            let bind = self.keyframe_value_binds.borrow().get(key).cloned();
+            if let Some(bind) = bind {
+                let container = self.keyframe_bind_container.borrow().upgrade();
+                if let Some(container) = container {
+                    container.flush_data_bind(&bind);
+                }
+            }
+            return Some(holder);
+        }
+        let source = self
+            .artboard
+            .with_artboard(|artboard| artboard.base.artboard_source_handle())
+            .flatten()?;
+        let bind = source
+            .with_downcast::<Artboard, _>(|source| {
+                if source.has_key_frame_source_binds() {
+                    source.key_frame_source_bind(key)
+                } else {
+                    None
+                }
+            })
+            .flatten()?;
+        self.build_keyframe_value_holder(key, &bind)
+    }
+
+    fn build_keyframe_value_holder(
+        &self,
+        key: &CoreHandle,
+        source_bind: &CoreHandle,
+    ) -> Option<CoreHandle> {
+        let (holder, property_key) = match key.core_type()? {
+            KeyFrameDoubleBase::TYPE_KEY => (
+                key.insert_sibling(BindablePropertyNumber::default())?,
+                BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY,
+            ),
+            KeyFrameColorBase::TYPE_KEY => (
+                key.insert_sibling(BindablePropertyColor::default())?,
+                BindablePropertyColorBase::PROPERTY_VALUE_PROPERTY_KEY,
+            ),
+            KeyFrameBoolBase::TYPE_KEY => (
+                key.insert_sibling(BindablePropertyBoolean::default())?,
+                BindablePropertyBooleanBase::PROPERTY_VALUE_PROPERTY_KEY,
+            ),
+            KeyFrameStringBase::TYPE_KEY => (
+                key.insert_sibling(BindablePropertyString::default())?,
+                BindablePropertyStringBase::PROPERTY_VALUE_PROPERTY_KEY,
+            ),
+            _ => return None,
+        };
+        self.keyframe_value_holders
+            .borrow_mut()
+            .get_or_insert_with(HashMap::new)
+            .insert(key.clone(), holder.clone());
+        let clone = source_bind
+            .clone_occurrence()
+            .expect("source DataBind is cloneable");
+        let (file, converter) = source_bind
+            .with(|source| {
+                let source = source.as_data_bind().expect("source keyframe DataBind");
+                (source.file(), source.converter())
+            })
+            .expect("live source DataBind");
+        clone.with_mut(|object| {
+            let bind = object.as_data_bind_mut().expect("cloned DataBind");
+            bind.set_file(file);
+            bind.configure_target(holder.clone(), property_key as u32);
+            bind.initialize();
+        });
+        if let Some(converter) = converter {
+            let converter = converter.clone_occurrence();
+            clone.with_mut(|object| object.as_data_bind_mut().unwrap().set_converter(converter));
+        }
+        let container = self
+            .artboard
+            .with_artboard(|artboard| artboard.base.data_bind_container.clone())
+            .expect("live animation artboard");
+        *self.keyframe_bind_container.borrow_mut() = container.downgrade();
+        container.add_data_bind(clone.clone());
+        self.keyframe_value_binds
+            .borrow_mut()
+            .insert(key.clone(), clone);
+        Some(holder)
     }
     pub fn cache_scripted_interpolator(
         &mut self,
@@ -592,7 +668,9 @@ impl Clone for LinearAnimationInstance {
             loop_value: self.loop_value,
             scripted_interpolators: RefCell::new(None),
             cloned_artboard_data_binds: RefCell::new(Vec::new()),
-            keyframe_value_holders: None,
+            keyframe_value_holders: RefCell::new(None),
+            keyframe_value_binds: RefCell::new(HashMap::new()),
+            keyframe_bind_container: RefCell::new(DataBindContainerWeak::default()),
         }
     }
 }
@@ -603,6 +681,17 @@ impl Drop for LinearAnimationInstance {
                 .artboard
                 .with_artboard_mut(|artboard| artboard.remove_data_bind(bind));
         }
+        for bind in self
+            .keyframe_value_binds
+            .get_mut()
+            .drain()
+            .map(|(_, bind)| bind)
+        {
+            if let Some(container) = self.keyframe_bind_container.get_mut().upgrade() {
+                container.remove_data_bind(bind.clone());
+            }
+            bind.remove_occurrence();
+        }
         if let Some(scripted_interpolators) = self.scripted_interpolators.get_mut().take() {
             let _ = self.artboard.with_artboard_mut(|artboard| {
                 for interpolator in scripted_interpolators.into_values() {
@@ -610,6 +699,10 @@ impl Drop for LinearAnimationInstance {
                 }
             });
         }
-        self.keyframe_value_holders.take();
+        if let Some(holders) = self.keyframe_value_holders.get_mut().take() {
+            for holder in holders.into_values() {
+                holder.remove_occurrence();
+            }
+        }
     }
 }

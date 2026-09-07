@@ -40,13 +40,6 @@ where
         self.base.clear_spilled_time();
     }
 
-    fn for_each_animation_instance(
-        &mut self,
-        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
-    ) {
-        self.base.for_each_animation_instance(callback);
-    }
-
     fn with_animation_instance_for_blend(
         &mut self,
         blend_animation: &CoreHandle,

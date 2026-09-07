@@ -156,6 +156,10 @@ pub struct Artboard {
     scripted_objects: Vec<CoreHandle>,
     advancing_components: Vec<AdvancingComponentHandle>,
     pub(crate) data_bind_container: DataBindContainer,
+    // Shared-keyframe identity -> first serialized source bind. Built once;
+    // source artboard bindings do not change during playback.
+    key_frame_source_binds: RefCell<HashMap<CoreHandle, CoreHandle>>,
+    key_frame_source_binds_built: Cell<bool>,
     data_context: Option<RuntimeDataContextHandle>,
     scripting_vm: Option<RuntimeScriptingVmHandle>,
     file: RuntimeFileWeakHandle,
@@ -227,6 +231,8 @@ impl Default for Artboard {
             scripted_objects: Vec::new(),
             advancing_components: Vec::new(),
             data_bind_container: DataBindContainer::default(),
+            key_frame_source_binds: RefCell::new(HashMap::new()),
+            key_frame_source_binds_built: Cell::new(false),
             data_context: None,
             scripting_vm: None,
             file: RuntimeFileWeakHandle::default(),
@@ -523,6 +529,37 @@ impl Artboard {
 
     pub fn data_bind_handles(&self) -> Vec<CoreHandle> {
         self.data_bind_container.data_binds()
+    }
+
+    fn build_key_frame_source_binds_index(&self) {
+        self.key_frame_source_binds_built.set(true);
+        let mut index = self.key_frame_source_binds.borrow_mut();
+        for bind in self.data_bind_container.data_binds() {
+            let Some(target) = bind
+                .with(|bind| bind.as_data_bind().and_then(|bind| bind.target()))
+                .flatten()
+            else {
+                continue;
+            };
+            if !target.is_type_of(crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBase::TYPE_KEY) {
+                continue;
+            }
+            index.entry(target).or_insert(bind);
+        }
+    }
+
+    pub fn has_key_frame_source_binds(&self) -> bool {
+        if !self.key_frame_source_binds_built.get() {
+            self.build_key_frame_source_binds_index();
+        }
+        !self.key_frame_source_binds.borrow().is_empty()
+    }
+
+    pub fn key_frame_source_bind(&self, keyframe: &CoreHandle) -> Option<CoreHandle> {
+        if !self.key_frame_source_binds_built.get() {
+            self.build_key_frame_source_binds_index();
+        }
+        self.key_frame_source_binds.borrow().get(keyframe).cloned()
     }
 
     pub fn add_data_bind(&mut self, bind: CoreHandle) {
@@ -1758,6 +1795,8 @@ impl Artboard {
             })
             .flatten();
         if let Some(target) = target {
+            // Keyframe holders are not Components; only graph-owned targets
+            // propagate component dirt, matching upstream afda7a16.
             target.with(|target| {
                 if let Some(component) = target.as_component() {
                     self.on_component_dirty(component);

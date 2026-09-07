@@ -58,18 +58,11 @@ use crate::mechanical_port::source::{
     file::DETERMINISTIC_MODE,
     focus_data::FocusData,
     generated::{
-        animation::{
-            keyframe_base::KeyFrameBase, keyframe_bool_base::KeyFrameBoolBase,
-            keyframe_color_base::KeyFrameColorBase, keyframe_double_base::KeyFrameDoubleBase,
-            keyframe_string_base::KeyFrameStringBase, state_transition_base::StateTransitionBase,
-        },
+        animation::state_transition_base::StateTransitionBase,
         core_registry::CoreRegistry,
         data_bind::{
             bindable_property_base::BindablePropertyBase,
-            bindable_property_boolean_base::BindablePropertyBooleanBase,
-            bindable_property_color_base::BindablePropertyColorBase,
             bindable_property_number_base::BindablePropertyNumberBase,
-            bindable_property_string_base::BindablePropertyStringBase,
         },
         event_base::EventBase,
     },
@@ -301,7 +294,6 @@ impl StateMachineLayerInstance {
             .flatten()
             .expect("an imported state-machine layer has AnyState");
         let any_state_instance = Self::make_state_instance(any_state, &artboard);
-        state_machine_instance.build_state_keyframe_binds(&any_state_instance);
         self.any_state_instance = Some(any_state_instance);
         let entry = layer
             .with_downcast::<StateMachineLayer, _>(StateMachineLayer::entry_state)
@@ -337,27 +329,7 @@ impl StateMachineLayerInstance {
     }
 
     fn reset_state(&mut self, machine: &mut StateMachineInstance) {
-        if let Some(state_from) = self.state_from.as_ref()
-            && self
-                .any_state_instance
-                .as_ref()
-                .is_none_or(|any| !state_from.ptr_eq(any))
-            && self
-                .current_state
-                .as_ref()
-                .is_none_or(|current| !state_from.ptr_eq(current))
-        {
-            machine.remove_state_keyframe_binds(state_from);
-        }
         self.state_from = None;
-        if let Some(current) = self.current_state.as_ref()
-            && self
-                .any_state_instance
-                .as_ref()
-                .is_none_or(|any| !current.ptr_eq(any))
-        {
-            machine.remove_state_keyframe_binds(current);
-        }
         self.current_state = None;
         let entry = self
             .layer
@@ -601,7 +573,6 @@ impl StateMachineLayerInstance {
         };
         let current = Self::make_state_instance(state_to, &self.artboard_instance);
         self.current_state = Some(current.clone());
-        machine.build_state_keyframe_binds(&current);
         let state = current.definition();
         let events = Self::layer_component_events(&state);
         self.fire_events(machine, 0, &events);
@@ -871,14 +842,6 @@ impl StateMachineLayerInstance {
         if self.transition_completed {
             self.fire_events(machine, 1, &events);
             self.perform_listener_actions(machine, 1, &actions);
-        }
-        if let Some(state_from) = self.state_from.as_ref()
-            && self
-                .any_state_instance
-                .as_ref()
-                .is_none_or(|any| !state_from.ptr_eq(any))
-        {
-            machine.remove_state_keyframe_binds(state_from);
         }
         self.state_from = out_state;
         if !self.transition_completed {
@@ -2327,7 +2290,6 @@ pub struct StateMachineInstance {
     bindable_data_binds_to_target: HashMap<CoreHandle, CoreHandle>,
     bindable_data_binds_to_source: HashMap<CoreHandle, CoreHandle>,
     transition_property_instances: HashMap<CoreHandle, HashMap<u32, CoreHandle>>,
-    state_keyframe_data_binds: HashMap<RuntimeStateInstanceHandle, Vec<CoreHandle>>,
     draw_order_change_counter: u8,
     focus_manager: RuntimeFocusManagerHandle,
     external_focus_manager: Option<RuntimeFocusManagerHandle>,
@@ -2404,7 +2366,6 @@ impl StateMachineInstance {
             bindable_data_binds_to_target: HashMap::new(),
             bindable_data_binds_to_source: HashMap::new(),
             transition_property_instances: HashMap::new(),
-            state_keyframe_data_binds: HashMap::new(),
             draw_order_change_counter: 0,
             focus_manager: RuntimeFocusManagerHandle::new(FocusManager::new()),
             external_focus_manager: None,
@@ -4506,118 +4467,6 @@ impl StateMachineInstance {
             .cloned()
     }
 
-    fn keyframe_holder_property_key(keyframe_type: u16) -> u32 {
-        match keyframe_type {
-            KeyFrameDoubleBase::TYPE_KEY => {
-                BindablePropertyNumberBase::PROPERTY_VALUE_PROPERTY_KEY as u32
-            }
-            KeyFrameColorBase::TYPE_KEY => {
-                BindablePropertyColorBase::PROPERTY_VALUE_PROPERTY_KEY as u32
-            }
-            KeyFrameBoolBase::TYPE_KEY => {
-                BindablePropertyBooleanBase::PROPERTY_VALUE_PROPERTY_KEY as u32
-            }
-            KeyFrameStringBase::TYPE_KEY => {
-                BindablePropertyStringBase::PROPERTY_VALUE_PROPERTY_KEY as u32
-            }
-            _ => 0,
-        }
-    }
-
-    pub fn build_state_keyframe_binds(&mut self, state_instance: &RuntimeStateInstanceHandle) {
-        if self.artboard_instance.upgrade().is_none() {
-            return;
-        }
-        let mut first_bind_by_target = HashMap::new();
-        let source_artboard = self
-            .artboard_instance
-            .with_artboard(|artboard| artboard.base.artboard_source_handle())
-            .flatten();
-        let Some(source_artboard) = source_artboard else {
-            return;
-        };
-        let source_data_binds = source_artboard
-            .with_downcast::<Artboard, _>(Artboard::data_bind_handles)
-            .unwrap_or_default();
-        for data_bind in source_data_binds {
-            let target = data_bind
-                .with(|data_bind| data_bind.as_data_bind().and_then(DataBind::target))
-                .flatten();
-            if let Some(target) = target
-                && target.is_type_of(KeyFrameBase::TYPE_KEY)
-            {
-                first_bind_by_target.entry(target).or_insert(data_bind);
-            }
-        }
-        if first_bind_by_target.is_empty() {
-            return;
-        }
-        state_instance.with_state_mut(|state| {
-            state.for_each_animation_instance(&mut |animation_instance| {
-                for keyframe in animation_instance.keyframes() {
-                    let keyframe_type = keyframe.core_type().unwrap_or_default();
-                    let holder_property_key = Self::keyframe_holder_property_key(keyframe_type);
-                    if holder_property_key == 0 {
-                        continue;
-                    }
-                    let Some(source_bind) = first_bind_by_target.get(&keyframe) else {
-                        continue;
-                    };
-                    let holder = match keyframe_type {
-                        KeyFrameDoubleBase::TYPE_KEY => {
-                            keyframe.insert_sibling(BindablePropertyNumber::default())
-                        }
-                        KeyFrameColorBase::TYPE_KEY => {
-                            keyframe.insert_sibling(BindablePropertyColor::default())
-                        }
-                        KeyFrameBoolBase::TYPE_KEY => {
-                            keyframe.insert_sibling(BindablePropertyBoolean::default())
-                        }
-                        KeyFrameStringBase::TYPE_KEY => {
-                            keyframe.insert_sibling(BindablePropertyString::default())
-                        }
-                        _ => None,
-                    }
-                    .expect("a supported KeyFrame retains its authored arena");
-                    animation_instance.add_keyframe_value_holder(keyframe.clone(), holder.clone());
-                    let clone = source_bind
-                        .clone_occurrence()
-                        .expect("an artboard DataBind must be cloneable in its authored arena");
-                    let (file, converter) = source_bind
-                        .with(|source_bind| {
-                            let source_bind = source_bind.as_data_bind()?;
-                            Some((source_bind.file(), source_bind.converter()))
-                        })
-                        .flatten()
-                        .unwrap_or_default();
-                    let converter = converter.and_then(|converter| converter.clone_occurrence());
-                    clone.with_mut(|clone| {
-                        if let Some(clone) = clone.as_data_bind_mut() {
-                            clone.set_file(file);
-                            clone.configure_target(holder, holder_property_key);
-                            clone.initialize();
-                            clone.set_converter(converter);
-                        }
-                    });
-                    self.add_data_bind(clone.clone());
-                    self.state_keyframe_data_binds
-                        .entry(state_instance.clone())
-                        .or_default()
-                        .push(clone);
-                }
-            });
-        });
-    }
-
-    pub fn remove_state_keyframe_binds(&mut self, state_instance: &RuntimeStateInstanceHandle) {
-        let Some(data_binds) = self.state_keyframe_data_binds.remove(state_instance) else {
-            return;
-        };
-        for data_bind in data_binds {
-            self.data_bind_container.remove_data_bind(data_bind.clone());
-            data_bind.remove_occurrence();
-        }
-    }
 
     pub fn scripted_object(&self, source: &CoreHandle) -> Option<CoreHandle> {
         self.scripted_objects_map.get(source).cloned()
@@ -4817,7 +4666,6 @@ impl Drop for StateMachineInstance {
         for data_bind in data_binds {
             data_bind.remove_occurrence();
         }
-        self.state_keyframe_data_binds.clear();
         self.layers.clear();
         for (_, property) in self.bindable_property_instances.drain() {
             property.remove_occurrence();

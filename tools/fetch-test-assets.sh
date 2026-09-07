@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-73f94edc539c1fbc79827e5940814125035f8c77}
+ref=${RIVE_RUNTIME_REF:-afda7a160cd72ea079e2cd25580518b22330646e}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/joystick_databound_keyframe_test.riv|ca3e052d533a32143279f8e035f95ca53461a4f5d5fdf782bd0e63332bbe2c63|afda7a160cd72ea079e2cd25580518b22330646e|joystick_databound_keyframe_test.riv"
   "sync/text_fit_test.riv|540cfae6ba78a81518525af17a8d09e4cd50131dcbd9e584832c2468f24fbcd3|73f94edc539c1fbc79827e5940814125035f8c77|text_fit_test.riv"
   "parity/Halloween_v3.riv|b786c27b0fc5ede17dca2365dd1830caa2e46654b89ac3f509337b792af48744|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Halloween_v3.riv"
   "parity/Knight_square_2.riv|cec7ff27afbf9506cd64c37cccf40b0e58a8eacd8a91dc7deb54c040ad9addb8|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Knight_square_2.riv"

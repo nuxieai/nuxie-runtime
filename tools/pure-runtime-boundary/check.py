@@ -250,6 +250,19 @@ PORTABLE_ABI_FACADE_ALLOWED_MODULE_SYMBOLS = {
     },
 }
 PORTABLE_ABI_FACADE_FILE_MODULE_SYMBOLS = {
+    "crates/nux-capi/src/android_vulkan/deferred.rs": {
+        "render_api": {
+            "BlendMode",
+            "DeferredCanvasHostHandle",
+            "ImageSampler",
+            "OreContextHandle",
+            "PersistentFactoryContext",
+            "RenderCanvas",
+            "RenderCanvasError",
+            "RenderCanvasFrame",
+            "RenderCanvasHandle",
+        },
+    },
     "crates/nux-capi/src/apple_metal.rs": {
         "ore_metal_gpu_canvas": {
             "OreMetalGpuCanvas",

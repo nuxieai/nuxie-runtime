@@ -19,6 +19,17 @@ use crate::mechanical_port::source::text_engine::{
 
 const ZERO_WIDTH_SPACE: Unichar = 8203;
 
+// src/text/raw_text_input.cpp::encodeCodePoints at ed92313a. Encode the
+// complete counted span, including any embedded zero inserted as a code point.
+fn encode_code_points(code_points: &[Unichar]) -> String {
+    let mut buffer = vec![0; Utf::count_code_point_length(code_points) as usize];
+    let mut encoded = 0;
+    for code_point in code_points {
+        encoded += Utf::encode(&mut buffer[encoded..], *code_point) as usize;
+    }
+    String::from_utf8(buffer).unwrap()
+}
+
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CursorBoundary {
@@ -379,7 +390,7 @@ impl RawTextInput {
         self.erase();
         let mut code_point_index = self.cursor.start().code_point_index();
         let mut bytes = value.as_bytes();
-        while !bytes.is_empty() {
+        while bytes.first().is_some_and(|byte| *byte != 0) {
             let code_point = Utf::next_utf8(&mut bytes);
             self.text.insert(code_point_index as usize, code_point);
             code_point_index += 1;
@@ -920,19 +931,27 @@ impl RawTextInput {
         if size == 0 {
             return String::new();
         }
-        let code_points = &self.text[..size - 1];
-        let mut buffer = vec![0; Utf::count_code_point_length(code_points) as usize];
-        let mut encoded = 0;
-        for code_point in code_points {
-            encoded += Utf::encode(&mut buffer[encoded..], *code_point) as usize;
+        encode_code_points(&self.text[..size - 1])
+    }
+
+    pub fn selected_text(&self) -> String {
+        if self.text.is_empty() {
+            return String::new();
         }
-        String::from_utf8(buffer).unwrap()
+        // The trailing zero-width-space sentinel is never selectable.
+        let text_end = self.text.len() - 1;
+        let first = (self.cursor.first().code_point_index() as usize).min(text_end);
+        let last = (self.cursor.last().code_point_index() as usize).min(text_end);
+        if first >= last {
+            return String::new();
+        }
+        encode_code_points(&self.text[first..last])
     }
 
     fn set_text_private(&mut self, value: String) {
         let mut bytes = value.as_bytes();
         self.text.clear();
-        while !bytes.is_empty() {
+        while bytes.first().is_some_and(|byte| *byte != 0) {
             self.text.push(Utf::next_utf8(&mut bytes));
         }
         self.text.push(ZERO_WIDTH_SPACE);

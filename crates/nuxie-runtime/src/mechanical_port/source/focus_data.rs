@@ -336,6 +336,13 @@ impl ComponentBaseCallbacks for FocusData {
 }
 
 impl Focusable for FocusDataFocusable {
+    fn selected_text(&self) -> String {
+        self.owner
+            .as_ref()
+            .and_then(|owner| owner.with_downcast::<FocusData, _>(FocusData::selected_text))
+            .unwrap_or_default()
+    }
+
     fn focusable_artboard(&self) -> Option<CoreHandle> {
         self.owner.as_ref().and_then(|owner| {
             owner
@@ -578,6 +585,20 @@ impl FocusData {
             }
         }
         false
+    }
+
+    pub fn selected_text(&self) -> String {
+        self.component()
+            .parent_handle()
+            .and_then(|parent| {
+                parent.with(|parent| {
+                    parent
+                        .as_text_input()
+                        .map(|text_input| text_input.selected_text())
+                        .unwrap_or_default()
+                })
+            })
+            .unwrap_or_default()
     }
 
     pub fn text_input_occurrence(owner: &CoreHandle, text: &str) -> bool {

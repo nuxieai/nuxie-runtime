@@ -12,7 +12,7 @@ use nuxie_runtime::source::{
     layout::layout_node_provider,
     layout_component::LayoutComponent,
     math::aabb::Aabb,
-    shapes::{points_path::PointsPath, shape::Shape},
+    shapes::{points_path::PointsPath, rectangle::Rectangle, shape::Shape},
     solo::Solo,
 };
 use nuxie_runtime::{
@@ -170,6 +170,21 @@ fn a_solos_active_child_is_laid_out_through_it_from_a_riv_file() {
     let bounds = bounds(&active(&solo));
     assert_eq!(bounds.width(), 200.0);
     assert_eq!(bounds.height(), 200.0);
+}
+
+#[test]
+fn a_non_participating_child_in_a_solo_is_content_sized_from_a_riv_file() {
+    let fixture = fixture("layout/solo_legacy_child.riv", None, true);
+    let solo = only_solo(&fixture);
+    assert!(layout_node_provider::from_component(&active(&solo)).is_none());
+    let rects = fixture.find::<Rectangle>();
+    assert_eq!(rects.len(), 1);
+    rects[0]
+        .with_downcast::<Rectangle, _>(|rect| {
+            assert_eq!(rect.base.width(), 200.0);
+            assert_eq!(rect.base.height(), 200.0);
+        })
+        .expect("native Rectangle");
 }
 
 #[test]

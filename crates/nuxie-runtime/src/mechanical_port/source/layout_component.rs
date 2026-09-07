@@ -1873,6 +1873,13 @@ impl LayoutComponent {
             style,
         );
     }
+    // Plain groups contain free content; Solo children still receive the
+    // enclosing layout's content size. Provider collection remains separately
+    // transparent through both groups and Solos.
+    fn stops_content_sizing(component: &dyn crate::mechanical_port::source::core::CoreObject) -> bool {
+        component.core_type() == crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY
+    }
+
     fn propagate_size_to_children(
         children: Vec<CoreHandle>,
         hidden: bool,
@@ -1886,8 +1893,7 @@ impl LayoutComponent {
             let skip = child
                 .with(|child| {
                     child.as_layout_component().is_some()
-                        || child.core_type() == crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY
-                        || child.as_any().is::<crate::mechanical_port::source::solo::Solo>()
+                        || Self::stops_content_sizing(child)
                         || child.layout_provider_handle().is_some()
                 })
                 .unwrap_or(true);

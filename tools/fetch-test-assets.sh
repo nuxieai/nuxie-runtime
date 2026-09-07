@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-1cdecb8ed9ea8310400405d20d728d4cb9924602}
+ref=${RIVE_RUNTIME_REF:-73f94edc539c1fbc79827e5940814125035f8c77}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/text_fit_test.riv|540cfae6ba78a81518525af17a8d09e4cd50131dcbd9e584832c2468f24fbcd3|73f94edc539c1fbc79827e5940814125035f8c77|text_fit_test.riv"
   "parity/Halloween_v3.riv|b786c27b0fc5ede17dca2365dd1830caa2e46654b89ac3f509337b792af48744|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Halloween_v3.riv"
   "parity/Knight_square_2.riv|cec7ff27afbf9506cd64c37cccf40b0e58a8eacd8a91dc7deb54c040ad9addb8|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Knight_square_2.riv"
   "parity/Tom_Morello.riv|2c2816f02811d6f349b6d73829d593e120939e554bde7f838b8c10f6c8ea0c82|e949498e05483a852c10fbbdad2cd1941c15aebc|parity/Tom_Morello.riv"

@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "1cdecb8ed9ea8310400405d20d728d4cb9924602"
+UPSTREAM_REF = "73f94edc539c1fbc79827e5940814125035f8c77"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "text_fit_test",
     "ik_anim_test",
     "ai_assitant",
     "artboard_list_overrides_horizontal",
@@ -2640,6 +2641,15 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "text_fit_test":
+                        # text_test.cpp: authored VMI 0, draw after .032,
+                        # then int(3.0f / .032f) further frames.
+                        actions = (
+                            action("bind-authored-view-model-instance", instance_index=0),
+                            action("advance", target="state-machine", seconds=0.032),
+                            action("draw"),
+                        ) + tuple(repeated_frames(93, 0.032))
+                        blocker = None
                     if silver_id == "color_passthrough_test":
                         # color_channels_test.cpp binds the authored default
                         # view-model instance to state machine 0, draws after
@@ -2713,6 +2723,11 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "pass the nullable authored view-model instance 0 lookup unchanged "
                             "to binding, advance 0 then 0.1, then "
                             "four 0.5-second frames. Enrollment alone is not a validation result."
+                        )
+                    if silver_id == "text_fit_test":
+                        note = (
+                            "Exact comparison contract for the literal 94-draw varying-size "
+                            "text producer at 73f94edc. Enrollment alone is not a validation result."
                         )
                     if silver_id == "color_passthrough_test":
                         note = (
@@ -3049,7 +3064,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (259, 211, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (260, 212, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3062,8 +3077,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 259",
-        "expected_runtime = 211",
+        "expected_entries = 260",
+        "expected_runtime = 212",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

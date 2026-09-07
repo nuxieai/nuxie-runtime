@@ -20,6 +20,12 @@ fn runtime_root(test: &str) -> Option<PathBuf> {
 }
 
 fn compare_case(id: &str, runtime: &Path) -> anyhow::Result<()> {
+    // Execution controls process-global deterministic/RNG state. Cases in
+    // this integration-test process must not overlap even with cargo defaults.
+    static EXECUTION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _execution = EXECUTION_LOCK
+        .lock()
+        .unwrap_or_else(|error| error.into_inner());
     let manifest = read_manifest(&workspace_root().join("silver-corpus.toml"))?;
     let case = manifest
         .cases
@@ -41,6 +47,15 @@ fn text_fit_font_size_source_correction_is_exact() {
     };
     compare_case("fit_font_size_test", &runtime)
         .unwrap_or_else(|error| panic!("fit-font-size source correction regressed: {error:#}"));
+}
+
+#[test]
+fn fit_font_size_with_varying_sizes() {
+    let Some(runtime) = runtime_root("upstream Text 73f94edc varying sizes") else {
+        return;
+    };
+    // Upstream: bind authored VMI 0, advance/draw .032, then 93 further frames.
+    compare_case("text_fit_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
 }
 
 #[test]

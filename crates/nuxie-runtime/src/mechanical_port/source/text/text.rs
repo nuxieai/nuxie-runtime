@@ -436,6 +436,9 @@ pub struct Text {
     clip_rect: RawPath,
     clip_path: ShapePaintPath,
     bounds: Aabb,
+    // Last fitFontSize multiplier. Read paragraph spacing through the guarded
+    // helper so switching overflow modes cannot reuse a stale fitted gap.
+    fitted_font_scale: f32,
     modifier_groups: Vec<CoreHandle>,
     styled_text: StyledText,
     modifier_styled_text: StyledText,
@@ -469,6 +472,7 @@ impl Default for Text {
             clip_rect: RawPath::default(),
             clip_path: ShapePaintPath::default(),
             bounds: Aabb::default(),
+            fitted_font_scale: 1.0,
             modifier_groups: Vec::new(),
             styled_text: StyledText::default(),
             modifier_styled_text: StyledText::default(),
@@ -695,6 +699,10 @@ impl Text {
     pub fn ordered_lines(&self) -> &[OrderedLine] {
         &self.ordered_lines
     }
+    // Upstream TESTING accessor, shared with external translated test crates.
+    pub fn shape(&self) -> &[Paragraph] {
+        &self.shape
+    }
     pub fn make_styled(
         &mut self,
         styled: &mut StyledText,
@@ -727,11 +735,18 @@ impl Text {
             if text.is_empty() {
                 continue;
             }
+            // Preserve the negative font-metric sentinel; authored absolute
+            // line height and letter spacing scale uniformly with the font.
+            let line_height = if line_height >= 0.0 {
+                line_height * font_scale
+            } else {
+                line_height
+            };
             styled.append(
                 font,
                 font_size * font_scale,
                 line_height,
-                letter_spacing,
+                letter_spacing * font_scale,
                 &text,
                 run_index as u16,
             );
@@ -808,6 +823,7 @@ impl Text {
             } else {
                 1.0
             };
+            self.fitted_font_scale = font_scale;
 
             if precompute_modifier_coverage {
                 let mut styled = std::mem::take(&mut self.modifier_styled_text);
@@ -995,8 +1011,16 @@ impl Text {
         }
     }
 
+    fn fit_paragraph_spacing(&self) -> f32 {
+        if self.overflow() == TextOverflow::FitFontSize {
+            self.base.paragraph_spacing() * self.fitted_font_scale
+        } else {
+            self.base.paragraph_spacing()
+        }
+    }
+
     fn compute_bounds_info(&self) -> TextBoundsInfo {
-        let paragraph_space = self.base.paragraph_spacing();
+        let paragraph_space = self.fit_paragraph_spacing();
         let mut paragraph_index = 0usize;
         let mut y = 0.0f32;
         let mut min_y = 0.0f32;
@@ -1095,7 +1119,6 @@ impl Text {
 
         let box_width = self.effective_width();
         let box_height = self.effective_height();
-        let paragraph_space = self.base.paragraph_spacing();
         let mut styled = StyledText::default();
         let mut fits = |this: &mut Text, top_size: i32| -> bool {
             let scale = top_size as f32 / max_size;
@@ -1123,7 +1146,7 @@ impl Text {
                 if let Some(last) = paragraph_lines.last() {
                     y += last.bottom;
                 }
-                y += paragraph_space;
+                y += this.base.paragraph_spacing() * scale;
             }
             measured_width <= box_width && (!this.overflow_as_fixed() || y <= box_height)
         };
@@ -1210,7 +1233,7 @@ impl Text {
             }
         }
 
-        let paragraph_space = self.base.paragraph_spacing();
+        let paragraph_space = self.fit_paragraph_spacing();
         let auto_size_max_y = if self.layout_height.is_nan() {
             info.min_y
                 .max(info.total_height - paragraph_space - info.top_trim - info.bottom_trim)
@@ -1408,7 +1431,7 @@ impl Text {
             if let Some(last) = paragraph_lines.last() {
                 current_y += last.bottom;
             }
-            current_y += paragraph_space;
+            current_y += self.fit_paragraph_spacing();
         }
 
         let mut scale = 1.0f32;
@@ -1838,7 +1861,7 @@ impl Text {
         self.mark_shape_dirty();
     }
     pub fn overflow_value_changed(&mut self) {
-        if self.effective_sizing() != TextSizing::AutoWidth {
+        if self.effective_sizing() != TextSizing::AutoWidth || self.overflow_as_fixed() {
             self.mark_shape_dirty();
         }
     }
@@ -1853,7 +1876,11 @@ impl Text {
         }
     }
     pub fn paragraph_spacing_changed(&mut self) {
-        self.mark_paint_dirty();
+        if self.overflow() == TextOverflow::FitFontSize {
+            self.mark_shape_dirty();
+        } else {
+            self.mark_paint_dirty();
+        }
     }
     pub fn origin_value_changed(&mut self) {
         self.mark_paint_dirty();

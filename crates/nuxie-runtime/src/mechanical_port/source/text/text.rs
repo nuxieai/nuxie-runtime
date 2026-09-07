@@ -1724,7 +1724,10 @@ impl Text {
                 height
             },
         );
-        self.measure(max)
+        self.measure(
+            max,
+            (width_mode == LayoutMeasureMode::Exactly).then_some(width),
+        )
     }
     pub fn control_size(
         &mut self,
@@ -1747,7 +1750,7 @@ impl Text {
             self.mark_shape_dirty_layout(false);
         }
     }
-    fn measure(&mut self, max: Vec2D) -> Vec2D {
+    fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {
         let mut styled = std::mem::take(&mut self.styled_text);
         if !self.make_styled(&mut styled, true, 1.0) {
             self.styled_text = styled;
@@ -1760,11 +1763,14 @@ impl Text {
             .as_ref()
             .expect("shaped text retains its font")
             .shape_text(styled.unichars(), runs, 0);
-        let measuring_width = match self.effective_sizing() {
+        // Layout can stretch a text child beyond its authored fallback width.
+        // Measure at that exact width, just as control_size will later draw it;
+        // capping it at base.width reserves height for lines that never render.
+        let measuring_width = exact_width.unwrap_or_else(|| match self.effective_sizing() {
             TextSizing::AutoHeight | TextSizing::Fixed => self.base.width(),
             TextSizing::AutoWidth => f32::MAX,
             TextSizing::Unknown(_) => f32::MAX,
-        };
+        });
         let measuring_wrap =
             if max.x == f32::MAX && self.effective_sizing() != TextSizing::AutoHeight {
                 TextWrap::NoWrap
@@ -1822,7 +1828,7 @@ impl Text {
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::AutoHeight => Vec2D::new(
-                self.base.width(),
+                exact_width.unwrap_or(self.base.width()),
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::Fixed => Vec2D::new(self.base.width(), min_y + self.base.height()),
@@ -1936,6 +1942,70 @@ mod settled_text_value_tests {
         let mut run = TextValueRun::default();
         run.base.set_text_value(value.to_owned());
         TextValueRunHandle::Runtime(Rc::new(RefCell::new(run)))
+    }
+
+    #[test]
+    fn exact_layout_width_measures_lines_at_the_controlled_width() {
+        use crate::mechanical_port::source::{
+            assets::font_asset::FontAsset,
+            core::CoreArena,
+            text::{font_hb::HbFont, text_style::TextStyle},
+        };
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(root)
+                .join("tests/unit_tests/assets/fonts/Inter_18pt-Regular.ttf"),
+        )
+        .expect("pinned text fixture font");
+        let arena = CoreArena::default();
+        let asset = arena.insert(FontAsset::default());
+        FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&bytes).unwrap()));
+        let style = arena.insert(TextStyle::default());
+        TextStyle::set_asset_occurrence(&style, Some(asset));
+        style
+            .with_downcast_mut::<TextStyle, _>(|style| {
+                style.base.set_font_size_value(40.0);
+                style.base.set_line_height_value(44.0);
+            })
+            .unwrap();
+        let mut run = TextValueRun::default();
+        run.base
+            .set_text_value("Choose what deserves your attention.".into());
+        run.set_style(style);
+        let mut text = Text::default();
+        text.base.set_sizing_value_value(1);
+        text.base.set_width_value(120.0);
+        text.all_runs
+            .push(TextValueRunHandle::Runtime(Rc::new(RefCell::new(run))));
+        let measure = |text: &mut Text, width, mode| {
+            text.measure_layout(width, mode, f32::NAN, LayoutMeasureMode::Undefined)
+        };
+        let narrow = measure(&mut text, 354.0, LayoutMeasureMode::AtMost);
+        let stretched = measure(&mut text, 354.0, LayoutMeasureMode::Exactly);
+        text.base.set_width_value(354.0);
+        let authored = measure(&mut text, 354.0, LayoutMeasureMode::AtMost);
+        assert!(narrow.y > authored.y, "fixture must wrap more at 120px");
+        assert_eq!(
+            stretched, authored,
+            "exact layout and authored widths must agree"
+        );
+        text.base.set_width_value(120.0);
+        text.control_size(
+            stretched,
+            LayoutScaleType::Fill,
+            LayoutScaleType::Hug,
+            LayoutDirection::Ltr,
+        );
+        assert_eq!(
+            measure(&mut text, 354.0, LayoutMeasureMode::Exactly),
+            authored
+        );
+        // A later resize must use its new constraint, not the last drawn width.
+        assert_eq!(
+            measure(&mut text, 120.0, LayoutMeasureMode::Exactly),
+            narrow
+        );
     }
 
     #[test]

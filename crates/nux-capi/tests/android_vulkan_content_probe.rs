@@ -12,6 +12,87 @@ fn live_vulkan_test_required() -> bool {
         == Some(std::ffi::OsStr::new("1"))
 }
 
+#[test]
+#[cfg(all(feature = "android-authored-wgsl", feature = "scripting"))]
+fn scripted_gpu_canvas_renders_through_android_vulkan() {
+    let bytes = include_bytes!("fixtures/android-gpu-canvas.riv");
+    unsafe {
+        let mut renderer = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        let status = nux_renderer_new_android_vulkan(160, 100, &mut renderer, &mut result);
+        nux_capi_result_free(result);
+        if status != NuxStatus::Ok {
+            assert!(
+                !live_vulkan_test_required(),
+                "Vulkan unavailable: {status:?}"
+            );
+            return;
+        }
+        result = ptr::null_mut();
+        let mut file = ptr::null_mut();
+        assert_eq!(
+            nux_file_import_android_vulkan_with_trusted_wgsl(
+                renderer,
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxFileImportConfig::default(),
+                &mut file,
+                &mut result,
+            ),
+            NuxStatus::Ok
+        );
+        nux_capi_result_free(result);
+        let mut artboard = ptr::null_mut();
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        let mut player = ptr::null_mut();
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
+        for index in 0..2 {
+            let step = NuxPlayerStep {
+                struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                elapsed_seconds: 0.016,
+                ..std::mem::zeroed()
+            };
+            let mut stepped = ptr::null_mut();
+            assert_eq!(nux_player_step(player, &step, &mut stepped), NuxStatus::Ok);
+            nux_player_step_result_free(stepped);
+            let mut frame = ptr::null_mut();
+            result = ptr::null_mut();
+            assert_eq!(
+                nux_renderer_android_vulkan_render_player(
+                    renderer,
+                    player,
+                    0xFF000000,
+                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    &mut frame,
+                    &mut result,
+                ),
+                NuxStatus::Ok
+            );
+            nux_capi_result_free(result);
+            let pixels = std::slice::from_raw_parts(
+                nux_android_vulkan_frame_data(frame),
+                nux_android_vulkan_frame_len(frame),
+            );
+            let red = pixels
+                .chunks_exact(4)
+                .filter(|p| p[0] >= 204 && p[1] <= 51 && p[2] <= 51 && p[3] >= 250)
+                .count();
+            nux_android_vulkan_frame_free(frame);
+            assert!(
+                red > 100,
+                "frame {index}: expected scripted red content, got {red} pixels"
+            );
+        }
+        nux_player_free(player);
+        nux_artboard_instance_free(artboard);
+        nux_file_free(file);
+        nux_renderer_android_vulkan_free(renderer);
+    }
+}
+
 fn probe_fixture_path() -> Option<std::path::PathBuf> {
     if let Some(path) = std::env::var_os("NUX_PROBE_RIV") {
         return Some(path.into());
@@ -232,6 +313,15 @@ fn portable_asset_hooks_reach_the_android_vulkan_render_path() {
         let mut player = ptr::null_mut();
         assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
 
+        // Rendering consumes the occurrence after its normal host tick.
+        let step = NuxPlayerStep {
+            struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+            elapsed_seconds: 0.016,
+            ..std::mem::zeroed()
+        };
+        let mut stepped = ptr::null_mut();
+        assert_eq!(nux_player_step(player, &step, &mut stepped), NuxStatus::Ok);
+        nux_player_step_result_free(stepped);
         let mut frame = ptr::null_mut();
         result = ptr::null_mut();
         assert_eq!(

@@ -172,27 +172,8 @@ impl NestedArtboardLayout {
         true
     }
 
-    pub fn update_artboard(&mut self, value: Option<CoreHandle>) {
-        if let Some(parent) = self.base.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(layout) = parent.as_layout_component_mut() {
-                    layout.clear_layout_children();
-                }
-            });
-        }
-        self.base.base.update_artboard(value);
-        self.update_width_override();
-        self.update_height_override();
-        if let Some(parent) = self.base.base.parent_handle() {
-            parent.with_mut(|parent| {
-                if let Some(layout) = parent.as_layout_component_mut() {
-                    layout.sync_layout_children();
-                }
-            });
-        }
-    }
-
-    pub(crate) fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+    /// Requires the unborrowed host handle for the base semantic rehome callback.
+    pub fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
         let parent = owner
             .with(|owner| {
                 owner

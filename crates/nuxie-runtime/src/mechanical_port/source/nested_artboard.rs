@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     advance_flags::AdvanceFlags,
     animation::{
         listener_invocation::ListenerInvocation, nested_state_machine::NestedStateMachine,
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
     },
     artboard::{
         Artboard, ArtboardInstance, RuntimeArtboardInstanceHandle,
@@ -32,9 +33,32 @@ use crate::mechanical_port::source::{
     math::{mat2d::Mat2D, vec2d::Vec2D},
     nested_artboard_host_flags::NestedArtboardHostFlags,
     renderer::Renderer,
+    semantic::{
+        semantic_data::SemanticData, semantic_manager::RuntimeSemanticManagerHandle,
+        semantic_node::SemanticNodeRef,
+    },
     status_code::StatusCode,
     view_model_type::ViewModelType,
 };
+
+struct NestedSemanticRehome {
+    manager: RuntimeSemanticManagerHandle,
+    parent_node: Option<SemanticNodeRef>,
+    machine: Option<RuntimeStateMachineInstanceHandle>,
+    instance: Option<RuntimeArtboardInstanceHandle>,
+}
+
+impl NestedSemanticRehome {
+    fn run(self) {
+        if let Some(machine) = self.machine {
+            machine.with_instance_mut(|machine| {
+                machine.set_external_semantic_manager_handle(self.manager, self.parent_node);
+            });
+        } else if let Some(instance) = self.instance {
+            instance.build_semantic_tree(Some(self.manager), self.parent_node);
+        }
+    }
+}
 
 fn build_vmi_list(primary: Option<CoreHandle>, globals: &[CoreHandle]) -> Vec<CoreHandle> {
     let mut list = Vec::with_capacity(usize::from(primary.is_some()) + globals.len());
@@ -462,16 +486,9 @@ impl NestedArtboard {
         self.nested_animations.clear();
     }
 
-    pub fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
-        if let Some((artboard, instance)) =
-            self.prepare_artboard_update(view_model_instance_artboard.clone())
-        {
-            self.referenced_artboard_instance(instance);
-            self.finish_artboard_update(artboard, view_model_instance_artboard);
-        }
-    }
-
-    pub(crate) fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
+    /// Runtime swaps use the handle boundary: semantic subtree construction
+    /// can walk back through this host, so the callback cannot retain &mut self.
+    pub fn update_artboard_occurrence(owner: &CoreHandle, value: Option<CoreHandle>) {
         let prepared = owner
             .with_mut(|owner| {
                 owner
@@ -482,11 +499,18 @@ impl NestedArtboard {
             .expect("live NestedArtboard");
         if let Some((artboard, instance)) = prepared {
             Self::nest_instance_occurrence(owner, instance);
-            owner.with_mut(|owner| {
-                let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
-                nested.try_schedule_bind_stateful();
-                nested.finish_artboard_update(artboard, value);
-            });
+            let rehome = owner
+                .with_mut(|owner| {
+                    let nested = owner.as_nested_artboard_mut().expect("NestedArtboard host");
+                    nested.try_schedule_bind_stateful();
+                    nested.finish_artboard_update(artboard, value)
+                })
+                .expect("live NestedArtboard");
+            // This is the final upstream operation, still before the layout
+            // subclass's post-super work, but after releasing the host slot.
+            if let Some(rehome) = rehome {
+                rehome.run();
+            }
         }
     }
 
@@ -526,6 +550,7 @@ impl NestedArtboard {
 
         if let Some(instance) = self.artboard_instance_handle(0) {
             instance.cleanup_focus_tree();
+            instance.cleanup_semantic_tree();
         }
         self.clear_data_context();
         self.clear_nested_animations();
@@ -581,7 +606,7 @@ impl NestedArtboard {
         &mut self,
         artboard: CoreHandle,
         view_model_instance_artboard: Option<CoreHandle>,
-    ) {
+    ) -> Option<NestedSemanticRehome> {
         if self.base.is_stateful() {
             let stateful_child = self.find_stateful_child_vmi();
             let artboard_view_model_id = artboard
@@ -646,7 +671,8 @@ impl NestedArtboard {
         // Upstream marks the host fully dirty after a runtime swap.
         self.add_dirt(ComponentDirt::FILTHY);
 
-        let parent_focus_manager = self.parent_artboard_handle().and_then(|parent| {
+        let parent_artboard = self.parent_artboard_handle();
+        let parent_focus_manager = parent_artboard.as_ref().and_then(|parent| {
             parent
                 .with_downcast::<Artboard, _>(Artboard::focus_manager_handle)
                 .flatten()
@@ -665,6 +691,33 @@ impl NestedArtboard {
         }
         let fallback = FocusData::find_closest_focus_node_from_parent(self.parent_handle());
         self.sync_nested_focus_tree(fallback, false, true);
+
+        // The incoming instance joins the host semantic manager below its
+        // enclosing SemanticData, after focus scope placement is complete.
+        let parent_semantic_manager = parent_artboard.as_ref().and_then(|parent| {
+            parent
+                .with_downcast::<Artboard, _>(Artboard::semantic_manager_handle)
+                .flatten()
+        });
+        if let Some(manager) = parent_semantic_manager {
+            // This host is the active callback owner: inspect its own Node
+            // before walking parents instead of reborrowing the arena slot.
+            let parent_node = SemanticData::find_closest_semantic_node_from_node(self);
+            let semantic_smi = self.bound_nested_state_machine.as_ref().and_then(|nested| {
+                nested
+                    .with_downcast::<NestedStateMachine, _>(
+                        NestedStateMachine::state_machine_instance,
+                    )
+                    .flatten()
+            });
+            return Some(NestedSemanticRehome {
+                manager,
+                parent_node,
+                machine: semantic_smi,
+                instance: self.instance.clone(),
+            });
+        }
+        None
     }
 
     fn detect_artboard_data_binding(&mut self) {
@@ -1635,10 +1688,6 @@ impl ArtboardReferencerBehavior for NestedArtboard {
 
     fn artboard_referencer_mut(&mut self) -> &mut ArtboardReferencer {
         &mut self.artboard_referencer
-    }
-
-    fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
-        NestedArtboard::update_artboard(self, view_model_instance_artboard);
     }
 
     fn referenced_artboard_id(&self) -> i32 {

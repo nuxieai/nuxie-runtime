@@ -1988,7 +1988,14 @@ pub fn artboard_referencer_update_artboard_handle(
         crate::mechanical_port::source::nested_artboard::NestedArtboard::update_artboard_occurrence(owner, value);
         true
     } else {
-        owner.with_mut(|owner| owner.artboard_referencer_update_artboard(value)).unwrap_or(false)
+        owner.with_mut(|owner| {
+            if let Some(input) = owner.as_any_mut().downcast_mut::<crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard>() {
+                input.update_artboard(value);
+                true
+            } else {
+                false
+            }
+        }).unwrap_or(false)
     }
 }
 
@@ -3429,13 +3436,6 @@ pub trait CoreCapabilities: Any {
     }
     fn data_bind_update_list(&mut self, _list: &[CoreHandle]) -> bool {
         false
-    }
-    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
-        let Some(nested) = self.as_nested_artboard_mut() else {
-            return false;
-        };
-        nested.update_artboard(value);
-        true
     }
     fn as_intrinsically_sizeable_mut(
         &mut self,
@@ -54636,10 +54636,6 @@ impl CoreCapabilities
     }
 }
 impl CoreCapabilities for crate::mechanical_port::source::nested_artboard::NestedArtboard {
-    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
-        self.update_artboard(value);
-        true
-    }
     fn as_nested_artboard(
         &self,
     ) -> Option<&crate::mechanical_port::source::nested_artboard::NestedArtboard> {
@@ -56088,10 +56084,6 @@ impl CoreCapabilities
         true
     }
     fn is_advancing_component(&self) -> bool {
-        true
-    }
-    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
-        self.update_artboard(value);
         true
     }
     fn as_nested_artboard(
@@ -64989,10 +64981,6 @@ impl CoreCapabilities for crate::mechanical_port::source::nested_artboard_leaf::
         );
         true
     }
-    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
-        self.base.base.update_artboard(value);
-        true
-    }
     fn is_advancing_component(&self) -> bool {
         true
     }
@@ -68097,10 +68085,6 @@ impl CoreCapabilities for crate::mechanical_port::source::inputs::semantic_input
 impl CoreCapabilities
     for crate::mechanical_port::source::script_input_artboard::ScriptInputArtboard
 {
-    fn artboard_referencer_update_artboard(&mut self, value: Option<CoreHandle>) -> bool {
-        self.update_artboard(value);
-        true
-    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,

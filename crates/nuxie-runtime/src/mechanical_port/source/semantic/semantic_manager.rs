@@ -122,6 +122,11 @@ impl SemanticManager {
     pub fn node_by_id(&self, id: u32) -> Option<SemanticNodeRef> {
         self.nodes_by_id.get(&id).cloned()
     }
+
+    #[cfg(any(test, feature = "tools"))]
+    pub fn node_count(&self) -> usize {
+        self.nodes_by_id.len()
+    }
     pub fn mark_node_dirty(&mut self, id: u32, dirt: SemanticDirt) {
         self.mark_dirty(dirt);
         if id == 0 {

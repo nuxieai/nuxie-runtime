@@ -201,10 +201,6 @@ impl ArtboardReferencerBehavior for ScriptInputArtboard {
         &mut self.artboard_referencer
     }
 
-    fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>) {
-        ScriptInputArtboard::update_artboard(self, view_model_instance_artboard);
-    }
-
     fn referenced_artboard_id(&self) -> i32 {
         ScriptInputArtboard::referenced_artboard_id(self)
     }

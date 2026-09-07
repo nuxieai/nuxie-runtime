@@ -70,7 +70,9 @@ impl ArtboardReferencer {
 pub trait ArtboardReferencerBehavior {
     fn artboard_referencer(&self) -> &ArtboardReferencer;
     fn artboard_referencer_mut(&mut self) -> &mut ArtboardReferencer;
-    fn update_artboard(&mut self, view_model_instance_artboard: Option<CoreHandle>);
+    // Runtime updateArtboard dispatch requires an unborrowed retained CoreHandle;
+    // use core_registry::artboard_referencer_update_artboard_handle so nested
+    // semantic trees can walk back through their host during the final callback.
     fn referenced_artboard_id(&self) -> i32;
 
     fn set_referenced_artboard(&mut self, artboard: Option<CoreHandle>) {

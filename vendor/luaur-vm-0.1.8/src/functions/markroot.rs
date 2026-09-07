@@ -32,26 +32,24 @@ pub(crate) unsafe fn markroot(l: *mut lua_State) {
         }
     }
 
-    if luaur_common::FFlag::LuauUdataDirectAccess6.get() {
-        if luaur_common::DFFlag::LuauGcMarkUdataAccess.get() {
-            markudatadirectaccess(g);
-        } else {
-            for i in 0..UTAG_INTERNAL_LIMIT as usize {
-                let udatadirect = core::ptr::addr_of_mut!((*(*l).global).udatadirect[i]);
+    if luaur_common::DFFlag::LuauGcMarkUdataAccess.get() {
+        markudatadirectaccess(g);
+    } else {
+        for i in 0..UTAG_INTERNAL_LIMIT as usize {
+            let udatadirect = core::ptr::addr_of_mut!((*(*l).global).udatadirect[i]);
 
-                markvalue!(
-                    g,
-                    core::ptr::addr_of_mut!((*udatadirect).indextm) as *mut TValue
-                );
-                markvalue!(
-                    g,
-                    core::ptr::addr_of_mut!((*udatadirect).newindextm) as *mut TValue
-                );
-                markvalue!(
-                    g,
-                    core::ptr::addr_of_mut!((*udatadirect).namecalltm) as *mut TValue
-                );
-            }
+            markvalue!(
+                g,
+                core::ptr::addr_of_mut!((*udatadirect).indextm) as *mut TValue
+            );
+            markvalue!(
+                g,
+                core::ptr::addr_of_mut!((*udatadirect).newindextm) as *mut TValue
+            );
+            markvalue!(
+                g,
+                core::ptr::addr_of_mut!((*udatadirect).namecalltm) as *mut TValue
+            );
         }
     }
 
@@ -61,9 +59,7 @@ pub(crate) unsafe fn markroot(l: *mut lua_State) {
 
     markmt(g);
 
-    if luaur_common::FFlag::LuauUdataMetatablePinned.get() {
-        marktaggetmt(g);
-    }
+    marktaggetmt(g);
 
     (*g).gcstate = GCSpropagate as u8;
 }

@@ -386,12 +386,10 @@ fn validate_instruction_stream(
             )));
         }
 
-        if FFlag::LuauUdataDirectAccess6.get()
-            && matches!(
-                opcode,
-                LuauOpcode::LOP_GETTABLEKS | LuauOpcode::LOP_SETTABLEKS | LuauOpcode::LOP_NAMECALL
-            )
-        {
+        if matches!(
+            opcode,
+            LuauOpcode::LOP_GETTABLEKS | LuauOpcode::LOP_SETTABLEKS | LuauOpcode::LOP_NAMECALL
+        ) {
             let key = code[pc + 1] as usize;
             validate_constant_index(key, constants.len(), "userdata direct-access key")?;
             if constants[key] != ConstantKind::String {

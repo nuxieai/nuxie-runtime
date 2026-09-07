@@ -52,3 +52,9 @@
 
 - Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
 - Gated table-indexer access visualization behind the new upstream flag.
+
+## Incremental Luau 0.734
+
+- Runtime64186dc0 dependency-tree delta f4a8c732→fb6ff089: translate the
+  return-type-pack grouping/CST behavior behind its new default-off flag.
+- Retain Rust hash storage and the disabled experimental-class profile.

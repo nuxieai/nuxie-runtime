@@ -96,3 +96,9 @@ allowing Android scripting builds to compile.
   concat, indexer-printing, and sparse-table-move flags. The static flags stay
   in Nuxie's raw-default-OFF exception set; the dynamic sparse-move flag also
   keeps its upstream default of false.
+
+## Incremental Luau 0.734
+
+- Runtime64186dc0 dependency delta f4a8c732→fb6ff089: retire the three
+  upstream GC/direct-userdata flags and preserve raw defaults for newly
+  introduced parser behavior. No experimental-class enablement.

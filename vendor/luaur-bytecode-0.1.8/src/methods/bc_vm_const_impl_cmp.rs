@@ -50,7 +50,6 @@ impl BcVmConstImpl {
             }
         }
 
-        LUAU_ASSERT!(false, "incompatible types for immCmpBcVmConst");
         0
     }
 }

@@ -12,3 +12,5 @@ mod rung8_tests;
 #[cfg(test)]
 mod sccp_tests;
 pub mod type_aliases;
+#[cfg(test)]
+mod upstream_734_tests;

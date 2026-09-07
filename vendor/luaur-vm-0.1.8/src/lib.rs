@@ -12,6 +12,8 @@ mod builtin_bounds_tests;
 mod rung8_tests;
 #[cfg(test)]
 mod rung9_tests;
+#[cfg(test)]
+mod upstream_734_gc_tests;
 
 // C++ macros are global #defines; translated callers use them unqualified.
 // Pull every #[macro_export] macro from luau-common into textual scope so

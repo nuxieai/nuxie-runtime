@@ -24,7 +24,9 @@ impl<'a> CallInliner<'a> {
             self.caller.maxstacksize as u32 + self.target.maxstacksize as u32;
 
         if self.target.is_vararg {
-            new_max_stack_size = new_max_stack_size.wrapping_add(self.call_params.len() as u32);
+            new_max_stack_size = new_max_stack_size.wrapping_add(
+                (self.call_params.len() as u8).max(self.target.numparams) as u32,
+            );
         }
 
         if new_max_stack_size >= k_max_inliner_combined_stack_size as u32 {
@@ -127,6 +129,7 @@ impl<'a> CallInliner<'a> {
             }
         }
 
+        self.migrate_block_phis();
         self.migrate_instructions();
 
         self.replace_call_usages_with_return_phis();

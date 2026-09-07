@@ -7,10 +7,40 @@ records the fork point, the carried patches, and the port plan. It owns the
 exit path for the historical WATCH `deferred-2026-07-19-luau-engine`
 (the retired register is available in git history): its exit criterion was **fork parity
 with the pinned C++ engine**, not "luaur publishes a newer base".
-**STATUS 2026-08-31: ten rungs translated through the current runtime pin.**
-The vendored engine now carries every upstream delta from its 0.724-era
-base through the Rive fork at `rive_0_733` (`f4a8c732`), which is what the
-pinned C++ runtime embeds.
+**STATUS 2026-09-06: incremental sync through `rive_0_734`.**
+The vendored engine carries the configured-profile delta from its 0.724-era
+base through the Rive fork at `rive_0_734` (`fb6ff089`). Disabled experimental
+subsystems are not a claim of complete Luau feature parity.
+
+## Current incremental checkpoint
+
+Runtime `64186dc048c7b81aee83a5290a2bb520fdffaa1e` changes the dependency
+from tree `f4a8c732e4166accb43789263b74229b945db029` to
+`fb6ff089bd5687713a59aa60a5baa86e0a5c8bfd`. Compare the trees directly:
+these fork branches have rebased histories, so a commit-list diff overstates
+the new Rive-specific work.
+
+Carry unconditional GC dummy-table accounting, tagged-userdata metatable
+retention, and direct-userdata loading/marking into the Rust VM. Carry bounded
+parser/bytecode-library fixes while preserving new flags' upstream defaults.
+The Rust hash-map representation remains an ownership/storage adaptation;
+the C++ DenseHashMap2 refactor does not require replacing it.
+
+User-defined classes, JIT, static type analysis, and heap-enumeration tooling
+are outside the enabled runtime profile. Normal experimental class output
+uses bytecode version100, rejected by Nuxie's ordinary version admission;
+this is not a claim that every class opcode/constant is universally rejected
+when embedded in an otherwise admitted version. Do not claim complete
+experimental-class semantics. Retain the existing target-version7 compiler
+contract and source-first, two-review incremental workflow in PARITY_WORKFLOW.md;
+the historical rung process below is not a new campaign to restart.
+
+Validation includes the translated parser case and focused GC/bytecode-helper
+regressions. The new upstream `empty_varargs_sequence_in_setlist`,
+`empty_varargs_sequence_in_for_loop`, and `vararg_in_loops_phi` end-to-end
+inliner tests remain unported: the Rust tests do not yet have upstream's
+compiler-to-graph-to-inliner-to-serializer fixture. Helper coverage is not a
+claim that those three end-to-end cases passed.
 
 ## Why
 

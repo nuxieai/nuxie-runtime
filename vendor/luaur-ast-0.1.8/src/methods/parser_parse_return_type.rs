@@ -98,7 +98,11 @@ impl Parser {
             if result.size() == 1 {
                 let mut inner: *mut AstType = core::ptr::null_mut();
 
-                if vararg_annotation.is_null() {
+                if vararg_annotation.is_null()
+                    && (!luaur_common::FFlag::LuauFunctionReturnTypePackLessTypeGroups.get()
+                        || self.lexer.current().r#type == Type('&' as i32)
+                        || self.lexer.current().r#type == Type('|' as i32))
+                {
                     inner = unsafe {
                         (*self.allocator)
                             .alloc(AstTypeGroup::new(location, *result.operator_index(0)))
@@ -152,11 +156,20 @@ impl Parser {
                 };
 
                 if self.options.store_cst_data {
+                    let cst = if luaur_common::FFlag::LuauFunctionReturnTypePackLessTypeGroups.get() {
+                        let commas = self.copy_temp_vector_t(&comma_positions);
+                        CstTypePackExplicit::cst_type_pack_explicit_position_position_ast_array_position(
+                            location.begin,
+                            close_parentheses_position,
+                            commas,
+                        )
+                    } else {
+                        CstTypePackExplicit::cst_type_pack_explicit()
+                    };
                     self.cst_node_map.try_insert(
                         node as *mut crate::records::ast_node::AstNode,
-                        unsafe {
-                            (*self.allocator).alloc(CstTypePackExplicit::cst_type_pack_explicit())
-                        } as *mut crate::records::cst_node::CstNode,
+                        unsafe { (*self.allocator).alloc(cst) }
+                            as *mut crate::records::cst_node::CstNode,
                     );
                 }
                 return node as *mut AstTypePack;

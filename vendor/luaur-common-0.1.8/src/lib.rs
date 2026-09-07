@@ -56,6 +56,7 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauBytecodeCostModel, false);
     apply(&FFlag::LuauBytecodeFold, false);
     apply(&FFlag::LuauCIProto, false);
+    apply(&FFlag::LuauFunctionReturnTypePackLessTypeGroups, false);
     apply(&FFlag::LuauCheckFunctionStatementTypes, value);
     apply(&FFlag::LuauCodeGenCallWrapperEmitInst, value);
     apply(&FFlag::LuauCodegenBufferInteger, value);
@@ -143,8 +144,6 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauTypeFunctionSerializeArgNames, value);
     apply(&FFlag::LuauTypeFunctionStructuredErrors, value);
     apply(&FFlag::LuauTypeFunctionSupportsFrozen, value);
-    apply(&FFlag::LuauUdataDirectAccess6, value);
-    apply(&FFlag::LuauUdataMetatablePinned, false);
     apply(&FFlag::LuauUdtfTypeIsSubtypeOf, value);
     apply(&FFlag::LuauUseNativeStackGuard, value);
     apply(&FFlag::LuauVirtualBcBuilder, false);
@@ -153,7 +152,6 @@ fn apply_all_flags(value: bool, mut apply: impl FnMut(&'static FValue<bool>, boo
     apply(&FFlag::LuauXpcallFixMessageYieldPath, false);
     apply(&FFlag::LuauManagedDebugNames, false);
     apply(&DFFlag::LuauGcMarkUdataAccess, false);
-    apply(&DFFlag::LuauGcTableStepFix, false);
     apply(&DFFlag::LuauSelfIsSelfAndAlwaysSelf, false);
 }
 
@@ -195,6 +193,7 @@ impl Drop for ScopedAllFlags {
 /// is the aggregation point — see `crate::macros::luau_fastflagvariable`.)
 #[allow(non_snake_case)]
 pub mod FFlag {
+    crate::LUAU_FASTFLAGVARIABLE!(LuauFunctionReturnTypePackLessTypeGroups);
     // CodeGen/src/IrRegAllocA64.cpp
     crate::LUAU_FASTFLAGVARIABLE!(DebugCodegenChaosA64);
     // CodeGen/src/CodeGen.cpp
@@ -453,10 +452,6 @@ pub mod FFlag {
     crate::LUAU_FASTFLAGVARIABLE!(LuauTypeFunctionStructuredErrors);
     // Analysis/src/TypeFunctionRuntime.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauTypeFunctionSupportsFrozen);
-    // VM/src/lvmload.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauUdataDirectAccess6);
-    // VM/src/lgc.cpp
-    crate::LUAU_FASTFLAGVARIABLE!(LuauUdataMetatablePinned);
     // Analysis/src/TypeFunctionRuntime.cpp
     crate::LUAU_FASTFLAGVARIABLE!(LuauUdtfTypeIsSubtypeOf);
     // Analysis/src/NativeStackGuard.cpp
@@ -579,8 +574,6 @@ pub mod DFFlag {
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(DebugLuauReportReturnTypeVariadicWithTypeSuffix, false);
     // VM/src/lgc.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcMarkUdataAccess, false);
-    // VM/src/lgc.cpp
-    crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauGcTableStepFix, false);
     // VM/src/ltablib.cpp
     crate::LUAU_DYNAMIC_FASTFLAGVARIABLE!(LuauTableMoveTimeoutFix, false);
     // Require/src/RequireNavigator.cpp

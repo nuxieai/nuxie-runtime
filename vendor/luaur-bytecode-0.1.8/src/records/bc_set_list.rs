@@ -18,7 +18,7 @@ pub struct BcSetList<'a, T = VmConst> {
 }
 
 impl<'a, T> BcSetList<'a, T> {
-    pub const K_PARAM_START_INPUT: u32 = 2;
+    pub const K_PARAM_START_INPUT: u32 = 3;
 
     pub fn from(graph: *mut BcFunction, inst: BcRef<'a, BcInst>) -> Self {
         Self {
@@ -37,6 +37,14 @@ impl<'a, T> BcSetList<'a, T> {
 
     pub fn params(&self) -> Vec<BcOp> {
         self.base.slice_inputs(Self::K_PARAM_START_INPUT)
+    }
+
+    pub fn target(&mut self) -> BcOp {
+        self.base.get_bc_op(2)
+    }
+
+    pub fn set_target(&mut self, value: BcOp) {
+        self.base.set_bc_op(2, value);
     }
 }
 

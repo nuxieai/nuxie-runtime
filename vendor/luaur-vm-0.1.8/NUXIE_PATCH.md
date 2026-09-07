@@ -90,3 +90,12 @@ Provenance:
 - Hardwired automatic API stack growth and clone-table GC barriers, promoted
   yieldable calls to the public API with the upstream compatibility spellings,
   and added the flag-gated sparse `table.move` path.
+
+## Incremental Luau 0.734
+
+- Upstream tree delta f4a8c732e4166accb43789263b74229b945db029 to
+  fb6ff089bd5687713a59aa60a5baa86e0a5c8bfd, runtime64186dc0.
+- Hardwire dummy-table GC accounting, tagged-userdata metatable retention,
+  and direct-userdata load/mark paths after upstream flag retirement.
+- Preserve the enabled profile; experimental classes and heap enumeration
+  are not claimed as newly implemented features. See docs/luau-fork.md.

@@ -15,9 +15,7 @@ impl FocusActionClear {
         _invocation: &ListenerInvocation,
     ) {
         if let Some(machine) = state_machine_instance {
-            machine
-                .focus_manager()
-                .with_focus_manager_mut(|manager| manager.clear_focus());
+            machine.queue_clear_focus();
         }
     }
 }

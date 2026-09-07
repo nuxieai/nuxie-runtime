@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `a343300260bd18776f3a556d67a9322b01d9d70f`
+- LAST_SYNCED_SHA: `9cb2205f06aa5e599554e7382889f4cf5bec382e`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `9cb2205f06aa5e599554e7382889f4cf5bec382e` | Queue failed focus-action requests on the shared manager, bounded and tagged by root; retry after component updates and discard remaining requests at frame end. Preserve immediate eligible focus, guard gamepad listener targets, and detach orphaned focus nodes without a dead manager. Translate gamepad navigation and uncollapse/focus Silver producers. | — |
 | `a343300260bd18776f3a556d67a9322b01d9d70f` | Include the upstream unique asset registration name in FileAssetData and the command-server/queue string stream. Extend the original hosted image/font asset-list assertions. | — |
 | `61f00897013eba8c57ee2002c33e6ee47d476eff` | Pack layout flags and narrow source fields; allocate layout render paths and proxies lazily. Mark dynamic clips and pointer/scroll targets before conditional proxy injection, carry source-only marks to clones, and balance clip saves. Translate overlapping layout pointer-order Silver regression. | — |
 | `ed92313af34f5a8928647d021ee497b6d95d949a` | Expose selected text through RawTextInput, TextInput, FocusData and Focusable; bubble the first nonempty selection through FocusManager. Share exact code-point encoding and exclude the trailing sentinel. System clipboard access remains a host responsibility. | — |

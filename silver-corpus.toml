@@ -3,13 +3,13 @@
 
 [corpus]
 version = 1
-upstream_ref = "a343300260bd18776f3a556d67a9322b01d9d70f"
-expected_entries = 263
-expected_runtime = 215
+upstream_ref = "9cb2205f06aa5e599554e7382889f4cf5bec382e"
+expected_entries = 265
+expected_runtime = 217
 expected_scripted = 45
 max_provenance_unknown = 3
-min_cpp_rust_exact = 186
-cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_converter_to_number", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "deterministic_mode", "drag_event", "draw_index_list", "event_trigger_event", "fill_trim_path", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
+min_cpp_rust_exact = 188
+cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_converter_to_number", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "deterministic_mode", "drag_event", "draw_index_list", "event_trigger_event", "fill_trim_path", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
 
 [[case]]
 id = "advance_blend_mode-inputs"
@@ -1460,7 +1460,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
-producer_line = 1915
+producer_line = 1971
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1482,7 +1482,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 2477
+producer_line = 2533
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1504,7 +1504,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
-producer_line = 2241
+producer_line = 2297
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1526,7 +1526,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
-producer_line = 2292
+producer_line = 2348
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1726,6 +1726,50 @@ provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Game menu ad script test"
 producer_line = 36
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
+
+[[case]]
+id = "gamepad_inputs_test"
+expected = "tests/unit_tests/silvers/gamepad_inputs_test.sriv"
+source = "gamepad_inputs_test.riv"
+dependencies = []
+artboard = "default"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0, 0.016, 0.016, 0.016]
+actions = [{ kind = "bind-fresh-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "gamepad-batch", records = [{ "kind" = "connected", "device_id" = 0, "mapping" = "standard", "button_count" = 17, "axis_count" = 4 }] }, { kind = "frame" }, { kind = "gamepad-batch", records = [{ "kind" = "update", "device_id" = 0, "input" = "button", "index" = 5, "value" = 1.0 }] }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "gamepad-batch", records = [{ "kind" = "update", "device_id" = 0, "input" = "button", "index" = 5, "value" = 0.0 }] }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "exact"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
+provenance_test = "Focus change with gamepad navigation"
+producer_line = 3062
+note = "Exact comparison contract for the literal gamepad/focus producer at 9cb2205f. Enrollment alone is not a validation result."
+
+[[case]]
+id = "gamepad_inputs_test-collapsing"
+expected = "tests/unit_tests/silvers/gamepad_inputs_test-collapsing.sriv"
+source = "gamepad_inputs_test.riv"
+dependencies = []
+artboard = "UncollapsedParent"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0, 0.016, 0.016]
+actions = [{ kind = "bind-default-view-model" }, { kind = "advance", target = "state-machine", seconds = 0.0 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 475.0, y = 475.0, pointer_id = 0 }, { kind = "pointer-up", x = 475.0, y = 475.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }, { kind = "frame" }, { kind = "pointer-down", x = 475.0, y = 475.0, pointer_id = 0 }, { kind = "pointer-up", x = 475.0, y = 475.0, pointer_id = 0 }, { kind = "advance", target = "state-machine", seconds = 0.016 }, { kind = "draw" }]
+verification = "sriv-v1-epsilon"
+status = "exact"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
+provenance_test = "Uncollapse and focus element on the same action"
+producer_line = 3096
+note = "Exact comparison contract for the literal gamepad/focus producer at 9cb2205f. Enrollment alone is not a validation result."
 
 [[case]]
 id = "gamepad_test"
@@ -2472,7 +2516,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focused elements receive keyboard inputs"
-producer_line = 1995
+producer_line = 2051
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2494,7 +2538,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Keyboard inputs with different key combinations"
-producer_line = 2111
+producer_line = 2167
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3072,7 +3116,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus is correctly built and updated for lists"
-producer_line = 2443
+producer_line = 2499
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

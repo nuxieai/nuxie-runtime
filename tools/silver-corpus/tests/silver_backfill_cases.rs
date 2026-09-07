@@ -9,6 +9,31 @@ fn workspace_root() -> PathBuf {
         .to_path_buf()
 }
 
+#[test]
+fn upstream_focus_change_with_gamepad_navigation() {
+    let Some(runtime) = runtime_root("upstream 9cb2205f gamepad navigation") else {
+        return;
+    };
+    compare_case("gamepad_inputs_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn upstream_uncollapse_and_focus_on_same_action() {
+    let Some(runtime) = runtime_root("upstream 9cb2205f uncollapse and focus") else {
+        return;
+    };
+    compare_case("gamepad_inputs_test-collapsing", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
+fn upstream_focus_traversal_updated_baseline() {
+    let Some(runtime) = runtime_root("upstream 9cb2205f focus traversal baseline") else {
+        return;
+    };
+    compare_case("focus_traversal", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
+}
+
 fn runtime_root(test: &str) -> Option<PathBuf> {
     let root = std::env::var_os("RIVE_RUNTIME_DIR").map(PathBuf::from);
     if root.is_none() {

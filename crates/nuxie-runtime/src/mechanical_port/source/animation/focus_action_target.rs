@@ -31,7 +31,7 @@ impl FocusActionTarget {
             })
             .flatten();
         if let Some(focus_data) = focus_data {
-            state_machine_instance.set_focus(Some(focus_data));
+            state_machine_instance.queue_focus_target(Some(focus_data));
         }
     }
 }

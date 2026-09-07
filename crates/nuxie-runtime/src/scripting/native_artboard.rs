@@ -295,9 +295,7 @@ impl ScriptArtboard for NativeScriptArtboard {
         let invocation = gamepad_invocation(invocation)?;
         let focus = machine.with_instance(|machine| machine.focus_manager());
         let mut dispatched = None;
-        focus.with_focus_manager_mut(|focus| {
-            focus.gamepad_dispatch(&invocation, Some(&mut dispatched));
-        });
+        focus.gamepad_dispatch(&invocation, Some(&mut dispatched));
         Ok(
             machine.broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref())
                 as u32,

@@ -19,26 +19,7 @@ impl FocusActionTraversal {
         let Some(manager) = state_machine_instance else {
             return;
         };
-        match self.base.traversal_kind() {
-            1 => {
-                manager.focus_previous();
-            }
-            2 => {
-                manager.focus_up();
-            }
-            3 => {
-                manager.focus_down();
-            }
-            4 => {
-                manager.focus_left();
-            }
-            5 => {
-                manager.focus_right();
-            }
-            _ => {
-                manager.focus_next();
-            }
-        }
+        manager.queue_focus_traversal(self.base.traversal_kind());
     }
 }
 

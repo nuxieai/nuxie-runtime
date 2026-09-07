@@ -311,6 +311,9 @@ pub trait Focusable {
         is_repeat: bool,
     ) -> bool;
     fn text_input(&mut self, text: &str) -> bool;
+    fn selected_text(&self) -> String {
+        String::new()
+    }
     fn gamepad_dispatch(
         &mut self,
         _invocation: &ListenerInvocation,

@@ -893,6 +893,21 @@ impl FocusManager {
         false
     }
 
+    pub fn selected_text(&self) -> String {
+        let mut node = self.primary_focus.clone();
+        while let Some(current) = node {
+            let focusable = current.borrow().focusable();
+            if let Some(focusable) = focusable {
+                let text = focusable.borrow().selected_text();
+                if !text.is_empty() {
+                    return text;
+                }
+            }
+            node = current.borrow().parent();
+        }
+        String::new()
+    }
+
     pub fn gamepad_dispatch(
         &mut self,
         invocation: &ListenerInvocation,
@@ -929,5 +944,45 @@ impl Drop for FocusManager {
         }
         // No focus/blur notifications during destruction, as in the source.
         self.primary_focus = None;
+    }
+}
+
+#[cfg(test)]
+mod selected_text_tests {
+    use super::*;
+    use crate::mechanical_port::source::input::focusable::Focusable;
+
+    struct Selection(&'static str);
+    impl Focusable for Selection {
+        fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+            false
+        }
+        fn text_input(&mut self, _: &str) -> bool {
+            false
+        }
+        fn selected_text(&self) -> String {
+            self.0.to_owned()
+        }
+        fn focused(&mut self) {}
+        fn blurred(&mut self) {}
+    }
+
+    #[test]
+    fn selected_text_returns_first_nonempty_selection_up_focus_chain() {
+        let mut manager = FocusManager::new();
+        assert_eq!(manager.selected_text(), "");
+        let root = FocusNode::new(Some(Rc::new(RefCell::new(Selection("ancestor")))));
+        let empty = FocusNode::new(Some(Rc::new(RefCell::new(Selection("")))));
+        let leaf = FocusNode::new(None);
+        FocusNode::add_child(&root, empty.clone());
+        FocusNode::add_child(&empty, leaf.clone());
+        manager.primary_focus = Some(leaf.clone());
+        assert_eq!(manager.selected_text(), "ancestor");
+        leaf.borrow_mut()
+            .set_focusable(Some(Rc::new(RefCell::new(Selection("nearest")))));
+        assert_eq!(manager.selected_text(), "nearest");
+        root.borrow_mut().clear_focusable();
+        leaf.borrow_mut().clear_focusable();
+        assert_eq!(manager.selected_text(), "");
     }
 }

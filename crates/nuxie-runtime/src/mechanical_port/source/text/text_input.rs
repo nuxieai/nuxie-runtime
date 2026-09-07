@@ -478,6 +478,9 @@ impl TextInput {
         self.mark_shape_dirty();
         true
     }
+    pub fn selected_text(&self) -> String {
+        self.raw_text_input.selected_text()
+    }
     pub fn gamepad_dispatch(&mut self, _invocation: &ListenerInvocation) -> bool {
         false
     }

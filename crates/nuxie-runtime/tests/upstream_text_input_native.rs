@@ -66,6 +66,73 @@ fn property_key_for_name(type_name: &str, property_name: &str) -> u16 {
 }
 
 #[test]
+fn selected_text_reaches_host_through_focus_data_and_structural_focus_child() {
+    use nuxie_runtime::source::input::focus_node::FocusNode;
+
+    let (_file, artboard, text_input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let focus_data = artboard
+        .with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .find(|object| {
+                    object
+                        .with_downcast::<FocusData, _>(|data| data.parent_handle())
+                        .flatten()
+                        .as_ref()
+                        == Some(&text_input)
+                })
+                .cloned()
+        })
+        .expect("TextInput's FocusData child");
+    let manager = machine.with_instance(|machine| machine.focus_manager());
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus_data)));
+    with_input(&text_input, |input| {
+        let raw = input.raw_text_input();
+        raw.set_text("aé🦀z".to_owned());
+        raw.set_cursor(Cursor::new(
+            CursorPosition::new(0, 1),
+            CursorPosition::new(0, 3),
+        ));
+    });
+    assert_eq!(
+        with_input(&text_input, |input| input.selected_text()),
+        "é🦀"
+    );
+    assert_eq!(
+        manager.with_focus_manager(|manager| manager.selected_text()),
+        "é🦀"
+    );
+
+    // Upstream skips a node without a Focusable and bubbles to the same
+    // FocusData/TextInput selection. Reading selection must not mutate text.
+    manager.with_focus_manager_mut(|manager| {
+        let parent = manager.primary_focus().expect("focused input");
+        let child = FocusNode::new(None);
+        manager.add_child(Some(parent), child.clone(), None);
+        manager.set_focus(child);
+    });
+    assert_eq!(
+        manager.with_focus_manager(|manager| manager.selected_text()),
+        "é🦀"
+    );
+    assert_eq!(
+        with_input(&text_input, |input| input.raw_text_input().text()),
+        "aé🦀z"
+    );
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert_eq!(
+        manager.with_focus_manager(|manager| manager.selected_text()),
+        ""
+    );
+}
+
+#[test]
 fn upstream_707c_state_machine_key_and_text_input_forward_to_text_input() {
     let (_file, artboard, text_input) = input_fixture();
     let Some(machine) = artboard.state_machine_instance_handle(0) else {

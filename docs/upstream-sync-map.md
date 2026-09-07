@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `cd7655b5dd634ee63f56f11a3eb7e0f1990292d3`
+- LAST_SYNCED_SHA: `ed92313af34f5a8928647d021ee497b6d95d949a`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ed92313af34f5a8928647d021ee497b6d95d949a` | Expose selected text through RawTextInput, TextInput, FocusData and Focusable; bubble the first nonempty selection through FocusManager. Share exact code-point encoding and exclude the trailing sentinel. System clipboard access remains a host responsibility. | — |
 | `cd7655b5dd634ee63f56f11a3eb7e0f1990292d3` | Already satisfied: canvas-DAG GMs are included under the Metal canvas feature without scripting. The chain test executes both forward and reversed recordings; the cycle test compares against its immediate schedule reference. | — |
 | `081f85a690f26a4e8cceead05bd9c3f86707eae2` | Remove outgoing nested semantic trees and attach replacement data-bound artboards to the host manager and enclosing semantic node, including the no-state-machine branch. Port early-enable/bind and alternating-swap manager identity and node-count regressions. | — |
 | `e289232b776cf315863ad995ca987982e50445ab` | Compose nested-artboard layout slot/origin inside the parent's transform before constraints, using the composeWorldTransform override. Translate the three rotated-parent assertions against actual solved layout values, preserving Taffy. | — |

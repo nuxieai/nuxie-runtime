@@ -18,6 +18,55 @@ use nuxie_runtime::source::{
 };
 use std::path::PathBuf;
 
+// Source-derived coverage for selectedText added by ed92313a; the upstream
+// commit did not add tests. Selection offsets are Unicode code-point indices.
+#[test]
+fn selected_text_orders_and_clamps_code_point_selection_excluding_sentinel() {
+    let mut input = RawTextInput::new();
+    assert_eq!(input.selected_text(), "");
+    input.set_text("aé🙂z".into());
+    for (start, end, expected) in [
+        (0, 0, ""),
+        (1, 3, "é🙂"),
+        (3, 1, "é🙂"),
+        (0, u32::MAX, "aé🙂z"),
+        (u32::MAX, 2, "🙂z"),
+        (4, 5, ""),
+        (7, 9, ""),
+    ] {
+        input.set_cursor(Cursor::new(
+            CursorPosition::unresolved(start),
+            CursorPosition::unresolved(end),
+        ));
+        assert_eq!(input.selected_text(), expected, "selection {start}..{end}");
+    }
+    assert_eq!(input.text(), "aé🙂z");
+    input.set_text(String::new());
+    input.set_cursor(Cursor::new(
+        CursorPosition::zero(),
+        CursorPosition::unresolved(10),
+    ));
+    assert_eq!(input.selected_text(), "");
+}
+
+#[test]
+fn selected_text_preserves_direct_zero_code_point_but_string_edits_stop_at_nul() {
+    let mut input = RawTextInput::new();
+    input.set_text("a\0ignored".into());
+    assert_eq!(input.text(), "a");
+    input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(1)));
+    input.insert("é\0ignored");
+    assert_eq!(input.text(), "aé");
+    input.insert_code_point(0);
+    input.insert("🙂");
+    assert_eq!(input.text(), "aé\0🙂");
+    input.set_cursor(Cursor::new(
+        CursorPosition::unresolved(1),
+        CursorPosition::unresolved(4),
+    ));
+    assert_eq!(input.selected_text().as_bytes(), "é\0🙂".as_bytes());
+}
+
 fn retained_factory() -> RuntimeFactoryHandle {
     let mut factory = PersistentFactory::new(RecordingFactory::new());
     RuntimeFactoryHandle::from_factory(&mut factory).expect("retained native factory")

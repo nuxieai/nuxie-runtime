@@ -18,8 +18,6 @@ impl<'a> CallInliner<'a> {
         for i in 0..self.target.blocks.len() {
             let target_block_sortkey = self.target.blocks[i].sortkey;
             let target_block_ops: Vec<BcOp> = self.target.blocks[i].ops.iter().cloned().collect();
-            let target_block_phis: Vec<BcOp> =
-                self.target.blocks[i].phis.iter().cloned().collect();
 
             let caller_block_idx = (self.caller_blocks_size_before_inline + i as u32) as usize;
             let caller_block_op = BcOp::bc_op_bc_op_kind_u32(
@@ -65,13 +63,6 @@ impl<'a> CallInliner<'a> {
                 });
             }
 
-            for phi_op in target_block_phis {
-                let caller_phi_op = self.map_to_caller_op(phi_op);
-                self.caller.blocks[caller_block_idx]
-                    .phis
-                    .push_back(caller_phi_op);
-            }
-
             // Migrate instructions
             for op in target_block_ops {
                 let inst_op_code = self.target.inst_op(op).op;
@@ -93,5 +84,18 @@ impl<'a> CallInliner<'a> {
         next_block.operator_deref_mut().chainkey = max_chain_key + 2;
 
         true
+    }
+
+    pub fn migrate_block_phis(&mut self) {
+        // GETVARARGS projections are only materialized by migrate_blocks.
+        for i in 0..self.target.blocks.len() {
+            let phis: Vec<BcOp> = self.target.blocks[i].phis.iter().copied().collect();
+            for phi_op in phis {
+                let caller_phi_op = self.map_to_caller_op(phi_op);
+                self.caller.blocks[self.caller_blocks_size_before_inline as usize + i]
+                    .phis
+                    .push_back(caller_phi_op);
+            }
+        }
     }
 }

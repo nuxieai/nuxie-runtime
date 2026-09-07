@@ -31,9 +31,7 @@ pub unsafe fn atomic(l: *mut lua_State) -> usize {
     markobject!(g, l);
     markmt(g);
 
-    if luaur_common::FFlag::LuauUdataMetatablePinned.get() {
-        marktaggetmt(g);
-    }
+    marktaggetmt(g);
 
     if luaur_common::DFFlag::LuauGcMarkUdataAccess.get() {
         markudatadirectaccess(g);

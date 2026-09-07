@@ -273,7 +273,13 @@ impl BytecodeBuilder {
             }
             Type::Type_Closure => {
                 let func = &self.functions[unsafe { data.value.valueClosure } as usize];
-                if !func.dumpname.is_empty() {
+                if detailed {
+                    if !func.dumpname.is_empty() {
+                        formatAppend(result, format_args!("function {}", func.dumpname));
+                    } else {
+                        formatAppend(result, format_args!("function"));
+                    }
+                } else if !func.dumpname.is_empty() {
                     formatAppend(result, format_args!("'{}'", func.dumpname));
                 }
             }

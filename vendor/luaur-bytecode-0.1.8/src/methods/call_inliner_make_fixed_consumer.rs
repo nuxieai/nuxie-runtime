@@ -15,7 +15,11 @@ impl<'a> crate::records::call_inliner::CallInliner<'a> {
                 let mut set_list =
                     BcSetList::<crate::records::bc_op::BcOp>::from(self.caller, inst.clone());
                 let count = set_list.params().len() as u32;
-                set_list.set_count(count);
+                if count == 0 {
+                    set_list.base.detach();
+                } else {
+                    set_list.set_count(count);
+                }
             }
             LuauOpcode::LOP_RETURN => {
                 let mut ret =

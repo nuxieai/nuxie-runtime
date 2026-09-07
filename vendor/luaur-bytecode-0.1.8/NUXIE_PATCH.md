@@ -58,3 +58,13 @@ introduces a caller ("crash vs silently-unfolded" becomes observable then).
 - Ported the reachable `rive_0_733` delta (upstream 86eb0096..f4a8c732).
 - Preserved userdata cache slots through graph parsing/serialization and kept
   `PREPVARARGS` out of migrated inlined instructions.
+
+## Incremental Luau 0.734
+
+- Runtime64186dc0 dependency-tree delta f4a8c732→fb6ff089: translate
+  SETLIST target/operand serialization, inliner register/vararg handling,
+  SCCP comparison, operand detachment, and class-shape reserve semantics.
+- Rename the builder API to `clear_strings`, clearing debug strings as well
+  as the string table; include function names in detailed closure dumps.
+- These library corrections do not enable experimental classes, JIT, or
+  the currently disabled graph-optimization pipeline in the product profile.

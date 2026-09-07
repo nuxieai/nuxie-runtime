@@ -58,9 +58,8 @@ use luaur_common::enums::luau_bytecode_tag::{
     LBC_CONSTANT_BOOLEAN, LBC_CONSTANT_CLASS_SHAPE, LBC_CONSTANT_CLOSURE, LBC_CONSTANT_IMPORT,
     LBC_CONSTANT_INTEGER, LBC_CONSTANT_NIL, LBC_CONSTANT_NUMBER, LBC_CONSTANT_STRING,
     LBC_CONSTANT_TABLE, LBC_CONSTANT_TABLE_WITH_CONSTANTS, LBC_CONSTANT_VECTOR,
-    LBC_CONSTANT_VECTORD,
-    LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_CLASSES, LBC_VERSION_MAX,
-    LBC_VERSION_MIN,
+    LBC_CONSTANT_VECTORD, LBC_TYPE_VERSION_MAX, LBC_TYPE_VERSION_MIN, LBC_VERSION_CLASSES,
+    LBC_VERSION_MAX, LBC_VERSION_MIN,
 };
 use luaur_common::enums::luau_bytecode_type::{
     LBC_TYPE_FUNCTION, LBC_TYPE_TAGGED_USERDATA_BASE, LBC_TYPE_TAGGED_USERDATA_END,
@@ -468,7 +467,7 @@ pub unsafe fn loadsafe(
             }
         }
 
-        if luaur_common::FFlag::LuauUdataDirectAccess6.get() {
+        {
             let mut instruction = (*p).code;
             let end = (*p).code.add((*p).sizecode as usize);
 

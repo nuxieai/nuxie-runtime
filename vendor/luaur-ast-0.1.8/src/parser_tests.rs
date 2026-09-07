@@ -72,6 +72,44 @@ struct Fixture {
     names: Box<AstNameTable>,
 }
 
+// Luau 0.734 tests/Parser.test.cpp: type_pack_explicit_with_cst.
+#[test]
+fn type_pack_explicit_with_cst() {
+    struct FlagGuard;
+    impl Drop for FlagGuard {
+        fn drop(&mut self) {
+            luaur_common::FFlag::LuauFunctionReturnTypePackLessTypeGroups.pop_test_override();
+        }
+    }
+    luaur_common::FFlag::LuauFunctionReturnTypePackLessTypeGroups.push_test_override(true);
+    let _flag = FlagGuard;
+    let mut fixture = Fixture::new();
+    let mut options = ParseOptions::default();
+    options.store_cst_data = true;
+    let result = fixture.parse_result("type T = () -> (number, ...string)", options);
+    assert!(result.errors.is_empty());
+    unsafe {
+        assert!(!result.root.is_null());
+        assert_eq!((*result.root).body.size, 1);
+        let alias = as_node::<AstStatTypeAlias>((*(*result.root).body.data).cast());
+        assert!(!alias.is_null());
+        let function = as_node::<AstTypeFunction>((*alias).type_ptr.cast());
+        assert!(!function.is_null());
+        let pack = as_node::<AstTypePackExplicit>((*function).return_types.cast());
+        assert!(!pack.is_null());
+        let pack = &*pack;
+        assert_eq!(pack.type_list.types.size, 1);
+        assert!(!pack.type_list.tail_type.is_null());
+        let key = pack as *const AstTypePackExplicit as *mut AstNode;
+        let cst = result.cst_node_map.find(&key).unwrap();
+        let cst = &*((*cst) as *const crate::records::cst_type_pack_explicit::CstTypePackExplicit);
+        assert_eq!(cst.open_parentheses_position, Position::new(0, 15));
+        assert_eq!(cst.close_parentheses_position, Position::new(0, 33));
+        assert_eq!(cst.comma_positions.size, 1);
+        assert_eq!(*cst.comma_positions.data, Position::new(0, 22));
+    }
+}
+
 impl Fixture {
     fn new() -> Fixture {
         let mut allocator = Box::new(Allocator::allocator());

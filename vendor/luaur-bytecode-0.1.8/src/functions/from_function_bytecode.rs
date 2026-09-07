@@ -202,10 +202,8 @@ pub fn from_function_bytecode(
                     methodNames: Vec::new(),
                 };
 
-                // decb2d05 Bytecode/src/BytecodeGraph.cpp:182-189 resizes and then
-                // appends; preserve the doubled layout intentionally for pinned-C fidelity.
-                shape.propertyNames.resize(num_props, 0);
-                shape.methodNames.resize(num_methods, 0);
+                shape.propertyNames.reserve(num_props);
+                shape.methodNames.reserve(num_methods);
 
                 for _ in 0..num_props {
                     shape

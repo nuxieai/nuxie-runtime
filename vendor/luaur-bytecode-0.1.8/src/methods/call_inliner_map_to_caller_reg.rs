@@ -9,6 +9,8 @@ impl<'a> CallInliner<'a> {
             0
         };
 
-        self.target_reg + 1 + vararg_offset + reg
+        let caller_reg = self.target_reg + 1 + vararg_offset + reg;
+        luaur_common::LUAU_ASSERT!(caller_reg < self.caller.maxstacksize);
+        caller_reg
     }
 }

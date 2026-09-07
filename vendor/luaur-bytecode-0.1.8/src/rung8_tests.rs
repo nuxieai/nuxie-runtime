@@ -60,7 +60,7 @@ fn bytecode_version_ladder_preserves_tip_precedence_and_default_target() {
 }
 
 #[test]
-fn class_shape_graph_decode_preserves_cpp_resize_then_append_layout() {
+fn class_shape_graph_decode_preserves_upstream_734_shape_layout() {
     let _guard = FFLAG_LOCK.lock().unwrap();
     let old_classes = luaur_common::FFlag::DebugLuauUserDefinedClasses.get();
     luaur_common::FFlag::DebugLuauUserDefinedClasses.set(true);
@@ -84,8 +84,8 @@ fn class_shape_graph_decode_preserves_cpp_resize_then_append_layout() {
         &mut strings,
     )
     .unwrap();
-    assert_eq!(decoded.class_shapes[0].propertyNames, vec![0, 0, 11, 12]);
-    assert_eq!(decoded.class_shapes[0].methodNames, vec![0, 13]);
+    assert_eq!(decoded.class_shapes[0].propertyNames, vec![11, 12]);
+    assert_eq!(decoded.class_shapes[0].methodNames, vec![13]);
 
     let roundtripped = crate::functions::to_function_bytecode_bytecode_graph_alt_b::to_function_bytecode_comp_time_bc_function(
         &mut decoded,
@@ -97,9 +97,9 @@ fn class_shape_graph_decode_preserves_cpp_resize_then_append_layout() {
     .unwrap();
     assert_eq!(
         decoded_again.class_shapes[0].propertyNames,
-        vec![0, 0, 0, 0, 0, 0, 11, 12]
+        vec![11, 12]
     );
-    assert_eq!(decoded_again.class_shapes[0].methodNames, vec![0, 0, 0, 13]);
+    assert_eq!(decoded_again.class_shapes[0].methodNames, vec![13]);
 
     luaur_common::FFlag::DebugLuauUserDefinedClasses.set(old_classes);
 }

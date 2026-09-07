@@ -301,13 +301,18 @@ impl<'a> BytecodeGraphSerializer<'a> {
             LuauOpcode::LOP_SETLIST => {
                 LUAU_ASSERT!(insn.ops.len() > 2);
                 let reg_input_2 = self.get_reg_input(insn, 2);
-                let reg_input_3 = self.get_reg_input(insn, 3);
                 let imm_int_1 = self.get_imm_int(insn, 1);
+                LUAU_ASSERT!(imm_int_1 < 255);
+                let mut start_reg = reg_input_2;
+                if imm_int_1 != 0 {
+                    LUAU_ASSERT!(insn.ops.len() > 3);
+                    start_reg = self.get_reg_input(insn, 3);
+                }
                 let imm_int_0 = self.get_imm_int(insn, 0);
                 self.bcb.emit_abc(
                     LuauOpcode::LOP_SETLIST,
                     reg_input_2,
-                    reg_input_3,
+                    start_reg,
                     (imm_int_1 + 1) as u8,
                 );
                 self.bcb.emit_aux(imm_int_0 as u32);

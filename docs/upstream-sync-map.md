@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `3f4047a85f11fecfde8c4d906c0c1654aa12b015`
+- LAST_SYNCED_SHA: `155b22d887c79e121d1e032c60ef59903c06be1a`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `155b22d887c79e121d1e032c60ef59903c06be1a` | Rename Sidecar allocation accessor to ensure_allocated and update all generated setters/deserializers and storage tests. Runtime diff is an API rename, not the broader Unreal changes described by its title. No compatibility alias. | — |
 | `3f4047a85f11fecfde8c4d906c0c1654aa12b015` | Signed grid fields through binding reads/writes; separate placement application phase and sibling-placement registration during resync, retaining Taffy. Port all three upstream bound-grid assertions. Editor-only export fixes are not runtime code. | — |
 | `afda7a160cd72ea079e2cd25580518b22330646e` | Move bound-keyframe holders from state machines to lazy per-animation ownership, with source-artboard bind lookup, read-time flushing, teardown, and joystick playback contexts. Port updated standalone assertion and joystick Silver. | — |
 | `73f94edc539c1fbc79827e5940814125035f8c77` | Uniform fit-font scaling for custom line height, letter spacing, and paragraph gaps; preserve negative line-height sentinel and invalidate shape for fitting/overflow changes. Port three metric tests and varying-size Silver producer. | — |

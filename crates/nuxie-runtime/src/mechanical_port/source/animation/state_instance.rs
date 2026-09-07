@@ -57,7 +57,7 @@ impl RuntimeStateInstanceHandle {
         let mut use_animation = Some(use_animation);
         let mut result = None;
         self.with_state_mut(|state| {
-            state.for_each_animation_instance(&mut |animation| {
+            state.with_animation_instance(&mut |animation| {
                 if let Some(use_animation) = use_animation.take() {
                     result = Some(use_animation(animation));
                 }
@@ -109,12 +109,6 @@ impl StateInstance {
 
     pub fn clear_spilled_time(&mut self) {}
 
-    pub fn for_each_animation_instance(
-        &mut self,
-        _callback: &mut dyn FnMut(&mut LinearAnimationInstance),
-    ) {
-    }
-
     pub fn state(&self) -> CoreHandle {
         self.layer_state.clone()
     }
@@ -129,7 +123,8 @@ pub trait StateInstanceBehavior {
     fn apply(&mut self, artboard_instance: &RuntimeArtboardInstanceWeakHandle, mix: f32);
     fn keep_going(&self) -> bool;
     fn clear_spilled_time(&mut self) {}
-    fn for_each_animation_instance(
+    // Rust dynamic dispatch for AnimationStateInstance::animationInstance().
+    fn with_animation_instance(
         &mut self,
         _callback: &mut dyn FnMut(&mut LinearAnimationInstance),
     ) {

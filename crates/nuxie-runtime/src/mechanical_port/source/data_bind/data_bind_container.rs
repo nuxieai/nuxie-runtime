@@ -76,6 +76,12 @@ impl DataBindContainerOwner {
             .update_data_binds(apply_target_to_source);
     }
 
+    pub fn flush_data_bind(&self, bind: &CoreHandle) {
+        self.container()
+            .expect("live binding container")
+            .flush_data_bind(bind);
+    }
+
     pub fn add_dirty_data_bind(&self, bind: CoreHandle) {
         bind.with_mut(|bind| self.add_dirty_data_bind_borrowed(bind.as_data_bind_mut().unwrap()));
     }
@@ -159,6 +165,10 @@ struct DataBindContainerState {
 }
 
 impl DataBindContainer {
+    pub fn flush_data_bind(&self, bind: &CoreHandle) {
+        DataBind::update_data_bind_handle(bind, false);
+    }
+
     pub(crate) fn downgrade(&self) -> DataBindContainerWeak {
         DataBindContainerWeak(Rc::downgrade(&self.0))
     }

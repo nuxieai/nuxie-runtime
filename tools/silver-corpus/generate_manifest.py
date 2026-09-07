@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "73f94edc539c1fbc79827e5940814125035f8c77"
+UPSTREAM_REF = "afda7a160cd72ea079e2cd25580518b22330646e"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "joystick_databound_keyframe_test",
     "text_fit_test",
     "ik_anim_test",
     "ai_assitant",
@@ -855,6 +856,17 @@ def p1q_view_model_actions(
             advance(0.1),
             draw,
         )
+
+    if silver_id == "joystick_databound_keyframe_test":
+        actions = [bind, advance(0.016), draw]
+        for index in range(5):
+            actions += [
+                action("frame"),
+                action("pointer-move", x=f"artboard-width*{index}/5", y=250.0, seconds=0.0),
+                advance(0.2),
+                draw,
+            ]
+        return tuple(actions)
 
     if silver_id == "data_bind_keyframes_test":
         actions = [bind, advance(0.016), draw]
@@ -3064,7 +3076,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (260, 212, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (261, 213, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3077,8 +3089,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 260",
-        "expected_runtime = 212",
+        "expected_entries = 261",
+        "expected_runtime = 213",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

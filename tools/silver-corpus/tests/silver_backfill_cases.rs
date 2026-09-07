@@ -59,6 +59,15 @@ fn fit_font_size_with_varying_sizes() {
 }
 
 #[test]
+fn data_binding_keyframes_animated_by_joysticks() {
+    let Some(runtime) = runtime_root("upstream joystick keyframe binding Silver") else {
+        return;
+    };
+    compare_case("joystick_databound_keyframe_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
 fn upstream_fl_bc_exact_silver_assertions() {
     // Literal fixture/action streams from the corresponding upstream
     // TEST_CASEs. The final comparison is the original `silver.matches(...)`

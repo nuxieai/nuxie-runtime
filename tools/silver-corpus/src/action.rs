@@ -102,6 +102,17 @@ impl PointerCoordinate {
         match self {
             Self::Literal(value) => Ok(*value),
             Self::Expression(expression) => {
+                if let Some(index) = expression
+                    .strip_prefix("artboard-width*")
+                    .and_then(|value| value.strip_suffix("/5"))
+                {
+                    let index = index.parse::<u8>().with_context(|| {
+                        format!("invalid pointer coordinate expression {expression}")
+                    })?;
+                    anyhow::ensure!(index < 5, "joystick pointer index out of range");
+                    // Source width * i / frames: preserve the f32 operation order.
+                    return Ok(width * f32::from(index) / 5.0);
+                }
                 if let Some(distance) = expression.strip_prefix("artboard-width/2+") {
                     let distance = distance.parse::<f32>().with_context(|| {
                         format!("invalid pointer coordinate expression {expression}")
@@ -1436,6 +1447,14 @@ repeat = false
 
     #[test]
     fn resolves_pointer_coordinate_expressions_against_artboard_size() {
+        for index in 0..5 {
+            assert_eq!(
+                PointerCoordinate::Expression(format!("artboard-width*{index}/5"))
+                    .resolve(641.25, 480.0)
+                    .unwrap(),
+                641.25_f32 * index as f32 / 5.0,
+            );
+        }
         assert_eq!(
             PointerCoordinate::Expression("artboard-width/2".to_owned())
                 .resolve(640.0, 480.0)

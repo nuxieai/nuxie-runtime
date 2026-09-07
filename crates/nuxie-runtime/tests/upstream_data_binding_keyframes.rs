@@ -1,5 +1,6 @@
 //! Direct ports of all five cases in pinned
-//! tests/unit_tests/runtime/data_binding_keyframes.cpp.
+//! tests/unit_tests/runtime/data_binding_keyframes_test.cpp at afda7a16.
+//! The new joystick Silver case is in silver-corpus's backfill tests.
 use nuxie_render_api::{PersistentFactory, SerializingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceHandle,
@@ -212,9 +213,8 @@ fn keyframe_interpolation_reads_the_data_bound_start_value() {
 }
 
 #[test]
-fn standalone_animation_instance_ignores_keyframe_value_binds() {
-    // The pinned standalone case creates no StateMachineInstance: creating one
-    // would itself build the keyframe bindings this case must exclude.
+fn standalone_animation_instance_resolves_keyframe_value_binds() {
+    // No StateMachineInstance: the animation now owns lazy keyframe bindings.
     let bytes = std::fs::read(pinned_path("assets/data_bind_keyframes_test.riv"))
         .expect("pinned keyframe fixture");
     let mut factory = PersistentFactory::new(SerializingFactory::new());
@@ -229,7 +229,7 @@ fn standalone_animation_instance_ignores_keyframe_value_binds() {
             file.create_default_view_model_instance_for_artboard(artboard.core_handle())
         })
         .expect("default view-model instance");
-    set_start_text(&view_model, "SHOULD_NOT_BIND");
+    set_start_text(&view_model, "STANDALONE_BOUND");
     set_start_x(&view_model, 424_242.0);
     artboard.bind_view_model_instance(Some(view_model));
     let mut animation = artboard.animation_at(0).expect("animation 0");
@@ -237,13 +237,13 @@ fn standalone_animation_instance_ignores_keyframe_value_binds() {
     let run = artboard
         .with_artboard(|artboard| artboard.find_all_handles::<TextValueRun>().first().cloned())
         .expect("first text run");
-    assert_ne!(
+    assert_eq!(
         run.with_downcast::<TextValueRun, _>(|run| run.base.text().to_owned())
             .expect("TextValueRun"),
-        "SHOULD_NOT_BIND"
+        "STANDALONE_BOUND"
     );
     let nodes = artboard.with_artboard(|artboard| artboard.find_all_handles::<Node>());
-    assert!(!nodes.iter().any(|node| {
+    assert!(nodes.iter().any(|node| {
         node.with(|node| catch_approx_eq(node.as_node().expect("Node").base.x(), 424_242.0))
             .expect("live Node")
     }));

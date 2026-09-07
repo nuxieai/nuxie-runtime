@@ -134,15 +134,6 @@ where
         }
     }
 
-    pub fn for_each_animation_instance(
-        &mut self,
-        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
-    ) {
-        for animation in &mut self.animation_instances {
-            callback(&mut animation.animation_instance);
-        }
-    }
-
     pub fn animation_instance(
         &self,
         blend_animation: &CoreHandle,

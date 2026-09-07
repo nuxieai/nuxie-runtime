@@ -10204,8 +10204,12 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
+            CoreField::ViewModelPropertySymbolTypeValue => {
+                self.base.base.base.symbol_type_value() as u32
+            }
+            CoreField::ViewModelPropertyComponentProps => {
+                self.base.base.base.component_props() as u32
+            }
             _ => 0,
         }
     }
@@ -11348,8 +11352,12 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
+            CoreField::ViewModelPropertySymbolTypeValue => {
+                self.base.base.base.symbol_type_value() as u32
+            }
+            CoreField::ViewModelPropertyComponentProps => {
+                self.base.base.base.component_props() as u32
+            }
             _ => 0,
         }
     }
@@ -11674,8 +11682,12 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
+            CoreField::ViewModelPropertySymbolTypeValue => {
+                self.base.base.base.symbol_type_value() as u32
+            }
+            CoreField::ViewModelPropertyComponentProps => {
+                self.base.base.base.component_props() as u32
+            }
             _ => 0,
         }
     }
@@ -12382,8 +12394,12 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
+            CoreField::ViewModelPropertySymbolTypeValue => {
+                self.base.base.base.symbol_type_value() as u32
+            }
+            CoreField::ViewModelPropertyComponentProps => {
+                self.base.base.base.component_props() as u32
+            }
             _ => 0,
         }
     }
@@ -19745,8 +19761,12 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             CoreField::ScriptedDrawableScriptAssetId => self.base.base.base.script_asset_id(),
             _ => 0,
         }
@@ -20515,8 +20535,12 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             CoreField::NestedArtboardArtboardId => self.base.base.base.artboard_id(),
             CoreField::NestedArtboardLayoutInstanceWidthUnitsValue => {
                 self.base.instance_width_units_value()
@@ -28555,7 +28579,9 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::StateMachineFireActionOccursValue => self.base.base.base.occurs_value() as u32,
+            CoreField::StateMachineFireActionOccursValue => {
+                self.base.base.base.occurs_value() as u32
+            }
             CoreField::StateMachineFireEventEventId => self.base.event_id(),
             _ => 0,
         }
@@ -40341,8 +40367,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             CoreField::LayoutComponentStyleId => self.base.base.base.style_id(),
             CoreField::ArtboardDefaultStateMachineId => self.base.default_state_machine_id(),
             CoreField::ArtboardViewModelId => self.base.view_model_id(),
@@ -45434,8 +45464,12 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             CoreField::NestedArtboardArtboardId => self.base.base.base.artboard_id(),
             CoreField::NestedArtboardLeafFit => self.base.fit(),
             _ => 0,
@@ -47416,8 +47450,12 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             _ => 0,
         }
     }
@@ -47863,8 +47901,12 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             _ => 0,
         }
     }
@@ -49066,8 +49108,12 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             _ => 0,
         }
     }
@@ -50072,8 +50118,12 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
+            CoreField::DrawableBlendModeValue => {
+                self.base.base.base.base.base.blend_mode_value() as u32
+            }
+            CoreField::DrawableDrawableFlags => {
+                self.base.base.base.base.base.drawable_flags() as u32
+            }
             _ => 0,
         }
     }
@@ -63793,7 +63843,12 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
         ),
     ) -> bool {
         let path = match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.local_clockwise_path() };
-        if let Some(path) = path { f(path); true } else { false }
+        if let Some(path) = path {
+            f(path);
+            true
+        } else {
+            false
+        }
     }
     fn drawable_hit_test(
         &mut self,
@@ -64082,7 +64137,12 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
         ),
     ) -> bool {
         let path = match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path() };
-        if let Some(path) = path { f(path); true } else { false }
+        if let Some(path) = path {
+            f(path);
+            true
+        } else {
+            false
+        }
     }
     fn component_on_dirty(
         &mut self,

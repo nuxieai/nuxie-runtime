@@ -56,7 +56,8 @@ impl Stroke {
         }
         let thickness = self.base.thickness();
         let cap: nuxie_render_api::StrokeCap = StrokeCap::from(u32::from(self.base.cap())).into();
-        let join: nuxie_render_api::StrokeJoin = StrokeJoin::from(u32::from(self.base.join())).into();
+        let join: nuxie_render_api::StrokeJoin =
+            StrokeJoin::from(u32::from(self.base.join())).into();
         self.base.with_render_paint_mut(|paint| {
             paint.style(RenderPaintStyle::Stroke);
             paint.thickness(thickness);
@@ -100,7 +101,11 @@ impl Stroke {
 
     pub fn update(&mut self, value: ComponentDirt) {
         let kind = self.pick_path_kind();
-        let stroke = Some((self.base.thickness(), u32::from(self.base.cap()), u32::from(self.base.join())));
+        let stroke = Some((
+            self.base.thickness(),
+            u32::from(self.base.cap()),
+            u32::from(self.base.join()),
+        ));
         self.base.base.update_with_path_kind(value, kind, stroke);
         if has_dirt(value, ComponentDirt::PAINT) {
             let thickness = self.base.thickness();

@@ -107,7 +107,11 @@ fn approx(actual: f32, expected: f32) -> bool {
     let actual = f64::from(actual);
     let expected = f64::from(expected);
     let within = |margin: f64| expected + margin >= actual && actual + margin >= expected;
-    let scale = if expected.is_infinite() { 0.0 } else { expected.abs() };
+    let scale = if expected.is_infinite() {
+        0.0
+    } else {
+        expected.abs()
+    };
     within(1e-4) || within(f64::from(f32::EPSILON * 100.0) * scale)
 }
 

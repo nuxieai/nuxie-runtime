@@ -2,7 +2,7 @@
 use super::{
     canvas_schedule::schedule_canvases,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{GpuCensus, take_gpu_census},
+    gpu_census::{take_gpu_census, GpuCensus},
     render_handle::INVALID_RENDER_HANDLE,
     render_replay::*,
 };

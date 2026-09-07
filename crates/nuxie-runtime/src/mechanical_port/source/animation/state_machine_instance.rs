@@ -2323,7 +2323,8 @@ impl GamepadDispatcher for StateMachineGamepadDispatcher {
                 }),
         };
         let mut dispatched = None;
-        self.focus_manager.gamepad_dispatch(&invocation, Some(&mut dispatched));
+        self.focus_manager
+            .gamepad_dispatch(&invocation, Some(&mut dispatched));
         self.machine
             .broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref());
     }

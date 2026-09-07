@@ -751,7 +751,9 @@ impl LayoutComponentStyleBase {
         if self.position_left_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure_allocated().position_left_units_value = value;
+        self.absolute_position
+            .ensure_allocated()
+            .position_left_units_value = value;
         true
     }
     pub fn position_right_units_value(&self) -> u8 {
@@ -778,7 +780,9 @@ impl LayoutComponentStyleBase {
         if self.position_right_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure_allocated().position_right_units_value = value;
+        self.absolute_position
+            .ensure_allocated()
+            .position_right_units_value = value;
         true
     }
     pub fn position_top_units_value(&self) -> u8 {
@@ -805,7 +809,9 @@ impl LayoutComponentStyleBase {
         if self.position_top_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure_allocated().position_top_units_value = value;
+        self.absolute_position
+            .ensure_allocated()
+            .position_top_units_value = value;
         true
     }
     pub fn position_bottom_units_value(&self) -> u8 {
@@ -832,7 +838,9 @@ impl LayoutComponentStyleBase {
         if self.position_bottom_units_value() == value {
             return false;
         }
-        self.absolute_position.ensure_allocated().position_bottom_units_value = value;
+        self.absolute_position
+            .ensure_allocated()
+            .position_bottom_units_value = value;
         true
     }
     pub fn flex_basis(&self) -> f32 {

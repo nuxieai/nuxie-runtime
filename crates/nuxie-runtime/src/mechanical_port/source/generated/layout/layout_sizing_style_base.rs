@@ -269,7 +269,9 @@ impl LayoutSizingStyleBase {
         if self.min_height_units_value() == value {
             return false;
         }
-        self.min_max_sizing.ensure_allocated().min_height_units_value = value;
+        self.min_max_sizing
+            .ensure_allocated()
+            .min_height_units_value = value;
         true
     }
     pub fn max_height_units_value(&self) -> u8 {
@@ -296,7 +298,9 @@ impl LayoutSizingStyleBase {
         if self.max_height_units_value() == value {
             return false;
         }
-        self.min_max_sizing.ensure_allocated().max_height_units_value = value;
+        self.min_max_sizing
+            .ensure_allocated()
+            .max_height_units_value = value;
         true
     }
     pub fn layout_width_scale_type(&self) -> u8 {

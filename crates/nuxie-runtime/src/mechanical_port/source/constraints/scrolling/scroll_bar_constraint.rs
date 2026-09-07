@@ -262,7 +262,9 @@ impl ScrollBarConstraint {
             .filter(|added| *added)
             .expect("resolved ScrollConstraint component");
         self.base.build_dependencies();
-        let thumb_is_layout = self.with_thumb_mut(|thumb| thumb.mark_interaction_target()).is_some();
+        let thumb_is_layout = self
+            .with_thumb_mut(|thumb| thumb.mark_interaction_target())
+            .is_some();
         if thumb_is_layout {
             if let Some(track) = self.track_handle() {
                 track.with_mut(|track| {

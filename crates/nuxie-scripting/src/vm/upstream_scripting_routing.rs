@@ -1,4 +1,4 @@
-//! `tests/unit_tests/runtime/scripting/scripting_routing_test.cpp` at e949498e.
+//! `tests/unit_tests/runtime/scripting/scripting_routing_test.cpp` at dee5342a.
 use super::*;
 use nuxie_render_api::*;
 
@@ -18,11 +18,11 @@ struct SessionFactory {
     inner: RecordingFactory,
     host: DeferredCanvasHostHandle,
     ore: OreContextHandle,
-    bound: bool,
+    device: Option<PersistentFactoryContext>,
 }
 impl Factory for SessionFactory {
-    fn is_render_context(&self) -> bool {
-        self.bound
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        self.device.clone()
     }
     fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
         Some(self.host.clone())
@@ -94,7 +94,11 @@ fn import_session(
         inner: RecordingFactory::default(),
         host: host.clone(),
         ore,
-        bound,
+        device: bound.then(|| {
+            PersistentFactory::new(RecordingFactory::new())
+                .persistent_context()
+                .unwrap()
+        }),
     });
     let vm = Rc::new(ScriptVm::new());
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -137,7 +141,11 @@ fn caller_supplied_vm_routes_through_import_factory() {
         inner: RecordingFactory::new(),
         host: host.clone(),
         ore: ore.clone(),
-        bound: true,
+        device: Some(
+            PersistentFactory::new(RecordingFactory::new())
+                .persistent_context()
+                .unwrap(),
+        ),
     });
     let import_identity = import_factory.persistent_context().unwrap().identity();
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
@@ -160,7 +168,9 @@ fn caller_supplied_vm_routes_through_import_factory() {
     .expect("caller-supplied VM import");
 
     assert_ne!(construction_identity, import_identity);
-    assert_eq!(vm.render_context().unwrap().identity(), import_identity);
+    let device_identity = import_factory.borrow().device.as_ref().unwrap().identity();
+    assert_ne!(device_identity, import_identity);
+    assert_eq!(vm.render_context().unwrap().identity(), device_identity);
     assert!(Rc::ptr_eq(&vm.deferred_canvas_host().unwrap(), &host));
     assert!(Rc::ptr_eq(&vm.ore_context().unwrap(), &ore));
 }
@@ -172,7 +182,7 @@ fn import_routes_canvas_host_with_device() {
     assert!(vm.ore_context().is_some());
     assert_eq!(
         vm.render_context().unwrap().identity(),
-        factory.persistent_context().unwrap().identity()
+        factory.borrow().device.as_ref().unwrap().identity()
     );
     assert!(!vm.render_context_is_late_bound());
 }
@@ -221,4 +231,102 @@ fn sized_canvas_refuses_deviceless_factory_without_host() {
             .eval::<Value>()
             .is_err()
     );
+}
+
+#[test]
+fn command_server_load_routes_device_off_import_factory() {
+    use nuxie_runtime::source::{
+        command_queue::CommandQueue, command_server::CommandServer,
+        lua::scripting_vm::RuntimeScriptingVmHandle,
+    };
+
+    // Command callbacks are Send, while the server creates and owns the VM on
+    // its processing thread. Keep only test observation on that same thread;
+    // no Rc or factory is transferred across the command queue boundary.
+    thread_local! {
+        static CREATED_VM: RefCell<Option<(Rc<ScriptVm>, RuntimeScriptingVmHandle)>> = const { RefCell::new(None) };
+    }
+    let host: DeferredCanvasHostHandle = Rc::new(RefCell::new(StubCanvasHost));
+    let ore: OreContextHandle = Rc::new(RefCell::new(
+        nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None),
+    ));
+    let device = PersistentFactory::new(RecordingFactory::new())
+        .persistent_context()
+        .unwrap();
+    let mut factory = PersistentFactory::new(SessionFactory {
+        inner: RecordingFactory::new(),
+        host: host.clone(),
+        ore: ore.clone(),
+        device: Some(device.clone()),
+    });
+    let factory_identity = factory.persistent_context().unwrap().identity() as usize;
+    let device_identity = device.identity() as usize;
+    assert_ne!(factory_identity, device_identity);
+    let host_identity = Rc::as_ptr(&host) as *const () as usize;
+    let ore_identity = Rc::as_ptr(&ore) as *const () as usize;
+    let mut queue = CommandQueue::default();
+    let mut server = CommandServer::new(
+        queue.clone(),
+        nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+    );
+    let root = std::env::var_os("RIVE_RUNTIME_DIR")
+        .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+    let bytes = std::fs::read(
+        std::path::PathBuf::from(root).join("tests/unit_tests/assets/script_advance_test.riv"),
+    )
+    .unwrap();
+    let handle = queue.load_file(
+        bytes,
+        None,
+        0,
+        Some(Box::new(|factory| {
+            let vm = Rc::new(ScriptVm::new());
+            let retained = RuntimeScriptingVmHandle::new(Box::new(vm.clone()));
+            retained.install_render_factory(&factory).unwrap();
+            CREATED_VM.with(|slot| *slot.borrow_mut() = Some((vm, retained.clone())));
+            Some(retained)
+        })),
+    );
+    let observed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let callback_observed = observed.clone();
+    queue.run_once(Box::new(move |server| {
+        let file = server
+            .get_file(handle)
+            .expect("command server imported file");
+        let file_vm = file
+            .with_file(|file| file.scripting_vm())
+            .expect("file scripting VM");
+        CREATED_VM.with(|slot| {
+            let slot = slot.borrow();
+            let (context, retained) = slot.as_ref().expect("server created scripting context");
+            assert!(file_vm.ptr_eq(retained));
+            assert_eq!(
+                context
+                    .renderer_bindings
+                    .with_factory(|factory| {
+                        Ok(factory.persistent_context().unwrap().identity() as usize)
+                    })
+                    .unwrap(),
+                factory_identity
+            );
+            assert_eq!(
+                Rc::as_ptr(&context.deferred_canvas_host().unwrap()) as *const () as usize,
+                host_identity
+            );
+            assert_eq!(
+                Rc::as_ptr(&context.ore_context().unwrap()) as *const () as usize,
+                ore_identity
+            );
+            assert_eq!(
+                context.render_context().unwrap().identity() as usize,
+                device_identity
+            );
+        });
+        callback_observed.store(true, std::sync::atomic::Ordering::Relaxed);
+    }));
+    server.process_commands();
+    assert!(observed.load(std::sync::atomic::Ordering::Relaxed));
+    queue.disconnect();
+    CREATED_VM.with(|slot| slot.borrow_mut().take());
 }

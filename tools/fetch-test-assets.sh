@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-d7fff883fd802b46c92d5bf479a70712fd73ecba}
+ref=${RIVE_RUNTIME_REF:-5892bb05be7ae966b751625b4ee12239e6860dc1}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/solo_legacy_child.riv|250efc7d785b3ca7f89a07615786f7d83dfb0f7352db50a74aaa07fa1760cc13|5892bb05be7ae966b751625b4ee12239e6860dc1|layout/solo_legacy_child.riv"
   "sync/gamepad_inputs_test.riv|77278e320b77b1d3610d15ad4cb80722eeb1a59333e06548f1efc89c9d3f2433|9cb2205f06aa5e599554e7382889f4cf5bec382e|gamepad_inputs_test.riv"
   "sync/layout_order_pointer_test.riv|039c181c5acb8c8eef63dab84ac473606c93876821ffc0877efc832a90e557ae|61f00897013eba8c57ee2002c33e6ee47d476eff|layout_order_pointer_test.riv"
   "sync/swappable_artboards_focus.riv|b36ee050fe0dccb447a00893ac7f89599f459eea53c5f4ecddef1a1f5b065fa0|081f85a690f26a4e8cceead05bd9c3f86707eae2|swappable_artboards_focus.riv"

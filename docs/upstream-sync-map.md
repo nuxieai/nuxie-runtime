@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d7fff883fd802b46c92d5bf479a70712fd73ecba`
+- LAST_SYNCED_SHA: `5892bb05be7ae966b751625b4ee12239e6860dc1`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `5892bb05be7ae966b751625b4ee12239e6860dc1` | Content-size non-participating children through Solo containers, keeping plain groups as barriers and the layout-provider walk unchanged. Port the original 200x200 rectangle regression and exact fixture; preserve Taffy. | — |
 | `d7fff883fd802b46c92d5bf479a70712fd73ecba` | Merge actual vertex/fragment binding maps for split-file ORE pipelines; validate stage agreement and backend-specific slot collisions. Port allocator v2 admission, shared layout builders, Lua fragment selection and auto layouts, original binding-map/split-stage tests, and the exact generated GM shader header. Unsupported D3D backends and C++ test-build infrastructure are not added. Editor producer followup: UNIV-2958. | — |
 | `05058845faa261dace9eb0804e36cfa0a3676b05` | Enumerate dynamic-state MSAA draw types for ubershaders only when the platform supports them; share the exhaustive GPU predicate with Vulkan. Port the upstream permutation membership test. Upstream deploy_tests.py skip/window handling has no corresponding downstream tool; no shader source or artifact bytes changed. | — |
 | `9cb2205f06aa5e599554e7382889f4cf5bec382e` | Queue failed focus-action requests on the shared manager, bounded and tagged by root; retry after component updates and discard remaining requests at frame end. Preserve immediate eligible focus, guard gamepad listener targets, and detach orphaned focus nodes without a dead manager. Translate gamepad navigation and uncollapse/focus Silver producers. | — |

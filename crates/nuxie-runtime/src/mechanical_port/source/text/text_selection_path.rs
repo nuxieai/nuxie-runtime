@@ -26,21 +26,59 @@ impl TextSelectionPath {
             self.rectangles.add_rect(*rect);
         }
         self.rectangles.compute_contours();
-        for contour in self.rectangles.contours() {
-            Self::add_rounded_path(&contour, radius, self.path.mutable_raw_path());
+        let count = self.rectangles.contour_count();
+        for i in 0..count {
+            let contour = self.rectangles.contour(i);
+            if contour.size() < 2 {
+                continue;
+            }
+            let probe = contour.point(0);
+            let mut depth = 0;
+            for j in 0..count {
+                if j != i && Self::contour_contains(&self.rectangles.contour(j), probe) {
+                    depth += 1;
+                }
+            }
+            Self::add_rounded_path(
+                &contour,
+                radius,
+                self.path.mutable_raw_path(),
+                depth & 1 == 0,
+            );
         }
     }
-    fn add_rounded_path(contour: &Contour, radius: f32, raw: &mut RawPath) {
-        let clockwise = contour.is_clockwise();
+    // Crossing-number test. RectanglesToContour contours never touch, so a
+    // vertex of another contour is a safe containment probe.
+    fn contour_contains(contour: &Contour, point: Vec2D) -> bool {
+        let size = contour.size();
+        if size < 3 {
+            return false;
+        }
+        let mut inside = false;
+        let mut j = size - 1;
+        for i in 0..size {
+            let a = contour.point(i);
+            let b = contour.point(j);
+            if (a.y > point.y) != (b.y > point.y)
+                && point.x < (b.x - a.x) * (point.y - a.y) / (b.y - a.y) + a.x
+            {
+                inside = !inside;
+            }
+            j = i;
+        }
+        inside
+    }
+    fn add_rounded_path(contour: &Contour, radius: f32, raw: &mut RawPath, clockwise: bool) {
+        let reversed = contour.is_clockwise() != clockwise;
         let len = contour.size();
         if len < 2 {
             return;
         }
         for i in 0..len {
-            let pos = contour.point_reversed(i, !clockwise);
+            let pos = contour.point_reversed(i, reversed);
             if radius > 0.0 {
-                let prev = contour.point_reversed((i + len - 1) % len, !clockwise);
-                let next = contour.point_reversed((i + 1) % len, !clockwise);
+                let prev = contour.point_reversed((i + len - 1) % len, reversed);
+                let next = contour.point_reversed((i + 1) % len, reversed);
                 let mut to_prev = prev - pos;
                 let lp = to_prev.length();
                 to_prev /= lp;

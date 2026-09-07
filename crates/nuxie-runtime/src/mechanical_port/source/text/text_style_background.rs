@@ -1,6 +1,8 @@
-//! Translation of text_style_background.hpp/.cpp at upstream 1f04919a.
+//! Translation of text_style_background.hpp/.cpp at upstream d6107a91.
 
 use crate::mechanical_port::source::{
+    component::ComponentOccurrenceHandle,
+    component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
     generated::text::text_style_background_base::{
@@ -26,8 +28,9 @@ impl Default for TextStyleBackground {
             base: TextStyleBackgroundBase::default(),
             paints: ShapePaintContainer::default(),
             rects: Vec::new(),
-            // Upstream intentionally makes background contours winding-agnostic.
-            path: TextSelectionPath::new(true, FillRule::EvenOdd),
+            // Outer contours are clockwise and holes counter-clockwise. Only
+            // clockwise fills are feathered by the renderer.
+            path: TextSelectionPath::new(true, FillRule::Clockwise),
         }
     }
 }
@@ -68,6 +71,30 @@ impl TextStyleBackground {
 
     pub fn update_path(&mut self) {
         self.path.update(&self.rects, self.base.corner_radius());
+        // Text has rebuilt our path. Feathers sort after us and must derive
+        // their geometry again from this updated path.
+        for paint in self.paints.shape_paints() {
+            let feather = paint
+                .with(|object| {
+                    object
+                        .as_shape_paint_behavior()
+                        .and_then(|paint| paint.shape_paint().feather())
+                })
+                .flatten();
+            if let Some(feather) = feather {
+                ComponentOccurrenceHandle::Authored(feather).add_dirt(ComponentDirt::PATH, false);
+            }
+        }
+    }
+
+    pub fn build_dependencies(&mut self) {
+        self.base.build_dependencies();
+        // TextStylePaint depends on Text. This edge sorts the background after
+        // text layout, and makes feathers below its paints reachable.
+        if let (Some(parent), Some(this)) = (self.base.parent_handle(), self.base.handle()) {
+            ComponentOccurrenceHandle::Authored(parent)
+                .with_component_mut(|parent| parent.add_dependent(this));
+        }
     }
 
     pub fn propagate_opacity(&mut self, opacity: f32) {

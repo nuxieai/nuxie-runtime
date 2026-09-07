@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-746e3063dab40dfb79f0db9ed8d41bc3bf419366}
+ref=${RIVE_RUNTIME_REF:-d6107a91f7a2798893356605fa96cff3cea41c8f}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/text_background_feather_test.riv|8b9856e161949d835339a0b7666a920857578cbde8b06dade66daa645a2913ce|d6107a91f7a2798893356605fa96cff3cea41c8f|text_background_feather_test.riv"
   "sync/grid_placement_bound.riv|02dca529414c584c38e7c438e501e276d89337588d9042381120d330784380d0|3f4047a85f11fecfde8c4d906c0c1654aa12b015|layout/grid_placement_bound.riv"
   "sync/joystick_databound_keyframe_test.riv|ca3e052d533a32143279f8e035f95ca53461a4f5d5fdf782bd0e63332bbe2c63|afda7a160cd72ea079e2cd25580518b22330646e|joystick_databound_keyframe_test.riv"
   "sync/text_fit_test.riv|540cfae6ba78a81518525af17a8d09e4cd50131dcbd9e584832c2468f24fbcd3|73f94edc539c1fbc79827e5940814125035f8c77|text_fit_test.riv"

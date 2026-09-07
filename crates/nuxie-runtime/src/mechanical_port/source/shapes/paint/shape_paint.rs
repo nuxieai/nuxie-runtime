@@ -329,6 +329,10 @@ impl ShapePaint {
                     if !*is_inner {
                         return None;
                     }
+                    // Upstream d6107a91 restores the renderer before returning
+                    // when innerPath() is null. Feather::innerPath() actually
+                    // returns its value member's address, represented here by
+                    // a non-null Rc, so that null-only branch is unreachable.
                     if path_effect.is_some() && *effect_path_dirty {
                         if let (Some(feather), Some(effect)) =
                             (self.feather.as_ref(), path_effect.as_ref())

@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "746e3063dab40dfb79f0db9ed8d41bc3bf419366"
+UPSTREAM_REF = "d6107a91f7a2798893356605fa96cff3cea41c8f"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "text_background_feather_test",
     "joystick_databound_keyframe_test",
     "text_fit_test",
     "ik_anim_test",
@@ -2653,6 +2654,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "text_background_feather_test":
+                        actions = (
+                            action("bind-authored-view-model-instance", instance_index=0),
+                            action("advance", target="state-machine", seconds=0.032),
+                            action("draw"),
+                        )
+                        blocker = None
                     if silver_id == "text_fit_test":
                         # text_test.cpp: authored VMI 0, draw after .032,
                         # then int(3.0f / .032f) further frames.
@@ -2735,6 +2743,12 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "pass the nullable authored view-model instance 0 lookup unchanged "
                             "to binding, advance 0 then 0.1, then "
                             "four 0.5-second frames. Enrollment alone is not a validation result."
+                        )
+                    if silver_id == "text_background_feather_test":
+                        note = (
+                            "Exact comparison contract for the one-draw background feather "
+                            "producer at d6107a91: authored VMI 0, advance .032, draw. "
+                            "Enrollment alone is not a validation result."
                         )
                     if silver_id == "text_fit_test":
                         note = (
@@ -3076,7 +3090,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (261, 213, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (262, 214, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"

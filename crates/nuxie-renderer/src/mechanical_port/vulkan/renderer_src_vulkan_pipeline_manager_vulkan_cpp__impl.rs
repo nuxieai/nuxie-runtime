@@ -9,24 +9,24 @@ use super::draw_pipeline_layout_vulkan_decl::DrawPipelineLayoutVulkan;
 use super::draw_pipeline_vulkan_decl::{DrawPipelineOptions, DrawPipelineVulkan, PipelineProps};
 use super::draw_shader_vulkan_decl::{DrawShaderVulkan, DrawShaderVulkanType};
 use super::pipeline_manager_vulkan_decl::{
-    CompletedJob, JobParams, PLSBackingType, PipelineCreateType, PipelineManagerVulkan,
-    PipelineStatus, ShaderCompilationMode, MAX_SAMPLER_PERMUTATIONS,
+    CompletedJob, JobParams, MAX_SAMPLER_PERMUTATIONS, PLSBackingType, PipelineCreateType,
+    PipelineManagerVulkan, PipelineStatus, ShaderCompilationMode,
 };
 use super::render_pass_vulkan_decl::{
-    RenderPassOptionsVulkan, RenderPassVulkan, RENDER_PASS_OPTIONS_LAYOUT_MASK,
-    RENDER_PASS_OPTION_COUNT,
+    RENDER_PASS_OPTION_COUNT, RENDER_PASS_OPTIONS_LAYOUT_MASK, RenderPassOptionsVulkan,
+    RenderPassVulkan,
 };
 use super::vulkan_context_decl::VulkanContext;
 use crate::mechanical_port::source::include::rive::shapes::paint::image_sampler_hpp::{
     ImageFilter, ImageSampler, ImageWrap,
 };
 use crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::{
-    kVertexShaderFeaturesMask, DrawContents, DrawType, InterlockMode, LoadAction, PlatformFeatures,
-    ShaderFeatures, ShaderMiscFlags, UbershaderFeaturesMaskFor,
-    DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE,
+    DRAW_CONTENTS_FOR_MSAA_PIPELINE_STATE, DrawContents, DrawType, InterlockMode, LoadAction,
+    PlatformFeatures, ShaderFeatures, ShaderMiscFlags, UbershaderFeaturesMaskFor,
+    kVertexShaderFeaturesMask,
 };
 use crate::mechanical_port::source::renderer::src::gpu_cpp::{
-    get_stencil_info, ForEachUbershaderPermutation, ShaderUniqueKey,
+    ForEachUbershaderPermutation, ShaderUniqueKey, get_stencil_info,
 };
 use ash::vk;
 use nuxie_render_api::BlendMode;
@@ -83,13 +83,39 @@ fn vk_check<T>(result: Result<T, vk::Result>) -> T {
         Err(result) => super::vkutil_impl::vk_abort(result, file!(), line!()),
     }
 }
-
 impl PipelineManagerVulkan {
-    pub(crate) fn new(
+    pub(crate) fn make(
         vk: Arc<VulkanContext>,
         mode: ShaderCompilationMode,
         nullTextureView: vk::ImageView,
-    ) -> Pin<Box<Self>> {
+    ) -> Option<Pin<Box<Self>>> {
+        let mut manager = Box::pin(Self {
+            m_state: Default::default(),
+            m_mode: mode,
+            m_jobThread: Default::default(),
+            m_newJobCV: Default::default(),
+            m_jobCompleteCV: Default::default(),
+            m_sharedObjectReadyCV: Default::default(),
+            m_vk: vk,
+            m_featherAtlasFormat: vk::Format::R16_SFLOAT,
+            m_linearSampler: Default::default(),
+            m_imageSamplers: [vk::Sampler::null(); MAX_SAMPLER_PERMUTATIONS],
+            m_perFlushDescriptorSetLayout: Default::default(),
+            m_perDrawDescriptorSetLayout: Default::default(),
+            m_emptyDescriptorSetLayout: Default::default(),
+            m_staticDescriptorPool: Default::default(),
+            m_nullImageDescriptorSet: Default::default(),
+            m_pin: std::marker::PhantomPinned,
+        });
+        // No self-referential worker has been started; the allocation stays pinned.
+        if !unsafe { manager.as_mut().get_unchecked_mut() }.init(nullTextureView) {
+            return None;
+        }
+        Some(manager)
+    }
+
+    fn init(&mut self, nullTextureView: vk::ImageView) -> bool {
+        let vk = Arc::clone(&self.m_vk);
         let linearInfo = vk::SamplerCreateInfo::default()
             .mag_filter(vk::Filter::LINEAR)
             .min_filter(vk::Filter::LINEAR)
@@ -98,9 +124,15 @@ impl PipelineManagerVulkan {
             .address_mode_v(vk::SamplerAddressMode::CLAMP_TO_EDGE)
             .min_lod(0.0)
             .max_lod(0.0);
-        let linearSampler = vk_check(unsafe { vk.m_ashDevice.create_sampler(&linearInfo, None) });
-        let mut imageSamplers = [vk::Sampler::null(); MAX_SAMPLER_PERMUTATIONS];
-        for (i, sampler) in imageSamplers.iter_mut().enumerate() {
+        self.m_linearSampler = vk.createHandle(
+            unsafe { vk.m_ashDevice.create_sampler(&linearInfo, None) },
+            file!(),
+            line!(),
+        );
+        if self.m_linearSampler == Default::default() {
+            return false;
+        }
+        for (i, sampler) in self.m_imageSamplers.iter_mut().enumerate() {
             let wrapX = ImageSampler::GetWrapXOptionFromKey(i as u8);
             let wrapY = ImageSampler::GetWrapYOptionFromKey(i as u8);
             let filter = ImageSampler::GetFilterOptionFromKey(i as u8);
@@ -113,7 +145,14 @@ impl PipelineManagerVulkan {
                 .address_mode_v(vk_sampler_address_mode(wrapY))
                 .min_lod(0.0)
                 .max_lod(vk::LOD_CLAMP_NONE);
-            *sampler = vk_check(unsafe { vk.m_ashDevice.create_sampler(&info, None) });
+            *sampler = vk.createHandle(
+                unsafe { vk.m_ashDevice.create_sampler(&info, None) },
+                file!(),
+                line!(),
+            );
+            if *sampler == vk::Sampler::null() {
+                return false;
+            }
         }
 
         let vertexFragment = vk::ShaderStageFlags::VERTEX | vk::ShaderStageFlags::FRAGMENT;
@@ -158,7 +197,7 @@ impl PipelineManagerVulkan {
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                p_immutable_samplers: std::ptr::from_ref(&linearSampler),
+                p_immutable_samplers: std::ptr::from_ref(&self.m_linearSampler),
                 ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
@@ -166,7 +205,7 @@ impl PipelineManagerVulkan {
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vertexFragment,
-                p_immutable_samplers: std::ptr::from_ref(&linearSampler),
+                p_immutable_samplers: std::ptr::from_ref(&self.m_linearSampler),
                 ..Default::default()
             },
             vk::DescriptorSetLayoutBinding {
@@ -174,30 +213,51 @@ impl PipelineManagerVulkan {
                 descriptor_type: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
                 descriptor_count: 1,
                 stage_flags: vk::ShaderStageFlags::FRAGMENT,
-                p_immutable_samplers: std::ptr::from_ref(&linearSampler),
+                p_immutable_samplers: std::ptr::from_ref(&self.m_linearSampler),
                 ..Default::default()
             },
         ];
         let perFlushInfo = vk::DescriptorSetLayoutCreateInfo::default().bindings(&perFlushBindings);
-        let perFlushDescriptorSetLayout = vk_check(unsafe {
-            vk.m_ashDevice
-                .create_descriptor_set_layout(&perFlushInfo, None)
-        });
+        self.m_perFlushDescriptorSetLayout = vk.createHandle(
+            unsafe {
+                vk.m_ashDevice
+                    .create_descriptor_set_layout(&perFlushInfo, None)
+            },
+            file!(),
+            line!(),
+        );
+        if self.m_perFlushDescriptorSetLayout == Default::default() {
+            return false;
+        }
         let perDrawBindings = [vk::DescriptorSetLayoutBinding::default()
             .binding(IMAGE_TEXTURE_IDX)
             .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
             .descriptor_count(1)
             .stage_flags(vk::ShaderStageFlags::FRAGMENT)];
         let perDrawInfo = vk::DescriptorSetLayoutCreateInfo::default().bindings(&perDrawBindings);
-        let perDrawDescriptorSetLayout = vk_check(unsafe {
-            vk.m_ashDevice
-                .create_descriptor_set_layout(&perDrawInfo, None)
-        });
+        self.m_perDrawDescriptorSetLayout = vk.createHandle(
+            unsafe {
+                vk.m_ashDevice
+                    .create_descriptor_set_layout(&perDrawInfo, None)
+            },
+            file!(),
+            line!(),
+        );
+        if self.m_perDrawDescriptorSetLayout == Default::default() {
+            return false;
+        }
         let emptyInfo = vk::DescriptorSetLayoutCreateInfo::default();
-        let emptyDescriptorSetLayout = vk_check(unsafe {
-            vk.m_ashDevice
-                .create_descriptor_set_layout(&emptyInfo, None)
-        });
+        self.m_emptyDescriptorSetLayout = vk.createHandle(
+            unsafe {
+                vk.m_ashDevice
+                    .create_descriptor_set_layout(&emptyInfo, None)
+            },
+            file!(),
+            line!(),
+        );
+        if self.m_emptyDescriptorSetLayout == Default::default() {
+            return false;
+        }
         let staticPoolSizes = [vk::DescriptorPoolSize {
             ty: vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
             descriptor_count: 1,
@@ -206,42 +266,37 @@ impl PipelineManagerVulkan {
             .flags(vk::DescriptorPoolCreateFlags::FREE_DESCRIPTOR_SET)
             .max_sets(2)
             .pool_sizes(&staticPoolSizes);
-        let staticDescriptorPool =
-            vk_check(unsafe { vk.m_ashDevice.create_descriptor_pool(&staticPoolInfo, None) });
-        let nullLayouts = [perDrawDescriptorSetLayout];
+        self.m_staticDescriptorPool = vk.createHandle(
+            unsafe { vk.m_ashDevice.create_descriptor_pool(&staticPoolInfo, None) },
+            file!(),
+            line!(),
+        );
+        if self.m_staticDescriptorPool == Default::default() {
+            return false;
+        }
+        let nullLayouts = [self.m_perDrawDescriptorSetLayout];
         let nullInfo = vk::DescriptorSetAllocateInfo::default()
-            .descriptor_pool(staticDescriptorPool)
+            .descriptor_pool(self.m_staticDescriptorPool)
             .set_layouts(&nullLayouts);
-        let nullImageDescriptorSet =
-            vk_check(unsafe { vk.m_ashDevice.allocate_descriptor_sets(&nullInfo) })[0];
+        self.m_nullImageDescriptorSet =
+            match unsafe { vk.m_ashDevice.allocate_descriptor_sets(&nullInfo) } {
+                Ok(sets) => sets[0],
+                Err(error) => {
+                    super::vkutil_impl::vkReportError(error, file!(), line!());
+                    return false;
+                }
+            };
         vk.updateImageDescriptorSets(
-            nullImageDescriptorSet,
+            self.m_nullImageDescriptorSet,
             vk::WriteDescriptorSet::default()
                 .dst_binding(IMAGE_TEXTURE_IDX)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER),
             &[vk::DescriptorImageInfo::default()
-                .sampler(imageSamplers[ImageSampler::LINEAR_CLAMP_SAMPLER_KEY as usize])
+                .sampler(self.m_imageSamplers[ImageSampler::LINEAR_CLAMP_SAMPLER_KEY as usize])
                 .image_view(nullTextureView)
                 .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)],
         );
-        Box::pin(Self {
-            m_state: Default::default(),
-            m_mode: mode,
-            m_jobThread: Default::default(),
-            m_newJobCV: Default::default(),
-            m_jobCompleteCV: Default::default(),
-            m_sharedObjectReadyCV: Default::default(),
-            m_vk: vk,
-            m_featherAtlasFormat: vk::Format::R16_SFLOAT,
-            m_linearSampler: linearSampler,
-            m_imageSamplers: imageSamplers,
-            m_perFlushDescriptorSetLayout: perFlushDescriptorSetLayout,
-            m_perDrawDescriptorSetLayout: perDrawDescriptorSetLayout,
-            m_emptyDescriptorSetLayout: emptyDescriptorSetLayout,
-            m_staticDescriptorPool: staticDescriptorPool,
-            m_nullImageDescriptorSet: nullImageDescriptorSet,
-            m_pin: std::marker::PhantomPinned,
-        })
+        true
     }
 }
 

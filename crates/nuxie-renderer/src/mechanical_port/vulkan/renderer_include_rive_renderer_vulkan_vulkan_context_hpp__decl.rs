@@ -7,6 +7,7 @@
 use ash::vk;
 use nuxie_ore_metal::gpu_resource::{GPUResourceManager, GPUResourceManagerOwner};
 use std::mem::ManuallyDrop;
+use std::sync::{Arc, atomic::{AtomicBool, AtomicU32, Ordering}};
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -149,16 +150,51 @@ pub(crate) struct VulkanContext {
     pub(crate) m_ashDevice: ash::Device,
     pub(crate) m_vmaAllocator: ManuallyDrop<vk_mem::Allocator>,
     pub(crate) m_supportsD24S8: bool,
+    pub(crate) m_allocationFailureCount: AtomicU32,
+    pub(crate) m_abortsOnAllocationFailure: AtomicBool,
     // Source inheritance destroys the GPUResourceManager base last.
     pub(crate) m_managerOwner: GPUResourceManagerOwner,
 }
 
 impl VulkanContext {
+    pub(crate) fn allocationFailureCount(&self) -> u32 { self.m_allocationFailureCount.load(Ordering::Relaxed) }
+    pub(crate) fn reportAllocationFailure(&self) {
+        self.m_allocationFailureCount.fetch_add(1, Ordering::Relaxed);
+        if self.m_abortsOnAllocationFailure.load(Ordering::Relaxed) { std::process::abort(); }
+    }
+    pub(crate) fn createHandle<T: vk::Handle>(&self, result: Result<T, vk::Result>, file: &str, line: u32) -> T {
+        match result {
+            Ok(handle) => handle,
+            Err(error) => {
+                super::vkutil_impl::vkReportError(error, file, line);
+                self.reportAllocationFailure();
+                T::from_raw(0)
+            }
+        }
+    }
     pub(crate) fn manager(&self) -> GPUResourceManager { self.m_managerOwner.manager() }
     pub(crate) fn allocator(&self) -> &vk_mem::Allocator { &self.m_vmaAllocator }
     pub(crate) fn supportsD24S8(&self) -> bool { self.m_supportsD24S8 }
     pub(crate) fn ashDevice(&self) -> &ash::Device { &self.m_ashDevice }
     pub(crate) fn ashInstance(&self) -> &ash::Instance { &self.m_ashInstance }
+}
+
+pub(crate) struct AllocationFailureScope {
+    m_vk: Arc<VulkanContext>,
+    m_initialFailureCount: u32,
+}
+impl AllocationFailureScope {
+    pub(crate) fn new(vk: Arc<VulkanContext>) -> Self {
+        let initial = vk.allocationFailureCount();
+        assert!(vk.m_abortsOnAllocationFailure.swap(false, Ordering::Relaxed), "allocation failure scopes cannot nest");
+        Self { m_vk: vk, m_initialFailureCount: initial }
+    }
+    pub(crate) fn anyFailed(&self) -> bool { self.m_vk.allocationFailureCount() != self.m_initialFailureCount }
+}
+impl Drop for AllocationFailureScope {
+    fn drop(&mut self) {
+        assert!(!self.m_vk.m_abortsOnAllocationFailure.swap(true, Ordering::Relaxed));
+    }
 }
 
 #[cfg(test)]

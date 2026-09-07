@@ -146,7 +146,7 @@ impl VulkanProductBackend {
             instance_api_version.min(properties.api_version),
         )?;
         let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
-        let mut context = unsafe {
+        let context = unsafe {
             super::render_context_vulkan_decl::MakeContext(
                 instance.handle(),
                 physical_device,
@@ -155,8 +155,19 @@ impl VulkanProductBackend {
                 get_instance_proc_addr,
                 ContextOptions::default(),
             )
-        }
-        .ok_or_else(|| RendererError::Device("exact Vulkan context admission failed".into()))?;
+        };
+        let Some(mut context) = context else {
+            // Failed initialization has released its context-owned objects.
+            // These ash handles are still owned by this constructor, not yet
+            // by VulkanProductBackend::drop, and have no automatic native Drop.
+            unsafe {
+                device.destroy_device(None);
+                instance.destroy_instance(None);
+            }
+            return Err(RendererError::Device(
+                "exact Vulkan context admission failed".into(),
+            ));
+        };
         #[cfg(feature = "rive-decoders")]
         crate::exact_source_adapter::install_bitmap_decoder(context.as_mut());
         let context_ref = unsafe { Pin::get_unchecked_mut(context.as_mut()) };

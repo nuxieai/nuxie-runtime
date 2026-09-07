@@ -316,6 +316,9 @@ pub(crate) mod vulkan {
     mod vulkan_context_decl;
     #[path = "renderer_src_vulkan_vulkan_context_cpp__impl.rs"]
     mod vulkan_context_impl;
+    #[cfg(test)]
+    #[path = "vulkan_allocation_failure_test.rs"]
+    mod vulkan_allocation_failure_test;
     #[path = "renderer_src_vulkan_vulkan_memory_allocator_cpp__impl.rs"]
     mod vulkan_memory_allocator_impl;
     #[path = "renderer_src_vulkan_vulkan_shaders_hpp__decl.rs"]

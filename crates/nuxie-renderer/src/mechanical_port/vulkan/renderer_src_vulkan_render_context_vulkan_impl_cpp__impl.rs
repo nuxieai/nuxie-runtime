@@ -4,6 +4,27 @@
 
 #![allow(non_snake_case, non_upper_case_globals)]
 
+// Upstream PRINT_ERROR_LINE writes both Android's error log and stderr.
+fn print_error_line(message: &str) {
+    #[cfg(target_os = "android")]
+    {
+        #[link(name = "log")]
+        unsafe extern "C" {
+            fn __android_log_print(
+                priority: core::ffi::c_int,
+                tag: *const core::ffi::c_char,
+                format: *const core::ffi::c_char,
+                ...
+            ) -> core::ffi::c_int;
+        }
+        let message = std::ffi::CString::new(message).expect("static Vulkan diagnostic");
+        unsafe {
+            __android_log_print(6, c"rive_runtime".as_ptr(), c"%s".as_ptr(), message.as_ptr());
+        }
+    }
+    eprintln!("{message}");
+}
+
 use super::common_layouts_decl as layout;
 use super::draw_pipeline_layout_vulkan_decl::DrawPipelineLayoutVulkan;
 use super::draw_pipeline_vulkan_decl::{DrawPipelineOptions, PipelineProps};
@@ -501,14 +522,23 @@ pub(crate) fn makeRenderCanvas(
 }
 
 impl ResourceTexturePipeline {
-    fn new(
-        vk_context: Arc<VulkanContext>,
+    fn new(vk_context: Arc<VulkanContext>) -> Self {
+        Self {
+            m_vk: vk_context,
+            m_renderPass: vk::RenderPass::null(),
+            m_resumingRenderPass: vk::RenderPass::null(),
+            m_instanceCountInCurrentRenderPass: 0,
+        }
+    }
+    fn initRenderPasses(
+        &mut self,
         format: vk::Format,
         load_op: vk::AttachmentLoadOp,
         consumption_stage: vk::PipelineStageFlags,
         label: &'static [u8],
         workarounds: DriverWorkarounds,
-    ) -> Self {
+    ) -> bool {
+        let vk_context = Arc::clone(&self.m_vk);
         let attachment = vk::AttachmentDescription::default()
             .format(format)
             .samples(vk::SampleCountFlags::TYPE_1)
@@ -543,14 +573,20 @@ impl ResourceTexturePipeline {
             .attachments(core::slice::from_ref(&attachment))
             .subpasses(core::slice::from_ref(&subpass))
             .dependencies(&dependencies);
-        let render_pass =
-            vk_check(unsafe { vk_context.ashDevice().create_render_pass(&create, None) });
+        self.m_renderPass = vk_context.createHandle(
+            unsafe { vk_context.ashDevice().create_render_pass(&create, None) },
+            file!(),
+            line!(),
+        );
+        if self.m_renderPass == vk::RenderPass::null() {
+            return false;
+        }
         vk_context.setDebugNameIfEnabled(
-            render_pass,
+            self.m_renderPass,
             vk::ObjectType::RENDER_PASS,
             Some(cstr(label)),
         );
-        let mut resuming = vk::RenderPass::null();
+
         if workarounds.needsInterruptibleRenderPasses() {
             let resume_attachment = attachment
                 .load_op(vk::AttachmentLoadOp::LOAD)
@@ -559,11 +595,18 @@ impl ResourceTexturePipeline {
                 .attachments(core::slice::from_ref(&resume_attachment))
                 .subpasses(core::slice::from_ref(&subpass))
                 .dependencies(&dependencies);
-            resuming = vk_check(unsafe {
-                vk_context
-                    .ashDevice()
-                    .create_render_pass(&resume_create, None)
-            });
+            self.m_resumingRenderPass = vk_context.createHandle(
+                unsafe {
+                    vk_context
+                        .ashDevice()
+                        .create_render_pass(&resume_create, None)
+                },
+                file!(),
+                line!(),
+            );
+            if self.m_resumingRenderPass == vk::RenderPass::null() {
+                return false;
+            }
             let authored_label = cstr(label).to_string_lossy();
             let label_stem = authored_label
                 .strip_suffix(" RenderPass")
@@ -571,17 +614,12 @@ impl ResourceTexturePipeline {
             let resume_label = std::ffi::CString::new(format!("{label_stem} RESUME RenderPass"))
                 .expect("source render-pass label has no interior nul");
             vk_context.setDebugNameIfEnabled(
-                resuming,
+                self.m_resumingRenderPass,
                 vk::ObjectType::RENDER_PASS,
                 Some(&resume_label),
             );
         }
-        Self {
-            m_vk: vk_context,
-            m_renderPass: render_pass,
-            m_resumingRenderPass: resuming,
-            m_instanceCountInCurrentRenderPass: 0,
-        }
+        true
     }
 
     fn beginRenderPass(
@@ -650,9 +688,37 @@ impl Drop for ResourceTexturePipeline {
     }
 }
 
-fn shader_module(vk_context: &VulkanContext, words: &[u32]) -> vk::ShaderModule {
-    let info = vk::ShaderModuleCreateInfo::default().code(words);
-    vk_check(unsafe { vk_context.ashDevice().create_shader_module(&info, None) })
+struct ScopedShaderModule<'a> {
+    vk: &'a VulkanContext,
+    handle: vk::ShaderModule,
+}
+impl<'a> ScopedShaderModule<'a> {
+    fn new(vk: &'a VulkanContext) -> Self {
+        Self {
+            vk,
+            handle: vk::ShaderModule::null(),
+        }
+    }
+    fn create(&mut self, words: &[u32]) -> bool {
+        debug_assert_eq!(self.handle, vk::ShaderModule::null());
+        self.handle = self.vk.createHandle(
+            unsafe {
+                self.vk
+                    .ashDevice()
+                    .create_shader_module(&vk::ShaderModuleCreateInfo::default().code(words), None)
+            },
+            file!(),
+            line!(),
+        );
+        self.handle != vk::ShaderModule::null()
+    }
+}
+impl Drop for ScopedShaderModule<'_> {
+    fn drop(&mut self) {
+        unsafe {
+            self.vk.ashDevice().destroy_shader_module(self.handle, None);
+        }
+    }
 }
 
 fn shader_stage(
@@ -666,33 +732,58 @@ fn shader_stage(
 }
 
 impl ColorRampPipeline {
-    fn new(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Box<Self> {
-        let mut base = ResourceTexturePipeline::new(
-            Arc::clone(&manager.m_vk),
+    fn make(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Option<Box<Self>> {
+        let mut pipeline = Box::new(Self {
+            base: ManuallyDrop::new(ResourceTexturePipeline::new(Arc::clone(&manager.m_vk))),
+            m_pipelineLayout: vk::PipelineLayout::null(),
+            m_renderPipeline: vk::Pipeline::null(),
+        });
+        if !pipeline.init(manager, workarounds) {
+            return None;
+        }
+        Some(pipeline)
+    }
+    fn init(&mut self, manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> bool {
+        if !self.base.initRenderPasses(
             vk::Format::R8G8B8A8_UNORM,
             vk::AttachmentLoadOp::DONT_CARE,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
             b"ColorRamp RenderPass\0",
             workarounds,
-        );
+        ) {
+            return false;
+        }
         let layouts = [manager.perFlushDescriptorSetLayout()];
-        let pipeline_layout = vk_check(unsafe {
-            manager.m_vk.ashDevice().create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts),
-                None,
-            )
-        });
+        self.m_pipelineLayout = manager.m_vk.createHandle(
+            unsafe {
+                manager.m_vk.ashDevice().create_pipeline_layout(
+                    &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts),
+                    None,
+                )
+            },
+            file!(),
+            line!(),
+        );
+        if self.m_pipelineLayout == vk::PipelineLayout::null() {
+            return false;
+        }
         let vertex_words = spirv::color_ramp_vert
             .read()
             .expect("embedded color ramp vertex shader");
         let fragment_words = spirv::color_ramp_frag
             .read()
             .expect("embedded color ramp fragment shader");
-        let vertex = shader_module(&manager.m_vk, &vertex_words);
-        let fragment = shader_module(&manager.m_vk, &fragment_words);
+        let mut vertex = ScopedShaderModule::new(&manager.m_vk);
+        if !vertex.create(&vertex_words) {
+            return false;
+        }
+        let mut fragment = ScopedShaderModule::new(&manager.m_vk);
+        if !fragment.create(&fragment_words) {
+            return false;
+        }
         let stages = [
-            shader_stage(vk::ShaderStageFlags::VERTEX, vertex),
-            shader_stage(vk::ShaderStageFlags::FRAGMENT, fragment),
+            shader_stage(vk::ShaderStageFlags::VERTEX, vertex.handle),
+            shader_stage(vk::ShaderStageFlags::FRAGMENT, fragment.handle),
         ];
         let binding = [vk::VertexInputBindingDescription {
             binding: 0,
@@ -733,9 +824,9 @@ impl ColorRampPipeline {
             .multisample_state(&multisample)
             .color_blend_state(&blend)
             .dynamic_state(&dynamic)
-            .layout(pipeline_layout)
-            .render_pass(base.m_renderPass);
-        let render_pipeline = match unsafe {
+            .layout(self.m_pipelineLayout)
+            .render_pass(self.base.m_renderPass);
+        self.m_renderPipeline = match unsafe {
             manager.m_vk.ashDevice().create_graphics_pipelines(
                 vk::PipelineCache::null(),
                 &[create],
@@ -743,20 +834,13 @@ impl ColorRampPipeline {
             )
         } {
             Ok(mut values) => values.remove(0),
-            Err((_, error)) => super::vkutil_impl::vk_abort(error, file!(), line!()),
+            Err((values, error)) => {
+                self.m_renderPipeline = values.first().copied().unwrap_or(vk::Pipeline::null());
+                super::vkutil_impl::vkReportError(error, file!(), line!());
+                return false;
+            }
         };
-        unsafe {
-            manager.m_vk.ashDevice().destroy_shader_module(vertex, None);
-            manager
-                .m_vk
-                .ashDevice()
-                .destroy_shader_module(fragment, None);
-        }
-        Box::new(Self {
-            base: ManuallyDrop::new(base),
-            m_pipelineLayout: pipeline_layout,
-            m_renderPipeline: render_pipeline,
-        })
+        true
     }
 }
 
@@ -777,36 +861,61 @@ impl Drop for ColorRampPipeline {
 }
 
 impl TessellatePipeline {
-    fn new(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Box<Self> {
-        let base = ResourceTexturePipeline::new(
-            Arc::clone(&manager.m_vk),
+    fn make(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Option<Box<Self>> {
+        let mut pipeline = Box::new(Self {
+            base: ManuallyDrop::new(ResourceTexturePipeline::new(Arc::clone(&manager.m_vk))),
+            m_pipelineLayout: vk::PipelineLayout::null(),
+            m_renderPipeline: vk::Pipeline::null(),
+        });
+        if !pipeline.init(manager, workarounds) {
+            return None;
+        }
+        Some(pipeline)
+    }
+    fn init(&mut self, manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> bool {
+        if !self.base.initRenderPasses(
             vk::Format::R32G32B32A32_UINT,
             vk::AttachmentLoadOp::DONT_CARE,
             vk::PipelineStageFlags::VERTEX_SHADER,
             b"Tessellate RenderPass\0",
             workarounds,
-        );
+        ) {
+            return false;
+        }
         let layouts = [
             manager.perFlushDescriptorSetLayout(),
             manager.emptyDescriptorSetLayout(),
         ];
-        let pipeline_layout = vk_check(unsafe {
-            manager.m_vk.ashDevice().create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts),
-                None,
-            )
-        });
+        self.m_pipelineLayout = manager.m_vk.createHandle(
+            unsafe {
+                manager.m_vk.ashDevice().create_pipeline_layout(
+                    &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts),
+                    None,
+                )
+            },
+            file!(),
+            line!(),
+        );
+        if self.m_pipelineLayout == vk::PipelineLayout::null() {
+            return false;
+        }
         let vertex_words = spirv::tessellate_vert
             .read()
             .expect("embedded tessellate vertex shader");
         let fragment_words = spirv::tessellate_frag
             .read()
             .expect("embedded tessellate fragment shader");
-        let vertex = shader_module(&manager.m_vk, &vertex_words);
-        let fragment = shader_module(&manager.m_vk, &fragment_words);
+        let mut vertex = ScopedShaderModule::new(&manager.m_vk);
+        if !vertex.create(&vertex_words) {
+            return false;
+        }
+        let mut fragment = ScopedShaderModule::new(&manager.m_vk);
+        if !fragment.create(&fragment_words) {
+            return false;
+        }
         let stages = [
-            shader_stage(vk::ShaderStageFlags::VERTEX, vertex),
-            shader_stage(vk::ShaderStageFlags::FRAGMENT, fragment),
+            shader_stage(vk::ShaderStageFlags::VERTEX, vertex.handle),
+            shader_stage(vk::ShaderStageFlags::FRAGMENT, fragment.handle),
         ];
         let binding = [vk::VertexInputBindingDescription {
             binding: 0,
@@ -867,9 +976,9 @@ impl TessellatePipeline {
             .multisample_state(&multisample)
             .color_blend_state(&blend)
             .dynamic_state(&dynamic)
-            .layout(pipeline_layout)
-            .render_pass(base.m_renderPass);
-        let render_pipeline = match unsafe {
+            .layout(self.m_pipelineLayout)
+            .render_pass(self.base.m_renderPass);
+        self.m_renderPipeline = match unsafe {
             manager.m_vk.ashDevice().create_graphics_pipelines(
                 vk::PipelineCache::null(),
                 &[create],
@@ -877,20 +986,13 @@ impl TessellatePipeline {
             )
         } {
             Ok(mut values) => values.remove(0),
-            Err((_, error)) => super::vkutil_impl::vk_abort(error, file!(), line!()),
+            Err((values, error)) => {
+                self.m_renderPipeline = values.first().copied().unwrap_or(vk::Pipeline::null());
+                super::vkutil_impl::vkReportError(error, file!(), line!());
+                return false;
+            }
         };
-        unsafe {
-            manager.m_vk.ashDevice().destroy_shader_module(vertex, None);
-            manager
-                .m_vk
-                .ashDevice()
-                .destroy_shader_module(fragment, None);
-        }
-        Box::new(Self {
-            base: ManuallyDrop::new(base),
-            m_pipelineLayout: pipeline_layout,
-            m_renderPipeline: render_pipeline,
-        })
+        true
     }
 }
 
@@ -911,25 +1013,45 @@ impl Drop for TessellatePipeline {
 }
 
 impl FeatherAtlasPipeline {
-    fn new(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Box<Self> {
-        let base = ResourceTexturePipeline::new(
-            Arc::clone(&manager.m_vk),
+    fn make(manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> Option<Box<Self>> {
+        let mut pipeline = Box::new(Self {
+            base: ManuallyDrop::new(ResourceTexturePipeline::new(Arc::clone(&manager.m_vk))),
+            m_pipelineLayout: vk::PipelineLayout::null(),
+            m_fillPipeline: vk::Pipeline::null(),
+            m_strokePipeline: vk::Pipeline::null(),
+        });
+        if !pipeline.init(manager, workarounds) {
+            return None;
+        }
+        Some(pipeline)
+    }
+    fn init(&mut self, manager: &PipelineManagerVulkan, workarounds: DriverWorkarounds) -> bool {
+        if !self.base.initRenderPasses(
             manager.featherAtlasFormat(),
             vk::AttachmentLoadOp::CLEAR,
             vk::PipelineStageFlags::FRAGMENT_SHADER,
             b"Feather Atlas RenderPass\0",
             workarounds,
-        );
+        ) {
+            return false;
+        }
         let layouts = [
             manager.perFlushDescriptorSetLayout(),
             manager.emptyDescriptorSetLayout(),
         ];
-        let pipeline_layout = vk_check(unsafe {
-            manager.m_vk.ashDevice().create_pipeline_layout(
-                &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts),
-                None,
-            )
-        });
+        self.m_pipelineLayout = manager.m_vk.createHandle(
+            unsafe {
+                manager.m_vk.ashDevice().create_pipeline_layout(
+                    &vk::PipelineLayoutCreateInfo::default().set_layouts(&layouts),
+                    None,
+                )
+            },
+            file!(),
+            line!(),
+        );
+        if self.m_pipelineLayout == vk::PipelineLayout::null() {
+            return false;
+        }
         let vertex_words = spirv::render_atlas_vert
             .read()
             .expect("embedded atlas vertex shader");
@@ -939,9 +1061,18 @@ impl FeatherAtlasPipeline {
         let stroke_words = spirv::render_atlas_stroke_frag
             .read()
             .expect("embedded atlas stroke shader");
-        let vertex = shader_module(&manager.m_vk, &vertex_words);
-        let fill_fragment = shader_module(&manager.m_vk, &fill_words);
-        let stroke_fragment = shader_module(&manager.m_vk, &stroke_words);
+        let mut vertex = ScopedShaderModule::new(&manager.m_vk);
+        if !vertex.create(&vertex_words) {
+            return false;
+        }
+        let mut fill_fragment = ScopedShaderModule::new(&manager.m_vk);
+        if !fill_fragment.create(&fill_words) {
+            return false;
+        }
+        let mut stroke_fragment = ScopedShaderModule::new(&manager.m_vk);
+        if !stroke_fragment.create(&stroke_words) {
+            return false;
+        }
         let assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
             .topology(vk::PrimitiveTopology::TRIANGLE_LIST);
         let viewport = vk::PipelineViewportStateCreateInfo::default()
@@ -957,7 +1088,7 @@ impl FeatherAtlasPipeline {
         let dynamic = vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamics);
         let make_pipeline = |fragment: vk::ShaderModule, operation: vk::BlendOp| {
             let stages = [
-                shader_stage(vk::ShaderStageFlags::VERTEX, vertex),
+                shader_stage(vk::ShaderStageFlags::VERTEX, vertex.handle),
                 shader_stage(vk::ShaderStageFlags::FRAGMENT, fragment),
             ];
             let attachment = [vk::PipelineColorBlendAttachmentState::default()
@@ -976,8 +1107,8 @@ impl FeatherAtlasPipeline {
                 .multisample_state(&multisample)
                 .color_blend_state(&blend)
                 .dynamic_state(&dynamic)
-                .layout(pipeline_layout)
-                .render_pass(base.m_renderPass);
+                .layout(self.m_pipelineLayout)
+                .render_pass(self.base.m_renderPass);
             match unsafe {
                 manager.m_vk.ashDevice().create_graphics_pipelines(
                     vk::PipelineCache::null(),
@@ -985,29 +1116,27 @@ impl FeatherAtlasPipeline {
                     None,
                 )
             } {
-                Ok(mut values) => values.remove(0),
-                Err((_, error)) => super::vkutil_impl::vk_abort(error, file!(), line!()),
+                Ok(mut values) => (values.remove(0), true),
+                Err((values, error)) => {
+                    super::vkutil_impl::vkReportError(error, file!(), line!());
+                    (
+                        values.first().copied().unwrap_or(vk::Pipeline::null()),
+                        false,
+                    )
+                }
             }
         };
-        let fill_pipeline = make_pipeline(fill_fragment, vk::BlendOp::ADD);
-        let stroke_pipeline = make_pipeline(stroke_fragment, vk::BlendOp::MAX);
-        unsafe {
-            manager.m_vk.ashDevice().destroy_shader_module(vertex, None);
-            manager
-                .m_vk
-                .ashDevice()
-                .destroy_shader_module(fill_fragment, None);
-            manager
-                .m_vk
-                .ashDevice()
-                .destroy_shader_module(stroke_fragment, None);
+        let (pipeline, success) = make_pipeline(fill_fragment.handle, vk::BlendOp::ADD);
+        self.m_fillPipeline = pipeline;
+        if !success {
+            return false;
         }
-        Box::new(Self {
-            base: ManuallyDrop::new(base),
-            m_pipelineLayout: pipeline_layout,
-            m_fillPipeline: fill_pipeline,
-            m_strokePipeline: stroke_pipeline,
-        })
+        let (pipeline, success) = make_pipeline(stroke_fragment.handle, vk::BlendOp::MAX);
+        self.m_strokePipeline = pipeline;
+        if !success {
+            return false;
+        }
+        true
     }
 }
 
@@ -1207,7 +1336,9 @@ impl RenderContextVulkanImpl {
         }
     }
 
-    fn initGPUObjects(&mut self, mode: ShaderCompilationMode) {
+    fn initGPUObjects(&mut self, mode: ShaderCompilationMode) -> bool {
+        let allocation_failures =
+            super::vulkan_context_decl::AllocationFailureScope::new(Arc::clone(&self.m_vk));
         let black = [0u8, 0, 0, 1];
         *self.m_nullImageTexture = self.m_vk.makeTexture2D(
             vk::ImageCreateInfo::default()
@@ -1219,6 +1350,9 @@ impl RenderContextVulkanImpl {
                 }),
             Some(cstr(b"null image texture\0")),
         );
+        if unsafe { rcp_ref(&self.m_nullImageTexture) }.vkImageView() == vk::ImageView::null() {
+            return false;
+        }
         unsafe { rcp_ref(&self.m_nullImageTexture) }.scheduleUploadBytes(&black);
         let device_name =
             unsafe { CStr::from_ptr(self.m_vk.physicalDeviceProperties.device_name.as_ptr()) };
@@ -1238,16 +1372,36 @@ impl RenderContextVulkanImpl {
                     .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::TRANSFER_DST),
                 Some(cstr(b"tesselation sync bug workaround texture\0")),
             );
+            if unsafe { rcp_ref(&self.m_tesselationSyncIssueWorkaroundTexture) }.vkImageView()
+                == vk::ImageView::null()
+            {
+                return false;
+            }
         }
-        *self.m_pipelineManager = Some(PipelineManagerVulkan::new(
+        *self.m_pipelineManager = PipelineManagerVulkan::make(
             Arc::clone(&self.m_vk),
             mode,
             unsafe { rcp_ref(&self.m_nullImageTexture) }.vkImageView(),
-        ));
-        let manager = self.m_pipelineManager.as_ref().unwrap();
-        *self.m_colorRampPipeline = Some(ColorRampPipeline::new(manager, self.m_workarounds));
-        *self.m_tessellatePipeline = Some(TessellatePipeline::new(manager, self.m_workarounds));
-        *self.m_featherAtlasPipeline = Some(FeatherAtlasPipeline::new(manager, self.m_workarounds));
+        );
+        let Some(manager) = self.m_pipelineManager.as_ref() else {
+            print_error_line("ERROR: Rive Vulkan renderer failed to create the pipeline manager.");
+            return false;
+        };
+        *self.m_colorRampPipeline = ColorRampPipeline::make(manager, self.m_workarounds);
+        if self.m_colorRampPipeline.is_none() {
+            print_error_line("ERROR: Rive Vulkan renderer failed to create the color ramp pipeline.");
+            return false;
+        }
+        *self.m_tessellatePipeline = TessellatePipeline::make(manager, self.m_workarounds);
+        if self.m_tessellatePipeline.is_none() {
+            print_error_line("ERROR: Rive Vulkan renderer failed to create the tessellation pipeline.");
+            return false;
+        }
+        *self.m_featherAtlasPipeline = FeatherAtlasPipeline::make(manager, self.m_workarounds);
+        if self.m_featherAtlasPipeline.is_none() {
+            print_error_line("ERROR: Rive Vulkan renderer failed to create the feather atlas pipeline.");
+            return false;
+        }
         self.m_plsTransientUsageFlags =
             vk::ImageUsageFlags::COLOR_ATTACHMENT | vk::ImageUsageFlags::INPUT_ATTACHMENT;
         if self.base.m_platformFeatures.supportsClockwiseMode {
@@ -1273,6 +1427,11 @@ impl RenderContextVulkanImpl {
                 }),
             Some(cstr(b"gaussian integral texture\0")),
         );
+        if unsafe { rcp_ref(&self.m_gaussianIntegralTexture) }.vkImageView()
+            == vk::ImageView::null()
+        {
+            return false;
+        }
         unsafe { rcp_ref(&self.m_gaussianIntegralTexture) }
             .scheduleUploadBytes(as_bytes(&gaussian));
         let tess_indices = as_bytes(&kTessSpanIndices);
@@ -1282,6 +1441,9 @@ impl RenderContextVulkanImpl {
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER),
             Mappability::writeOnly,
         );
+        if !tess_index.hasContents() {
+            return false;
+        }
         unsafe {
             core::ptr::copy_nonoverlapping(
                 tess_indices.as_ptr(),
@@ -1297,12 +1459,18 @@ impl RenderContextVulkanImpl {
                 .usage(vk::BufferUsageFlags::VERTEX_BUFFER),
             Mappability::writeOnly,
         );
+        if !vertex.hasContents() {
+            return false;
+        }
         let index = self.m_vk.makeBuffer(
             vk::BufferCreateInfo::default()
                 .size(kPatchIndexBufferCount as u64 * size_of::<u16>() as u64)
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER),
             Mappability::writeOnly,
         );
+        if !index.hasContents() {
+            return false;
+        }
         unsafe { GeneratePatchBufferData(vertex.contents().cast(), index.contents().cast()) };
         vertex.flushAllContents();
         index.flushAllContents();
@@ -1315,6 +1483,9 @@ impl RenderContextVulkanImpl {
                 .usage(vk::BufferUsageFlags::VERTEX_BUFFER),
             Mappability::writeOnly,
         );
+        if !rect_vertex.hasContents() {
+            return false;
+        }
         unsafe {
             core::ptr::copy_nonoverlapping(
                 rect_vertices.as_ptr(),
@@ -1331,6 +1502,9 @@ impl RenderContextVulkanImpl {
                 .usage(vk::BufferUsageFlags::INDEX_BUFFER),
             Mappability::writeOnly,
         );
+        if !rect_index.hasContents() {
+            return false;
+        }
         unsafe {
             core::ptr::copy_nonoverlapping(
                 rect_indices.as_ptr(),
@@ -1340,6 +1514,7 @@ impl RenderContextVulkanImpl {
         };
         rect_index.flushAllContents();
         *self.m_imageRectIndexBuffer = Some(rect_index);
+        !allocation_failures.anyFailed()
     }
 }
 
@@ -4236,19 +4411,21 @@ pub(crate) fn hotloadShaders(implementation: &mut RenderContextVulkanImpl, data:
     // are required to keep the hotload blob alive for every recreated pipeline.
     let source_lifetime: &'static [u32] = unsafe { core::mem::transmute(data) };
     spirv::hotload_shaders(source_lifetime);
+    let _allocation_failures =
+        super::vulkan_context_decl::AllocationFailureScope::new(Arc::clone(&implementation.m_vk));
     let manager = implementation.m_pipelineManager.as_ref().unwrap();
-    *implementation.m_colorRampPipeline = Some(ColorRampPipeline::new(
-        manager,
-        implementation.m_workarounds,
-    ));
-    *implementation.m_tessellatePipeline = Some(TessellatePipeline::new(
-        manager,
-        implementation.m_workarounds,
-    ));
-    *implementation.m_featherAtlasPipeline = Some(FeatherAtlasPipeline::new(
-        manager,
-        implementation.m_workarounds,
-    ));
+    let color = ColorRampPipeline::make(manager, implementation.m_workarounds);
+    let tessellate = TessellatePipeline::make(manager, implementation.m_workarounds);
+    let feather = FeatherAtlasPipeline::make(manager, implementation.m_workarounds);
+    if color.is_none() || tessellate.is_none() || feather.is_none() {
+        print_error_line(
+            "ERROR: Rive Vulkan renderer failed to hotload shaders; keeping the previous pipelines."
+        );
+        return;
+    }
+    *implementation.m_colorRampPipeline = color;
+    *implementation.m_tessellatePipeline = tessellate;
+    *implementation.m_featherAtlasPipeline = feather;
 }
 
 pub(crate) fn startAsyncPipelineCreation(
@@ -4524,12 +4701,12 @@ pub(crate) unsafe fn MakeContext(
             0
         };
         if api_level < 29 {
-            eprintln!("ERROR: Rive Vulkan renderer requires Android 10 or newer.");
+            print_error_line("ERROR: Rive Vulkan renderer requires Android 10 or newer.");
             return None;
         }
     }
     let vk_context = unsafe {
-        VulkanContext::new(
+        VulkanContext::make(
             instance,
             physical_device,
             device,
@@ -4537,27 +4714,36 @@ pub(crate) unsafe fn MakeContext(
             get_instance_proc_addr,
         )
     };
+    let Some(vk_context) = vk_context else {
+        print_error_line("ERROR: Rive Vulkan renderer failed to create its context.");
+        return None;
+    };
     let properties = &vk_context.physicalDeviceProperties;
     if properties.api_version < vk::API_VERSION_1_1 {
-        eprintln!(
+        print_error_line(
             "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.1."
         );
+        vk_context.shutdown();
         return None;
     }
     if properties.vendor_id == vkutil::Imagination && properties.api_version < vk::API_VERSION_1_3 {
-        eprintln!(
+        print_error_line(
             "ERROR: Rive Vulkan renderer requires a driver that supports at least Vulkan 1.3 on PowerVR chipsets."
         );
+        vk_context.shutdown();
         return None;
     }
     let mut implementation = Box::new(RenderContextVulkanImpl::new(vk_context, options));
     if options.forceAtomicMode && !implementation.platformFeatures().supportsAtomicMode {
-        eprintln!(
+        print_error_line(
             "ERROR: Requested \"atomic\" mode but Vulkan does not support fragmentStoresAndAtomics on this platform."
         );
         return None;
     }
-    implementation.initGPUObjects(options.shaderCompilationMode);
+    if !implementation.initGPUObjects(options.shaderCompilationMode) {
+        print_error_line("ERROR: Rive Vulkan renderer failed to initialize its GPU objects.");
+        return None;
+    }
     Some(<RenderContext as RenderContextContract>::new(
         implementation,
     ))

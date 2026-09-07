@@ -41,16 +41,24 @@ pub(crate) fn string_from_vk_result(result: vk::Result) -> &'static str {
     }
 }
 
-pub(crate) fn vk_check(result: vk::Result, file: &str, line: u32) {
-    if result == vk::Result::SUCCESS {
-        return;
-    }
-    vk_abort(result, file, line)
+pub(crate) fn vkReportError(result: vk::Result, file: &str, line: u32) -> bool {
+    if result == vk::Result::SUCCESS { return true; }
+    eprintln!("{file}:{line}: vulkan error: {} ({})", string_from_vk_result(result), result.as_raw());
+    false
+}
+
+pub(crate) fn vkReportAllocationError(result: vk::Result, what: &str, file: &str, line: u32) -> bool {
+    if result == vk::Result::SUCCESS { return true; }
+    eprintln!("{file}:{line}: vulkan error: {} ({}) allocating {what}", string_from_vk_result(result), result.as_raw());
+    false
+}
+
+pub(crate) fn vkAbortOnError(result: vk::Result, file: &str, line: u32) {
+    if !vkReportError(result, file, line) { std::process::abort(); }
 }
 
 pub(crate) fn vk_abort<T>(result: vk::Result, file: &str, line: u32) -> T {
-    eprintln!("Vulkan error {} ({}) at line: {} in file: {}",
-        string_from_vk_result(result), result.as_raw(), line, file);
+    vkReportError(result, file, line);
     std::process::abort()
 }
 
@@ -82,6 +90,7 @@ impl Buffer {
     pub(crate) fn contents(&self) -> *mut u8 {
         let contents = unsafe { *self.m_contents.get() }; assert!(!contents.is_null()); contents
     }
+    pub(crate) fn hasContents(&self) -> bool { !unsafe { *self.m_contents.get() }.is_null() }
     pub(crate) fn resizeImmediately(&self, size: vk::DeviceSize) {
         unsafe {
             if (*self.m_info.get()).size == size { return; }
@@ -96,6 +105,9 @@ impl Buffer {
     }
     fn init(&self) {
         unsafe {
+            *self.m_vkBuffer.get() = vk::Buffer::null();
+            *self.m_vmaAllocation.get() = None;
+            *self.m_contents.get() = core::ptr::null_mut();
             if (*self.m_info.get()).size == 0 {
                 *self.m_vkBuffer.get() = vk::Buffer::null();
                 *self.m_vmaAllocation.get() = None;
@@ -104,12 +116,22 @@ impl Buffer {
             let allocation_info = AllocationCreateInfo { flags: vma_flags_for_mappability(self.m_mappability),
                 usage: MemoryUsage::Auto, ..Default::default() };
             let (buffer, mut allocation) = match self.vk().allocator().create_buffer(&*self.m_info.get(), &allocation_info) {
-                Ok(value) => value, Err(error) => vk_abort(error, file!(), line!()),
+                Ok(value) => value, Err(error) => {
+                    vkReportAllocationError(error, "a buffer", file!(), line!());
+                    self.vk().reportAllocationFailure();
+                    return;
+                }
             };
             *self.m_vkBuffer.get() = buffer;
             *self.m_contents.get() = if self.m_mappability != Mappability::none {
                 match self.vk().allocator().map_memory(&mut allocation) {
-                    Ok(pointer) => pointer, Err(error) => vk_abort(error, file!(), line!()),
+                    Ok(pointer) => pointer, Err(error) => {
+                        vkReportAllocationError(error, "a buffer mapping", file!(), line!());
+                        self.vk().allocator().destroy_buffer(buffer, &mut allocation);
+                        *self.m_vkBuffer.get() = vk::Buffer::null();
+                        self.vk().reportAllocationFailure();
+                        return;
+                    }
                 }
             } else { core::ptr::null_mut() };
             *self.m_vmaAllocation.get() = Some(allocation);
@@ -189,22 +211,19 @@ impl Image {
         else if info.mip_levels > 1 { info.usage |= vk::ImageUsageFlags::TRANSFER_SRC; }
         if info.array_layers == 0 { info.array_layers = 1; }
         if info.samples.is_empty() { info.samples = vk::SampleCountFlags::TYPE_1; }
-        let mut allocation_info = AllocationCreateInfo {
+        let allocation_info = AllocationCreateInfo {
             usage: MemoryUsage::Auto,
             ..Default::default()
         };
-        let lazy = info.usage.contains(vk::ImageUsageFlags::TRANSIENT_ATTACHMENT);
-        if lazy { allocation_info.usage = MemoryUsage::GpuLazy; }
         let attempt = unsafe { vk.allocator().create_image(&info, &allocation_info) };
         let (image, allocation) = match attempt {
             Ok(value) => value,
-            Err(_) if lazy => {
-                allocation_info.usage = MemoryUsage::Auto;
-                match unsafe { vk.allocator().create_image(&info, &allocation_info) } {
-                    Ok(value) => value, Err(error) => vk_abort(error, file!(), line!()),
-                }
+            Err(error) => {
+                vkReportAllocationError(error, &name.map(CStr::to_string_lossy).unwrap_or_default(), file!(), line!());
+                vk.reportAllocationFailure();
+                return Self { base: std::mem::ManuallyDrop::new(Resource::new(vk)), m_info: info,
+                    m_vmaAllocation: std::cell::UnsafeCell::new(None), m_vkImage: vk::Image::null() };
             }
-            Err(error) => vk_abort(error, file!(), line!()),
         };
         vk.setDebugNameIfEnabled(image, vk::ObjectType::IMAGE, name);
         Self { base: std::mem::ManuallyDrop::new(Resource::new(vk)), m_info: info,
@@ -236,12 +255,15 @@ impl ImageView {
         info: vk::ImageViewCreateInfo<'_>, name: Option<&CStr>) -> Self {
         let mut info: vk::ImageViewCreateInfo<'static> = unsafe { transmute(info) };
         if info.image == vk::Image::null() {
-            info.image = image_ref.as_ref().expect("image view requires image").vkImage();
+            info.image = image_ref.as_ref().map_or(vk::Image::null(), |image| image.vkImage());
         } else if let Some(image) = image_ref.as_ref() { assert_eq!(info.image, image.vkImage()); }
+        if info.image == vk::Image::null() {
+            return Self { base: std::mem::ManuallyDrop::new(Resource::new(vk)),
+                m_textureRefOrNull: std::mem::ManuallyDrop::new(image_ref),
+                m_info: info, m_vkImageView: vk::ImageView::null() };
+        }
         info.s_type = vk::StructureType::IMAGE_VIEW_CREATE_INFO;
-        let image_view = match unsafe { vk.ashDevice().create_image_view(&info, None) } {
-            Ok(value) => value, Err(error) => vk_abort(error, file!(), line!()),
-        };
+        let image_view = vk.createHandle(unsafe { vk.ashDevice().create_image_view(&info, None) }, file!(), line!());
         vk.setDebugNameIfEnabled(image_view, vk::ObjectType::IMAGE_VIEW, name);
         Self { base: std::mem::ManuallyDrop::new(Resource::new(vk)),
             m_textureRefOrNull: std::mem::ManuallyDrop::new(image_ref),
@@ -310,6 +332,7 @@ impl Texture2D {
     pub(crate) fn scheduleUploadBytes(&self, bytes: &[u8]) {
         let buffer = self.m_image.m_vk.makeBuffer(vk::BufferCreateInfo::default()
             .size(bytes.len() as u64).usage(vk::BufferUsageFlags::TRANSFER_SRC), Mappability::writeOnly);
+        if !buffer.hasContents() { return; }
         unsafe { core::ptr::copy_nonoverlapping(bytes.as_ptr(), buffer.contents(), bytes.len()) };
         buffer.flushAllContents(); self.scheduleUpload(buffer);
     }
@@ -447,9 +470,7 @@ impl Framebuffer {
     pub(crate) fn new(vk: Arc<VulkanContext>, info: vk::FramebufferCreateInfo<'_>) -> Self {
         let mut info: vk::FramebufferCreateInfo<'static> = unsafe { transmute(info) };
         info.s_type = vk::StructureType::FRAMEBUFFER_CREATE_INFO;
-        let framebuffer = match unsafe { vk.ashDevice().create_framebuffer(&info, None) } {
-            Ok(value) => value, Err(error) => vk_abort(error, file!(), line!()),
-        };
+        let framebuffer = vk.createHandle(unsafe { vk.ashDevice().create_framebuffer(&info, None) }, file!(), line!());
         Self { base: std::mem::ManuallyDrop::new(Resource::new(vk)),
             m_info: info, m_vkFramebuffer: framebuffer }
     }
@@ -475,7 +496,7 @@ mod tests {
         assert_eq!(string_from_vk_result(vk::Result::SUCCESS), "SUCCESS");
         assert_eq!(string_from_vk_result(vk::Result::ERROR_DEVICE_LOST), "ERROR_DEVICE_LOST");
         assert_eq!(string_from_vk_result(vk::Result::from_raw(i32::MIN)), "<unknown>");
-        vk_check(vk::Result::SUCCESS, file!(), line!());
+        vkAbortOnError(vk::Result::SUCCESS, file!(), line!());
     }
 
     #[test]

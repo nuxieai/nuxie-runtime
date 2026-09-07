@@ -2409,6 +2409,34 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             result.stderr,
         )
 
+    def test_allows_exact_android_deferred_renderer_symbols(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        directory = package / "src/android_vulkan"
+        directory.mkdir()
+        (directory / "deferred.rs").write_text(
+            "use nuxie::render_api::{BlendMode, ImageSampler, "
+            "PersistentFactoryContext, RenderCanvasFrame, RenderCanvasHandle};\n"
+            "fn context(_: nuxie::render_api::OreContextHandle) {}\n"
+            "fn canvas(_: nuxie::render_api::DeferredCanvasHostHandle) {}\n"
+            "fn render(_: nuxie::render_api::RenderCanvas) {}\n"
+            "fn error(_: nuxie::render_api::RenderCanvasError) {}\n"
+        )
+
+        result = self.run_check()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rejects_android_deferred_symbols_outside_exact_file(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        (package / "src/not_android_deferred.rs").write_text(
+            "use nuxie::render_api::{PersistentFactoryContext, RenderCanvasFrame};\n"
+        )
+
+        result = self.run_check()
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("portable ABI facade symbol 'PersistentFactoryContext'", result.stderr)
+
     def test_rejects_authored_msl_extension_symbols_outside_exact_files(self) -> None:
         package = self.create_package("crates/nux-capi", "nux-capi", "")
         (package / "src/not_apple_metal.rs").write_text(

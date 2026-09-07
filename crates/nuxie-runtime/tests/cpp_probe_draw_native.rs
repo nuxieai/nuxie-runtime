@@ -360,7 +360,11 @@ fn observe_paints(
                 },
                 path_kind,
                 blend_mode_value: blend,
-                render_blend_mode_value: if blend == 127 { shape_blend } else { blend },
+                render_blend_mode_value: if blend == 127 {
+                    u32::from(shape_blend)
+                } else {
+                    blend
+                },
                 paint_state,
                 feather_state,
                 path_commands: paths,

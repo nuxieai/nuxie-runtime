@@ -13,7 +13,7 @@ use nuxie::{
 };
 use nuxie_renderer::deferred::cmd::{
     deferred_replayer::{DeferredFrameSink, DeferredReplayer},
-    deferred_session::DeferredSession,
+    deferred_session::{DeferredSession, ReplayCaps},
     render_replay::RendererOwner,
 };
 use nuxie_renderer::{NativeVulkanFactory, NativeVulkanFrame, RenderMode, RendererError};
@@ -30,7 +30,11 @@ pub(crate) struct AndroidVulkanFactory {
 impl AndroidVulkanFactory {
     pub(super) fn new(inner: NativeVulkanFactory) -> Self {
         let mut native = PersistentFactory::new(inner);
-        let mut session = DeferredSession::new(native.ore());
+        let caps = native
+            .ore()
+            .map(|ore| ReplayCaps::from(&*ore.borrow()))
+            .unwrap_or_default();
+        let mut session = DeferredSession::with_caps(caps);
         session.bind_render_context(native.persistent_context());
         Self {
             session,

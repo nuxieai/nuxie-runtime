@@ -43,6 +43,14 @@ unsafe fn loadDeviceCommand<T: Copy>(
 
 impl VulkanContext {
     /// # Safety
+    /// Handles and loader must remain valid for the returned context's lifetime.
+    pub(crate) unsafe fn make(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
+        device: vk::Device, features: VulkanFeatures,
+        get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr) -> Option<Arc<Self>> {
+        let allocator = unsafe { make_vma_allocator(instance, physicalDevice, device, features, get_instance_proc_addr) }?;
+        Some(unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, Some(allocator)) })
+    }
+    /// # Safety
     /// The raw handles and loader must be a compatible live Vulkan tuple and
     /// must remain valid through `shutdown` and final context release.
     pub(crate) unsafe fn new(
@@ -52,6 +60,13 @@ impl VulkanContext {
         features: VulkanFeatures,
         get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
     ) -> Arc<Self> {
+        unsafe { Self::new_with_allocator(instance, physicalDevice, device, features, get_instance_proc_addr, None) }
+    }
+
+    pub(crate) unsafe fn new_with_allocator(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
+        device: vk::Device, features: VulkanFeatures,
+        get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr,
+        allocator: Option<vk_mem::Allocator>) -> Arc<Self> {
         // The source GPUResourceManager base is constructed before every
         // Vulkan member and allocator initializer.
         let manager_owner = nuxie_ore_metal::gpu_resource::GPUResourceManagerOwner::new();
@@ -97,13 +112,9 @@ impl VulkanContext {
         {
             features.colorWriteEnable = false;
         }
-        let mut allocator_info = AllocatorCreateInfo::new(&ash_instance, &ash_device, physicalDevice);
-        allocator_info.flags = AllocatorCreateFlags::EXTERNALLY_SYNCHRONIZED;
-        allocator_info.vulkan_api_version = features.apiVersion;
-        let allocator = match unsafe { vk_mem::Allocator::new(allocator_info) } {
-            Ok(allocator) => allocator,
-            Err(result) => vk_abort(result, file!(), line!()),
-        };
+        let allocator = allocator.or_else(|| unsafe {
+            make_vma_allocator(instance, physicalDevice, device, features, get_instance_proc_addr)
+        }).unwrap_or_else(|| std::process::abort());
         assert!(properties.api_version >= features.apiVersion,
             "Supplied API version should not be newer than the physical device");
         let d24 = unsafe { ash_instance.get_physical_device_format_properties(
@@ -200,6 +211,8 @@ impl VulkanContext {
             m_vmaAllocator: ManuallyDrop::new(allocator),
             physicalDeviceProperties: properties,
             m_supportsD24S8: d24,
+            m_allocationFailureCount: std::sync::atomic::AtomicU32::new(0),
+            m_abortsOnAllocationFailure: std::sync::atomic::AtomicBool::new(true),
         })
     }
 
@@ -396,14 +409,33 @@ impl VulkanContext {
 
     pub(crate) fn setDebugNameIfEnabled<T: Handle>(&self, handle: T,
         object_type: vk::ObjectType, name: Option<&CStr>) {
+        let handle = handle.as_raw();
+        if handle == 0 { return; }
         let (Some(function), Some(name)) = (self.SetDebugUtilsObjectNameEXT, name) else { return; };
         let info = vk::DebugUtilsObjectNameInfoEXT {
             object_type,
-            object_handle: handle.as_raw(),
+            object_handle: handle,
             p_object_name: name.as_ptr(),
             ..Default::default()
         };
         let _ = unsafe { function(self.device, &info) };
+    }
+}
+
+unsafe fn make_vma_allocator(instance: vk::Instance, physicalDevice: vk::PhysicalDevice,
+    device: vk::Device, features: VulkanFeatures,
+    get_instance_proc_addr: vk::PFN_vkGetInstanceProcAddr) -> Option<vk_mem::Allocator> {
+    let ash_instance = unsafe { ash::Instance::load(&ash::StaticFn { get_instance_proc_addr }, instance) };
+    let ash_device = unsafe { ash::Device::load(ash_instance.fp_v1_0(), device) };
+    let mut info = AllocatorCreateInfo::new(&ash_instance, &ash_device, physicalDevice);
+    info.flags = AllocatorCreateFlags::EXTERNALLY_SYNCHRONIZED;
+    info.vulkan_api_version = features.apiVersion;
+    match unsafe { vk_mem::Allocator::new(info) } {
+        Ok(allocator) => Some(allocator),
+        Err(error) => {
+            super::vkutil_impl::vkReportAllocationError(error, "the VMA allocator", file!(), line!());
+            None
+        }
     }
 }
 

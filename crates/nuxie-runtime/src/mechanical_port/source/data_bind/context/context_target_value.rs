@@ -50,6 +50,7 @@ pub trait TargetBinding {
     fn source_kind(&self) -> SourceKind;
     fn target_kind(&self) -> TargetKind;
     fn uint_value(&self) -> u32;
+    fn int_value(&self) -> i32;
     fn color_value(&self) -> i32;
     fn double_value(&self) -> f32;
     fn string_value(&self) -> String;
@@ -258,7 +259,7 @@ impl DataBindContextTargetValue {
                         false
                     }
                 } else {
-                    let value = binding.uint_value();
+                    let value = binding.int_value();
                     // Read back using the actual kind retained by initialize(),
                     // independently of subsequent source-resolution timing.
                     if self
@@ -268,7 +269,7 @@ impl DataBindContextTargetValue {
                     {
                         self.update_number(value as f32)
                     } else {
-                        self.update_integer(value)
+                        self.update_integer(value as u32)
                     }
                 }
             }

@@ -110,6 +110,7 @@ pub trait ContextApplyBinding: ContextBinding {
     fn set_color(&mut self, property_key: u32, value: i32);
     fn set_double(&mut self, property_key: u32, value: f32);
     fn set_uint(&mut self, property_key: u32, value: u32);
+    fn set_int(&mut self, property_key: u32, value: i32);
     fn set_string(&mut self, property_key: u32, value: String);
     fn target_is_solo(&self) -> bool;
     fn solo_update_by_index(&mut self, index: usize);

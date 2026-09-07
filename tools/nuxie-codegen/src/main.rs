@@ -1225,6 +1225,17 @@ impl Schema {
         out.push_str("    }\n");
         out.push_str("}\n\n");
 
+        out.push_str("pub fn is_signed_int_property_key(key: u16) -> bool {\n    match key {\n");
+        for (key, property) in &first_properties {
+            if matches!(
+                core_registry_setter_field_kind(*property)?,
+                Some(FieldKind::Int)
+            ) {
+                out.push_str(&format!("        {key} => true,\n"));
+            }
+        }
+        out.push_str("        _ => false,\n    }\n}\n\n");
+
         out.push_str(
             "pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<FieldKind> {\n",
         );

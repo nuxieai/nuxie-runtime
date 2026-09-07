@@ -700,7 +700,7 @@ impl LayoutComponent {
         else {
             return;
         };
-        // Keep C++'s three sweeps and applier order. In particular the first
+        // Keep C++'s four sweeps and applier order. In particular the first
         // applier is this LayoutComponent, borrowed only after extraction above.
         for applier in &appliers {
             applier.with(|object| {
@@ -720,6 +720,13 @@ impl LayoutComponent {
             applier.with(|object| {
                 if let Some(applier) = object.as_layout_style_applier() {
                     applier.apply_item_style(&mut style, &context);
+                }
+            });
+        }
+        for applier in &appliers {
+            applier.with(|applier| {
+                if let Some(applier) = applier.as_layout_style_applier() {
+                    applier.apply_placement_style(&mut style, &context);
                 }
             });
         }
@@ -1647,12 +1654,13 @@ impl LayoutComponent {
             .as_deref()
             .cloned()
             .unwrap_or_default();
-        for pass in 0..3 {
+        for pass in 0..4 {
             for applier in &appliers {
                 let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
                     0 => applier.apply_base_style(&mut taffy_style, &context),
                     1 => applier.apply_container_style(&mut taffy_style, &context),
-                    _ => applier.apply_item_style(&mut taffy_style, &context),
+                    2 => applier.apply_item_style(&mut taffy_style, &context),
+                    _ => applier.apply_placement_style(&mut taffy_style, &context),
                 };
                 if this.as_ref() == Some(applier) {
                     apply(self);

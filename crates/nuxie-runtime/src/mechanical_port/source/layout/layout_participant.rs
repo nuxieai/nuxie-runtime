@@ -289,6 +289,19 @@ impl LayoutParticipant {
                 self.add_layout_style_applier(this);
             }
         }
+        // A sibling placement may have cleaned before this participant had
+        // layout data. Re-register it now; appliers are unique.
+        if let Some(placement) = self.owner_handle().and_then(|owner| {
+            owner
+                .with(|owner| {
+                    crate::source::layout::grid_item_placement::GridItemPlacement::from(
+                        owner.as_container_component(),
+                    )
+                })
+                .flatten()
+        }) {
+            self.add_layout_style_applier(placement);
+        }
         self.sync_style_changes();
         if let Some(layout) = self.owning_layout_handle() {
             LayoutComponent::sync_layout_children_with_participant_occurrence(&layout, Some(self));
@@ -523,12 +536,13 @@ impl LayoutParticipant {
         let mut style = std::mem::take(&mut data.style);
         let appliers = data.appliers.as_deref().cloned().unwrap_or_default();
         let this = self.base.handle();
-        for pass in 0..3 {
+        for pass in 0..4 {
             for applier in &appliers {
                 let mut apply = |applier: &dyn LayoutStyleApplier| match pass {
                     0 => applier.apply_base_style(&mut style, &context),
                     1 => applier.apply_container_style(&mut style, &context),
-                    _ => applier.apply_item_style(&mut style, &context),
+                    2 => applier.apply_item_style(&mut style, &context),
+                    _ => applier.apply_placement_style(&mut style, &context),
                 };
                 if this.as_ref() == Some(applier) {
                     apply(self);

@@ -27,7 +27,15 @@ impl DataBindContextValueSymbolListIndex {
             .map_or(0, DataValueSymbolListIndex::value);
         match binding.field_type() {
             FieldType::Double => binding.set_double(property_key, value as f32),
-            FieldType::Uint => binding.set_uint(property_key, value),
+            FieldType::Uint => {
+                if crate::source::generated::core_registry::CoreRegistry::is_signed_int(
+                    property_key,
+                ) {
+                    binding.set_int(property_key, value as i32)
+                } else {
+                    binding.set_uint(property_key, value)
+                }
+            }
             _ => {}
         }
     }

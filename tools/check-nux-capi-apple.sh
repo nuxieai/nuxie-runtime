@@ -102,8 +102,11 @@ for target in "${targets[@]}"; do
             ;;
     esac
 
+    sdk_path=$(xcrun --sdk "$sdk" --show-sdk-path)
     echo "building Nuxie Apple authored-data extension for $target"
     IPHONEOS_DEPLOYMENT_TARGET=15.0 MACOSX_DEPLOYMENT_TARGET=12.0 \
+        SDKROOT="$sdk_path" \
+        BINDGEN_EXTRA_CLANG_ARGS="--target=${clang_target} --sysroot=${sdk_path}" \
         RUSTC="$rustc_path" \
         "${cargo_cmd[@]}" build --locked --manifest-path "$repo_dir/Cargo.toml" \
         -p nux-apple-product-extension --no-default-features --features apple-runtime \

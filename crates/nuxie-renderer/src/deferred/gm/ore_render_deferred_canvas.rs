@@ -1,7 +1,7 @@
 //! tests/gm/ore_render_deferred_canvas.cpp through 34f6df47.
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
-    deferred_replayer::{DeferredReplayer, snapshot_frame},
+    deferred_replayer::{snapshot_frame, DeferredReplayer},
     deferred_session::{DeferredSession, ReplayCaps},
 };
 fn record_clear(ctx: &mut dyn ContextApi, view: &AnyResourceHandle) {

@@ -114,12 +114,18 @@ fn dispatch_gamepad_from_node(
             let owner = focusable.borrow().gamepad_dispatch_owner();
             let handled = if let Some(owner) = owner {
                 crate::mechanical_port::source::focus_data::FocusData::gamepad_dispatch_occurrence(
-                    &owner, invocation, output.as_deref_mut(),
+                    &owner,
+                    invocation,
+                    output.as_deref_mut(),
                 )
             } else {
-                focusable.borrow_mut().gamepad_dispatch(invocation, output.as_deref_mut())
+                focusable
+                    .borrow_mut()
+                    .gamepad_dispatch(invocation, output.as_deref_mut())
             };
-            if handled { return true; }
+            if handled {
+                return true;
+            }
         }
         // A synchronous callback may reparent this node; read the live parent.
         node = current.borrow().parent();
@@ -1090,7 +1096,11 @@ impl FocusManager {
         out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
         self.drop_focus_if_focus_target_hidden();
-        dispatch_gamepad_from_node(self.primary_focus.clone(), invocation, out_dispatched_scripted_drawable)
+        dispatch_gamepad_from_node(
+            self.primary_focus.clone(),
+            invocation,
+            out_dispatched_scripted_drawable,
+        )
     }
 }
 

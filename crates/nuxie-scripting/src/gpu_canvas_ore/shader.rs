@@ -159,11 +159,13 @@ pub(super) fn auto_layouts(
         }
         // Source does not diagnose allocation here: null is passed to pipeline
         // validation for an automatically reflected layout.
-        layouts[group] = makeBindGroupLayoutFromBindingMap(context, &binding_map, group as u32, &[])
-            .map(|resource| Layout {
-                resource,
-                group: group as u32,
-            });
+        layouts[group] =
+            makeBindGroupLayoutFromBindingMap(context, &binding_map, group as u32, &[]).map(
+                |resource| Layout {
+                    resource,
+                    group: group as u32,
+                },
+            );
     }
     Ok(layouts)
 }
@@ -208,14 +210,19 @@ pub(super) fn install(lua: &Lua) -> Result<()> {
             Value::UserData(value) if value.is::<Shader>() => {
                 Some(value.borrow::<Shader>()?.clone())
             }
-            _ => return Err(Error::runtime("GPUBindGroupLayout.new: 'fragment' must be a Shader with a @fragment entry point")),
+            _ => {
+                return Err(Error::runtime(
+                    "GPUBindGroupLayout.new: 'fragment' must be a Shader with a @fragment entry point",
+                ));
+            }
         };
         let fragment_module = if let Some(fragment) = &fragment {
             Some(fragment.first_of_stage(ShaderStage::fragment).ok_or_else(||
                 Error::runtime("GPUBindGroupLayout.new: 'fragment' must be a Shader with a @fragment entry point"))?)
                 .and_then(|entry| entry.module.shaderModuleBase())
         } else {
-            shader.first_of_stage(ShaderStage::fragment)
+            shader
+                .first_of_stage(ShaderStage::fragment)
                 .or_else(|| shader.first_of_stage(ShaderStage::vertex))
                 .and_then(|entry| entry.module.shaderModuleBase())
         };

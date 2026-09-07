@@ -45,7 +45,7 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::ore::ore_
     kMaxBindGroups,
 };
 use crate::mechanical_port::source::renderer::src::ore::ore_bind_group_layout_cpp::{
-    validatePipelineDesc, NativeSlotScope,
+    NativeSlotScope, validatePipelineDesc,
 };
 
 #[cfg(all(target_vendor = "apple", feature = "metal-backend"))]

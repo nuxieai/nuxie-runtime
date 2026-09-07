@@ -192,6 +192,5 @@ fn upstream_layout_occluded_by_rectangle_pointer_test() {
     let Some(runtime) = runtime_root("upstream layout hit-order Silver assertion") else {
         return;
     };
-    compare_case("layout_order_pointer_test", &runtime)
-        .unwrap_or_else(|error| panic!("{error:#}"));
+    compare_case("layout_order_pointer_test", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
 }

@@ -435,9 +435,7 @@ impl Shape {
         self.world_bounds
     }
     pub fn mark_bounds_dirty(&mut self) {
-        self.set_drawable_flags(
-            self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0,
-        );
+        self.set_drawable_flags(self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0);
         self.world_length = -1.0;
         if let Some(participant) = self.layout_participant() {
             participant.with_downcast_mut::<LayoutParticipant, _>(|participant| {

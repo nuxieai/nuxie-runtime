@@ -37,10 +37,7 @@ impl StateInstanceBehavior for AnimationStateInstance {
         Self::clear_spilled_time(self);
     }
 
-    fn with_animation_instance(
-        &mut self,
-        callback: &mut dyn FnMut(&mut LinearAnimationInstance),
-    ) {
+    fn with_animation_instance(&mut self, callback: &mut dyn FnMut(&mut LinearAnimationInstance)) {
         callback(&mut self.animation_instance);
     }
 }

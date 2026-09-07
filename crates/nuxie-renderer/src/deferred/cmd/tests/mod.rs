@@ -119,7 +119,9 @@ pub struct FakeCanvas {
     image: Rc<dyn RenderImage>,
 }
 impl RenderCanvas for FakeCanvas {
-    fn is_backed(&self) -> bool { true }
+    fn is_backed(&self) -> bool {
+        true
+    }
     fn width(&self) -> u32 {
         8
     }
@@ -145,11 +147,21 @@ pub fn fake_canvas() -> RenderCanvasHandle {
 #[derive(Clone)]
 struct FakeCanvasImage(Rc<()>);
 impl RenderImage for FakeCanvasImage {
-    fn as_any(&self) -> &dyn Any { self }
-    fn width(&self) -> u32 { 8 }
-    fn height(&self) -> u32 { 8 }
-    fn retain_image(&self) -> Rc<dyn RenderImage> { Rc::new(self.clone()) }
-    fn image_identity(&self) -> usize { Rc::as_ptr(&self.0) as usize }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn width(&self) -> u32 {
+        8
+    }
+    fn height(&self) -> u32 {
+        8
+    }
+    fn retain_image(&self) -> Rc<dyn RenderImage> {
+        Rc::new(self.clone())
+    }
+    fn image_identity(&self) -> usize {
+        Rc::as_ptr(&self.0) as usize
+    }
 }
 
 pub struct RuntimeCase {

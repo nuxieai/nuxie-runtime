@@ -124,10 +124,7 @@ pub trait StateInstanceBehavior {
     fn keep_going(&self) -> bool;
     fn clear_spilled_time(&mut self) {}
     // Rust dynamic dispatch for AnimationStateInstance::animationInstance().
-    fn with_animation_instance(
-        &mut self,
-        _callback: &mut dyn FnMut(&mut LinearAnimationInstance),
-    ) {
+    fn with_animation_instance(&mut self, _callback: &mut dyn FnMut(&mut LinearAnimationInstance)) {
     }
     fn with_animation_instance_for_blend(
         &mut self,

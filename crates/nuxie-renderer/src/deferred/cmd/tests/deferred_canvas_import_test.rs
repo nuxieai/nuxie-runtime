@@ -192,13 +192,11 @@ fn record_canvas_write_and_sample(session: &mut DeferredSession, canvas: &Render
         height: canvas.borrow().height(),
         owner: Rc::new(image) as Rc<dyn Any>,
     };
-    assert!(
-        session
-            .ore_context
-            .borrow_mut()
-            .recordWrapCanvasImage(info)
-            .is_some()
-    );
+    assert!(session
+        .ore_context
+        .borrow_mut()
+        .recordWrapCanvasImage(info)
+        .is_some());
 }
 
 #[test]

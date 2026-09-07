@@ -1,10 +1,10 @@
 //! Metal branch of tests/gm/ore_gm_helper.hpp, plus the owned Rust GM host.
 use crate::deferred::cmd::{deferred_replayer::DeferredFrameSink, render_replay::RendererOwner};
 use crate::{
-    RenderMode,
     native_metal::{
         NativeMetalContextOptions, NativeMetalFactory, NativeMetalFrame, ShaderCompilationMode,
     },
+    RenderMode,
 };
 use nuxie_ore_metal::context::FrameDescriptor;
 pub(super) use nuxie_ore_metal::{
@@ -172,7 +172,9 @@ impl GmHost {
     }
     pub fn deferred_canvas(&mut self, w: u32, h: u32) -> RenderCanvasHandle {
         Rc::new(RefCell::new(
-            self.factory.make_deferred_render_canvas(w, h).expect("GM deferred canvas"),
+            self.factory
+                .make_deferred_render_canvas(w, h)
+                .expect("GM deferred canvas"),
         ))
     }
     // testing_window_metal_texture.mm::beginOreFrame uses beginFrame({});

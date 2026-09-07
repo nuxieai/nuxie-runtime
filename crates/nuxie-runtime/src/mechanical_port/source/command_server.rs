@@ -1794,7 +1794,15 @@ impl CommandServer {
                         m.write(handle);
                         m.write(request_id);
                         m.write(values.len());
-                        for (asset_id, core_type, name, unique_name, cdn_uuid, cdn_base_url, extension) in values
+                        for (
+                            asset_id,
+                            core_type,
+                            name,
+                            unique_name,
+                            cdn_uuid,
+                            cdn_base_url,
+                            extension,
+                        ) in values
                         {
                             m.write(asset_id);
                             m.write(core_type);

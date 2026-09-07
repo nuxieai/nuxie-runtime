@@ -57,7 +57,10 @@ fn bind_group_layout_fragment_requires_an_actual_fragment_entry() {
     let data: AnyUserData = vm.lua().globals().get("shader").unwrap();
     let mut vertex_only = data.borrow::<Shader>().unwrap().clone();
     vertex_only.entries.retain(|entry| entry.stage == 0);
-    vm.lua().globals().set("vertexOnly", vm.lua().create_userdata(vertex_only).unwrap()).unwrap();
+    vm.lua()
+        .globals()
+        .set("vertexOnly", vm.lua().create_userdata(vertex_only).unwrap())
+        .unwrap();
     vm.lua().load(r#"
         for _, fragment in {false, {}, vertexOnly} do
             local ok, err = pcall(function()
@@ -74,21 +77,45 @@ fn bind_group_layout_fragment_requires_an_actual_fragment_entry() {
 fn split_stage_fragment_bindings_reach_explicit_and_auto_layouts() {
     let vm = recording_vm();
     let ore = context(vm.lua()).unwrap();
-    let map = [3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0,
-        0, 7, 0, 2, 0, 255, 255, 1, 0, 255, 255, 0, 0, 0];
-    let module = ore.borrow_mut().makeShaderModule(&ShaderModuleDesc {
-        code: Some(b"fragment test module"), codeSize: 20,
-        bindingMapBytes: Some(&map), bindingMapSize: map.len() as u32,
-        ..ShaderModuleDesc::default()
-    }).unwrap();
-    vm.lua().globals().set("fragment", vm.lua().create_userdata(Shader {
-        entries: vec![ShaderEntry {stage: 1, logical: "fragment".into(), physical: "fragment".into(), module}],
-    }).unwrap()).unwrap();
-    vm.lua().load(r#"
+    let map = [
+        3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, 0, 7, 0, 2, 0, 255, 255, 1, 0, 255, 255, 0, 0, 0,
+    ];
+    let module = ore
+        .borrow_mut()
+        .makeShaderModule(&ShaderModuleDesc {
+            code: Some(b"fragment test module"),
+            codeSize: 20,
+            bindingMapBytes: Some(&map),
+            bindingMapSize: map.len() as u32,
+            ..ShaderModuleDesc::default()
+        })
+        .unwrap();
+    vm.lua()
+        .globals()
+        .set(
+            "fragment",
+            vm.lua()
+                .create_userdata(Shader {
+                    entries: vec![ShaderEntry {
+                        stage: 1,
+                        logical: "fragment".into(),
+                        physical: "fragment".into(),
+                        module,
+                    }],
+                })
+                .unwrap(),
+        )
+        .unwrap();
+    vm.lua()
+        .load(
+            r#"
         explicitSplitLayout = GPUBindGroupLayout.new {shader = shader, fragment = fragment}
         splitPipeline = GPUPipeline.new {vertex = shader, fragment = fragment, vertexLayout = {}}
         autoSplitLayout = splitPipeline:getBindGroupLayout(0)
-    "#).exec().unwrap();
+    "#,
+        )
+        .exec()
+        .unwrap();
     for name in ["explicitSplitLayout", "autoSplitLayout"] {
         let data: AnyUserData = vm.lua().globals().get(name).unwrap();
         let layout = data.borrow::<Layout>().unwrap();

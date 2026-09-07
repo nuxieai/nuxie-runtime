@@ -66,11 +66,6 @@ pub(crate) fn vkCullMode(face: CullFace) -> vk::CullModeFlags {
     }
 }
 
-pub(crate) fn hasPipelineDynamicState(draw_type: DrawType) -> bool {
-    draw_type == DrawType::msaaDynamicMidpointFans
-        || draw_type == DrawType::msaaDynamicOuterCubics
-}
-
 // Vertex shaders multiply paint by this float: one writes, zero suppresses.
 pub(crate) const ColorWriteEnablePushConstant: vk::PushConstantRange = vk::PushConstantRange {
     stage_flags: vk::ShaderStageFlags::VERTEX,
@@ -310,7 +305,7 @@ mod tests {
         assert_eq!(vkCullMode(CullFace::none), vk::CullModeFlags::NONE);
         assert_eq!(vkCullMode(CullFace::clockwise), vk::CullModeFlags::FRONT);
         assert_eq!(vkCullMode(CullFace::counterclockwise), vk::CullModeFlags::BACK);
-        assert!(hasPipelineDynamicState(DrawType::msaaDynamicMidpointFans));
+        assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(DrawType::msaaDynamicMidpointFans));
     }
 
     #[test]

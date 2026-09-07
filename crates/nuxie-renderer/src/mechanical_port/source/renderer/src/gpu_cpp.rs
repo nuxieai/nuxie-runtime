@@ -2347,9 +2347,11 @@ fn get_valid_draw_types(mode: InterlockMode) -> &'static [DrawType] {
             DrawType::msaaMidpointFanStencilReset,
             DrawType::msaaMidpointFanPathsStencil,
             DrawType::msaaMidpointFanPathsCover,
+            DrawType::msaaDynamicMidpointFans,
             DrawType::msaaOuterCubicBorrowedCoverage,
             DrawType::msaaOuterCubics,
             DrawType::msaaOuterCubicStencilReset,
+            DrawType::msaaDynamicOuterCubics,
             DrawType::msaaOuterCubicPathsStencil,
             DrawType::msaaOuterCubicPathsCover,
             DrawType::clipReset,
@@ -2421,6 +2423,11 @@ pub fn ForEachUbershaderPermutation(
         || (interlockMode == InterlockMode::msaa && platformFeatures.msaaColorPreserveNeedsDraw);
     for &draw_type in get_valid_draw_types(interlockMode) {
         if draw_type == DrawType::renderPassInitialize && !allow_init {
+            continue;
+        }
+        if drawTypeHasPipelineDynamicState(draw_type)
+            && !platformFeatures.supportsPipelineDynamicState
+        {
             continue;
         }
         let all_misc = get_valid_shader_misc_flags(draw_type, interlockMode);
@@ -3797,6 +3804,36 @@ fn get_blend_equation(
 #[cfg(test)]
 mod dynamic_color_write_tests {
     use super::*;
+
+    #[test]
+    fn upstream_for_each_ubershader_permutation() {
+        let enumerate = |supports_dynamic_state| {
+            let platform = PlatformFeatures {
+                supportsPipelineDynamicState: supports_dynamic_state,
+                ..PlatformFeatures::default()
+            };
+            let mut draw_types = std::collections::BTreeSet::new();
+            ForEachUbershaderPermutation(InterlockMode::msaa, &platform, |draw_type, _, _| {
+                draw_types.insert(draw_type as u8);
+                true
+            });
+            draw_types
+        };
+        let with_dynamic_state = enumerate(true);
+        let without_dynamic_state = enumerate(false);
+        assert!(with_dynamic_state.contains(&(DrawType::msaaDynamicMidpointFans as u8)));
+        assert!(with_dynamic_state.contains(&(DrawType::msaaDynamicOuterCubics as u8)));
+        assert!(!without_dynamic_state.contains(&(DrawType::msaaDynamicMidpointFans as u8)));
+        assert!(!without_dynamic_state.contains(&(DrawType::msaaDynamicOuterCubics as u8)));
+        for draw_type in [
+            DrawType::msaaMidpointFanBorrowedCoverage,
+            DrawType::msaaMidpointFans,
+            DrawType::msaaMidpointFanStencilReset,
+        ] {
+            assert!(with_dynamic_state.contains(&(draw_type as u8)));
+            assert!(without_dynamic_state.contains(&(draw_type as u8)));
+        }
+    }
 
     #[test]
     fn opaque_msaa_keeps_blending_when_color_write_is_emulated() {

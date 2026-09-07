@@ -4011,7 +4011,7 @@ fn submitDrawList(
             batch.shaderFeatures
         };
         let mut misc = batch.shaderMiscFlags;
-        if vkutil::hasPipelineDynamicState(batch.drawType)
+        if crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(batch.drawType)
             && !implementation.m_vk.features.colorWriteEnable
         {
             misc |= ShaderMiscFlags::emulateDynamicColorWriteDisable;
@@ -4202,7 +4202,7 @@ fn submitDrawList(
                             batch.firstBlendMode,
                             &implementation.base.m_platformFeatures,
                         );
-                    assert!(vkutil::hasPipelineDynamicState(batch.drawType));
+                    assert!(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(batch.drawType));
                     binder.setDynamicState(command, &state, draw_pass.pipelineLayout());
                     unsafe {
                         implementation.m_vk.ashDevice().cmd_draw_indexed(

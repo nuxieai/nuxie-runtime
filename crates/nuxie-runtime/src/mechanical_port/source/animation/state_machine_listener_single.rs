@@ -11,6 +11,18 @@ pub struct StateMachineListenerSingle {
 }
 
 impl StateMachineListenerSingle {
+    pub fn has_pointer_listeners(&self) -> bool {
+        super::state_machine_listener::has_pointer_listeners(self)
+    }
+    pub fn on_added_clean(
+        &mut self,
+        context: &mut dyn crate::source::core_context::CoreContext,
+    ) -> StatusCode {
+        let has_pointer = self.has_pointer_listeners();
+        self.base
+            .base
+            .on_added_clean_with_pointer(context, has_pointer)
+    }
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
         self.data_bind_path_referencer
             .import_data_bind_path(import_stack);

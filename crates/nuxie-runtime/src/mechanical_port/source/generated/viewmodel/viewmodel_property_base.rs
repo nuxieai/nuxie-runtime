@@ -12,8 +12,8 @@ pub trait ViewModelPropertyBaseCallbacks: crate::mechanical_port::source::genera
 
 pub struct ViewModelPropertyBase {
     pub base: ViewModelComponent,
-    symbol_type_value: u32,
-    component_props: u32,
+    symbol_type_value: u8,
+    component_props: u8,
 }
 
 impl Default for ViewModelPropertyBase {
@@ -37,12 +37,12 @@ impl ViewModelPropertyBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn symbol_type_value(&self) -> u32 {
+    pub fn symbol_type_value(&self) -> u8 {
         self.symbol_type_value
     }
     pub fn set_symbol_type_value(
         &mut self,
-        value: u32,
+        value: u8,
         callbacks: &mut impl ViewModelPropertyBaseCallbacks,
     ) {
         if !self.set_symbol_type_value_value(value) {
@@ -55,19 +55,19 @@ impl ViewModelPropertyBase {
         );
     }
 
-    pub(crate) fn set_symbol_type_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_symbol_type_value_value(&mut self, value: u8) -> bool {
         if self.symbol_type_value == value {
             return false;
         }
         self.symbol_type_value = value;
         true
     }
-    pub fn component_props(&self) -> u32 {
+    pub fn component_props(&self) -> u8 {
         self.component_props
     }
     pub fn set_component_props(
         &mut self,
-        value: u32,
+        value: u8,
         callbacks: &mut impl ViewModelPropertyBaseCallbacks,
     ) {
         if !self.set_component_props_value(value) {
@@ -80,7 +80,7 @@ impl ViewModelPropertyBase {
         );
     }
 
-    pub(crate) fn set_component_props_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_component_props_value(&mut self, value: u8) -> bool {
         if self.component_props == value {
             return false;
         }
@@ -108,11 +108,11 @@ impl ViewModelPropertyBase {
     ) -> bool {
         match property_key {
             Self::SYMBOL_TYPE_VALUE_PROPERTY_KEY => {
-                self.symbol_type_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.symbol_type_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::COMPONENT_PROPS_PROPERTY_KEY => {
-                self.component_props = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.component_props = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

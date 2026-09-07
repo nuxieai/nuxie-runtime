@@ -5621,13 +5621,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::shapes::shape::Shape as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -5832,8 +5832,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::shape::Shape
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -6032,13 +6032,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::text::text::Text as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -6338,8 +6338,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text::Text {
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::TextAlignValue => self.base.align_value(),
             CoreField::TextSizingValue => self.base.sizing_value(),
             CoreField::TextOverflowValue => self.base.overflow_value(),
@@ -9693,13 +9693,13 @@ impl CoreRegistryObject
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.set_symbol_type_value_value(value) {
+                if self.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.set_component_props_value(value) {
+                if self.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property::ViewModelProperty as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -9735,8 +9735,8 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -9805,13 +9805,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_artboard::ViewModelPropertyArtboard as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_artboard::ViewModelPropertyArtboard as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_artboard::ViewModelPropertyArtboard as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_artboard::ViewModelPropertyArtboard as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -9847,8 +9847,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -10162,13 +10162,13 @@ impl CoreRegistryObject
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum::ViewModelPropertyEnum as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum::ViewModelPropertyEnum as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum::ViewModelPropertyEnum as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum::ViewModelPropertyEnum as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -10204,8 +10204,8 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -10275,13 +10275,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_custom::ViewModelPropertyEnumCustom as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -10323,8 +10323,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props() as u32,
             CoreField::ViewModelPropertyEnumCustomEnumId => self.base.enum_id(),
             _ => 0,
         }
@@ -10564,13 +10564,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_number::ViewModelPropertyNumber as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_number::ViewModelPropertyNumber as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_number::ViewModelPropertyNumber as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_number::ViewModelPropertyNumber as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -10606,8 +10606,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -10784,13 +10784,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_symbol_list_index::ViewModelPropertySymbolListIndex as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_symbol_list_index::ViewModelPropertySymbolListIndex as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_symbol_list_index::ViewModelPropertySymbolListIndex as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_symbol_list_index::ViewModelPropertySymbolListIndex as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -10826,8 +10826,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -11306,13 +11306,13 @@ impl CoreRegistryObject
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_list::ViewModelPropertyList as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_list::ViewModelPropertyList as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_list::ViewModelPropertyList as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_list::ViewModelPropertyList as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -11348,8 +11348,8 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -11415,13 +11415,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_system::ViewModelPropertyEnumSystem as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_system::ViewModelPropertyEnumSystem as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_system::ViewModelPropertyEnumSystem as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_enum_system::ViewModelPropertyEnumSystem as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -11463,8 +11463,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props() as u32,
             CoreField::ViewModelPropertyEnumSystemEnumType => self.base.enum_type(),
             _ => 0,
         }
@@ -11632,13 +11632,13 @@ impl CoreRegistryObject
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset::ViewModelPropertyAsset as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset::ViewModelPropertyAsset as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset::ViewModelPropertyAsset as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset::ViewModelPropertyAsset as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -11674,8 +11674,8 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -11844,13 +11844,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_font::ViewModelPropertyAssetFont as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_font::ViewModelPropertyAssetFont as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_font::ViewModelPropertyAssetFont as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_font::ViewModelPropertyAssetFont as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -11886,8 +11886,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -11935,13 +11935,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_viewmodel::ViewModelPropertyViewModel as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -11983,8 +11983,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             CoreField::ViewModelPropertyViewModelViewModelReferenceId => self.base.view_model_reference_id(),
             _ => 0,
         }
@@ -12150,13 +12150,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_blob::ViewModelPropertyAssetBlob as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_blob::ViewModelPropertyAssetBlob as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_blob::ViewModelPropertyAssetBlob as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_blob::ViewModelPropertyAssetBlob as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -12192,8 +12192,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -12241,13 +12241,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_boolean::ViewModelPropertyBoolean as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_boolean::ViewModelPropertyBoolean as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_boolean::ViewModelPropertyBoolean as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_boolean::ViewModelPropertyBoolean as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -12283,8 +12283,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -12340,13 +12340,13 @@ impl CoreRegistryObject
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_color::ViewModelPropertyColor as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_color::ViewModelPropertyColor as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_color::ViewModelPropertyColor as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_color::ViewModelPropertyColor as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -12382,8 +12382,8 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -12449,13 +12449,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_image::ViewModelPropertyAssetImage as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_image::ViewModelPropertyAssetImage as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_image::ViewModelPropertyAssetImage as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_asset_image::ViewModelPropertyAssetImage as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -12491,8 +12491,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -13167,13 +13167,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_string::ViewModelPropertyString as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_string::ViewModelPropertyString as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_string::ViewModelPropertyString as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_string::ViewModelPropertyString as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -13209,8 +13209,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -13356,13 +13356,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::ViewModelPropertySymbolTypeValue => {
-                if self.base.base.base.set_symbol_type_value_value(value) {
+                if self.base.base.base.set_symbol_type_value_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_trigger::ViewModelPropertyTrigger as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::symbol_type_value_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_trigger::ViewModelPropertyTrigger as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::SYMBOL_TYPE_VALUE_PROPERTY_KEY);
                 }
             },
             CoreField::ViewModelPropertyComponentProps => {
-                if self.base.base.base.set_component_props_value(value) {
+                if self.base.base.base.set_component_props_value(value as u8) {
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_trigger::ViewModelPropertyTrigger as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::component_props_changed(self);
                     <crate::mechanical_port::source::viewmodel::viewmodel_property_trigger::ViewModelPropertyTrigger as crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::viewmodel::viewmodel_property_base::ViewModelPropertyBase::COMPONENT_PROPS_PROPERTY_KEY);
                 }
@@ -13398,8 +13398,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::viewmodel::viewmodel
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value(),
-            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props(),
+            CoreField::ViewModelPropertySymbolTypeValue => self.base.base.base.symbol_type_value() as u32,
+            CoreField::ViewModelPropertyComponentProps => self.base.base.base.component_props() as u32,
             _ => 0,
         }
     }
@@ -17190,13 +17190,13 @@ impl CoreRegistryObject
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -17394,8 +17394,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -17592,13 +17592,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::nested_artboard::NestedArtboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -17828,8 +17828,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::nested_artboard::Nes
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::NestedArtboardArtboardId => self.base.artboard_id(),
             _ => 0,
         }
@@ -18030,13 +18030,13 @@ impl CoreRegistryObject
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::artboard_component_list::ArtboardComponentList as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -18240,8 +18240,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::ArtboardComponentListListSource => self.base.list_source(),
             _ => 0,
         }
@@ -18890,13 +18890,13 @@ impl CoreRegistryObject
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::scripted::scripted_drawable::ScriptedDrawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -19100,8 +19100,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::ScriptedDrawableScriptAssetId => self.base.script_asset_id(),
             _ => 0,
         }
@@ -19515,7 +19515,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -19528,7 +19528,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::scripted::scripted_layout::ScriptedLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -19745,8 +19745,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             CoreField::ScriptedDrawableScriptAssetId => self.base.base.base.script_asset_id(),
             _ => 0,
         }
@@ -20223,7 +20223,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -20236,7 +20236,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -20515,8 +20515,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             CoreField::NestedArtboardArtboardId => self.base.base.base.artboard_id(),
             CoreField::NestedArtboardLayoutInstanceWidthUnitsValue => {
                 self.base.instance_width_units_value()
@@ -23696,7 +23696,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::state_mac
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::StateMachineFireActionOccursValue => {
-                if self.base.base.base.set_occurs_value_value(value) {
+                if self.base.base.base.set_occurs_value_value(value as u8) {
                     <crate::mechanical_port::source::animation::state_machine_fire_trigger::StateMachineFireTrigger as crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBaseCallbacks>::occurs_value_changed(self);
                     <crate::mechanical_port::source::animation::state_machine_fire_trigger::StateMachineFireTrigger as crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBase::OCCURS_VALUE_PROPERTY_KEY);
                 }
@@ -23724,7 +23724,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::state_mac
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::StateMachineFireActionOccursValue => self.base.base.base.occurs_value(),
+            CoreField::StateMachineFireActionOccursValue => self.base.base.base.occurs_value() as u32,
             _ => 0,
         }
     }
@@ -26423,7 +26423,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::TransitionViewModelConditionOpValue => self.base.op_value(),
+            CoreField::TransitionViewModelConditionOpValue => self.base.op_value() as u32,
             _ => 0,
         }
     }
@@ -26496,7 +26496,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::TransitionViewModelConditionOpValue => self.base.base.base.op_value(),
+            CoreField::TransitionViewModelConditionOpValue => self.base.base.base.op_value() as u32,
             _ => 0,
         }
     }
@@ -26547,7 +26547,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
                 }
             },
             CoreField::TransitionValueConditionOpValue => {
-                if self.base.base.base.set_op_value_value(value) {
+                if self.base.base.base.set_op_value_value(value as u8) {
                     <crate::mechanical_port::source::animation::transition_number_condition::TransitionNumberCondition as crate::mechanical_port::source::generated::animation::transition_value_condition_base::TransitionValueConditionBaseCallbacks>::op_value_changed(self);
                     <crate::mechanical_port::source::animation::transition_number_condition::TransitionNumberCondition as crate::mechanical_port::source::generated::animation::transition_value_condition_base::TransitionValueConditionBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::animation::transition_value_condition_base::TransitionValueConditionBase::OP_VALUE_PROPERTY_KEY);
                 }
@@ -26584,7 +26584,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::TransitionInputConditionInputId => self.base.base.base.base.base.input_id(),
-            CoreField::TransitionValueConditionOpValue => self.base.base.base.op_value(),
+            CoreField::TransitionValueConditionOpValue => self.base.base.base.op_value() as u32,
             _ => 0,
         }
     }
@@ -26733,7 +26733,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::TransitionViewModelConditionOpValue => self.base.base.base.op_value(),
+            CoreField::TransitionViewModelConditionOpValue => self.base.base.base.op_value() as u32,
             _ => 0,
         }
     }
@@ -28521,7 +28521,7 @@ impl CoreRegistryObject
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
             CoreField::StateMachineFireActionOccursValue => {
-                if self.base.base.base.set_occurs_value_value(value) {
+                if self.base.base.base.set_occurs_value_value(value as u8) {
                     <crate::mechanical_port::source::animation::state_machine_fire_event::StateMachineFireEvent as crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBaseCallbacks>::occurs_value_changed(self);
                     <crate::mechanical_port::source::animation::state_machine_fire_event::StateMachineFireEvent as crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::animation::state_machine_fire_action_base::StateMachineFireActionBase::OCCURS_VALUE_PROPERTY_KEY);
                 }
@@ -28555,7 +28555,7 @@ impl CoreRegistryObject
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
-            CoreField::StateMachineFireActionOccursValue => self.base.base.base.occurs_value(),
+            CoreField::StateMachineFireActionOccursValue => self.base.base.base.occurs_value() as u32,
             CoreField::StateMachineFireEventEventId => self.base.event_id(),
             _ => 0,
         }
@@ -31088,7 +31088,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
                 }
             },
             CoreField::TransitionValueConditionOpValue => {
-                if self.base.base.base.set_op_value_value(value) {
+                if self.base.base.base.set_op_value_value(value as u8) {
                     <crate::mechanical_port::source::animation::transition_bool_condition::TransitionBoolCondition as crate::mechanical_port::source::generated::animation::transition_value_condition_base::TransitionValueConditionBaseCallbacks>::op_value_changed(self);
                     <crate::mechanical_port::source::animation::transition_bool_condition::TransitionBoolCondition as crate::mechanical_port::source::generated::animation::transition_value_condition_base::TransitionValueConditionBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::animation::transition_value_condition_base::TransitionValueConditionBase::OP_VALUE_PROPERTY_KEY);
                 }
@@ -31117,7 +31117,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::animation::transitio
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::TransitionInputConditionInputId => self.base.base.base.base.base.input_id(),
-            CoreField::TransitionValueConditionOpValue => self.base.base.base.op_value(),
+            CoreField::TransitionValueConditionOpValue => self.base.base.base.op_value() as u32,
             _ => 0,
         }
     }
@@ -32503,13 +32503,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
                 }
             }
             CoreField::StrokeCap => {
-                if self.base.set_cap_value(value) {
+                if self.base.set_cap_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBaseCallbacks>::cap_changed(self);
                     <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBase::CAP_PROPERTY_KEY);
                 }
             }
             CoreField::StrokeJoin => {
-                if self.base.set_join_value(value) {
+                if self.base.set_join_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBaseCallbacks>::join_changed(self);
                     <crate::mechanical_port::source::shapes::paint::stroke::Stroke as crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::stroke_base::StrokeBase::JOIN_PROPERTY_KEY);
                 }
@@ -32577,9 +32577,9 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::strok
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
-            CoreField::ShapePaintBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::StrokeCap => self.base.cap(),
-            CoreField::StrokeJoin => self.base.join(),
+            CoreField::ShapePaintBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::StrokeCap => self.base.cap() as u32,
+            CoreField::StrokeJoin => self.base.join() as u32,
             _ => 0,
         }
     }
@@ -33230,7 +33230,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
                 }
             }
             CoreField::FillFillRule => {
-                if self.base.set_fill_rule_value(value) {
+                if self.base.set_fill_rule_value(value as u8) {
                     <crate::mechanical_port::source::shapes::paint::fill::Fill as crate::mechanical_port::source::generated::shapes::paint::fill_base::FillBaseCallbacks>::fill_rule_changed(self);
                     <crate::mechanical_port::source::shapes::paint::fill::Fill as crate::mechanical_port::source::generated::shapes::paint::fill_base::FillBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::paint::fill_base::FillBase::FILL_RULE_PROPERTY_KEY);
                 }
@@ -33284,8 +33284,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::paint::fill:
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::ComponentParentId => self.base.base.base.base.base.base.base.parent_id(),
-            CoreField::ShapePaintBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::FillFillRule => self.base.fill_rule(),
+            CoreField::ShapePaintBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::FillFillRule => self.base.fill_rule() as u32,
             _ => 0,
         }
     }
@@ -36770,7 +36770,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::clipping_sha
                 }
             }
             CoreField::ClippingShapeFillRule => {
-                if self.base.set_fill_rule_value(value) {
+                if self.base.set_fill_rule_value(value as u8) {
                     <crate::mechanical_port::source::shapes::clipping_shape::ClippingShape as crate::mechanical_port::source::generated::shapes::clipping_shape_base::ClippingShapeBaseCallbacks>::fill_rule_changed(self);
                     <crate::mechanical_port::source::shapes::clipping_shape::ClippingShape as crate::mechanical_port::source::generated::shapes::clipping_shape_base::ClippingShapeBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::shapes::clipping_shape_base::ClippingShapeBase::FILL_RULE_PROPERTY_KEY);
                 }
@@ -36816,7 +36816,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::clipping_sha
         match field {
             CoreField::ComponentParentId => self.base.base.base.parent_id(),
             CoreField::ClippingShapeSourceId => self.base.source_id(),
-            CoreField::ClippingShapeFillRule => self.base.fill_rule(),
+            CoreField::ClippingShapeFillRule => self.base.fill_rule() as u32,
             _ => 0,
         }
     }
@@ -37971,13 +37971,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::shapes::image::Image as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -38229,8 +38229,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::shapes::image::Image
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::ImageAssetId => self.base.asset_id(),
             CoreField::ImageFit => self.base.fit(),
             CoreField::ImageSamplerFilter => self.base.sampler_filter() as u32,
@@ -39604,13 +39604,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::layout_component::LayoutComponent as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -39846,8 +39846,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::layout_component::La
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             CoreField::LayoutComponentStyleId => self.base.style_id(),
             _ => 0,
         }
@@ -40055,7 +40055,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -40068,7 +40068,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::artboard::Artboard as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -40341,8 +40341,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::artboard::Artboard {
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             CoreField::LayoutComponentStyleId => self.base.base.base.style_id(),
             CoreField::ArtboardDefaultStateMachineId => self.base.default_state_machine_id(),
             CoreField::ArtboardViewModelId => self.base.view_model_id(),
@@ -45160,7 +45160,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -45173,7 +45173,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -45434,8 +45434,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             CoreField::NestedArtboardArtboardId => self.base.base.base.artboard_id(),
             CoreField::NestedArtboardLeafFit => self.base.fit(),
             _ => 0,
@@ -47192,7 +47192,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -47205,7 +47205,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::text::text_input_cursor::TextInputCursor as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -47416,8 +47416,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -47639,7 +47639,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -47652,7 +47652,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::text::text_input_text::TextInputText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -47863,8 +47863,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input_tex
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -48842,7 +48842,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -48855,7 +48855,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::text::text_input_selected_text::TextInputSelectedText as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -49066,8 +49066,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -49283,13 +49283,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                 }
             }
             CoreField::DrawableBlendModeValue => {
-                if self.base.base.base.set_blend_mode_value_value(value) {
+                if self.base.base.base.set_blend_mode_value_value(value as u8) {
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
                 }
             }
             CoreField::DrawableDrawableFlags => {
-                if self.base.base.base.set_drawable_flags_value(value) {
+                if self.base.base.base.set_drawable_flags_value(value as u16) {
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
                 }
@@ -49507,8 +49507,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -49848,7 +49848,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_blend_mode_value_value(value)
+                    .set_blend_mode_value_value(value as u8)
                 {
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::blend_mode_value_changed(self);
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::BLEND_MODE_VALUE_PROPERTY_KEY);
@@ -49861,7 +49861,7 @@ impl CoreRegistryObject
                     .base
                     .base
                     .base
-                    .set_drawable_flags_value(value)
+                    .set_drawable_flags_value(value as u16)
                 {
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::drawable_flags_changed(self);
                     <crate::mechanical_port::source::text::text_input_selection::TextInputSelection as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::drawable_base::DrawableBase::DRAWABLE_FLAGS_PROPERTY_KEY);
@@ -50072,8 +50072,8 @@ impl CoreRegistryObject
                 .base
                 .base
                 .parent_id(),
-            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value(),
-            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags(),
+            CoreField::DrawableBlendModeValue => self.base.base.base.base.base.blend_mode_value() as u32,
+            CoreField::DrawableDrawableFlags => self.base.base.base.base.base.drawable_flags() as u32,
             _ => 0,
         }
     }
@@ -57720,7 +57720,7 @@ impl CoreCapabilities for crate::mechanical_port::source::animation::state_machi
     }
 
     fn state_machine_listener_on_added_dirty(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> { Some(self.base.base.on_added_dirty(context)) }
-    fn state_machine_listener_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> { Some(self.base.base.on_added_clean(context)) }
+    fn state_machine_listener_on_added_clean(&mut self, context: &mut dyn crate::mechanical_port::source::core_context::CoreContext) -> Option<crate::mechanical_port::source::status_code::StatusCode> { Some(self.on_added_clean(context)) }
     fn state_machine_listener_add_action(&mut self, value: crate::mechanical_port::source::core::CoreHandle) -> bool { self.base.base.add_action(value); true }
     fn state_machine_listener_add_listener_input_type(&mut self, value: crate::mechanical_port::source::core::CoreHandle) -> bool { self.base.base.add_listener_input_type(value); true }
     fn state_machine_listener_actions(&self) -> Option<Vec<crate::mechanical_port::source::core::CoreHandle>> { Some((0..self.base.base.action_count()).filter_map(|index| self.base.base.action(index)).collect()) }
@@ -63792,8 +63792,8 @@ impl CoreCapabilities for crate::mechanical_port::source::layout_component::Layo
             &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
         ),
     ) -> bool {
-        f(match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.local_clockwise_path() });
-        true
+        let path = match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.local_clockwise_path() };
+        if let Some(path) = path { f(path); true } else { false }
     }
     fn drawable_hit_test(
         &mut self,
@@ -64081,8 +64081,8 @@ impl CoreCapabilities for crate::mechanical_port::source::artboard::Artboard {
             &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath,
         ),
     ) -> bool {
-        f(match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path() });
-        true
+        let path = match kind { crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::Local => self.base.base.local_path(), crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path() };
+        if let Some(path) = path { f(path); true } else { false }
     }
     fn component_on_dirty(
         &mut self,

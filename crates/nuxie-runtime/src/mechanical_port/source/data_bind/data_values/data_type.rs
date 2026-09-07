@@ -1,5 +1,5 @@
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[repr(u32)]
+#[repr(u8)]
 pub enum DataType {
     None = 0,
     String = 1,

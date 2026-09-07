@@ -608,6 +608,15 @@ impl DataBind {
             }
         }
         self.target = value;
+        if self.property_key() == u32::from(crate::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY) {
+            if let Some(target) = &self.target {
+                target.with_mut(|target| {
+                    if let Some(layout) = target.as_layout_component_mut() {
+                        layout.mark_clip_may_be_dynamic();
+                    }
+                });
+            }
+        }
         if self.to_source() && self.target_supports_push() {
             if let (Some(target), Some(bind)) = (self.target.as_ref(), bind) {
                 target.with_mut(|target| {

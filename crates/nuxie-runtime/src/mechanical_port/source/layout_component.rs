@@ -147,6 +147,32 @@ struct LayoutTreeCache {
     root: usize,
 }
 
+#[repr(u16)]
+#[derive(Clone, Copy)]
+pub(crate) enum LayoutComponentFlags {
+    ParentIsRow = 1 << 0,
+    ParentIsStack = 1 << 1,
+    WidthIntrinsicallySizeOverride = 1 << 2,
+    HeightIntrinsicallySizeOverride = 1 << 3,
+    ForceUpdateLayoutBounds = 1 << 4,
+    PositionLeftChanged = 1 << 5,
+    PositionTopChanged = 1 << 6,
+    HasForegroundDrawable = 1 << 7,
+    HasComponentOrigin = 1 << 8,
+    ComposeTransform = 1 << 9,
+    IsSmoothingAnimation = 1 << 10,
+    JustAddedToHost = 1 << 11,
+    ForceDrawableProxy = 1 << 12,
+    ClipSaved = 1 << 13,
+}
+
+#[derive(Default)]
+pub(crate) struct LayoutRenderPaths {
+    pub background: RawPath,
+    pub local: ShapePaintPath,
+    pub world: ShapePaintPath,
+}
+
 pub struct LayoutComponent {
     pub base: LayoutComponentBase,
     paints: ShapePaintContainer,
@@ -161,36 +187,23 @@ pub struct LayoutComponent {
     solved_padding: LayoutPadding,
     animation_data_a: LayoutAnimationData,
     animation_data_b: LayoutAnimationData,
-    is_smoothing_animation: bool,
     inherited_interpolator: Option<CoreHandle>,
     inherited_interpolation: LayoutStyleInterpolation,
     inherited_interpolation_time: f32,
     inherited_direction: LayoutDirection,
-    background_raw_path: RawPath,
-    local_path: ShapePaintPath,
-    world_path: ShapePaintPath,
+    layout_flags: u16,
+    render_paths: Option<Box<LayoutRenderPaths>>,
     proxy: Option<Rc<RefCell<DrawableProxy>>>,
-    pub(crate) just_added_to_host: bool,
     width_override: f32,
-    width_unit_value_override: i32,
+    width_unit_value_override: i8,
     height_override: f32,
-    height_unit_value_override: i32,
-    parent_is_row: bool,
-    parent_is_stack: bool,
-    width_intrinsically_size_override: bool,
-    height_intrinsically_size_override: bool,
+    height_unit_value_override: i8,
     forced_width: f32,
     forced_height: f32,
-    force_update_layout_bounds: bool,
-    position_left_changed: bool,
-    position_top_changed: bool,
-    has_foreground_drawable: bool,
-    has_component_origin: bool,
     // Files exported before 7.3 never composed a layout's own rotation/scale,
     // so any stored value was ignored. Import clears this for those files; it
     // defaults to the current behavior so a layout built outside of import
     // isn't stuck on the legacy path. See File::MINOR_VERSION.
-    compose_transform: bool,
 }
 
 impl Default for LayoutComponent {
@@ -209,32 +222,22 @@ impl Default for LayoutComponent {
             solved_padding: LayoutPadding::default(),
             animation_data_a: LayoutAnimationData::default(),
             animation_data_b: LayoutAnimationData::default(),
-            is_smoothing_animation: false,
             inherited_interpolator: None,
             inherited_interpolation: LayoutStyleInterpolation::Hold,
             inherited_interpolation_time: 0.0,
             inherited_direction: LayoutDirection::Inherit,
-            background_raw_path: RawPath::default(),
-            local_path: ShapePaintPath::default(),
-            world_path: ShapePaintPath::default(),
+            layout_flags: LayoutComponentFlags::ParentIsRow as u16
+                | LayoutComponentFlags::PositionLeftChanged as u16
+                | LayoutComponentFlags::PositionTopChanged as u16
+                | LayoutComponentFlags::ComposeTransform as u16,
+            render_paths: None,
             proxy: None,
-            just_added_to_host: false,
             width_override: f32::NAN,
             width_unit_value_override: -1,
             height_override: f32::NAN,
             height_unit_value_override: -1,
-            parent_is_row: true,
-            parent_is_stack: false,
-            width_intrinsically_size_override: false,
-            height_intrinsically_size_override: false,
             forced_width: f32::NAN,
             forced_height: f32::NAN,
-            force_update_layout_bounds: false,
-            position_left_changed: true,
-            position_top_changed: true,
-            has_foreground_drawable: false,
-            has_component_origin: false,
-            compose_transform: true,
         }
     }
 }
@@ -261,6 +264,33 @@ impl ProxyDrawing for LayoutProxy {
 }
 
 impl LayoutComponent {
+    pub(crate) fn has_layout_flag(&self, flag: LayoutComponentFlags) -> bool {
+        self.layout_flags & flag as u16 != 0
+    }
+    pub(crate) fn set_layout_flag(&mut self, flag: LayoutComponentFlags, on: bool) {
+        if on {
+            self.layout_flags |= flag as u16;
+        } else {
+            self.layout_flags &= !(flag as u16);
+        }
+    }
+    pub(crate) fn mutable_render_paths(&mut self) -> &mut LayoutRenderPaths {
+        self.render_paths.get_or_insert_with(Default::default)
+    }
+    pub fn needs_drawable_proxy(&self) -> bool {
+        self.base.clip()
+            || !self.paints.shape_paints().is_empty()
+            || self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy)
+    }
+    pub fn mark_clip_may_be_dynamic(&mut self) {
+        self.set_layout_flag(LayoutComponentFlags::ForceDrawableProxy, true);
+    }
+    pub fn mark_interaction_target(&mut self) {
+        self.set_layout_flag(LayoutComponentFlags::ForceDrawableProxy, true);
+    }
+    pub fn mark_listener_target(&mut self) {
+        self.set_layout_flag(LayoutComponentFlags::ForceDrawableProxy, true);
+    }
     pub(crate) fn set_compose_transform_from_import(&mut self, import_stack: &ImportStack) {
         // Files exported before 7.3 composed a layout's transform from the solved
         // slot alone, so any stored rotation/scale was written but never applied.
@@ -268,7 +298,10 @@ impl LayoutComponent {
         // of the slot. See File::MINOR_VERSION.
         let major = import_stack.major_version();
         let minor = import_stack.minor_version();
-        self.compose_transform = major > 7 || (major == 7 && minor >= 3);
+        self.set_layout_flag(
+            LayoutComponentFlags::ComposeTransform,
+            major > 7 || (major == 7 && minor >= 3),
+        );
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {
@@ -294,7 +327,14 @@ impl LayoutComponent {
     pub fn clone_core(&self) -> Self {
         let mut callbacks = Self::default();
         let mut twin = self.base.clone_into(&mut callbacks);
-        twin.compose_transform = self.compose_transform;
+        twin.set_layout_flag(
+            LayoutComponentFlags::ComposeTransform,
+            self.has_layout_flag(LayoutComponentFlags::ComposeTransform),
+        );
+        twin.set_layout_flag(
+            LayoutComponentFlags::ForceDrawableProxy,
+            self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy),
+        );
         twin
     }
 
@@ -360,7 +400,7 @@ impl LayoutComponent {
                     || !child.is_type_of(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY)
                     || child.with(|object| {
                         let drawable = object.as_drawable().expect("component list Drawable");
-                        drawable.base.drawable_flags() & u32::from(crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0) != 0
+                        drawable.base.drawable_flags() & crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0 != 0
                     }).expect("live component list");
                 if joins {
                     result.push((child.clone(), provider));
@@ -442,7 +482,9 @@ impl LayoutComponent {
         let artboard = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().expect("Layout owner");
-                layout.force_update_layout_bounds |= force;
+                if force {
+                    layout.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, true);
+                }
                 layout.layout_data.dirty = true;
                 layout.artboard_handle()
             })
@@ -461,7 +503,7 @@ impl LayoutComponent {
             object
                 .as_layout_component_mut()
                 .expect("Layout owner")
-                .parent_is_row = row;
+                .set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         });
         Self::mark_layout_node_dirty_with_host_occurrence(owner, false, Some(host));
     }
@@ -474,10 +516,10 @@ impl LayoutComponent {
         let changed = owner
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().expect("Layout owner");
-                if layout.parent_is_stack == is_stack {
+                if layout.has_layout_flag(LayoutComponentFlags::ParentIsStack) == is_stack {
                     return false;
                 }
-                layout.parent_is_stack = is_stack;
+                layout.set_layout_flag(LayoutComponentFlags::ParentIsStack, is_stack);
                 true
             })
             .expect("live Layout owner");
@@ -814,7 +856,7 @@ impl LayoutComponent {
         None
     }
     fn origin(&self) -> Option<(f32, f32)> {
-        if !self.has_component_origin {
+        if !self.has_layout_flag(LayoutComponentFlags::HasComponentOrigin) {
             return None;
         }
         self.base
@@ -838,7 +880,7 @@ impl LayoutComponent {
         self.origin().map_or(0.0, |origin| origin.1)
     }
     pub fn mark_has_component_origin(&mut self) {
-        self.has_component_origin = true;
+        self.set_layout_flag(LayoutComponentFlags::HasComponentOrigin, true);
     }
     pub fn origin_offset(&self) -> Vec2D {
         self.origin_offset_with(self.pivot_origin_x(), self.pivot_origin_y())
@@ -850,7 +892,7 @@ impl LayoutComponent {
         )
     }
     pub fn local_anchor(&self) -> Vec2D {
-        if !self.has_component_origin || self.is_artboard() {
+        if !self.has_layout_flag(LayoutComponentFlags::HasComponentOrigin) || self.is_artboard() {
             Vec2D::default()
         } else {
             self.origin_offset()
@@ -880,7 +922,7 @@ impl LayoutComponent {
         location
     }
     pub fn composes_layout_offset(&self) -> bool {
-        self.compose_transform && !self.is_artboard()
+        self.has_layout_flag(LayoutComponentFlags::ComposeTransform) && !self.is_artboard()
     }
     pub fn composed_translation(&self) -> Vec2D {
         if self.composes_layout_offset() {
@@ -918,7 +960,7 @@ impl LayoutComponent {
 
         // Pivot about the origin. The box stays put, so wrap rather than fold
         // into the frame.
-        if self.compose_transform
+        if self.has_layout_flag(LayoutComponentFlags::ComposeTransform)
             && (self.rotation() != 0.0 || self.scale_x() != 1.0 || self.scale_y() != 1.0)
         {
             let mut local = if self.rotation() != 0.0 {
@@ -1133,13 +1175,13 @@ impl LayoutComponent {
         &mut self.paints
     }
     pub fn register_foreground_drawable(&mut self) {
-        self.has_foreground_drawable = true;
+        self.set_layout_flag(LayoutComponentFlags::HasForegroundDrawable, true);
     }
     pub fn mark_position_left_changed(&mut self) {
-        self.position_left_changed = true;
+        self.set_layout_flag(LayoutComponentFlags::PositionLeftChanged, true);
     }
     pub fn mark_position_top_changed(&mut self) {
-        self.position_top_changed = true;
+        self.set_layout_flag(LayoutComponentFlags::PositionTopChanged, true);
     }
 
     pub fn build_dependencies(&mut self) {
@@ -1217,8 +1259,8 @@ impl LayoutComponent {
     /// Called after the most-derived render-path update, preserving the pinned
     /// virtual-call boundary before resetting the position flags.
     pub(crate) fn reset_update_flags(&mut self) {
-        self.position_left_changed = false;
-        self.position_top_changed = false;
+        self.set_layout_flag(LayoutComponentFlags::PositionLeftChanged, false);
+        self.set_layout_flag(LayoutComponentFlags::PositionTopChanged, false);
     }
 
     pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {
@@ -1226,8 +1268,8 @@ impl LayoutComponent {
     }
     pub fn width_override(&mut self, width: f32, unit: i32, row: bool) {
         self.width_override = width;
-        self.width_unit_value_override = unit;
-        self.parent_is_row = row;
+        self.width_unit_value_override = unit as i8;
+        self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         self.mark_layout_node_dirty(false);
     }
     pub(crate) fn width_override_occurrence(
@@ -1240,8 +1282,8 @@ impl LayoutComponent {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().expect("Layout owner");
             layout.width_override = width;
-            layout.width_unit_value_override = unit;
-            layout.parent_is_row = row;
+            layout.width_unit_value_override = unit as i8;
+            layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         });
         Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
     }
@@ -1255,8 +1297,8 @@ impl LayoutComponent {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().expect("Layout owner");
             layout.height_override = height;
-            layout.height_unit_value_override = unit;
-            layout.parent_is_row = row;
+            layout.height_unit_value_override = unit as i8;
+            layout.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         });
         Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
     }
@@ -1267,7 +1309,10 @@ impl LayoutComponent {
     ) {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().expect("Layout owner");
-            layout.width_intrinsically_size_override = intrinsic;
+            layout.set_layout_flag(
+                LayoutComponentFlags::WidthIntrinsicallySizeOverride,
+                intrinsic,
+            );
             layout.width_unit_value_override = if intrinsic { 3 } else { 1 };
         });
         Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
@@ -1279,35 +1324,44 @@ impl LayoutComponent {
     ) {
         owner.with_mut(|object| {
             let layout = object.as_layout_component_mut().expect("Layout owner");
-            layout.height_intrinsically_size_override = intrinsic;
+            layout.set_layout_flag(
+                LayoutComponentFlags::HeightIntrinsicallySizeOverride,
+                intrinsic,
+            );
             layout.height_unit_value_override = if intrinsic { 3 } else { 1 };
         });
         Self::mark_layout_node_dirty_with_host_occurrence(owner, false, host);
     }
     pub fn height_override(&mut self, height: f32, unit: i32, row: bool) {
         self.height_override = height;
-        self.height_unit_value_override = unit;
-        self.parent_is_row = row;
+        self.height_unit_value_override = unit as i8;
+        self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         self.mark_layout_node_dirty(false);
     }
     pub fn set_parent_is_row(&mut self, row: bool) {
-        self.parent_is_row = row;
+        self.set_layout_flag(LayoutComponentFlags::ParentIsRow, row);
         self.mark_layout_node_dirty(false);
     }
     pub fn set_parent_is_stack(&mut self, is_stack: bool) {
-        if self.parent_is_stack == is_stack {
+        if self.has_layout_flag(LayoutComponentFlags::ParentIsStack) == is_stack {
             return;
         }
-        self.parent_is_stack = is_stack;
+        self.set_layout_flag(LayoutComponentFlags::ParentIsStack, is_stack);
         self.mark_layout_node_dirty(false);
     }
     pub fn set_width_intrinsically_size_override(&mut self, intrinsic: bool) {
-        self.width_intrinsically_size_override = intrinsic;
+        self.set_layout_flag(
+            LayoutComponentFlags::WidthIntrinsicallySizeOverride,
+            intrinsic,
+        );
         self.width_unit_value_override = if intrinsic { 3 } else { 1 };
         self.mark_layout_node_dirty(false);
     }
     pub fn set_height_intrinsically_size_override(&mut self, intrinsic: bool) {
-        self.height_intrinsically_size_override = intrinsic;
+        self.set_layout_flag(
+            LayoutComponentFlags::HeightIntrinsicallySizeOverride,
+            intrinsic,
+        );
         self.height_unit_value_override = if intrinsic { 3 } else { 1 };
         self.mark_layout_node_dirty(false);
     }
@@ -1410,14 +1464,16 @@ impl LayoutComponent {
         StatusCode::Ok
     }
     pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
-        if self.base.clip() {
+        let save_for_clip = self.base.clip();
+        if save_for_clip {
             renderer.save();
             let factory = self
                 .with_artboard(|artboard| artboard.factory())
                 .flatten()
                 .expect("a drawable LayoutComponent has its imported factory");
-            renderer.clip_path(self.world_path.render_path(&factory));
+            renderer.clip_path(self.mutable_render_paths().world.render_path(&factory));
         }
+        self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
         let world = self.shape_world_transform();
         let mut paint_index = 0;
         while let Some(paint) = self.paints.shape_paints().get(paint_index).cloned() {
@@ -1432,9 +1488,12 @@ impl LayoutComponent {
                 let fill_rule = paint.fill_rule();
                 let path = match paint.pick_path_kind() {
                     ShapePaintPathKind::Local | ShapePaintPathKind::LocalClockwise => {
-                        &mut self.local_path
+                        self.local_path()
                     }
-                    ShapePaintPathKind::World => &mut self.world_path,
+                    ShapePaintPathKind::World => self.world_path(),
+                };
+                let Some(path) = path else {
+                    return;
                 };
                 paint
                     .shape_paint_mut()
@@ -1443,7 +1502,8 @@ impl LayoutComponent {
         }
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
-        if self.base.clip() {
+        if self.has_layout_flag(LayoutComponentFlags::ClipSaved) {
+            self.set_layout_flag(LayoutComponentFlags::ClipSaved, false);
             renderer.restore();
         }
     }
@@ -1452,7 +1512,7 @@ impl LayoutComponent {
             if self.is_hidden()
                 || (self.paints.shape_paints().is_empty()
                     && !self.base.clip()
-                    && !self.has_foreground_drawable)
+                    && !self.has_layout_flag(LayoutComponentFlags::HasForegroundDrawable))
             {
                 return;
             }
@@ -1479,20 +1539,17 @@ impl LayoutComponent {
                     };
                 }
             });
-            self.background_raw_path.rewind();
-            Path::add_rounded_rect(
-                &mut self.background_raw_path,
-                Aabb::new(0.0, 0.0, self.layout.width(), self.layout.height()),
-                radii,
-            );
-            self.local_path.rewind();
-            self.local_path.add_path(&self.background_raw_path, None);
-            self.world_path
+            let bounds = Aabb::new(0.0, 0.0, self.layout.width(), self.layout.height());
+            let world = *self.base.base.base.base.world_transform();
+            let paths = self.mutable_render_paths();
+            paths.background.rewind();
+            Path::add_rounded_rect(&mut paths.background, bounds, radii);
+            paths.local.rewind();
+            paths.local.add_path(&paths.background, None);
+            paths
+                .world
                 .rewind_as(false, nuxie_render_api::FillRule::Clockwise);
-            self.world_path.add_path(
-                &self.background_raw_path,
-                Some(self.base.base.base.base.world_transform()),
-            );
+            paths.world.add_path(&paths.background, Some(&world));
             for paint in self.paints.shape_paints().iter().cloned() {
                 let should_draw = paint
                     .with_mut(|paint| {
@@ -1536,7 +1593,7 @@ impl LayoutComponent {
     }
     pub fn effective_parent_is_row(&mut self) -> bool {
         if self.can_have_overrides() {
-            self.parent_is_row
+            self.has_layout_flag(LayoutComponentFlags::ParentIsRow)
         } else {
             self.layout_parent_handle()
                 .and_then(|parent| {
@@ -1616,8 +1673,10 @@ impl LayoutComponent {
                 })
             })
             .unwrap_or((
-                self.can_have_overrides() && self.parent_is_stack,
-                self.can_have_overrides() && self.parent_is_stack,
+                self.can_have_overrides()
+                    && self.has_layout_flag(LayoutComponentFlags::ParentIsStack),
+                self.can_have_overrides()
+                    && self.has_layout_flag(LayoutComponentFlags::ParentIsStack),
                 crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
                     as u8,
             ));
@@ -1632,7 +1691,7 @@ impl LayoutComponent {
             container_justify_items: u32::from(container_justify_items),
             inline_hugs,
             parent_is_row: if self.can_have_overrides() {
-                self.parent_is_row
+                self.has_layout_flag(LayoutComponentFlags::ParentIsRow)
             } else if let Some(snapshot) = active_parent_style {
                 snapshot.is_row
             } else {
@@ -2293,8 +2352,8 @@ impl LayoutComponent {
         }
         let next = self.layout_data.solved_layout;
         self.layout_padding = self.solved_padding;
-        if self.just_added_to_host {
-            self.just_added_to_host = false;
+        if self.has_layout_flag(LayoutComponentFlags::JustAddedToHost) {
+            self.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
             self.layout = next;
             let data = self.current_animation_data();
             data.from = next;
@@ -2302,20 +2361,20 @@ impl LayoutComponent {
             data.elapsed_seconds = 0.0;
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
-            self.force_update_layout_bounds = false;
+            self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
             return;
         }
         if animate && self.animates() {
-            let force = self.force_update_layout_bounds;
+            let force = self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds);
             let data = self.current_animation_data();
             if next != data.to || force {
                 if data.elapsed_seconds != 0.0 {
-                    if self.is_smoothing_animation {
+                    if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
                         self.animation_data_a = self.animation_data_b;
                     }
-                    self.is_smoothing_animation = true;
+                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
                 } else {
-                    self.is_smoothing_animation = false;
+                    self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                 }
                 let from = self.layout;
                 let data = self.current_animation_data();
@@ -2325,7 +2384,9 @@ impl LayoutComponent {
                 self.propagate_size();
                 CoreCapabilities::world_transform_mark_dirty(self);
             }
-        } else if next != self.layout || self.force_update_layout_bounds {
+        } else if next != self.layout
+            || self.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds)
+        {
             if self.layout.width() != next.width() || self.layout.height() != next.height() {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
@@ -2334,7 +2395,7 @@ impl LayoutComponent {
             self.propagate_size();
             CoreCapabilities::world_transform_mark_dirty(self);
         }
-        self.force_update_layout_bounds = false;
+        self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false);
     }
     fn hosted_layout_roots(provider: &CoreHandle) -> Option<(bool, Vec<(i32, CoreHandle)>)> {
         provider.with(|object| {
@@ -2391,9 +2452,9 @@ impl LayoutComponent {
                 (
                     layout.layout_data.solved_layout,
                     layout.layout,
-                    layout.just_added_to_host,
+                    layout.has_layout_flag(LayoutComponentFlags::JustAddedToHost),
                     layout.animates(),
-                    layout.force_update_layout_bounds,
+                    layout.has_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds),
                     *layout.current_animation_data(),
                 )
             })
@@ -2402,7 +2463,7 @@ impl LayoutComponent {
         if just_added {
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
-                layout.just_added_to_host = false;
+                layout.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
                 layout.layout = next;
                 *layout.current_animation_data() = LayoutAnimationData {
                     from: next,
@@ -2416,12 +2477,12 @@ impl LayoutComponent {
                 owner.with_mut(|object| {
                     let layout = object.as_layout_component_mut().unwrap();
                     if current.elapsed_seconds != 0.0 {
-                        if layout.is_smoothing_animation {
+                        if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
                             layout.animation_data_a = layout.animation_data_b;
                         }
-                        layout.is_smoothing_animation = true;
+                        layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, true);
                     } else {
-                        layout.is_smoothing_animation = false;
+                        layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                     }
                     *layout.current_animation_data() = LayoutAnimationData {
                         from: old,
@@ -2453,7 +2514,7 @@ impl LayoutComponent {
             object
                 .as_layout_component_mut()
                 .unwrap()
-                .force_update_layout_bounds = false
+                .set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, false)
         });
     }
 
@@ -2571,7 +2632,7 @@ impl LayoutComponent {
                     layout.interpolation_time(),
                     layout.interpolation(),
                     layout.interpolator(),
-                    layout.is_smoothing_animation,
+                    layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation),
                     layout.animation_data_a,
                 ))
             })
@@ -2600,7 +2661,7 @@ impl LayoutComponent {
                 layout.animation_data_b.from = layout.animation_data_a.interpolate(f);
                 if f == 1.0 {
                     layout.animation_data_a = layout.animation_data_b;
-                    layout.is_smoothing_animation = false;
+                    layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                 } else {
                     layout.animation_data_a.elapsed_seconds += elapsed;
                 }
@@ -2619,8 +2680,8 @@ impl LayoutComponent {
             owner.with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout = data.to;
-                if layout.is_smoothing_animation {
-                    layout.is_smoothing_animation = false;
+                if layout.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
+                    layout.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                     layout.animation_data_a = layout.animation_data_b;
                     layout.animation_data_b.elapsed_seconds = 0.0;
                 }
@@ -2714,7 +2775,7 @@ impl LayoutComponent {
         .unwrap_or(0.0)
     }
     fn current_animation_data(&mut self) -> &mut LayoutAnimationData {
-        if self.is_smoothing_animation {
+        if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
             &mut self.animation_data_b
         } else {
             &mut self.animation_data_a
@@ -2741,7 +2802,7 @@ impl LayoutComponent {
                 })
                 .unwrap_or(factor)
         };
-        if self.is_smoothing_animation {
+        if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
             let factor = transform_factor(
                 self.animation_data_a.elapsed_seconds,
                 self.interpolation(),
@@ -2750,7 +2811,7 @@ impl LayoutComponent {
             self.animation_data_b.from = self.animation_data_a.interpolate(factor);
             if factor == 1.0 {
                 self.animation_data_a = self.animation_data_b;
-                self.is_smoothing_animation = false;
+                self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
             } else {
                 self.animation_data_a.elapsed_seconds += elapsed;
             }
@@ -2761,8 +2822,8 @@ impl LayoutComponent {
                 CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
             }
             self.layout = data.to;
-            if self.is_smoothing_animation {
-                self.is_smoothing_animation = false;
+            if self.has_layout_flag(LayoutComponentFlags::IsSmoothingAnimation) {
+                self.set_layout_flag(LayoutComponentFlags::IsSmoothingAnimation, false);
                 self.animation_data_a = self.animation_data_b;
                 self.animation_data_b.elapsed_seconds = 0.0;
             }
@@ -2810,7 +2871,9 @@ impl LayoutComponent {
         }
     }
     pub fn mark_layout_node_dirty(&mut self, force: bool) {
-        self.force_update_layout_bounds |= force;
+        if force {
+            self.set_layout_flag(LayoutComponentFlags::ForceUpdateLayoutBounds, true);
+        }
         self.layout_data.dirty = true;
         if let (Some(artboard), Some(this)) = (
             self.base.base.base.base.base.artboard_handle(),
@@ -2957,7 +3020,10 @@ impl LayoutComponent {
                 let (left_changed, left) = owner
                     .with(|object| {
                         let layout = object.as_layout_component().expect("style layout owner");
-                        (layout.position_left_changed, layout.layout.left())
+                        (
+                            layout.has_layout_flag(LayoutComponentFlags::PositionLeftChanged),
+                            layout.layout.left(),
+                        )
                     })
                     .expect("live style layout owner");
                 if !left_changed {
@@ -2966,7 +3032,10 @@ impl LayoutComponent {
                 let (top_changed, top) = owner
                     .with(|object| {
                         let layout = object.as_layout_component().expect("style layout owner");
-                        (layout.position_top_changed, layout.layout.top())
+                        (
+                            layout.has_layout_flag(LayoutComponentFlags::PositionTopChanged),
+                            layout.layout.top(),
+                        )
                     })
                     .expect("live style layout owner");
                 if !top_changed {
@@ -3107,14 +3176,14 @@ impl LayoutComponent {
     pub fn fractional_height_changed(&mut self) {
         self.mark_layout_node_dirty(false);
     }
-    pub fn world_path(&mut self) -> &mut ShapePaintPath {
-        &mut self.world_path
+    pub fn world_path(&mut self) -> Option<&mut ShapePaintPath> {
+        self.render_paths.as_mut().map(|paths| &mut paths.world)
     }
-    pub fn local_path(&mut self) -> &mut ShapePaintPath {
-        &mut self.local_path
+    pub fn local_path(&mut self) -> Option<&mut ShapePaintPath> {
+        self.render_paths.as_mut().map(|paths| &mut paths.local)
     }
-    pub fn local_clockwise_path(&mut self) -> &mut ShapePaintPath {
-        &mut self.local_path
+    pub fn local_clockwise_path(&mut self) -> Option<&mut ShapePaintPath> {
+        self.local_path()
     }
     pub fn path_builder(&mut self) -> &mut Component {
         self
@@ -3206,7 +3275,7 @@ impl LayoutComponent {
             if self.width_unit_value_override != -1 {
                 width_units = YGUnit::from(self.width_unit_value_override as u32);
                 width_scale = if width_units == YGUnit::Auto {
-                    if self.width_intrinsically_size_override {
+                    if self.has_layout_flag(LayoutComponentFlags::WidthIntrinsicallySizeOverride) {
                         LayoutScaleType::Hug
                     } else {
                         LayoutScaleType::Fill
@@ -3218,7 +3287,7 @@ impl LayoutComponent {
             if self.height_unit_value_override != -1 {
                 height_units = YGUnit::from(self.height_unit_value_override as u32);
                 height_scale = if height_units == YGUnit::Auto {
-                    if self.height_intrinsically_size_override {
+                    if self.has_layout_flag(LayoutComponentFlags::HeightIntrinsicallySizeOverride) {
                         LayoutScaleType::Hug
                     } else {
                         LayoutScaleType::Fill
@@ -3415,3 +3484,45 @@ impl std::ops::DerefMut for LayoutComponent {
     }
 }
 use std::{cell::RefCell, rc::Rc};
+
+#[cfg(test)]
+mod packed_layout_tests {
+    use super::*;
+
+    #[test]
+    fn plain_container_paths_and_proxy_are_lazy() {
+        let mut layout = LayoutComponent::default();
+        assert!(layout.render_paths.is_none());
+        assert!(layout.proxy.is_none());
+        assert!(layout.world_path().is_none());
+        assert!(layout.local_path().is_none());
+        assert!(layout.local_clockwise_path().is_none());
+        assert!(!layout.needs_drawable_proxy());
+        assert_eq!(
+            layout.layout_flags,
+            (1 << 0) | (1 << 5) | (1 << 6) | (1 << 9)
+        );
+        layout.mutable_render_paths();
+        assert!(layout.world_path().is_some());
+        assert!(layout.local_path().is_some());
+        assert!(layout.proxy.is_none());
+    }
+
+    #[test]
+    fn source_proxy_marks_survive_clone_without_render_allocations() {
+        for mark in [
+            LayoutComponent::mark_clip_may_be_dynamic,
+            LayoutComponent::mark_interaction_target,
+            LayoutComponent::mark_listener_target,
+        ] {
+            let mut source = LayoutComponent::default();
+            mark(&mut source);
+            source.set_layout_flag(LayoutComponentFlags::ComposeTransform, false);
+            let clone = source.clone_core();
+            assert!(clone.needs_drawable_proxy());
+            assert!(!clone.has_layout_flag(LayoutComponentFlags::ComposeTransform));
+            assert!(clone.render_paths.is_none());
+            assert!(clone.proxy.is_none());
+        }
+    }
+}

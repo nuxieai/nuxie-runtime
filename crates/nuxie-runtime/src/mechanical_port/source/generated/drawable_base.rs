@@ -10,8 +10,8 @@ pub trait DrawableBaseCallbacks:
 
 pub struct DrawableBase {
     pub base: Node,
-    blend_mode_value: u32,
-    drawable_flags: u32,
+    blend_mode_value: u8,
+    drawable_flags: u16,
 }
 
 impl Default for DrawableBase {
@@ -35,10 +35,10 @@ impl DrawableBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn blend_mode_value(&self) -> u32 {
+    pub fn blend_mode_value(&self) -> u8 {
         self.blend_mode_value
     }
-    pub fn set_blend_mode_value(&mut self, value: u32, callbacks: &mut impl DrawableBaseCallbacks) {
+    pub fn set_blend_mode_value(&mut self, value: u8, callbacks: &mut impl DrawableBaseCallbacks) {
         if !self.set_blend_mode_value_value(value) {
             return;
         }
@@ -49,17 +49,17 @@ impl DrawableBase {
         );
     }
 
-    pub(crate) fn set_blend_mode_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_blend_mode_value_value(&mut self, value: u8) -> bool {
         if self.blend_mode_value == value {
             return false;
         }
         self.blend_mode_value = value;
         true
     }
-    pub fn drawable_flags(&self) -> u32 {
+    pub fn drawable_flags(&self) -> u16 {
         self.drawable_flags
     }
-    pub fn set_drawable_flags(&mut self, value: u32, callbacks: &mut impl DrawableBaseCallbacks) {
+    pub fn set_drawable_flags(&mut self, value: u16, callbacks: &mut impl DrawableBaseCallbacks) {
         if !self.set_drawable_flags_value(value) {
             return;
         }
@@ -70,7 +70,7 @@ impl DrawableBase {
         );
     }
 
-    pub(crate) fn set_drawable_flags_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_drawable_flags_value(&mut self, value: u16) -> bool {
         if self.drawable_flags == value {
             return false;
         }
@@ -90,11 +90,11 @@ impl DrawableBase {
     ) -> bool {
         match property_key {
             Self::BLEND_MODE_VALUE_PROPERTY_KEY => {
-                self.blend_mode_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.blend_mode_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::DRAWABLE_FLAGS_PROPERTY_KEY => {
-                self.drawable_flags = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.drawable_flags = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u16;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

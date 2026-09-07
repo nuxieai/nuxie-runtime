@@ -107,18 +107,6 @@ pub enum RuntimeComparisonValue {
     ViewModel(CoreHandle),
 }
 
-const POINTER_HIT_LISTENER_TYPES: [ListenerType; 9] = [
-    ListenerType::Enter,
-    ListenerType::Exit,
-    ListenerType::Down,
-    ListenerType::Up,
-    ListenerType::Move,
-    ListenerType::Click,
-    ListenerType::DragStart,
-    ListenerType::DragEnd,
-    ListenerType::Drag,
-];
-
 #[derive(Clone, Debug, Default)]
 pub struct EventReport {
     pub event: Option<CoreHandle>,
@@ -511,7 +499,7 @@ impl StateMachineLayerInstance {
                 .with(|event| event.state_machine_fire_action_occurs())
                 .flatten()
                 .expect("an authored fire action must expose occurrence");
-            if scheduled.0 == occurrence as i32 {
+            if scheduled.0 == occurrence {
                 let performed = event
                     .with_mut(|event| event.state_machine_fire_action_perform(machine))
                     .unwrap_or(false);
@@ -527,7 +515,7 @@ impl StateMachineLayerInstance {
         actions: &[CoreHandle],
     ) {
         for action in actions {
-            let scheduled = crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance(occurrence as i32);
+            let scheduled = crate::mechanical_port::source::animation::state_machine_fire_action::StateMachineFireOccurance(occurrence);
             let matches = action
                 .with(|action| action.listener_action_matches(scheduled))
                 .flatten()
@@ -2698,7 +2686,7 @@ impl StateMachineInstance {
                     self.semantic_listener_groups.push(group);
                 }
             }
-            if self.listener_has_any(&listener, &POINTER_HIT_LISTENER_TYPES) {
+            if listener.with(super::state_machine_listener::has_pointer_listeners).unwrap_or(false) {
                 let group =
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 if let Some(target) = target.as_ref() {

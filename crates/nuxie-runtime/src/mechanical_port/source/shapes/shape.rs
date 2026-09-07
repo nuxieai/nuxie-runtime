@@ -426,9 +426,9 @@ impl Shape {
     }
 
     pub fn world_bounds(&mut self) -> Aabb {
-        if self.base.drawable_flags() & u32::from(DrawableFlag::WORLD_BOUNDS_CLEAN.0) == 0 {
+        if self.base.drawable_flags() & DrawableFlag::WORLD_BOUNDS_CLEAN.0 == 0 {
             self.set_drawable_flags(
-                self.base.drawable_flags() | u32::from(DrawableFlag::WORLD_BOUNDS_CLEAN.0),
+                self.base.drawable_flags() | DrawableFlag::WORLD_BOUNDS_CLEAN.0,
             );
             self.world_bounds = self.compute_world_bounds(None);
         }
@@ -436,7 +436,7 @@ impl Shape {
     }
     pub fn mark_bounds_dirty(&mut self) {
         self.set_drawable_flags(
-            self.base.drawable_flags() & !u32::from(DrawableFlag::WORLD_BOUNDS_CLEAN.0),
+            self.base.drawable_flags() & !DrawableFlag::WORLD_BOUNDS_CLEAN.0,
         );
         self.world_length = -1.0;
         if let Some(participant) = self.layout_participant() {
@@ -656,7 +656,7 @@ impl Shape {
             })
             .cloned()
     }
-    fn set_drawable_flags(&mut self, value: u32) {
+    fn set_drawable_flags(&mut self, value: u16) {
         if self.base.set_drawable_flags_value(value) {
             use crate::mechanical_port::source::generated::drawable_base::{
                 DrawableBase, DrawableBaseCallbacks,

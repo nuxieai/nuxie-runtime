@@ -12,7 +12,7 @@ use crate::mechanical_port::source::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct StateMachineFireOccurance(pub i32);
+pub struct StateMachineFireOccurance(pub u8);
 
 impl StateMachineFireOccurance {
     pub const AT_START: Self = Self(0);
@@ -30,7 +30,7 @@ pub trait StateMachineFireActionBehavior {
 
 impl StateMachineFireAction {
     pub fn occurs(&self) -> StateMachineFireOccurance {
-        StateMachineFireOccurance(self.base.occurs_value() as i32)
+        StateMachineFireOccurance(self.base.occurs_value())
     }
 
     pub fn import(&mut self, import_stack: &mut ImportStack) -> StatusCode {

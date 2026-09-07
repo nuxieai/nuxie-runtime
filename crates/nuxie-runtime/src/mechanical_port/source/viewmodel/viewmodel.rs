@@ -58,7 +58,7 @@ impl ViewModel {
                 property
                     .with(|property| {
                         property.as_view_model_property().is_some_and(|property| {
-                            property.base.symbol_type_value() == symbol_type as u32
+                            property.base.symbol_type_value() == symbol_type as u8
                         })
                     })
                     .unwrap_or(false)

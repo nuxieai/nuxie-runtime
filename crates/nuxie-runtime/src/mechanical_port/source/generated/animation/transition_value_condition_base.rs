@@ -10,7 +10,7 @@ pub trait TransitionValueConditionBaseCallbacks: crate::mechanical_port::source:
 
 pub struct TransitionValueConditionBase {
     pub base: TransitionInputCondition,
-    op_value: u32,
+    op_value: u8,
 }
 
 impl Default for TransitionValueConditionBase {
@@ -32,12 +32,12 @@ impl TransitionValueConditionBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn op_value(&self) -> u32 {
+    pub fn op_value(&self) -> u8 {
         self.op_value
     }
     pub fn set_op_value(
         &mut self,
-        value: u32,
+        value: u8,
         callbacks: &mut impl TransitionValueConditionBaseCallbacks,
     ) {
         if !self.set_op_value_value(value) {
@@ -50,7 +50,7 @@ impl TransitionValueConditionBase {
         );
     }
 
-    pub(crate) fn set_op_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_op_value_value(&mut self, value: u8) -> bool {
         if self.op_value == value {
             return false;
         }
@@ -73,7 +73,7 @@ impl TransitionValueConditionBase {
     ) -> bool {
         match property_key {
             Self::OP_VALUE_PROPERTY_KEY => {
-                self.op_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.op_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => self.base.deserialize(property_key, reader, callbacks),

@@ -682,6 +682,13 @@ impl ScrollConstraint {
 
     pub fn build_dependencies(&mut self) {
         self.base.build_dependencies();
+        if let Some(viewport) = self.viewport_handle() {
+            viewport.with_mut(|viewport| {
+                if let Some(layout) = viewport.as_layout_component_mut() {
+                    layout.mark_interaction_target();
+                }
+            });
+        }
         self.has_list_children = false;
         let children = self
             .with_content(|content| content.children().to_vec())

@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "ed92313af34f5a8928647d021ee497b6d95d949a"
+UPSTREAM_REF = "61f00897013eba8c57ee2002c33e6ee47d476eff"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,7 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "layout_order_pointer_test",
     "text_background_feather_test",
     "joystick_databound_keyframe_test",
     "text_fit_test",
@@ -2654,6 +2655,25 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "layout_order_pointer_test":
+                        # layout_test.cpp: fresh VMI, initial draw, then five
+                        # pointer clicks and .1-second advances before drawing.
+                        actions = (
+                            action("bind-fresh-view-model"),
+                            action("advance", target="state-machine", seconds=0.0),
+                            action("draw"),
+                        ) + tuple(
+                            step
+                            for point in (25.0, 60.0, 150.0, 300.0, 450.0)
+                            for step in (
+                                action("frame"),
+                                action("pointer-down", x=point, y=point, pointer_id=0),
+                                action("pointer-up", x=point, y=point, pointer_id=0),
+                                action("advance", target="state-machine", seconds=0.1),
+                                action("draw"),
+                            )
+                        )
+                        blocker = None
                     if silver_id == "text_background_feather_test":
                         actions = (
                             action("bind-authored-view-model-instance", instance_index=0),
@@ -2737,6 +2757,13 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         "Rust renderer stream is operation-exact with the pinned C++ silver "
                         "baseline after replaying the TEST_CASE actions."
                     )
+                    if silver_id == "layout_order_pointer_test":
+                        note = (
+                            "Exact comparison contract for the six-draw pointer-order "
+                            "producer at 61f00897: fresh VMI, initial draw at zero, then "
+                            "five clicks with .1-second advances. Enrollment alone is not "
+                            "a validation result."
+                        )
                     if silver_id == "ik_anim_test":
                         note = (
                             "Exact comparison contract for the literal six-draw IK producer: "
@@ -3090,7 +3117,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (262, 214, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (263, 215, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3103,8 +3130,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 261",
-        "expected_runtime = 213",
+        "expected_entries = 263",
+        "expected_runtime = 215",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

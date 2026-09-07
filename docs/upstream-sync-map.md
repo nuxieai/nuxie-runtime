@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `1cdecb8ed9ea8310400405d20d728d4cb9924602`
+- LAST_SYNCED_SHA: `73f94edc539c1fbc79827e5940814125035f8c77`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `73f94edc539c1fbc79827e5940814125035f8c77` | Uniform fit-font scaling for custom line height, letter spacing, and paragraph gaps; preserve negative line-height sentinel and invalidate shape for fitting/overflow changes. Port three metric tests and varying-size Silver producer. | — |
 | `1cdecb8ed9ea8310400405d20d728d4cb9924602` | Binding-map v3 baked layout IDs, context-owned layout interning, dynamic-offset cache exclusion, full required-count reporting and wide-group spill. Update shader admission and fixtures to v3; reject v2 like upstream. Editor producer followup: UNIV-2958. | — |
 | `9f1d2ed110a6eda762ecb4716ceb5fecf6772699` | Move shader-derived bind-group layout population/construction into shared ORE; route Lua and GM callers through that owner, preserving reflection metadata, visibility, dynamic UBO selection, native slots, and entry limits. | — |
 | `64186dc048c7b81aee83a5290a2bb520fdffaa1e` | Port Luau dependency-tree delta f4a8c732→fb6ff089 into retained luaur: unconditional GC/userdata fixes, bounded parser/bytecode-library corrections. Retain disabled experimental classes/JIT and Rust hash storage; no new scripting backend. See luau-fork.md for precise profile limits. | — |

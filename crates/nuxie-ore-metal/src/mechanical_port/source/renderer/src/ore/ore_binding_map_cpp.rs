@@ -28,7 +28,11 @@ mod binding_map_detail {
     //          1  [u8]  allocator_version   (= kAllocatorVersion)
     //          2  [u16] entry_size (LE)     (grows append-only)
     //          4  [u32] entry_count (LE)
-    //          8  [entry_count * entry_size] entries
+    //          8  [u16] group_size (LE)
+    //         10  [u16] group_count (LE)
+    //         12  [entry_count * entry_size] entries
+    //             [group_count * group_size] group layout ids
+    // Each group row is group:u8 followed by layout_id:u64 (LE).
     //
     // Each entry (entry_size = 14 bytes, no trailing alignment):
     //
@@ -52,8 +56,9 @@ mod binding_map_detail {
     // matters semantically (blob_version or allocator_version) is a loud
     // error.
 
-    pub(super) const kBlobHeaderSize: usize = 8;
+    pub(super) const kBlobHeaderSize: usize = 12;
     pub(super) const kEntryWireSize: u16 = 14;
+    pub(super) const kGroupWireSize: u16 = 9;
 
     pub(super) fn readU16LE(p: &[u8]) -> u16 {
         u16::from(p[0]) | (u16::from(p[1]) << 8)
@@ -61,6 +66,15 @@ mod binding_map_detail {
 
     pub(super) fn readU32LE(p: &[u8]) -> u32 {
         u32::from(p[0]) | (u32::from(p[1]) << 8) | (u32::from(p[2]) << 16) | (u32::from(p[3]) << 24)
+    }
+
+    pub(super) fn readU64LE(p: &[u8]) -> u64 {
+        u64::from_le_bytes(p[..8].try_into().unwrap())
+    }
+
+    #[cfg(feature = "with-rive-tools")]
+    pub(super) fn writeU64LE(p: &mut [u8], v: u64) {
+        p[..8].copy_from_slice(&v.to_le_bytes());
     }
 
     // #ifdef WITH_RIVE_TOOLS
@@ -95,6 +109,7 @@ impl BindingMap {
             return false;
         };
         out.m_entries.clear();
+        out.m_groupLayouts.clear();
         // #ifdef WITH_RIVE_TOOLS
         #[cfg(feature = "with-rive-tools")]
         {
@@ -120,15 +135,29 @@ impl BindingMap {
 
         let entrySize: u16 = binding_map_detail::readU16LE(&data[2..]);
         let entryCount: u32 = binding_map_detail::readU32LE(&data[4..]);
+        let groupSize = binding_map_detail::readU16LE(&data[8..]);
+        let groupCount = binding_map_detail::readU16LE(&data[10..]);
 
         // Reject writers that emit fewer fields than the reader needs.
         // Larger entry_size is fine — trailing unknown bytes are skipped.
         if entrySize < binding_map_detail::kEntryWireSize {
             return false;
         }
+        if groupCount != 0 && groupSize < binding_map_detail::kGroupWireSize {
+            return false;
+        }
 
-        let needed: usize =
-            binding_map_detail::kBlobHeaderSize + (entryCount as usize) * (entrySize as usize);
+        let needed = (entryCount as usize)
+            .checked_mul(entrySize as usize)
+            .and_then(|entries| {
+                (groupCount as usize)
+                    .checked_mul(groupSize as usize)
+                    .and_then(|groups| entries.checked_add(groups))
+            })
+            .and_then(|payload| binding_map_detail::kBlobHeaderSize.checked_add(payload));
+        let Some(needed) = needed else {
+            return false;
+        };
         if size < needed {
             return false;
         }
@@ -152,6 +181,14 @@ impl BindingMap {
             out.m_entries.push(e);
             p = &p[entrySize as usize..];
         }
+        out.m_groupLayouts.reserve(groupCount as usize);
+        for _ in 0..groupCount {
+            out.m_groupLayouts.push(GroupLayout {
+                group: p[0],
+                layoutId: binding_map_detail::readU64LE(&p[1..]),
+            });
+            p = &p[groupSize as usize..];
+        }
         // #ifdef WITH_RIVE_TOOLS
         // Flip the finalized flag so tooling-build lookups satisfy their assert.
         // The blob is already sorted by construction; no std::sort call.
@@ -166,16 +203,19 @@ impl BindingMap {
     // #ifdef WITH_RIVE_TOOLS
     #[cfg(feature = "with-rive-tools")]
     pub fn toBlob(&self) -> Vec<u8> {
-        let mut blob: Vec<u8> = vec![
-            0;
-            binding_map_detail::kBlobHeaderSize
-                + self.m_entries.len()
-                    * (binding_map_detail::kEntryWireSize as usize)
-        ];
+        let mut blob: Vec<u8> =
+            vec![
+                0;
+                binding_map_detail::kBlobHeaderSize
+                    + self.m_entries.len() * (binding_map_detail::kEntryWireSize as usize)
+                    + self.m_groupLayouts.len() * binding_map_detail::kGroupWireSize as usize
+            ];
         blob[0] = Self::kBlobVersion;
         blob[1] = Self::kAllocatorVersion;
         binding_map_detail::writeU16LE(&mut blob[2..], binding_map_detail::kEntryWireSize);
         binding_map_detail::writeU32LE(&mut blob[4..], self.m_entries.len() as u32);
+        binding_map_detail::writeU16LE(&mut blob[8..], binding_map_detail::kGroupWireSize);
+        binding_map_detail::writeU16LE(&mut blob[10..], self.m_groupLayouts.len() as u16);
 
         let mut p: &mut [u8] = &mut blob[binding_map_detail::kBlobHeaderSize..];
         for e in &self.m_entries {
@@ -192,7 +232,50 @@ impl BindingMap {
             p[13] = if e.textureMultisampled { 1u8 } else { 0u8 };
             p = &mut p[binding_map_detail::kEntryWireSize as usize..];
         }
+        for group in &self.m_groupLayouts {
+            p[0] = group.group;
+            binding_map_detail::writeU64LE(&mut p[1..], group.layoutId);
+            p = &mut p[binding_map_detail::kGroupWireSize as usize..];
+        }
         blob
+    }
+
+    /// Requires finalize first; dynamic offsets are not known by the toolchain.
+    #[cfg(feature = "with-rive-tools")]
+    pub fn computeLayoutIds(&mut self) {
+        const _: () = assert!(binding_map_detail::kEntryWireSize == 14);
+        assert!(
+            self.m_finalized,
+            "BindingMap::computeLayoutIds before finalize"
+        );
+        self.m_groupLayouts.clear();
+        let mix = |h: u64, b: u8| (h ^ u64::from(b)).wrapping_mul(0x100000001b3);
+        let mut i = 0;
+        while i < self.m_entries.len() {
+            let group = self.m_entries[i].group;
+            let mut h = mix(0xcbf29ce484222325, group);
+            let mut j = i;
+            while j < self.m_entries.len() && self.m_entries[j].group == group {
+                let e = &self.m_entries[j];
+                h = mix(h, e.binding);
+                h = mix(h, e.kind.0);
+                h = mix(h, e.stageMask);
+                for slot in e.backendSlot {
+                    for byte in slot.to_le_bytes() {
+                        h = mix(h, byte);
+                    }
+                }
+                h = mix(h, e.textureViewDim.0);
+                h = mix(h, e.textureSampleType.0);
+                h = mix(h, u8::from(e.textureMultisampled));
+                j += 1;
+            }
+            self.m_groupLayouts.push(GroupLayout {
+                group,
+                layoutId: if h == Self::kNoLayoutId { 1 } else { h },
+            });
+            i = j;
+        }
     }
 
     #[cfg(feature = "with-rive-tools")]

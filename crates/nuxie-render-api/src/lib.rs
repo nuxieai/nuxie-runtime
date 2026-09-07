@@ -1494,7 +1494,7 @@ pub struct GpuCanvasShaderEntry {
     pub physical_entry_point: String,
 }
 
-/// One resource kind from Rive's frozen `BindingMap` v2 wire schema.
+/// One resource kind from Rive's frozen `BindingMap` wire schema (unchanged in v3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum GpuCanvasShaderResourceKind {

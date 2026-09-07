@@ -277,7 +277,7 @@ fn put_string(bytes: &mut Vec<u8>, value: &str) {
 }
 
 fn webgpu_shader_payload(entries: &[(u8, &str, &str)], wgsl: &str) -> Vec<u8> {
-    const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
+    const EMPTY_BINDING_MAP: &[u8] = &[3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
     let mut source = vec![entries.len() as u8];
     for (stage, logical, physical) in entries {
         source.push(*stage);

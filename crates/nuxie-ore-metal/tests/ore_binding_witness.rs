@@ -64,11 +64,10 @@ fragment fs_mainOutput fs_main(
 }
 "#;
 
-// BindingMap v2, two 14-byte rows. Authored bindings 0 and 7 resolve to
+// BindingMap v3, two 14-byte rows, no baked ids. Authored bindings 0 and 7 resolve to
 // Metal buffer slots 0 and 1 for vertex, fragment, and compute stages.
-// SHA-256: 8a2aa27a73c79b03ee5868aa07b0a25294e281454326df657b0a7c6cf3f5ba22
-const BINDING_WITNESS_MAP: [u8; 36] = [
-    2, 1, 14, 0, 2, 0, 0, 0, // header
+const BINDING_WITNESS_MAP: [u8; 40] = [
+    3, 1, 14, 0, 2, 0, 0, 0, 9, 0, 0, 0, // header
     0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // group 0, binding 0 -> slot 0
     0, 7, 0, 7, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, // group 0, binding 7 -> slot 1
 ];
@@ -92,7 +91,7 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     );
     assert_eq!(
         format!("{:x}", Sha256::digest(BINDING_WITNESS_MAP)),
-        "8a2aa27a73c79b03ee5868aa07b0a25294e281454326df657b0a7c6cf3f5ba22"
+        "dffe52aab70d795f00c1219a79aa9c9f85f615f59ed72419e2aae0a04336e260"
     );
 
     let device = MTLCreateSystemDefaultDevice().expect("the macOS ORE witness requires Metal");

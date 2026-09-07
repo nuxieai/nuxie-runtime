@@ -67,7 +67,7 @@ impl RecordingGpu {
     }
     pub fn shader(&self, id: u64, shader: &GpuCanvasShader) -> AnyResourceHandle {
         let bytes = if shader.binding_map_bytes.is_empty() {
-            [2, 1, 14, 0, 0, 0, 0, 0].as_slice()
+            [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0].as_slice()
         } else {
             shader.binding_map_bytes.as_ref()
         };

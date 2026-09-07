@@ -2447,7 +2447,7 @@ mod tests {
             return;
         };
         context.base.setLastError("earlier context error");
-        let empty_binding_map = [2, 1, 14, 0, 0, 0, 0, 0];
+        let empty_binding_map = [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
         assert!(
             context
                 .makeShaderModule(&ShaderModuleDesc {
@@ -2531,7 +2531,7 @@ vertex float4 vs_main(uint vertex_id [[vertex_id]]) {
 }
 fragment float4 fs_main() { return float4(1.0); }
 "#;
-        let empty_binding_map = [2, 1, 14, 0, 0, 0, 0, 0];
+        let empty_binding_map = [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
         let module = context
             .makeShaderModule(&ShaderModuleDesc {
                 code: Some(source),
@@ -2579,9 +2579,9 @@ vertex float4 vs_main(uint vertex_id [[vertex_id]]) {
 }
 fragment float4 fs_main() { return float4(1.0); }
 "#;
-        let empty = [2, 1, 14, 0, 0, 0, 0, 0];
+        let empty = [3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
         let fragment_sampler = [
-            2, 1, 14, 0, 1, 0, 0, 0, // header
+            3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0, // v3 header
             0, 0, 5, 2, 0, 0xff, 0xff, 0, 0, 0xff, 0xff, 0, 0, 0,
         ];
         let vertex = context

@@ -34,7 +34,7 @@ fragment float4 fragment_main(
 "#;
 
 pub const BINDING_MAP: &[u8] = &[
-    2, 1, 14, 0, 2, 0, 0, 0, // v2 header, two 14-byte rows.
+    3, 1, 14, 0, 2, 0, 0, 0, 9, 0, 0, 0, // v3 header, two rows, no baked ids.
     0, 0, 0, 2, 0, 0xff, 0xff, 0, 0, 0xff, 0xff, 2, 1, 0, // group 0, binding 0.
     2, 3, 0, 2, 2, 0xff, 0xff, 1, 0, 0xff, 0xff, 2, 1, 0, // group 2, binding 3.
 ];

@@ -53,7 +53,7 @@ const SUPPLEMENTAL_REFLECTION_SECTION: u8 = 2;
 const SUPPLEMENTAL_REFLECTION_VERSION: u8 = 1;
 const MAX_RSTB_BYTES: usize = 4 * 1024 * 1024;
 const MAX_SHADER_MODULE_BYTES: usize = 1024 * 1024;
-const BINDING_MAP_BLOB_VERSION: u8 = 2;
+const BINDING_MAP_BLOB_VERSION: u8 = 3;
 const BINDING_MAP_ALLOCATOR_VERSION: u8 = 1;
 const BINDING_MAP_ENTRY_WIRE_SIZE: usize = 14;
 const BINDING_MAP_ABSENT: u16 = u16::MAX;
@@ -751,8 +751,14 @@ fn decode_binding_map(name: &str, bytes: &[u8]) -> Result<Vec<GpuCanvasShaderBin
     }
     let entry_count = usize::try_from(cursor.read_u32("binding-map entry count")?)
         .map_err(|_| Error::runtime("binding-map entry count is not addressable"))?;
+    let group_size = usize::from(cursor.read_u16("binding-map group size")?);
+    let group_count = usize::from(cursor.read_u16("binding-map group count")?);
+    if group_count != 0 && group_size < 9 {
+        return Err(Error::runtime("binding-map group rows are too small"));
+    }
     let required_bytes = entry_count
         .checked_mul(entry_size)
+        .and_then(|entries| group_count.checked_mul(group_size)?.checked_add(entries))
         .ok_or_else(|| Error::runtime("binding-map byte length overflow"))?;
     if cursor.remaining() < required_bytes {
         return Err(Error::runtime(format!(
@@ -1092,8 +1098,8 @@ mod tests {
     const IMPORTED_GPU_CANVAS_UBO_WGSL: &str =
         include_str!("../tests/fixtures/imported-gpu-canvas-ubo-triangle.wgsl");
     const IMPORTED_GPU_CANVAS_BINDING_MAP: &[u8] = &[
-        0x02, 0x01, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0xff, 0xff,
-        0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00,
+        0x03, 0x01, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 9, 0, 0, 0, 0x00, 0x00, 0x00, 0x02, 0x00,
+        0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00,
     ];
 
     fn put_u16(bytes: &mut Vec<u8>, value: u16) {
@@ -1199,9 +1205,11 @@ mod tests {
     }
 
     fn native_binding_map() -> Vec<u8> {
-        let mut map = vec![2, 1];
+        let mut map = vec![3, 1];
         put_u16(&mut map, 14);
         put_u32(&mut map, 3);
+        put_u16(&mut map, 9);
+        put_u16(&mut map, 0);
         // group, binding, kind, stages, space, vertex/fragment/compute slots,
         // texture dimension/sample type/multisampled.
         map.extend_from_slice(&[0, 0, 0, 3, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0, 0]);
@@ -1526,12 +1534,12 @@ mod tests {
     }
 
     #[test]
-    fn decodes_pinned_cpp_webgpu_whole_module_and_binding_map() {
+    fn decodes_cpp_webgpu_fixture_with_v3_binding_map_header() {
         let payload = imported_gpu_canvas_webgpu_payload();
         assert_eq!(
             format!("{:x}", Sha256::digest(&payload[1..])),
-            "546517d0dc9fbdaf9585f3daa6e440628e62292d7cb8aa7253fd3019aa35713d",
-            "fixture must remain byte-identical to pinned C++ f4bb3025e263",
+            "98eb42158743bf0cae64489a1c1362fe94c5046d07fc898956bd31a695b76db4",
+            "f4bb3025e263 source/reflection fixture with the 1cdecb8e v3 header; not an unchanged historical artifact",
         );
         let shader = decode_shader_asset("scene", &payload)
             .expect("WebGPU selects target-0 WGSL and mandatory target-16 binding map");
@@ -1887,10 +1895,11 @@ mod tests {
     fn malformed_binding_maps_fail_closed() {
         let source = imported_gpu_canvas_source_container();
         for malformed in [
-            vec![2, 1, 14, 0, 1, 0, 0, 0],
-            vec![3, 1, 14, 0, 0, 0, 0, 0],
-            vec![2, 1, 13, 0, 0, 0, 0, 0],
-            vec![2, 1, 14, 0, 1, 0, 0, 0],
+            vec![3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0],
+            vec![2, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0],
+            vec![3, 1, 13, 0, 0, 0, 0, 0, 9, 0, 0, 0],
+            vec![3, 1, 14, 0, 0, 0, 0, 0, 8, 0, 1, 0],
+            vec![3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 1, 0],
         ] {
             let payload = rstb_payload(&[
                 (WGSL_SOURCE_TARGET, source.clone()),
@@ -1911,9 +1920,28 @@ mod tests {
         ]);
 
         let shader = decode_shader_asset("scene", &payload)
-            .expect("BindingMap v2 is append-only like the pinned C++ decoder");
+            .expect("BindingMap v3 is append-only like the pinned C++ decoder");
         assert_eq!(shader.bindings.len(), 1);
         assert_eq!(shader.bindings[0].backend_slots, [None, Some(0), None]);
+    }
+
+    #[test]
+    fn binding_map_v3_group_table_is_validated_and_raw_bytes_retained() {
+        let mut map = IMPORTED_GPU_CANVAS_BINDING_MAP.to_vec();
+        map[8..10].copy_from_slice(&10u16.to_le_bytes());
+        map[10..12].copy_from_slice(&1u16.to_le_bytes());
+        map.push(0);
+        map.extend_from_slice(&0x123456789abcdef0u64.to_le_bytes());
+        map.push(0xa5); // append-only group extension
+        let payload = rstb_payload(&[
+            (WGSL_SOURCE_TARGET, imported_gpu_canvas_source_container()),
+            (WGSL_BINDING_MAP_TARGET, map.clone()),
+        ]);
+        let shader = decode_shader_asset("scene", &payload).unwrap();
+        assert_eq!(shader.bindings.len(), 1);
+        assert_eq!(shader.binding_map_bytes.as_ref(), map.as_slice());
+        map.pop();
+        assert!(decode_binding_map("truncated group", &map).is_err());
     }
 
     #[test]
@@ -1964,9 +1992,9 @@ mod tests {
             "#include <metal_stdlib>\nusing namespace metal;",
         );
         let original = native_binding_map();
-        let mut extended = original[..8].to_vec();
+        let mut extended = original[..12].to_vec();
         extended[2..4].copy_from_slice(&15u16.to_le_bytes());
-        for (index, row) in original[8..].chunks_exact(14).enumerate() {
+        for (index, row) in original[12..].chunks_exact(14).enumerate() {
             extended.extend_from_slice(row);
             extended.push(0xa0 + index as u8);
         }

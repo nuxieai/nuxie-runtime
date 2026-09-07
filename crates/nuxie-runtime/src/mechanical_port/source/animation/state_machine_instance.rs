@@ -2084,6 +2084,9 @@ impl RuntimeStateMachineInstanceHandle {
             if artboard.update_pass(true) {
                 keep_going = true;
             }
+            let (manager, root) =
+                self.with_instance(|machine| (machine.focus_manager(), machine.root_artboard()));
+            manager.with_focus_manager_mut(|manager| manager.process_pending_focus_requests(root));
             if self.with_instance_mut(StateMachineInstance::try_change_state) {
                 self.with_instance_mut(|machine| machine.advance(0.0, false));
                 keep_going = true;
@@ -2102,6 +2105,9 @@ impl RuntimeStateMachineInstanceHandle {
                 break;
             }
         }
+        let (manager, root) =
+            self.with_instance(|machine| (machine.focus_manager(), machine.root_artboard()));
+        manager.with_focus_manager_mut(|manager| manager.finish_pending_focus_requests(root));
         if advance_view_models {
             Artboard::advance_scripted_view_models_handle(&artboard.core_handle());
         }
@@ -2317,9 +2323,7 @@ impl GamepadDispatcher for StateMachineGamepadDispatcher {
                 }),
         };
         let mut dispatched = None;
-        self.focus_manager.with_focus_manager_mut(|manager| {
-            manager.gamepad_dispatch(&invocation, Some(&mut dispatched));
-        });
+        self.focus_manager.gamepad_dispatch(&invocation, Some(&mut dispatched));
         self.machine
             .broadcast_gamepad_to_scripted_drawables(&invocation, dispatched.as_ref());
     }
@@ -2686,7 +2690,10 @@ impl StateMachineInstance {
                     self.semantic_listener_groups.push(group);
                 }
             }
-            if listener.with(super::state_machine_listener::has_pointer_listeners).unwrap_or(false) {
+            if listener
+                .with(super::state_machine_listener::has_pointer_listeners)
+                .unwrap_or(false)
+            {
                 let group =
                     RuntimeListenerGroupHandle::new(Box::new(ListenerGroup::new(listener.clone())));
                 if let Some(target) = target.as_ref() {
@@ -3323,6 +3330,52 @@ impl StateMachineInstance {
         } else {
             manager.with_focus_manager_mut(FocusManager::clear_focus);
         }
+    }
+
+    fn root_artboard(&self) -> Option<CoreHandle> {
+        let mut artboard = self
+            .artboard_instance
+            .upgrade()
+            .map(|artboard| artboard.core_handle());
+        while let Some(current) = artboard.as_ref() {
+            let parent = current
+                .with_downcast::<Artboard, _>(Artboard::host)
+                .flatten()
+                .and_then(|host| {
+                    host.with(|host| host.as_artboard_host()?.parent_artboard())
+                        .flatten()
+                });
+            let Some(parent) = parent else {
+                break;
+            };
+            artboard = Some(parent);
+        }
+        artboard
+    }
+
+    pub fn queue_focus_target(&mut self, focus_data: Option<CoreHandle>) {
+        let Some(focus_data) = focus_data else {
+            return;
+        };
+        let node = focus_data.with_downcast_mut::<FocusData, _>(FocusData::focus_node);
+        let root = self.root_artboard();
+        self.focus_manager()
+            .with_focus_manager_mut(|manager| manager.request_focus(node, root));
+        self.needs_advance.set(true);
+    }
+
+    pub fn queue_clear_focus(&mut self) {
+        let root = self.root_artboard();
+        self.focus_manager()
+            .with_focus_manager_mut(|manager| manager.request_clear_focus(root));
+        self.needs_advance.set(true);
+    }
+
+    pub fn queue_focus_traversal(&mut self, traversal_kind: u32) {
+        let root = self.root_artboard();
+        self.focus_manager()
+            .with_focus_manager_mut(|manager| manager.request_traversal(traversal_kind, root));
+        self.needs_advance.set(true);
     }
 
     pub fn focus_state(&self) -> FocusState {
@@ -4454,7 +4507,6 @@ impl StateMachineInstance {
             .and_then(|properties| properties.get(&property_key))
             .cloned()
     }
-
 
     pub fn scripted_object(&self, source: &CoreHandle) -> Option<CoreHandle> {
         self.scripted_objects_map.get(source).cloned()

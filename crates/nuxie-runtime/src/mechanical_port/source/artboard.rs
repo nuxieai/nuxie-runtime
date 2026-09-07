@@ -3032,12 +3032,16 @@ impl Artboard {
                 let node = node.borrow();
                 match node.manager() {
                     Some(owner) => owner.ptr_eq(&manager),
-                    None => node.parent().is_some(),
+                    None => false,
                 }
             };
             if should_remove {
                 // removeChild may synchronously blur this very FocusData.
                 manager.with_focus_manager_mut(|manager| manager.remove_child(&node));
+            } else if node.borrow().manager().is_none() && node.borrow().parent().is_some() {
+                crate::mechanical_port::source::input::focus_node::FocusNode::remove_from_parent(
+                    &node,
+                );
             }
         }
         for nested_host in nested_artboards {

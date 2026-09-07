@@ -89,6 +89,42 @@ impl RuntimeFocusManagerHandle {
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
+
+    pub fn gamepad_dispatch(
+        &self,
+        invocation: &ListenerInvocation,
+        output: Option<&mut Option<CoreHandle>>,
+    ) -> bool {
+        let node = self.with_focus_manager_mut(|manager| {
+            manager.drop_focus_if_focus_target_hidden();
+            manager.primary_focus.clone()
+        });
+        dispatch_gamepad_from_node(node, invocation, output)
+    }
+}
+
+fn dispatch_gamepad_from_node(
+    mut node: Option<FocusNodeRef>,
+    invocation: &ListenerInvocation,
+    mut output: Option<&mut Option<CoreHandle>>,
+) -> bool {
+    while let Some(current) = node {
+        let focusable = current.borrow().focusable();
+        if let Some(focusable) = focusable {
+            let owner = focusable.borrow().gamepad_dispatch_owner();
+            let handled = if let Some(owner) = owner {
+                crate::mechanical_port::source::focus_data::FocusData::gamepad_dispatch_occurrence(
+                    &owner, invocation, output.as_deref_mut(),
+                )
+            } else {
+                focusable.borrow_mut().gamepad_dispatch(invocation, output.as_deref_mut())
+            };
+            if handled { return true; }
+        }
+        // A synchronous callback may reparent this node; read the live parent.
+        node = current.borrow().parent();
+    }
+    false
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +133,23 @@ pub enum Direction {
     Right,
     Up,
     Down,
+}
+
+#[derive(Clone, Copy)]
+#[repr(u8)]
+pub enum PendingFocusRequestKind {
+    Target,
+    Clear,
+    Traverse,
+}
+
+pub struct PendingFocusRequest {
+    pub kind: PendingFocusRequestKind,
+    pub node: Option<FocusNodeRef>,
+    pub traversal_kind: u32,
+    // CoreHandle carries weak arena/slot identity, matching the unowned
+    // upstream Artboard pointer without retaining the independent root.
+    pub root_artboard: Option<CoreHandle>,
 }
 
 #[cfg(feature = "tools")]
@@ -109,6 +162,7 @@ pub struct FocusManager {
     runtime_self: RuntimeFocusManagerWeakHandle,
     primary_focus: Option<FocusNodeRef>,
     root_nodes: Rc<RefCell<Vec<FocusNodeRef>>>,
+    pending_focus_requests: Vec<PendingFocusRequest>,
     has_focusable_content: bool,
     // The same canonical flag is reachable by attached nodes even while a
     // manager method is mutably borrowed; invalidation has no user callbacks.
@@ -125,6 +179,7 @@ impl Default for FocusManager {
             runtime_self: RuntimeFocusManagerWeakHandle::default(),
             primary_focus: None,
             root_nodes: Rc::new(RefCell::new(Vec::new())),
+            pending_focus_requests: Vec::new(),
             has_focusable_content: false,
             focusable_content_dirty: Rc::new(Cell::new(true)),
             #[cfg(feature = "tools")]
@@ -453,6 +508,127 @@ impl FocusManager {
     pub fn clear_focus(&mut self) {
         if let Some(old_focus) = self.primary_focus.take() {
             self.notify_focus_change(Some(&old_focus), None);
+        }
+    }
+
+    pub const MAX_PENDING_FOCUS_REQUESTS: usize = 64;
+
+    fn enqueue_focus_request(&mut self, request: PendingFocusRequest) {
+        if self.pending_focus_requests.len() >= Self::MAX_PENDING_FOCUS_REQUESTS {
+            self.pending_focus_requests.remove(0);
+        }
+        self.pending_focus_requests.push(request);
+    }
+
+    fn has_pending_focus_requests(&self, root_artboard: &Option<CoreHandle>) -> bool {
+        self.pending_focus_requests
+            .iter()
+            .any(|request| &request.root_artboard == root_artboard)
+    }
+
+    fn apply_focus_traversal(&mut self, traversal_kind: u32) -> bool {
+        match traversal_kind {
+            1 => self.focus_previous(),
+            2 => self.focus_up(),
+            3 => self.focus_down(),
+            4 => self.focus_left(),
+            5 => self.focus_right(),
+            _ => self.focus_next(),
+        }
+    }
+
+    pub fn request_focus(&mut self, node: Option<FocusNodeRef>, root_artboard: Option<CoreHandle>) {
+        let Some(node) = node else {
+            return;
+        };
+        if !self.has_pending_focus_requests(&root_artboard) {
+            self.set_focus(node.clone());
+            if self.has_focus(&node) {
+                return;
+            }
+        }
+        self.enqueue_focus_request(PendingFocusRequest {
+            kind: PendingFocusRequestKind::Target,
+            node: Some(node),
+            traversal_kind: 0,
+            root_artboard,
+        });
+    }
+
+    pub fn request_clear_focus(&mut self, root_artboard: Option<CoreHandle>) {
+        if !self.has_pending_focus_requests(&root_artboard) {
+            self.clear_focus();
+            return;
+        }
+        self.enqueue_focus_request(PendingFocusRequest {
+            kind: PendingFocusRequestKind::Clear,
+            node: None,
+            traversal_kind: 0,
+            root_artboard,
+        });
+    }
+
+    pub fn request_traversal(&mut self, traversal_kind: u32, root_artboard: Option<CoreHandle>) {
+        if !self.has_pending_focus_requests(&root_artboard)
+            && self.apply_focus_traversal(traversal_kind)
+        {
+            return;
+        }
+        self.enqueue_focus_request(PendingFocusRequest {
+            kind: PendingFocusRequestKind::Traverse,
+            node: None,
+            traversal_kind,
+            root_artboard,
+        });
+    }
+
+    fn apply_pending_focus_request(&mut self, request: &PendingFocusRequest) -> bool {
+        match request.kind {
+            PendingFocusRequestKind::Target => {
+                let Some(node) = &request.node else {
+                    return true;
+                };
+                if node.borrow().focusable().is_none() {
+                    return true;
+                }
+                self.set_focus(node.clone());
+                self.has_focus(node)
+            }
+            PendingFocusRequestKind::Clear => {
+                self.clear_focus();
+                true
+            }
+            PendingFocusRequestKind::Traverse => self.apply_focus_traversal(request.traversal_kind),
+        }
+    }
+
+    pub fn process_pending_focus_requests(&mut self, root_artboard: Option<CoreHandle>) {
+        self.drain_pending_focus_requests(root_artboard, true, false);
+    }
+    pub fn process_all_pending_focus_requests(&mut self) {
+        self.drain_pending_focus_requests(None, true, true);
+    }
+    pub fn finish_pending_focus_requests(&mut self, root_artboard: Option<CoreHandle>) {
+        self.drain_pending_focus_requests(root_artboard, false, false);
+    }
+    pub fn finish_all_pending_focus_requests(&mut self) {
+        self.drain_pending_focus_requests(None, false, true);
+    }
+    fn drain_pending_focus_requests(
+        &mut self,
+        root_artboard: Option<CoreHandle>,
+        keep_unapplied: bool,
+        all_roots: bool,
+    ) {
+        let requests = std::mem::take(&mut self.pending_focus_requests);
+        for request in requests {
+            if !all_roots && request.root_artboard != root_artboard {
+                self.enqueue_focus_request(request);
+                continue;
+            }
+            if !self.apply_pending_focus_request(&request) && keep_unapplied {
+                self.enqueue_focus_request(request);
+            }
         }
     }
 
@@ -914,25 +1090,7 @@ impl FocusManager {
         out_dispatched_scripted_drawable: Option<&mut Option<CoreHandle>>,
     ) -> bool {
         self.drop_focus_if_focus_target_hidden();
-        let mut node = self.primary_focus.clone();
-        let mut out_dispatched_scripted_drawable = out_dispatched_scripted_drawable;
-        while let Some(current) = node {
-            if current
-                .borrow()
-                .focusable
-                .as_ref()
-                .is_some_and(|focusable| {
-                    focusable.borrow_mut().gamepad_dispatch(
-                        invocation,
-                        out_dispatched_scripted_drawable.as_deref_mut(),
-                    )
-                })
-            {
-                return true;
-            }
-            node = current.borrow().parent();
-        }
-        false
+        dispatch_gamepad_from_node(self.primary_focus.clone(), invocation, out_dispatched_scripted_drawable)
     }
 }
 
@@ -984,5 +1142,72 @@ mod selected_text_tests {
         root.borrow_mut().clear_focusable();
         leaf.borrow_mut().clear_focusable();
         assert_eq!(manager.selected_text(), "");
+    }
+
+    #[test]
+    fn pending_focus_cap_drops_oldest_and_finish_is_root_scoped() {
+        let arena = crate::mechanical_port::source::core::CoreArena::default();
+        let a = Some(arena.insert(Artboard::default()));
+        let b = Some(arena.insert(Artboard::default()));
+        let mut manager = FocusManager::new();
+        for traversal_kind in 0..65 {
+            manager.enqueue_focus_request(PendingFocusRequest {
+                kind: PendingFocusRequestKind::Traverse,
+                node: None,
+                traversal_kind,
+                root_artboard: a.clone(),
+            });
+        }
+        assert_eq!(manager.pending_focus_requests.len(), 64);
+        assert_eq!(manager.pending_focus_requests[0].traversal_kind, 1);
+        manager.finish_pending_focus_requests(b.clone());
+        assert_eq!(manager.pending_focus_requests.len(), 64);
+        manager.process_pending_focus_requests(a.clone());
+        assert_eq!(manager.pending_focus_requests.len(), 64);
+        manager.finish_pending_focus_requests(a);
+        assert!(manager.pending_focus_requests.is_empty());
+        manager.request_traversal(0, b);
+        manager.finish_all_pending_focus_requests();
+        assert!(manager.pending_focus_requests.is_empty());
+    }
+
+    #[test]
+    fn pending_focus_preserves_root_order_and_retries_after_eligibility_update() {
+        let arena = crate::mechanical_port::source::core::CoreArena::default();
+        let a = Some(arena.insert(Artboard::default()));
+        let b = Some(arena.insert(Artboard::default()));
+        let blocked = FocusNode::new(Some(Rc::new(RefCell::new(Selection("blocked")))));
+        blocked.borrow_mut().set_can_focus(false);
+        let eligible = FocusNode::new(Some(Rc::new(RefCell::new(Selection("ready")))));
+        let mut manager = FocusManager::new();
+        manager.request_focus(Some(blocked.clone()), a.clone());
+        manager.request_focus(Some(eligible.clone()), a.clone());
+        assert!(manager.primary_focus().is_none());
+        manager.request_focus(Some(eligible.clone()), b.clone());
+        assert!(manager.has_focus(&eligible));
+        manager.process_pending_focus_requests(b);
+        assert_eq!(manager.pending_focus_requests.len(), 2);
+        blocked.borrow_mut().set_can_focus(true);
+        manager.process_pending_focus_requests(a.clone());
+        assert!(manager.pending_focus_requests.is_empty());
+        assert!(manager.has_focus(&eligible));
+        manager.request_focus(Some(blocked.clone()), a.clone());
+        assert!(manager.has_focus(&blocked));
+        blocked.borrow_mut().set_can_focus(false);
+        manager.request_focus(Some(blocked.clone()), a.clone());
+        // Existing focus counts as applied, even if the focused target became
+        // ineligible, matching requestFocus's hasFocus check after setFocus.
+        assert!(manager.pending_focus_requests.is_empty());
+        manager.clear_focus();
+        manager.request_focus(Some(blocked.clone()), a.clone());
+        manager.request_clear_focus(a.clone());
+        blocked.borrow_mut().set_can_focus(true);
+        manager.process_all_pending_focus_requests();
+        assert!(manager.primary_focus().is_none());
+        blocked.borrow_mut().set_can_focus(false);
+        manager.request_focus(Some(blocked.clone()), a.clone());
+        blocked.borrow_mut().clear_focusable();
+        manager.process_pending_focus_requests(a);
+        assert!(manager.pending_focus_requests.is_empty());
     }
 }

@@ -336,6 +336,10 @@ impl ComponentBaseCallbacks for FocusData {
 }
 
 impl Focusable for FocusDataFocusable {
+    fn gamepad_dispatch_owner(&self) -> Option<CoreHandle> {
+        self.owner.clone()
+    }
+
     fn selected_text(&self) -> String {
         self.owner
             .as_ref()

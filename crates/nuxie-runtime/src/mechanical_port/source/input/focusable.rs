@@ -314,6 +314,10 @@ pub trait Focusable {
     fn selected_text(&self) -> String {
         String::new()
     }
+    /// Native occurrence used to release this wrapper before synchronous actions.
+    fn gamepad_dispatch_owner(&self) -> Option<CoreHandle> {
+        None
+    }
     fn gamepad_dispatch(
         &mut self,
         _invocation: &ListenerInvocation,

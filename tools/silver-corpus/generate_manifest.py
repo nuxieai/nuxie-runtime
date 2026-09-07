@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "a343300260bd18776f3a556d67a9322b01d9d70f"
+UPSTREAM_REF = "9cb2205f06aa5e599554e7382889f4cf5bec382e"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -189,6 +189,8 @@ CLASSIFIED_RUNTIME_BLOCKERS = {
     ),
 }
 EXACT = (
+    "gamepad_inputs_test",
+    "gamepad_inputs_test-collapsing",
     "layout_order_pointer_test",
     "text_background_feather_test",
     "joystick_databound_keyframe_test",
@@ -2655,6 +2657,51 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             )
                         )
                         blocker = None
+                    if silver_id == "gamepad_inputs_test":
+                        # focus_test.cpp at 9cb2205f: four draws, announcing
+                        # device 0 before right-shoulder press/release batches.
+                        actions = (
+                            action("bind-fresh-view-model"),
+                            action("advance", target="state-machine", seconds=0.0),
+                            action("draw"),
+                            action("frame"),
+                            action("advance", target="state-machine", seconds=0.016),
+                            action("draw"),
+                            action("gamepad-batch", records=[{
+                                "kind": "connected", "device_id": 0,
+                                "mapping": "standard", "button_count": 17, "axis_count": 4,
+                            }]),
+                        ) + tuple(
+                            step
+                            for value in (1.0, 0.0)
+                            for step in (
+                                action("frame"),
+                                action("gamepad-batch", records=[{
+                                    "kind": "update", "device_id": 0,
+                                    "input": "button", "index": 5, "value": value,
+                                }]),
+                                action("advance", target="state-machine", seconds=0.016),
+                                action("draw"),
+                            )
+                        )
+                        blocker = None
+                    if silver_id == "gamepad_inputs_test-collapsing":
+                        actions = (
+                            action("bind-default-view-model"),
+                            action("advance", target="state-machine", seconds=0.0),
+                            action("draw"),
+                        ) + tuple(
+                            step
+                            for _ in range(2)
+                            for step in (
+                                action("frame"),
+                                action("pointer-down", x=475.0, y=475.0, pointer_id=0),
+                                action("pointer-up", x=475.0, y=475.0, pointer_id=0),
+                                action("advance", target="state-machine", seconds=0.016),
+                                action("draw"),
+                            )
+                        )
+                        blocker = None
                     if silver_id == "layout_order_pointer_test":
                         # layout_test.cpp: fresh VMI, initial draw, then five
                         # pointer clicks and .1-second advances before drawing.
@@ -2757,6 +2804,11 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                         "Rust renderer stream is operation-exact with the pinned C++ silver "
                         "baseline after replaying the TEST_CASE actions."
                     )
+                    if silver_id in ("gamepad_inputs_test", "gamepad_inputs_test-collapsing"):
+                        note = (
+                            "Exact comparison contract for the literal gamepad/focus "
+                            "producer at 9cb2205f. Enrollment alone is not a validation result."
+                        )
                     if silver_id == "layout_order_pointer_test":
                         note = (
                             "Exact comparison contract for the six-draw pointer-order "
@@ -3117,7 +3169,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (263, 215, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (265, 217, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3130,8 +3182,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 263",
-        "expected_runtime = 215",
+        "expected_entries = 265",
+        "expected_runtime = 217",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

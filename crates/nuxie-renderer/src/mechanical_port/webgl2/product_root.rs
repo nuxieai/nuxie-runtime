@@ -211,6 +211,10 @@ impl ExactSourceBackend for WebGl2ProductBackend {
                 "exact WebGL2 context already has an active frame".into(),
             ));
         }
+        // finish_frame_inner releases the shared context's texture bindings.
+        // Restore the persistent tessellation/gradient/feather textures even
+        // when this frame reuses their allocations instead of resizing them.
+        self.implementation_mut().invalidateGLState();
         let mut descriptor = FrameDescriptor {
             renderTargetWidth: self.width,
             renderTargetHeight: self.height,

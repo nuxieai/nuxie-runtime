@@ -4709,7 +4709,7 @@ pub mod source_execution {
             self.replace_buffer_ring(metal, name, capacity);
         }
 
-        pub fn make_render_canvas<E: MetalExecution>(
+        pub fn make_canvas_backing<E: MetalExecution>(
             &mut self,
             metal: &mut E,
             width: u32,
@@ -4760,9 +4760,8 @@ pub mod source_execution {
                 texture,
             );
             let image = TextureMetal::from_native(image_texture, width, height);
-            // Carry the source descriptor through the outer RenderCanvas
-            // construction. The mechanical adapter releases it only after
-            // RenderCanvas::new has consumed both complete source owners.
+            // Carry the source descriptor through setBacking. The mechanical
+            // adapter releases it after both complete owners are installed.
             Some((image, target, texture_descriptor))
         }
 
@@ -11527,7 +11526,7 @@ mod source_owner_regressions {
                 let occurrence = metal.selector_occurrence_count(selector) + 1;
                 metal.fail_exact = Some((selector, occurrence));
             }
-            let result = context.make_render_canvas(&mut metal, 4, 4);
+            let result = context.make_canvas_backing(&mut metal, 4, 4);
             if let Some((image, target, descriptor)) = result {
                 // This is the exact outer adapter boundary after image,
                 // target, and RenderCanvas construction. The production
@@ -12350,7 +12349,7 @@ mod source_owner_regressions {
             );
             #[cfg(feature = "native-ore-metal-experimental")]
             if let Some((_image, _target, descriptor)) =
-                context.make_render_canvas(&mut metal, 4, 4)
+                context.make_canvas_backing(&mut metal, 4, 4)
             {
                 metal.owner_event("RC-TD-CANVAS", OwnerEventPhase::LastUse, descriptor);
                 metal.retire_handle(descriptor);

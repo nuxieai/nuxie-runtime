@@ -2557,18 +2557,16 @@ pub trait RenderCanvasFrame: Renderer {
 /// Direct public-seam counterpart of pinned `gpu::RenderCanvas`: the image and
 /// render target share one backend texture, while the backend keeps both
 /// concrete owners opaque.
-pub trait RenderCanvas {
+pub trait RenderCanvas: std::any::Any {
     fn width(&self) -> u32;
     fn height(&self) -> u32;
+    fn is_backed(&self) -> bool;
     fn render_image(&self) -> Rc<dyn RenderImage>;
     /// Source native-canvas projection; deferred canvases instead route the
     /// typed retained owner through their session's canvas-ID provider.
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         self.render_image().ore_texture_info()
     }
-    /// Back a canvas whose allocation was deferred, immediately before its
-    /// first content frame. Backends without deferred allocation no-op.
-    fn ensure_backing(&mut self) {}
     fn begin_frame(
         &mut self,
         clear_color: ColorInt,
@@ -2756,15 +2754,20 @@ pub trait Factory {
         Err(RenderCanvasError::unsupported())
     }
 
-    /// Source RenderContextImpl default: only GL distinguishes allocation
-    /// on the recording thread from allocation on the replay context.
+    /// Render-context adapters return a device-free source canvas shell.
+    /// A generic Factory is not a RenderContext and has no canvas constructor;
+    /// never substitute eager make_render_canvas allocation here.
     fn make_deferred_render_canvas(
         &mut self,
-        width: u32,
-        height: u32,
+        _width: u32,
+        _height: u32,
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
-        self.make_render_canvas(width, height)
+        Err(RenderCanvasError::unsupported())
     }
+
+    /// Install a shell canvas's backing on this replay device, once. A
+    /// factory without canvas support leaves the shell unbacked.
+    fn ensure_canvas_backing(&mut self, _canvas: &RenderCanvasHandle) {}
 
     /// Validate the exact renderer-owned image occurrence used by pinned
     /// `Image:view`. Every authored GPU-texture binding made from the cached
@@ -2917,6 +2920,9 @@ impl Factory for PersistentFactoryContext {
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         self.with_factory(|factory| factory.make_deferred_render_canvas(width, height))
     }
+    fn ensure_canvas_backing(&mut self, canvas: &RenderCanvasHandle) {
+        self.with_factory(|factory| factory.ensure_canvas_backing(canvas));
+    }
     fn make_render_buffer(
         &mut self,
         kind: RenderBufferType,
@@ -3056,6 +3062,9 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
         height: u32,
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         self.borrow_mut().make_deferred_render_canvas(width, height)
+    }
+    fn ensure_canvas_backing(&mut self, canvas: &RenderCanvasHandle) {
+        self.borrow_mut().ensure_canvas_backing(canvas);
     }
 
     fn make_render_buffer(

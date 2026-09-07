@@ -388,16 +388,18 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
         unsafe { rcp::from_ptr(Box::into_raw(Box::new(native)).cast::<Texture>()) }
     }
 
-    fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        let canvas = unsafe { &mut *canvas };
+        if canvas.isBacked() { return; }
+        let (width, height) = (canvas.width(), canvas.height());
         let Some((texture_metal, target_metal, texture_descriptor)) = self
             .metal
-            .make_render_canvas(&mut self.execution, width, height)
+            .make_canvas_backing(&mut self.execution, width, height)
         else {
-            return rcp::new();
+            return;
         };
         let texture =
             unsafe { rcp::from_ptr(Box::into_raw(Box::new(texture_metal)).cast::<Texture>()) };
-        let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
 
         let target_owner = MechanicalRenderTargetOwner::new(
             target_metal,
@@ -407,9 +409,9 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
             &mut self.execution,
         );
         let target = unsafe { rcp::from_ptr(Box::into_raw(target_owner).cast::<RenderTarget>()) };
-        let canvas = make_rcp(|| unsafe { RenderCanvas::new(image, target) });
-        // The canonical source descriptor remains live through the complete
-        // outer RenderCanvas construction, then its original +1 is released.
+        canvas.setBacking(texture, target);
+        // The canonical source descriptor remains live through setBacking,
+        // then its original +1 is released.
         self.execution.owner_event(
             "RC-TD-CANVAS",
             crate::mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm::source_execution::OwnerEventPhase::LastUse,
@@ -421,7 +423,6 @@ impl RenderContextImplContract for MechanicalRenderContextImpl {
             crate::mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm::source_execution::OwnerEventPhase::Release,
             texture_descriptor,
         );
-        canvas
     }
 
     #[cfg(feature = "native-ore-metal-experimental")]

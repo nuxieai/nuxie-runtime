@@ -339,11 +339,16 @@ pub trait RenderContextHelperBackendContract:
         generate_mips: bool,
     ) -> rcp<Texture>;
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        let _ = (width, height);
-        rcp::new()
+        let canvas = self.makeDeferredRenderCanvas(width, height);
+        unsafe { self.ensureCanvasBacking(canvas.get()) };
+        if unsafe { (&*canvas.get()).isBacked() } {
+            canvas
+        } else {
+            rcp::new()
+        }
     }
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        self.makeRenderCanvas(width, height)
+        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| RenderCanvas::new(width, height))
     }
     unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
         let _ = canvas;

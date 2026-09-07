@@ -2,7 +2,7 @@
 use super::{
     canvas_schedule::schedule_canvases,
     deferred_session::{DeferredSegment, DeferredSession, SegmentTarget},
-    gpu_census::{take_gpu_census, GpuCensus},
+    gpu_census::{GpuCensus, take_gpu_census},
     render_handle::INVALID_RENDER_HANDLE,
     render_replay::*,
 };
@@ -16,6 +16,11 @@ pub trait DeferredFrameSink {
     // A retained factory projection makes the source's factory and frame
     // operations independently borrowable while a canvas hook is executing.
     fn factory(&mut self) -> PersistentFactoryContext;
+    /// Device on which replay occurs, distinct from the recording factory.
+    /// Without one, unbacked canvas content remains unbacked and is dropped.
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        None
+    }
     fn ore_context(&mut self) -> Option<OreContextHandle> {
         self.factory().with_factory(|factory| factory.ore())
     }
@@ -165,13 +170,8 @@ impl DeferredReplayer {
                 if id == open.0 {
                     return open.1.clone();
                 }
-                open.1 = content_canvas.borrow_mut()(id).and_then(|canvas| {
-                    // A deferred canvas has no backing until the replaying
-                    // context gives it one, and this is the first operation
-                    // that renders into it.
-                    canvas.borrow_mut().ensure_backing();
-                    sink.borrow_mut().begin_canvas_content(canvas, clear_color)
-                });
+                open.1 = resolve_canvas(id, &content_canvas, &sink)
+                    .and_then(|canvas| sink.borrow_mut().begin_canvas_content(canvas, clear_color));
                 open.0 = id;
                 open.1.clone()
             })),
@@ -285,6 +285,22 @@ impl DeferredReplayer {
         );
     }
 }
+fn resolve_canvas(
+    id: u32,
+    content_canvas: &RefCell<&mut dyn FnMut(u32) -> Option<RenderCanvasHandle>>,
+    sink: &RefCell<&mut dyn DeferredFrameSink>,
+) -> Option<RenderCanvasHandle> {
+    let canvas = content_canvas.borrow_mut()(id)?;
+    if !canvas.borrow().is_backed() {
+        let device = sink.borrow_mut().render_context();
+        if let Some(mut device) = device {
+            device.ensure_canvas_backing(&canvas);
+        }
+    }
+    let backed = canvas.borrow().is_backed();
+    backed.then_some(canvas)
+}
+
 fn open_screen_and_ore(
     target: u64,
     sink: &RefCell<&mut dyn DeferredFrameSink>,
@@ -320,7 +336,8 @@ fn open_screen_and_ore(
                     ore,
                     &mut |id| reals.get((id & 0x7fffffff) as usize).cloned(),
                     &mut |id| {
-                        content_canvas.borrow_mut()(id).map(|canvas| canvas_texture_info(&canvas))
+                        resolve_canvas(id, content_canvas, sink)
+                            .map(|canvas| canvas_texture_info(&canvas))
                     },
                     &mut |id| {
                         table

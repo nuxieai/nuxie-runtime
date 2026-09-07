@@ -1663,14 +1663,6 @@ unsafe fn wrapCanvasTextureCurrent(
     canvas: *mut c_void,
 ) -> Option<AnyResourceHandle> {
     debug_assert!(!canvas.is_null());
-    if !context.m_renderContextImpl.is_null() {
-        unsafe {
-            super::render_context_gl_impl::ensureCanvasBacking(
-                &mut *context.m_renderContextImpl.cast(),
-                canvas.cast(),
-            )
-        };
-    }
     let canvas = unsafe { canvas.cast::<RenderCanvas>().as_mut() }?;
     let target = unsafe { canvas.renderTarget().as_ref() }?;
     let execution = context.executionStamp();
@@ -1896,12 +1888,6 @@ pub(crate) unsafe fn wrapCanvasSampleView(
     withCurrentContext(context, |context| unsafe {
         debug_assert!(!canvas.is_null());
         let canvas = canvas.cast::<RenderCanvas>().as_mut()?;
-        if !context.m_renderContextImpl.is_null() {
-            super::render_context_gl_impl::ensureCanvasBacking(
-                &mut *context.m_renderContextImpl.cast(),
-                canvas,
-            );
-        }
         let source = (*canvas.renderImage()).getTexture();
         wrapImageSampleViewCurrent(context, source, canvas.width(), canvas.height())
     })
@@ -2295,12 +2281,16 @@ mod tests {
         let generated_before = state.borrow().generated.len();
         let canvas = RenderContextImplContract::makeDeferredRenderCanvas(&mut *owner, 3, 4);
         assert_eq!(state.borrow().generated.len(), generated_before);
-        let target = unsafe {
-            &*(*canvas.get())
-                .renderTarget()
-                .cast::<TextureRenderTargetGL>()
-        };
-        assert_eq!(target.externalTextureID(), 0);
+        assert!(!unsafe { &*canvas.get() }.isBacked());
+        assert!(unsafe { &mut *canvas.get() }.renderTarget().is_null());
+        let image = unsafe { &mut *canvas.get() }.renderImage();
+        assert!(unsafe { &mut *image }.getTexture().is_null());
+        // Backing is the replay owner's job, never an implicit ORE import.
+        unsafe {
+            RenderContextImplContract::ensureCanvasBacking(&mut *owner, canvas.get());
+        }
+        assert!(unsafe { &*canvas.get() }.isBacked());
+        assert_eq!(unsafe { &mut *canvas.get() }.renderImage(), image);
         let mut context = ContextGL::Make(domain.stamp(), std::ptr::from_mut(&mut *owner).cast())
             .expect("ORE context on the same GL owner");
         let color_view = unsafe { context.wrapCanvasTexture(canvas.get().cast()) }.unwrap();
@@ -3001,9 +2991,9 @@ mod tests {
         let (domain, state) = execution([]);
         let mut context = context(&domain);
         let texture = make_rcp(|| RiveTexture::new(4, 4));
-        let image = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
         let target = make_rcp(|| RenderTarget::new(4, 4));
-        let canvas = make_rcp(|| unsafe { RenderCanvas::new(image, target) });
+        let canvas = make_rcp(|| RenderCanvas::new(4, 4));
+        unsafe { &mut *canvas.get() }.setBacking(texture, target);
         clearTrace(&state);
 
         let wrapped =

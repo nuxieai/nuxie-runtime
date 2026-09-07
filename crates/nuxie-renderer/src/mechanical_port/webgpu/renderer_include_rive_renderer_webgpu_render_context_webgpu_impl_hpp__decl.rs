@@ -317,13 +317,12 @@ impl RenderContextWebGPUImpl {
         )
     }
 
-    pub(crate) fn makeRenderCanvas(
+    pub(crate) unsafe fn ensureCanvasBacking(
         &mut self,
-        width: u32,
-        height: u32,
-    ) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>
+        canvas: *mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+    )
     {
-        super::render_context_webgpu_impl::makeRenderCanvas(self, width, height)
+        unsafe { super::render_context_webgpu_impl::ensureCanvasBacking(self, canvas) }
     }
 
     pub(crate) fn makeOreContext(&self) -> Option<Box<super::ore_context_wgpu_decl::ContextWGPU>> {

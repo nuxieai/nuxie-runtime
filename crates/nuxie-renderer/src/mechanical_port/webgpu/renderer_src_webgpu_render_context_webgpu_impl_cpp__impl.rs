@@ -4402,14 +4402,14 @@ pub(crate) unsafe fn flush(
     }
 }
 
-pub(crate) fn makeRenderCanvas(
+pub(crate) unsafe fn ensureCanvasBacking(
     context: &mut RenderContextWebGPUImpl,
-    width: u32,
-    height: u32,
-) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>
+    canvas: *mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+)
 {
-    use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
-    use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImage;
+    let canvas = unsafe { &mut *canvas };
+    if canvas.isBacked() { return; }
+    let (width, height) = (canvas.width(), canvas.height());
 
     let texture = makeTexture(
         &context.m_device,
@@ -4427,9 +4427,8 @@ pub(crate) fn makeRenderCanvas(
             .setTargetTextureView((&*texture.get()).textureView(), (&*texture.get()).texture())
     };
     let texture: rcp<RiveTexture> = unsafe { static_rcp_cast(texture) };
-    let renderImage = make_rcp(|| unsafe { RiveRenderImage::new(texture) });
     let renderTarget: rcp<RenderTarget> = unsafe { static_rcp_cast(renderTarget) };
-    make_rcp(|| unsafe { RenderCanvas::new(renderImage, renderTarget) })
+    canvas.setBacking(texture, renderTarget);
 }
 
 pub(crate) fn makeOreContext(
@@ -4556,12 +4555,11 @@ impl RenderContextHelperBackendContract for RenderContextWebGPUImpl {
         )
     }
 
-    fn makeRenderCanvas(
+    unsafe fn ensureCanvasBacking(
         &mut self,
-        width: u32,
-        height: u32,
-    ) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
-        makeRenderCanvas(self, width, height)
+        canvas: *mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+    ) {
+        unsafe { ensureCanvasBacking(self, canvas) }
     }
 
     #[cfg(any(

@@ -82,20 +82,17 @@
 //         bool generateRemainingMips = false) = 0;
 //
 // #ifdef RIVE_CANVAS
-//     // Creates a RenderCanvas: a GPU texture usable as both a render target
-//     // and a render image. Returns nullptr if not supported by this backend.
-//     virtual rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height)
+//     virtual void ensureCanvasBacking(RenderCanvas*) {}
+//     // A device-free shell; the replaying context supplies the pixels.
+//     rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width, uint32_t height)
 //     {
-//         return nullptr;
+//         return make_rcp<RenderCanvas>(width, height);
 //     }
-//
-//     // Deferred allocation is only distinct on GL, where the replay worker
-//     // must own the texture on its own context. Everywhere else the device
-//     // is shared and eager allocation is correct.
-//     virtual rcp<RenderCanvas> makeDeferredRenderCanvas(uint32_t width,
-//                                                        uint32_t height)
+//     rcp<RenderCanvas> makeRenderCanvas(uint32_t width, uint32_t height)
 //     {
-//         return makeRenderCanvas(width, height);
+//         rcp<RenderCanvas> canvas = makeDeferredRenderCanvas(width, height);
+//         ensureCanvasBacking(canvas.get());
+//         return canvas->isBacked() ? canvas : nullptr;
 //     }
 //
 //     // If canvas is enabled then the backend Impl MUST implement this.
@@ -406,20 +403,15 @@ pub trait RenderContextImplContract {
     }
 
     // #ifdef RIVE_CANVAS
-    // virtual rcp<RenderCanvas> makeRenderCanvas(uint32_t width,
-    //                                             uint32_t height)
-    // {
-    //     return nullptr;
-    // }
-    //
-    // rcp<RenderCanvas> retains the source intrusive nullable owner.
+    // Immediate creation only succeeds if this backend backs the shell.
     fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        let _ = (width, height);
-        rcp::new()
+        let canvas = self.makeDeferredRenderCanvas(width, height);
+        unsafe { self.ensureCanvasBacking(canvas.get()) };
+        if unsafe { (&*canvas.get()).isBacked() } { canvas } else { rcp::new() }
     }
 
     fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        self.makeRenderCanvas(width, height)
+        crate::mechanical_port::source::include::rive::refcnt_hpp::make_rcp(|| RenderCanvas::new(width, height))
     }
 
     unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {

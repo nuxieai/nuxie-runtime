@@ -1,4 +1,4 @@
-//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp at 1db281b3.
+//! tests/unit_tests/renderer/deferred_canvas_import_test.cpp through 34f6df47.
 use super::super::{deferred_replayer::*, deferred_session::DeferredSession};
 use super::*;
 use nuxie_ore_metal::{
@@ -116,6 +116,7 @@ impl ContextApi for RecordingOreContext {
 }
 
 struct ImportOrderSink {
+    replay_context: Option<PersistentFactoryContext>,
     factory: PersistentFactory<SerializingFactory>,
     ore: Rc<RefCell<RecordingOreContext>>,
     steps: Rc<RefCell<Vec<&'static str>>>,
@@ -130,6 +131,7 @@ impl ImportOrderSink {
 
     fn with_steps(steps: Rc<RefCell<Vec<&'static str>>>) -> Self {
         Self {
+            replay_context: None,
             factory: PersistentFactory::new(SerializingFactory::new()),
             ore: Rc::new(RefCell::new(RecordingOreContext::new())),
             steps,
@@ -140,6 +142,9 @@ impl ImportOrderSink {
 }
 
 impl DeferredFrameSink for ImportOrderSink {
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        self.replay_context.clone()
+    }
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
     }
@@ -187,11 +192,13 @@ fn record_canvas_write_and_sample(session: &mut DeferredSession, canvas: &Render
         height: canvas.borrow().height(),
         owner: Rc::new(image) as Rc<dyn Any>,
     };
-    assert!(session
-        .ore_context
-        .borrow_mut()
-        .recordWrapCanvasImage(info)
-        .is_some());
+    assert!(
+        session
+            .ore_context
+            .borrow_mut()
+            .recordWrapCanvasImage(info)
+            .is_some()
+    );
 }
 
 #[test]
@@ -212,7 +219,7 @@ fn canvas_written_and_sampled_in_one_frame_wraps_after_its_content() {
 
 struct EnsureOrderCanvas {
     image: Rc<dyn RenderImage>,
-    steps: Rc<RefCell<Vec<&'static str>>>,
+    backed: Rc<Cell<bool>>,
 }
 
 impl RenderCanvas for EnsureOrderCanvas {
@@ -225,20 +232,77 @@ impl RenderCanvas for EnsureOrderCanvas {
     fn render_image(&self) -> Rc<dyn RenderImage> {
         self.image.clone()
     }
-    fn ensure_backing(&mut self) {
-        self.steps.borrow_mut().push("ensure");
+    fn is_backed(&self) -> bool {
+        self.backed.get()
     }
     fn begin_frame(&mut self, _: u32) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         Err(RenderCanvasError::unsupported())
     }
 }
 
+struct EnsureFactory {
+    serializing: SerializingFactory,
+    steps: Rc<RefCell<Vec<&'static str>>>,
+    backed: Rc<Cell<bool>>,
+}
+impl Factory for EnsureFactory {
+    fn ensure_canvas_backing(&mut self, canvas: &RenderCanvasHandle) {
+        assert!(!canvas.borrow().is_backed());
+        self.steps.borrow_mut().push("ensure");
+        self.backed.set(true);
+    }
+    fn make_render_buffer(
+        &mut self,
+        kind: RenderBufferType,
+        flags: RenderBufferFlags,
+        size: usize,
+    ) -> Box<dyn RenderBuffer> {
+        self.serializing.make_render_buffer(kind, flags, size)
+    }
+    fn make_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.serializing
+            .make_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
+    fn make_radial_gradient(
+        &mut self,
+        cx: f32,
+        cy: f32,
+        radius: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Box<dyn RenderShader> {
+        self.serializing
+            .make_radial_gradient(cx, cy, radius, colors, stops)
+    }
+    fn make_render_path(&mut self, path: RawPath, rule: FillRule) -> Box<dyn RenderPath> {
+        self.serializing.make_render_path(path, rule)
+    }
+    fn make_empty_render_path(&mut self) -> Box<dyn RenderPath> {
+        self.serializing.make_empty_render_path()
+    }
+    fn make_render_paint(&mut self) -> Box<dyn RenderPaint> {
+        self.serializing.make_render_paint()
+    }
+    fn decode_image(&mut self, bytes: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        self.serializing.decode_image(bytes)
+    }
+}
+
 #[test]
 fn first_canvas_content_ensures_backing_before_beginning_the_draw() {
     let steps = Rc::new(RefCell::new(Vec::new()));
+    let backed = Rc::new(Cell::new(false));
     let canvas: RenderCanvasHandle = Rc::new(RefCell::new(Box::new(EnsureOrderCanvas {
-        image: Rc::new(ForeignImage::new(0, Rc::new(Cell::new(false)))),
-        steps: steps.clone(),
+        image: Rc::new(FakeCanvasImage(Rc::new(()))),
+        backed: backed.clone(),
     })));
     let mut session = DeferredSession::with_caps(Default::default());
     record_canvas_write_and_sample(&mut session, &canvas);
@@ -246,6 +310,13 @@ fn first_canvas_content_ensures_backing_before_beginning_the_draw() {
 
     let frame = snapshot_frame(&mut session);
     let mut sink = ImportOrderSink::with_steps(steps.clone());
+    sink.replay_context = PersistentFactory::new(EnsureFactory {
+        serializing: SerializingFactory::new(),
+        steps: steps.clone(),
+        backed,
+    })
+    .persistent_context();
+    assert!(!canvas.borrow().is_backed());
     DeferredReplayer::default().replay_frame(&frame, &mut sink);
     assert_eq!(&*steps.borrow(), &["ensure", "begin", "content", "ore"]);
 }

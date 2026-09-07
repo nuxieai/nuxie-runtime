@@ -271,7 +271,7 @@ pub struct RiveRenderImageHandle {
     source: rcp<RiveRenderImage>,
     // Declared after source so image/texture release completes before the
     // backend owner drops. Identity and lifetime are one indivisible edge.
-    execution_domain: Option<AttachedImageExecutionDomain>,
+    execution_domain: Rc<std::cell::OnceCell<AttachedImageExecutionDomain>>,
 }
 
 impl RiveRenderImageHandle {
@@ -280,7 +280,7 @@ impl RiveRenderImageHandle {
     pub fn from_exact(source: rcp<RiveRenderImage>) -> Option<Self> {
         (!source.get().is_null()).then_some(Self {
             source,
-            execution_domain: None,
+            execution_domain: Rc::new(std::cell::OnceCell::new()),
         })
     }
 
@@ -298,26 +298,33 @@ impl RiveRenderImageHandle {
     /// Attach the opaque identity and owner of this image's execution domain
     /// together. The consuming builder permits this attachment exactly once.
     pub(crate) fn with_execution_domain(
-        mut self,
+        self,
         resource_domain: RenderResourceDomain,
         domain_guard: Rc<dyn Any>,
     ) -> Self {
-        assert!(
-            self.execution_domain.is_none(),
-            "image execution domain already attached"
-        );
-        self.execution_domain = Some(AttachedImageExecutionDomain {
+        self.attach_execution_domain(resource_domain, domain_guard);
+        self
+    }
+
+    /// A deferred canvas image keeps its source identity while the replaying
+    /// device attaches its execution owner exactly once. All retained image
+    /// wrappers share this cell, including wrappers obtained during recording.
+    pub(crate) fn attach_execution_domain(
+        &self,
+        resource_domain: RenderResourceDomain,
+        domain_guard: Rc<dyn Any>,
+    ) {
+        assert!(self.execution_domain.set(AttachedImageExecutionDomain {
             resource_domain,
             _domain_guard: domain_guard,
-        });
-        self
+        }).is_ok(), "image execution domain already attached");
     }
 
     /// Returns whether this resource was created by the queried execution
     /// domain. An unattached source handle belongs to no product domain.
     pub(crate) fn belongs_to(&self, resource_domain: &RenderResourceDomain) -> bool {
         self.execution_domain
-            .as_ref()
+            .get()
             .is_some_and(|attached| attached.resource_domain.same_domain(resource_domain))
     }
 
@@ -350,7 +357,7 @@ impl RiveRenderImageHandle {
         &self,
         execution_anchor: &Rc<dyn Any>,
     ) -> Option<NonNull<Texture>> {
-        let attached = self.execution_domain.as_ref()?;
+        let attached = self.execution_domain.get()?;
         if !Rc::ptr_eq(&attached._domain_guard, execution_anchor) {
             return None;
         }
@@ -382,7 +389,7 @@ impl nuxie_render_api::RenderImage for RiveRenderImageHandle {
                 target_os = "visionos"
             )
         ))]
-        if let Some(attached) = &self.execution_domain {
+        if let Some(attached) = self.execution_domain.get() {
             if let Some(info) = crate::native_metal::ore_image_texture_info(
                 self,
                 &attached._domain_guard,

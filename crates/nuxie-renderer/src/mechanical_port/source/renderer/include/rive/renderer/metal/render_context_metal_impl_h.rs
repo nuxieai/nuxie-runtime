@@ -1116,7 +1116,7 @@ mod tests {
         );
         metal.fail.push_back("newTextureWithDescriptor:");
         let (texture, target, descriptor) = context
-            .make_render_canvas(&mut metal, 3, 5)
+            .make_canvas_backing(&mut metal, 3, 5)
             .expect("pinned makeRenderCanvas returns its source owners after nil allocation");
         let first_queue = Handle::new(100, MetalObjectKind::CommandQueue);
         context.set_command_queue(&mut metal, Some(first_queue));

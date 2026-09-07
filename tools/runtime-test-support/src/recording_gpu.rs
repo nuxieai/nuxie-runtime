@@ -345,6 +345,9 @@ struct Canvas {
     image: Rc<Image>,
 }
 impl RenderCanvas for Canvas {
+    fn is_backed(&self) -> bool {
+        true
+    }
     fn width(&self) -> u32 {
         self.image.width
     }

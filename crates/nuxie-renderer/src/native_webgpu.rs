@@ -148,6 +148,16 @@ impl Factory for NativeWebGpuFactory {
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         self.core.make_render_canvas(width, height)
     }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.core.make_deferred_render_canvas(width, height)
+    }
+    fn ensure_canvas_backing(&mut self, canvas: &nuxie_render_api::RenderCanvasHandle) {
+        self.core.ensure_canvas_backing(canvas);
+    }
 }
 
 /// One active exact-source native Dawn WebGPU frame.

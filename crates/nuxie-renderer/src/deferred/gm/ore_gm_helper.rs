@@ -170,6 +170,11 @@ impl GmHost {
             self.factory.make_render_canvas(w, h).expect("GM canvas"),
         ))
     }
+    pub fn deferred_canvas(&mut self, w: u32, h: u32) -> RenderCanvasHandle {
+        Rc::new(RefCell::new(
+            self.factory.make_deferred_render_canvas(w, h).expect("GM deferred canvas"),
+        ))
+    }
     // testing_window_metal_texture.mm::beginOreFrame uses beginFrame({});
     // Metal allocates its own command buffer on the shared renderer queue.
     pub fn begin_ore(&self) {
@@ -206,6 +211,9 @@ impl GmHost {
 impl DeferredFrameSink for GmHost {
     fn factory(&mut self) -> PersistentFactoryContext {
         self.factory.persistent_context().unwrap()
+    }
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        self.factory.persistent_context()
     }
     fn begin_screen_frame(&mut self, target: u64) -> Option<RendererOwner> {
         assert_eq!(target, 0);

@@ -168,6 +168,16 @@ impl Factory for NativeVulkanFactory {
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         self.core.make_render_canvas(width, height)
     }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
+        self.core.make_deferred_render_canvas(width, height)
+    }
+    fn ensure_canvas_backing(&mut self, canvas: &nuxie_render_api::RenderCanvasHandle) {
+        self.core.ensure_canvas_backing(canvas);
+    }
 }
 
 /// One active exact-source Vulkan frame.
@@ -253,6 +263,52 @@ mod tests {
         LIVE_VULKAN_TEST_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+
+    #[test]
+    #[ignore = "requires configured Vulkan test host"]
+    fn deferred_canvas_is_backed_by_replay_factory_without_replacing_image() {
+        let _live_vulkan_test = lock_live_vulkan_test();
+        let mut producer = NativeVulkanFactory::new(2, 2).expect("producer Vulkan device");
+        let canvas: nuxie_render_api::RenderCanvasHandle =
+            std::rc::Rc::new(std::cell::RefCell::new(
+                producer
+                    .make_deferred_render_canvas(4, 4)
+                    .expect("device-free canvas shell"),
+            ));
+        let image = canvas.borrow().render_image();
+        assert!(!canvas.borrow().is_backed());
+        assert!(!image.as_any().downcast_ref::<crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle>().unwrap().has_source_texture());
+        drop(producer);
+
+        let mut replay = NativeVulkanFactory::new(2, 2).expect("replay Vulkan device");
+        replay.ensure_canvas_backing(&canvas);
+        assert!(canvas.borrow().is_backed());
+        assert!(std::rc::Rc::ptr_eq(&image, &canvas.borrow().render_image()));
+        assert!(image.as_any().downcast_ref::<crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle>().unwrap().has_source_texture());
+        let target = {
+            let canvas = canvas.borrow();
+            let shell = (&**canvas as &dyn std::any::Any)
+                .downcast_ref::<crate::exact_source_adapter::ExactSourceRenderCanvas>()
+                .unwrap();
+            unsafe { (&mut *shell.source_ptr()).renderTarget() }
+        };
+        let mut another_device = NativeVulkanFactory::new(2, 2).expect("another Vulkan device");
+        another_device.ensure_canvas_backing(&canvas);
+        let unchanged_target = {
+            let canvas = canvas.borrow();
+            let shell = (&**canvas as &dyn std::any::Any)
+                .downcast_ref::<crate::exact_source_adapter::ExactSourceRenderCanvas>()
+                .unwrap();
+            unsafe { (&mut *shell.source_ptr()).renderTarget() }
+        };
+        assert_eq!(target, unchanged_target);
+        canvas
+            .borrow_mut()
+            .begin_frame(0xff102030)
+            .expect("replay-backed canvas frame")
+            .finish()
+            .expect("replay-backed canvas finish");
     }
 
     #[test]

@@ -1181,119 +1181,33 @@ pub(crate) fn makeImageTexture(
     })
 }
 
-pub(crate) fn makeRenderCanvas(
+pub(crate) unsafe fn ensureCanvasBacking(
     context: &mut RenderContextGLImpl,
-    width: u32,
-    height: u32,
-) -> rcp<RenderCanvas> {
+    canvas: *mut RenderCanvas,
+) {
+    let canvas = unsafe { &mut *canvas };
+    if canvas.isBacked() { return; }
+    let (width, height) = (canvas.width(), canvas.height());
     let execution = (&*context.rust_execution).clone();
     execution.withCurrent(|| {
         let textureID = generateGLObject(GLObjectKind::Texture);
         recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
         recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, textureID));
         recordGLCommand(GLCommand::TexStorage2D {
-            target: GL_TEXTURE_2D,
-            levels: 1,
-            internal_format: GL_RGBA8,
-            width,
-            height,
+            target: GL_TEXTURE_2D, levels: 1, internal_format: GL_RGBA8, width, height,
         });
-        let canvas = wrapCanvasBacking(context, width, height, textureID);
-        registerCanvasTarget(context, textureID);
-        canvas
-    })
-}
-
-fn wrapCanvasBacking(
-    context: &mut RenderContextGLImpl,
-    width: u32,
-    height: u32,
-    textureID: GLuint,
-) -> rcp<RenderCanvas> {
-    let execution = (&*context.rust_execution).clone();
-    let source = make_rcp(|| {
-        CanvasSourceTextureGLImpl::new(
-            width,
-            height,
-            textureID,
-            execution.clone(),
-            context,
+        recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
+        let source = make_rcp(|| CanvasSourceTextureGLImpl::new(
+            width, height, textureID, execution.clone(), context,
             Rc::downgrade(&context.m_canvasMirrors),
-        )
+        ));
+        let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
+        let target = make_rcp(|| TextureRenderTargetGL::new(width, height, execution.clone()));
+        unsafe { (&mut *target.get()).setTargetTexture(textureID) };
+        let target: rcp<RenderTarget> = unsafe { static_rcp_cast(target) };
+        canvas.setBacking(source, target);
+        registerCanvasTarget(context, textureID);
     });
-    let source: rcp<RiveTexture> = unsafe { static_rcp_cast(source) };
-    let image = make_rcp(|| unsafe { RiveRenderImage::new(source) });
-    let mut target = make_rcp(|| TextureRenderTargetGL::new(width, height, execution.clone()));
-    unsafe { (&mut *target.get()).setTargetTexture(textureID) };
-    let target: rcp<RenderTarget> = unsafe { static_rcp_cast(target) };
-    make_rcp(|| unsafe { RenderCanvas::new(image, target) })
-}
-
-pub(crate) fn makeDeferredRenderCanvas(
-    context: &mut RenderContextGLImpl,
-    width: u32,
-    height: u32,
-) -> rcp<RenderCanvas> {
-    wrapCanvasBacking(context, width, height, 0)
-}
-
-pub(crate) unsafe fn ensureCanvasBacking(
-    context: &mut RenderContextGLImpl,
-    canvas: *mut RenderCanvas,
-) {
-    let canvas = unsafe { &mut *canvas };
-    let target = unsafe { &mut *canvas.renderTarget().cast::<TextureRenderTargetGL>() };
-    if target.externalTextureID() != 0 {
-        return;
-    }
-    let execution = (&*context.rust_execution).clone();
-    target.base.base.rebind_owner_thread_execution(
-        execution.domain().ownerThreadFinalReleaseRoute(),
-        execution.domain().key(),
-        execution.generation(),
-    );
-    *target.base.rust_execution = execution.clone();
-    let textureID = generateGLObject(GLObjectKind::Texture);
-    recordGLCommand(GLCommand::ActiveTexture(GL_TEXTURE0));
-    recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, textureID));
-    recordGLCommand(GLCommand::TexStorage2D {
-        target: GL_TEXTURE_2D,
-        levels: 1,
-        internal_format: GL_RGBA8,
-        width: canvas.width(),
-        height: canvas.height(),
-    });
-    recordGLCommand(GLCommand::BindTexture(GL_TEXTURE_2D, 0));
-    target.setTargetTexture(textureID);
-    let source = unsafe {
-        &mut *(*canvas.renderImage())
-            .getTexture()
-            .cast::<CanvasSourceTextureGLImpl>()
-    };
-    if !source.m_owner.is_null() && source.m_glID != 0 {
-        if let Some(queue) = source.rust_released_canvas_targets.upgrade() {
-            let mut queue = queue.lock().unwrap();
-            queue.push(source.m_glID);
-            if let Some(flag) = source.rust_has_released_canvas_targets.upgrade() {
-                flag.store(true, std::sync::atomic::Ordering::Release);
-            }
-        }
-    }
-    super::gl_utils_impl::resetTexture(&mut source.base.m_texture, textureID);
-    source.base.base.rebind_owner_thread_execution(
-        execution.domain().ownerThreadFinalReleaseRoute(),
-        execution.domain().key(),
-        execution.generation(),
-    );
-    *source.base.rust_execution = execution;
-    source.m_owner = context;
-    source.m_glID = textureID;
-    source.rust_canvas_registry = Rc::downgrade(&context.m_canvasMirrors);
-    source.rust_released_canvas_targets =
-        std::sync::Arc::downgrade(&context.m_releasedCanvasTargets);
-    source.rust_has_released_canvas_targets =
-        std::sync::Arc::downgrade(&context.m_hasReleasedCanvasTargets);
-    registerCanvasTarget(context, textureID);
 }
 
 pub(crate) fn makeOreContext(
@@ -4315,24 +4229,6 @@ impl RenderContextHelperBackendContract for RenderContextGLImpl {
             srgb,
             generateRemainingMips,
         )
-    }
-
-    #[cfg(any(
-        feature = "native-ore-metal-experimental",
-        feature = "native-ore-vulkan-experimental",
-        feature = "ore-gl"
-    ))]
-    fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        makeRenderCanvas(self, width, height)
-    }
-
-    #[cfg(any(
-        feature = "native-ore-metal-experimental",
-        feature = "native-ore-vulkan-experimental",
-        feature = "ore-gl"
-    ))]
-    fn makeDeferredRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        makeDeferredRenderCanvas(self, width, height)
     }
 
     unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {

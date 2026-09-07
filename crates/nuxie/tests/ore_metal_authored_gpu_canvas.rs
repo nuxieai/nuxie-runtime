@@ -161,6 +161,9 @@ impl RenderImage for MetalCanvasImage {
 
 struct MetalCanvas(MetalCanvasImage);
 impl RenderCanvas for MetalCanvas {
+    fn is_backed(&self) -> bool {
+        true
+    }
     fn width(&self) -> u32 {
         self.0.width()
     }

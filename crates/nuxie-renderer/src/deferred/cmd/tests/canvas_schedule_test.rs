@@ -1,4 +1,4 @@
-//! tests/unit_tests/renderer/canvas_schedule_test.cpp at e949498e.
+//! tests/unit_tests/renderer/canvas_schedule_test.cpp through 34f6df47.
 use super::super::{
     canvas_schedule::*, command_stream::WirePod, deferred_replayer::*, deferred_session::*,
     render_commands::*, render_handle::*,

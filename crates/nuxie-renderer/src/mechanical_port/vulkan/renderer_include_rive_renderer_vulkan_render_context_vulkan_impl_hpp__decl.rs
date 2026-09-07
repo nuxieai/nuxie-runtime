@@ -253,12 +253,11 @@ impl RenderContextVulkanImpl {
         }
     }
     #[cfg(feature = "native-ore-vulkan-experimental")]
-    pub(crate) fn makeRenderCanvas(
+    pub(crate) unsafe fn ensureCanvasBacking(
         &mut self,
-        width: u32,
-        height: u32,
-    ) -> rcp<crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas>{
-        super::render_context_vulkan_impl::makeRenderCanvas(self, width, height)
+        canvas: *mut crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas,
+    ) {
+        unsafe { super::render_context_vulkan_impl::ensureCanvasBacking(self, canvas) }
     }
     #[cfg(feature = "native-ore-vulkan-experimental")]
     pub(crate) fn makeOreContext(

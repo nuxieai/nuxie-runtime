@@ -43,11 +43,11 @@ use crate::mechanical_metal_implementation::source_execution::{
 
 fn source_static_function_name(name: &str) -> Option<&'static NSString> {
     Some(match name {
-        "GF" => objc2_foundation::ns_string!("GF"),
         "HF" => objc2_foundation::ns_string!("HF"),
-        "YF" => objc2_foundation::ns_string!("YF"),
-        "ZF" => objc2_foundation::ns_string!("ZF"),
-        "TF" => objc2_foundation::ns_string!("TF"),
+        "IF" => objc2_foundation::ns_string!("IF"),
+        "AG" => objc2_foundation::ns_string!("AG"),
+        "BG" => objc2_foundation::ns_string!("BG"),
+        "UF" => objc2_foundation::ns_string!("UF"),
         "WE" => objc2_foundation::ns_string!("WE"),
         "XE" => objc2_foundation::ns_string!("XE"),
         "HC" => objc2_foundation::ns_string!("HC"),

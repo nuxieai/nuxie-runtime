@@ -1,4 +1,4 @@
-//! tests/gm/render_canvas_dag.cpp at e949498e.
+//! tests/gm/render_canvas_dag.cpp through 34f6df47; GmHost exposes its replay context.
 use super::ore_gm_helper::*;
 use crate::deferred::cmd::{
     deferred_replayer::{snapshot_frame, DeferredFrameSink, DeferredReplayer},

@@ -60,10 +60,8 @@ enum NativeMetalRenderCanvasInner {
         // Rust drops variant fields in declaration order. Release the source
         // canvas and enqueue target/image retirements before the backend.
         source: rcp<RenderCanvas>,
-        image_texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
-        target_texture: Option<Retained<ProtocolObject<dyn MTLTexture>>>,
-        resource_domain: RenderResourceDomain,
-        execution_guard: Rc<RefCell<MechanicalRenderContext>>,
+        image: RiveRenderImageHandle,
+        execution_guard: Option<Rc<RefCell<MechanicalRenderContext>>>,
     },
 }
 
@@ -110,52 +108,43 @@ impl NativeMetalRenderCanvas {
         execution_guard: Rc<RefCell<MechanicalRenderContext>>,
         resource_domain: RenderResourceDomain,
     ) -> Option<Self> {
+        let mut canvas = Self::from_deferred_source(source)?;
+        canvas.attach_backing_owner(execution_guard, resource_domain);
+        Some(canvas)
+    }
+
+    /// A source shell has an image identity, but no Metal device, target,
+    /// texture, or recording-context lifetime dependency.
+    pub(super) fn from_deferred_source(source: rcp<RenderCanvas>) -> Option<Self> {
         if source.get().is_null() {
-            drop(source);
-            drop(execution_guard);
             return None;
         }
-        // SAFETY: the nonnull source rcp owns the complete RenderCanvas for
-        // this borrow. Its image owns the complete source TextureMetal whose
-        // nativeHandle override projects its directly owned MTLTexture.
-        let canvas = unsafe { &*source.get() };
-        let texture_owner = canvas.render_image_ref().refTexture();
-        if texture_owner.get().is_null() {
-            drop(texture_owner);
-            drop(source);
-            drop(execution_guard);
-            return None;
-        }
-        let native = unsafe { (&*texture_owner.get()).nativeHandle() };
-        let texture = unsafe { Retained::<AnyObject>::retain(native.cast()) }.map(|native| {
-            // SAFETY: TextureMetal's nonnull nativeHandle dispatch returns its
-            // retained `ProtocolObject<dyn MTLTexture>` and no other object.
-            // Null is the pinned allocation-failure state.
-            unsafe { Retained::cast_unchecked::<ProtocolObject<dyn MTLTexture>>(native) }
-        });
-        let target_texture =
-            super::mechanical_render_context::retained_canvas_target_texture(canvas);
-        let same_texture = match (&texture, &target_texture) {
-            (None, None) => true,
-            (Some(image), Some(target)) => Retained::as_ptr(image) == Retained::as_ptr(target),
-            _ => false,
-        };
-        if !same_texture {
-            drop(texture_owner);
-            drop(source);
-            drop(execution_guard);
-            return None;
-        }
-        drop(texture_owner);
+        let image =
+            RiveRenderImageHandle::from_exact(Self::source_ref(&source).ref_render_image())?;
         Some(Self {
             inner: NativeMetalRenderCanvasInner::Guarded {
                 source,
-                image_texture: texture,
-                target_texture,
-                resource_domain,
-                execution_guard,
+                image,
+                execution_guard: None,
             },
         })
+    }
+
+    fn attach_backing_owner(
+        &mut self,
+        guard: Rc<RefCell<MechanicalRenderContext>>,
+        domain: RenderResourceDomain,
+    ) {
+        let NativeMetalRenderCanvasInner::Guarded {
+            image,
+            execution_guard,
+            ..
+        } = &mut self.inner
+        else {
+            return;
+        };
+        image.attach_execution_domain(domain, Rc::clone(&guard) as Rc<dyn Any>);
+        *execution_guard = Some(guard);
     }
 
     pub fn width(&self) -> u32 {
@@ -186,18 +175,18 @@ impl NativeMetalRenderCanvas {
             NativeMetalRenderCanvasInner::Allocated { image, target } => target
                 .target_texture()
                 .is_some_and(|texture| std::ptr::eq(texture, image.texture())),
-            NativeMetalRenderCanvasInner::Guarded {
-                source,
-                image_texture,
-                target_texture,
-                ..
-            } => {
+            NativeMetalRenderCanvasInner::Guarded { source, .. } => {
                 let texture_owner = Self::source_ref(source).render_image_ref().refTexture();
                 if texture_owner.get().is_null() {
                     return false;
                 }
                 let native = unsafe { (&*texture_owner.get()).nativeHandle() };
-                match (image_texture, target_texture) {
+                let image_texture = self.retained_metal_texture();
+                let target_texture =
+                    super::mechanical_render_context::retained_canvas_target_texture(
+                        Self::source_ref(source),
+                    );
+                match (&image_texture, &target_texture) {
                     (None, None) => native.is_null(),
                     (Some(image), Some(target)) => {
                         native == Retained::as_ptr(image).cast_mut().cast()
@@ -217,7 +206,16 @@ impl NativeMetalRenderCanvas {
             NativeMetalRenderCanvasInner::Allocated { target, .. } => {
                 target.retained_target_texture()
             }
-            NativeMetalRenderCanvasInner::Guarded { image_texture, .. } => image_texture.clone(),
+            NativeMetalRenderCanvasInner::Guarded { source, .. } => {
+                let texture = Self::source_ref(source).render_image_ref().refTexture();
+                if texture.get().is_null() {
+                    return None;
+                }
+                let native = unsafe { (&*texture.get()).nativeHandle() };
+                unsafe { Retained::<AnyObject>::retain(native.cast()) }.map(|native| unsafe {
+                    Retained::cast_unchecked::<ProtocolObject<dyn MTLTexture>>(native)
+                })
+            }
         }
     }
 
@@ -231,17 +229,7 @@ impl NativeMetalRenderCanvas {
             NativeMetalRenderCanvasInner::Allocated { .. } => {
                 unreachable!("private canvas allocation staging has no source image owner")
             }
-            NativeMetalRenderCanvasInner::Guarded {
-                source,
-                resource_domain,
-                execution_guard,
-                ..
-            } => RiveRenderImageHandle::from_exact(Self::source_ref(source).ref_render_image())
-                .expect("a source RenderCanvas always owns a nonnull render image")
-                .with_execution_domain(
-                    resource_domain.clone(),
-                    Rc::clone(execution_guard) as Rc<dyn Any>,
-                ),
+            NativeMetalRenderCanvasInner::Guarded { image, .. } => image.clone(),
         };
         Box::new(image)
     }
@@ -266,9 +254,25 @@ impl NativeMetalRenderCanvas {
 }
 
 impl RenderCanvasContract for NativeMetalRenderCanvas {
+    fn is_backed(&self) -> bool {
+        match &self.inner {
+            NativeMetalRenderCanvasInner::Guarded { source, .. } => {
+                Self::source_ref(source).isBacked()
+            }
+            #[cfg(test)]
+            NativeMetalRenderCanvasInner::Allocated { .. } => true,
+        }
+    }
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         match &self.inner {
-            NativeMetalRenderCanvasInner::Guarded { target_texture, .. } => {
+            NativeMetalRenderCanvasInner::Guarded { source, .. } => {
+                if !Self::source_ref(source).isBacked() {
+                    return None;
+                }
+                let target_texture =
+                    super::mechanical_render_context::retained_canvas_target_texture(
+                        Self::source_ref(source),
+                    );
                 let mut info = RenderCanvasContract::render_image(self).ore_texture_info()?;
                 #[cfg(feature = "native-ore-metal-experimental")]
                 {
@@ -308,13 +312,17 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
         clear_color: ColorInt,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         let (width, height) = (self.width(), self.height());
-        let (source, resource_domain, execution_guard) = match &self.inner {
+        let (source, execution_guard) = match &self.inner {
             NativeMetalRenderCanvasInner::Guarded {
                 source,
-                resource_domain,
                 execution_guard,
                 ..
-            } => (source, resource_domain, execution_guard),
+            } => (
+                source,
+                execution_guard
+                    .as_ref()
+                    .ok_or_else(|| RenderCanvasError::new("canvas has no replay backing"))?,
+            ),
             #[cfg(test)]
             NativeMetalRenderCanvasInner::Allocated { .. } => {
                 return Err(RenderCanvasError::new(
@@ -324,6 +332,7 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
         };
         let renderer = {
             let mut mechanical = execution_guard.borrow_mut();
+            let resource_domain = mechanical.resource_domain();
             let mut descriptor = FrameDescriptor {
                 renderTargetWidth: width,
                 renderTargetHeight: height,
@@ -336,7 +345,7 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
             }
             let context = unsafe { Pin::get_unchecked_mut(mechanical.render_context_mut()) };
             context.beginFrameExecutable(&descriptor);
-            unsafe { ExactSourceRendererAdapter::new(context, resource_domain.clone()) }
+            unsafe { ExactSourceRendererAdapter::new(context, resource_domain) }
         };
         Ok(Box::new(NativeMetalRenderCanvasFrame {
             renderer,

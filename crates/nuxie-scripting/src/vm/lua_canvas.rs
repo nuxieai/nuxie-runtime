@@ -395,6 +395,9 @@ mod tests {
     }
 
     impl RenderCanvas for TestCanvas {
+        fn is_backed(&self) -> bool {
+            true
+        }
         fn width(&self) -> u32 {
             self.width
         }
@@ -548,7 +551,10 @@ mod tests {
             self.inner.decode_image(data)
         }
 
-        fn make_render_canvas(
+        // This lifecycle fixture supplies a recording canvas, not a GPU
+        // allocation. Implement the explicit deferred constructor used by
+        // ScriptedCanvas instead of relying on Factory's former eager alias.
+        fn make_deferred_render_canvas(
             &mut self,
             width: u32,
             height: u32,

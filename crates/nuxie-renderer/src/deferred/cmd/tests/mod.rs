@@ -114,9 +114,12 @@ impl RenderImage for ForeignImage {
     }
 }
 pub struct FakeCanvas {
+    // RenderCanvasImage is a stable, texture-free identity even when the
+    // upstream fake target marks the canvas backed. No fake GPU image/texture.
     image: Rc<dyn RenderImage>,
 }
 impl RenderCanvas for FakeCanvas {
+    fn is_backed(&self) -> bool { true }
     fn width(&self) -> u32 {
         8
     }
@@ -135,8 +138,18 @@ impl RenderCanvas for FakeCanvas {
 }
 pub fn fake_canvas() -> RenderCanvasHandle {
     Rc::new(RefCell::new(Box::new(FakeCanvas {
-        image: Rc::new(ForeignImage::new(0, Rc::new(Cell::new(false)))),
+        image: Rc::new(FakeCanvasImage(Rc::new(()))),
     })))
+}
+
+#[derive(Clone)]
+struct FakeCanvasImage(Rc<()>);
+impl RenderImage for FakeCanvasImage {
+    fn as_any(&self) -> &dyn Any { self }
+    fn width(&self) -> u32 { 8 }
+    fn height(&self) -> u32 { 8 }
+    fn retain_image(&self) -> Rc<dyn RenderImage> { Rc::new(self.clone()) }
+    fn image_identity(&self) -> usize { Rc::as_ptr(&self.0) as usize }
 }
 
 pub struct RuntimeCase {

@@ -70,6 +70,9 @@ mod tests {
     }
     struct ProjectingCanvas(Rc<Cell<bool>>);
     impl RenderCanvas for ProjectingCanvas {
+        fn is_backed(&self) -> bool {
+            true
+        }
         fn width(&self) -> u32 {
             3
         }

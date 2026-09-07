@@ -475,11 +475,13 @@ impl Drop for RenderTargetVulkanTexture {
     }
 }
 
-pub(crate) fn makeRenderCanvas(
+pub(crate) unsafe fn ensureCanvasBacking(
     implementation: &mut RenderContextVulkanImpl,
-    width: u32,
-    height: u32,
-) -> rcp<RenderCanvas> {
+    canvas: *mut RenderCanvas,
+) {
+    let canvas = unsafe { &mut *canvas };
+    if canvas.isBacked() { return; }
+    let (width, height) = (canvas.width(), canvas.height());
     let format = vk::Format::R8G8B8A8_UNORM;
     let usage = vk::ImageUsageFlags::COLOR_ATTACHMENT
         | vk::ImageUsageFlags::SAMPLED
@@ -499,7 +501,6 @@ pub(crate) fn makeRenderCanvas(
         Some(cstr(b"RenderCanvas\0")),
     );
     let image_texture: rcp<Texture> = unsafe { static_rcp_cast(rcp::copy_ctor(&texture)) };
-    let render_image = make_rcp(|| unsafe { RiveRenderImage::new(image_texture) });
     let target = make_rcp(|| {
         let mut render_target = RenderTarget::new(width, height);
         render_target.destroy_complete = destroy_render_target_vulkan_texture;
@@ -518,7 +519,7 @@ pub(crate) fn makeRenderCanvas(
         }
     });
     let render_target: rcp<RenderTarget> = unsafe { static_rcp_cast(target) };
-    make_rcp(|| unsafe { RenderCanvas::new(render_image, render_target) })
+    canvas.setBacking(image_texture, render_target);
 }
 
 impl ResourceTexturePipeline {
@@ -4545,8 +4546,8 @@ impl RenderContextImplContract for RenderContextVulkanImpl {
             crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(texture)
         }
     }
-    fn makeRenderCanvas(&mut self, width: u32, height: u32) -> rcp<RenderCanvas> {
-        makeRenderCanvas(self, width, height)
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        unsafe { ensureCanvasBacking(self, canvas) }
     }
     #[cfg(feature = "native-ore-vulkan-experimental")]
     fn makeOreContext(

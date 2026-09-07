@@ -643,11 +643,9 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
                 "RenderCanvas creation returned null",
             ));
         }
-        Ok(Box::new(ExactSourceRenderCanvas {
-            source,
-            backend: Rc::clone(&self.backend),
-            resource_domain: self.resource_domain.clone(),
-        }))
+        let mut canvas = ExactSourceRenderCanvas::from_source(source);
+        self.attach_canvas_execution(&mut canvas);
+        Ok(Box::new(canvas))
     }
 
     fn make_gpu_canvas_image_view(
@@ -670,28 +668,121 @@ impl<B: ExactSourceBackend> Factory for ExactSourceFactoryCore<B> {
         width: u32,
         height: u32,
     ) -> Result<Box<dyn RenderCanvasContract>, RenderCanvasError> {
-        let source =
-            self.with_context(|context| context.makeDeferredRenderCanvasExecutable(width, height));
-        if source.get().is_null() {
-            return Err(RenderCanvasError::new(
-                "Deferred RenderCanvas creation returned null",
-            ));
+        Ok(Box::new(ExactSourceRenderCanvas::new(width, height)))
+    }
+
+    fn ensure_canvas_backing(&mut self, canvas: &nuxie_render_api::RenderCanvasHandle) {
+        let mut canvas = canvas.borrow_mut();
+        if canvas.is_backed() {
+            return;
         }
-        Ok(Box::new(ExactSourceRenderCanvas {
-            source,
-            backend: self.backend.clone(),
-            resource_domain: self.resource_domain.clone(),
-        }))
+        let Some(canvas) =
+            (&mut **canvas as &mut dyn Any).downcast_mut::<ExactSourceRenderCanvas>()
+        else {
+            return;
+        };
+        self.with_context(|context| {
+            // SAFETY: the exclusive shell borrow retains the source owner.
+            context.ensureCanvasBackingExecutable(unsafe { &mut *canvas.source_ptr() });
+        });
+        if canvas.is_backed() {
+            self.attach_canvas_execution(canvas);
+        }
     }
 }
 
-struct ExactSourceRenderCanvas<B: ExactSourceBackend> {
+impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
+    fn attach_canvas_execution(&self, canvas: &mut ExactSourceRenderCanvas) {
+        canvas.install_backing(
+            Box::new(ExactSourceCanvasBacking {
+                source: canvas.ref_source(),
+                backend: self.backend.clone(),
+                resource_domain: self.resource_domain.clone(),
+            }),
+            self.resource_domain.clone(),
+            self.execution_anchor(),
+        );
+    }
+}
+
+/// Device-free source canvas/image identity shared by all backend adapters.
+/// Only the replaying device installs an execution owner after GPU backing.
+pub(crate) struct ExactSourceRenderCanvas {
+    source: rcp<SourceRenderCanvas>,
+    image: Rc<RiveRenderImageHandle>,
+    backing: Option<Box<dyn RenderCanvasContract>>,
+}
+
+impl ExactSourceRenderCanvas {
+    pub(crate) fn new(width: u32, height: u32) -> Self {
+        Self::from_source(make_rcp(|| SourceRenderCanvas::new(width, height)))
+    }
+    fn from_source(source: rcp<SourceRenderCanvas>) -> Self {
+        assert!(!source.get().is_null());
+        let image = RiveRenderImageHandle::from_exact(unsafe { &*source.get() }.ref_render_image())
+            .expect("source canvas retains a nonnull image");
+        Self {
+            source,
+            image: Rc::new(image),
+            backing: None,
+        }
+    }
+    pub(crate) fn source_ptr(&self) -> *mut SourceRenderCanvas {
+        self.source.get()
+    }
+    pub(crate) fn ref_source(&self) -> rcp<SourceRenderCanvas> {
+        self.source.clone()
+    }
+    pub(crate) fn install_backing(
+        &mut self,
+        backing: Box<dyn RenderCanvasContract>,
+        domain: RenderResourceDomain,
+        guard: Rc<dyn Any>,
+    ) {
+        assert!(self.is_backed());
+        assert!(self.backing.is_none(), "canvas execution already installed");
+        self.image.attach_execution_domain(domain, guard);
+        self.backing = Some(backing);
+    }
+}
+
+impl RenderCanvasContract for ExactSourceRenderCanvas {
+    fn width(&self) -> u32 {
+        unsafe { &*self.source.get() }.width()
+    }
+    fn height(&self) -> u32 {
+        unsafe { &*self.source.get() }.height()
+    }
+    fn is_backed(&self) -> bool {
+        unsafe { &*self.source.get() }.isBacked()
+    }
+    fn render_image(&self) -> Rc<dyn RenderImage> {
+        self.image.clone()
+    }
+    fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
+        // The replay executor owns the backend-specific ORE projection. In
+        // particular Metal publishes its typed bridge, not a source-canvas
+        // address. Image identity remains owned independently by the shell.
+        self.backing.as_ref()?.ore_texture_info()
+    }
+    fn begin_frame(
+        &mut self,
+        clear_color: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+        self.backing
+            .as_mut()
+            .ok_or_else(|| RenderCanvasError::new("RenderCanvas has no backing"))?
+            .begin_frame(clear_color)
+    }
+}
+
+struct ExactSourceCanvasBacking<B: ExactSourceBackend> {
     source: rcp<SourceRenderCanvas>,
     backend: Rc<RefCell<B>>,
     resource_domain: RenderResourceDomain,
 }
 
-impl<B: ExactSourceBackend> ExactSourceRenderCanvas<B> {
+impl<B: ExactSourceBackend> ExactSourceCanvasBacking<B> {
     fn source_ref(&self) -> &SourceRenderCanvas {
         // SAFETY: construction rejects the nullable source allocation and the
         // retained rcp owns it for this complete borrow.
@@ -699,7 +790,10 @@ impl<B: ExactSourceBackend> ExactSourceRenderCanvas<B> {
     }
 }
 
-impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceRenderCanvas<B> {
+impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceCanvasBacking<B> {
+    fn is_backed(&self) -> bool {
+        self.source_ref().isBacked()
+    }
     fn ore_texture_info(&self) -> Option<nuxie_ore_metal::context::CanvasTextureInfo> {
         let mut info = self.render_image().ore_texture_info()?;
         info.canvas = self.source.get().cast();
@@ -721,15 +815,6 @@ impl<B: ExactSourceBackend> RenderCanvasContract for ExactSourceRenderCanvas<B> 
                 Rc::clone(&self.backend) as Rc<dyn Any>,
             );
         Rc::new(image)
-    }
-
-    fn ensure_backing(&mut self) {
-        let mut backend = self.backend.borrow_mut();
-        let context = unsafe { Pin::get_unchecked_mut(backend.context_mut()) };
-        // SAFETY: `self.source` is retained for this canvas's full lifetime and
-        // the backend/context borrow is exclusive for the complete call.
-        let canvas = unsafe { &mut *self.source.get() };
-        context.ensureCanvasBackingExecutable(canvas);
     }
 
     fn begin_frame(

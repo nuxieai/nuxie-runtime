@@ -6,12 +6,12 @@
 
 #![allow(dead_code)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "4ac7b32798da0482e441ef09304dc3b480ed3ee5";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4ad6fcf47526b033e5cbe16275e9219365551d76";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/rhi.glsl";
-pub const PINNED_SOURCE_SHA256: &str = "b08bc3a81cd7e88eb82ffba447fd073630aaa51f996641e8f7cd367678617f96";
+pub const PINNED_SOURCE_SHA256: &str = "b246364cde3d724f5d4b9682cff39ae17845011a0ebc2151f97911422fce0b9d";
 pub const OWNERSHIP_UNIT: &str = "shader:source:rhi";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 560;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 22901;
+pub const PINNED_SOURCE_LINE_COUNT: usize = 590;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 24414;
 pub const PINNED_SOURCE: &[u8] = include_bytes!("source/renderer_src_shaders_rhi_glsl__generated_input.source");
 
 const _: [(); PINNED_SOURCE_BYTE_COUNT] = [(); PINNED_SOURCE.len()];

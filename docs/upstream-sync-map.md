@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `ecfc9746dc5bc72f1311cdd561c979b65bc11d8a`
+- LAST_SYNCED_SHA: `4ad6fcf47526b033e5cbe16275e9219365551d76`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `4ad6fcf47526b033e5cbe16275e9219365551d76` | Carry shared push-constant shader declaration macros and retained RHI source updates. Supported-backend expanded tokens are unchanged; retain coherent compiled bundles and correct the regenerated WebGPU wrapper's renamed coordinate. Unreal deployment/MSAA defaults, C++ stacktrace construction, Visual Studio bootstrap, and Unreal-specific NDK handling do not apply to Rust product hosts. No Unreal backend added. | — |
 | `ecfc9746dc5bc72f1311cdd561c979b65bc11d8a` | Recoverable Vulkan startup allocation scope, null-safe failed creation handles, fallible pipeline factories and context admission; preserve abort behavior outside scope. Translate upstream fault-injection regressions. Rust host propagates admission failure without introducing a GL fallback. | — |
 | `155b22d887c79e121d1e032c60ef59903c06be1a` | Rename Sidecar allocation accessor to ensure_allocated and update all generated setters/deserializers and storage tests. Runtime diff is an API rename, not the broader Unreal changes described by its title. No compatibility alias. | — |
 | `3f4047a85f11fecfde8c4d906c0c1654aa12b015` | Signed grid fields through binding reads/writes; separate placement application phase and sibling-placement registration during resync, retaining Taffy. Port all three upstream bound-grid assertions. Editor-only export fixes are not runtime code. | — |

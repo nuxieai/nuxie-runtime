@@ -1,5 +1,5 @@
 //! Direct translation of `tests/unit_tests/runtime/text_style_background_test.cpp`
-//! at upstream 1f04919af881fe51c929924dc773c835ca9071f0.
+//! at upstream d6107a91f7a2798893356605fa96cff3cea41c8f.
 
 use nuxie_render_api::{FillRule, NullRenderer, PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
@@ -81,6 +81,30 @@ fn selection_path_keeps_disjoint_lines_as_separate_contours() {
 }
 
 #[test]
+fn selection_path_winds_holes_opposite_to_their_outer_contour() {
+    let mut selection = TextSelectionPath::new(true, FillRule::Clockwise);
+    let rects = [
+        Aabb::new(0.0, 0.0, 60.0, 20.0),
+        Aabb::new(0.0, 20.0, 20.0, 40.0),
+        Aabb::new(40.0, 20.0, 60.0, 40.0),
+        Aabb::new(0.0, 40.0, 60.0, 60.0),
+    ];
+    selection.update(&rects, 0.0);
+    assert_eq!(num_contours(&selection.path), 2);
+    // Opposite winding subtracts the hole instead of adding its area.
+    let area = f64::from(selection.path.raw_path().compute_coarse_area().abs());
+    let expected = f64::from(3200.0_f32);
+    // Pinned Catch Approx keeps its default relative epsilon even with a fixed
+    // margin, promotes the float operands to double, and accepts either check.
+    let within_margin = |margin: f64| expected + margin >= area && area + margin >= expected;
+    assert!(
+        within_margin(f64::from(0.01_f32))
+            || within_margin(f64::from(f32::EPSILON * 100.0) * expected.abs()),
+        "expected ring area 3200, got {area}"
+    );
+}
+
+#[test]
 fn selection_path_rewinds_between_updates() {
     let mut selection = TextSelectionPath::new(true, FillRule::EvenOdd);
     let rects = [Aabb::new(0.0, 0.0, 100.0, 20.0)];
@@ -155,6 +179,39 @@ fn editor_exported_text_style_background_renders_at_runtime() {
 }
 
 #[test]
+fn text_style_background_sorts_into_the_dependency_graph() {
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/sync/text_style_background.riv");
+    let bytes = std::fs::read(&fixture).expect("pinned background fixture");
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file =
+        File::import(&bytes, retained, None, None, None).expect("background fixture imports");
+    let artboard = file
+        .with_file(|file| file.artboard())
+        .expect("source artboard");
+    let backgrounds = artboard
+        .with_downcast::<Artboard, _>(|artboard| artboard.find_all_handles::<TextStyleBackground>())
+        .unwrap();
+    assert_eq!(backgrounds.len(), 1);
+    let background = &backgrounds[0];
+    let parent = background
+        .with(|object| object.as_component().unwrap().parent_handle().unwrap())
+        .unwrap();
+    let text = parent
+        .with(|object| object.as_component().unwrap().parent_handle().unwrap())
+        .unwrap();
+    let text_order = text
+        .with_downcast::<Text, _>(|text| text.graph_order())
+        .unwrap();
+    let background_order = background
+        .with(|object| object.as_component().unwrap().graph_order())
+        .unwrap();
+    assert_ne!(background_order, 0);
+    assert!(background_order > text_order);
+}
+
+#[test]
 fn text_style_background_is_a_shape_paint_container() {
     let mut background = TextStyleBackground::default();
     assert!(std::ptr::eq(
@@ -167,6 +224,6 @@ fn text_style_background_is_a_shape_paint_container() {
         background.local_clockwise_path() as *const ShapePaintPath,
         local_path
     );
-    assert_eq!(background.local_path().fill_rule(), FillRule::EvenOdd);
+    assert_eq!(background.local_path().fill_rule(), FillRule::Clockwise);
     assert_eq!(background.base.corner_radius(), 0.0);
 }

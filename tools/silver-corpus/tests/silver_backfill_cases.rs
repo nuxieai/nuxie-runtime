@@ -59,6 +59,15 @@ fn fit_font_size_with_varying_sizes() {
 }
 
 #[test]
+fn text_background_color_with_active_feather() {
+    let Some(runtime) = runtime_root("upstream d6107a91 text background feather Silver") else {
+        return;
+    };
+    compare_case("text_background_feather_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}
+
+#[test]
 fn data_binding_keyframes_animated_by_joysticks() {
     let Some(runtime) = runtime_root("upstream joystick keyframe binding Silver") else {
         return;

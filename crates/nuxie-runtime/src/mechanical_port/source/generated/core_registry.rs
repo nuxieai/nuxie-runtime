@@ -76246,6 +76246,10 @@ impl crate::mechanical_port::source::core::CoreObject
 impl CoreCapabilities
     for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
 {
+    fn component_build_dependencies(&mut self) -> bool {
+        crate::mechanical_port::source::text::text_style_background::TextStyleBackground::build_dependencies(self);
+        true
+    }
     fn lifecycle_validate(
         &mut self,
         context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,

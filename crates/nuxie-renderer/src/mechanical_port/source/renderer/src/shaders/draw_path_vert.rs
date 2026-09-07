@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/draw_path.vert.
  *
- * Upstream source revision: 3ed35ee0ded0d58fb8d380930a156041a4624a2f
+ * Upstream source revision: 4ad6fcf47526b033e5cbe16275e9219365551d76
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "3ed35ee0ded0d58fb8d380930a156041a4624a2f";
+pub const PINNED_UPSTREAM_COMMIT: &str = "4ad6fcf47526b033e5cbe16275e9219365551d76";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/draw_path.vert";
 pub const PINNED_SOURCE_SHA256: &str =
-    "73252b133988b39c803cfe31d13c868fe223a9ddfb8996d1dbdb593839123162";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 548;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 18927;
+    "61cb7a9875b263f101e1621d89c139404fbc2406ae570b1235cb36060dfe1650";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 549;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 18959;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
@@ -108,8 +108,9 @@ VARYING_BLOCK_END
 // then gets discarded at the blend step).
 // NOTE: This is intentionally declared inside "#ifdef @VERTEX" so it doesn't
 // get needlessly added to fragment shaders.
-layout(push_constant) uniform PushConstants { float colorWriteEnable; }
-pushConstants;
+PUSH_CONSTANT_BLOCK_BEGIN(PushConstants)
+PUSH_CONSTANT(float, colorWriteEnable)
+PUSH_CONSTANT_BLOCK_END(pushConstants)
 #endif
 
 VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)

@@ -9,14 +9,20 @@ use super::{
     enter_occurrence, ffi_guard, ffi_guard_with_handle_result, ffi_guard_with_result,
     publish_result, register_handle, remove_handle,
 };
+use nuxie::PersistentFactory;
 use nuxie::render_api::Mat2D;
-use nuxie::{ImageDecodeError, PersistentFactory, RenderImage, Renderer};
-use nuxie_renderer::{NativeVulkanFactory, RenderMode, RendererError};
+#[cfg(test)]
+use nuxie_renderer::RenderMode;
+use nuxie_renderer::deferred::cmd::deferred_replayer::take_frame;
+use nuxie_renderer::{NativeVulkanFactory, RendererError};
 use std::cell::RefCell;
 use std::ptr;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
+
+mod deferred;
+use deferred::{AndroidVulkanFactory, AndroidVulkanFrameSink};
 
 pub type NuxAndroidVulkanRendererFit = u32;
 /// Preserve authored artboard coordinates without applying a viewport fit.
@@ -29,22 +35,9 @@ pub type NuxAndroidVulkanPixelFormat = u32;
 pub const NUX_ANDROID_VULKAN_PIXEL_FORMAT_RGBA8_PREMULTIPLIED: NuxAndroidVulkanPixelFormat = 1;
 
 struct AndroidVulkanRendererState {
-    factory: PersistentFactory<crate::asset_hooks::AssetFactory<NativeVulkanFactory>>,
+    factory: PersistentFactory<crate::asset_hooks::AssetFactory<AndroidVulkanFactory>>,
     pixel_width: u32,
     pixel_height: u32,
-}
-
-impl crate::asset_hooks::AssetUploadFactory for NativeVulkanFactory {
-    fn upload_rgba8_premul_srgb(
-        &mut self,
-        width: u32,
-        height: u32,
-        row_bytes: u32,
-        pixels: &[u8],
-    ) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
-        self.upload_canonical_rgba8_premul_srgb(width, height, row_bytes, pixels)
-            .map_err(|_| ImageDecodeError)
-    }
 }
 
 /// Product-neutral headless Vulkan renderer. The handle and every frame it
@@ -308,7 +301,7 @@ pub unsafe extern "C" fn nux_renderer_new_android_vulkan(
                 NuxAndroidVulkanRenderer {
                     state: RefCell::new(AndroidVulkanRendererState {
                         factory: PersistentFactory::new(crate::asset_hooks::AssetFactory::new(
-                            factory,
+                            AndroidVulkanFactory::new(factory),
                         )),
                         pixel_width,
                         pixel_height,
@@ -403,7 +396,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                 let _occurrence_call = enter_occurrence(&player.artboard).map_err(|status| {
                     ApiFailure::new(status, "player occurrence is unavailable")
                 })?;
-                let mut state = renderer_ref
+                let state = renderer_ref
                     .state
                     .try_borrow_mut()
                     .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
@@ -431,24 +424,37 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         ApiFailure::new(status, "player render revision overflowed")
                     })?;
                 let rendered_revision = player.artboard.render_revision.get();
-                let mut frame = state
-                    .factory
-                    .borrow()
-                    .begin_frame(clear_color, RenderMode::Msaa)
-                    .map_err(renderer_failure)?;
+                // Script callbacks allocate into the producer factory, so do
+                // not hold its borrow while recording the artboard.
+                let (mut session, replayer, native) = {
+                    let factory = state.factory.borrow();
+                    (
+                        factory.session.clone(),
+                        factory.replayer.clone(),
+                        factory.native.clone(),
+                    )
+                };
+                session.record_ore_replay_marker();
+                let mut recording = session.make_screen_renderer(0);
+                recording.save();
                 {
-                    let mut artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
+                    let artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
                         ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
                     })?;
                     if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER {
-                        frame.transform(centered_contain_transform(
+                        recording.transform(centered_contain_transform(
                             artboard.artboard_bounds(),
                             (state.pixel_width, state.pixel_height),
                         )?);
                     }
-                    artboard.draw(&mut frame);
+                    artboard.draw(recording.as_mut());
                 }
-                let pixels = frame.finish().map_err(renderer_failure)?;
+                recording.restore();
+                drop(recording);
+                let frame = take_frame(&mut session);
+                let mut sink = AndroidVulkanFrameSink::new(native, clear_color);
+                replayer.borrow_mut().replay_frame(&frame, &mut sink);
+                let pixels = sink.finish()?;
                 let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {
                     ApiFailure::new(NuxStatus::RuntimeError, "frame row stride overflowed")
                 })?;

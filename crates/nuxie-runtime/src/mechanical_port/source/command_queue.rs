@@ -319,6 +319,7 @@ impl Default for ViewModelPropertyData {
 #[derive(Clone, Default)]
 pub struct FileAssetData {
     pub name: String,
+    pub unique_name: String,
     pub asset_id: u32,
     pub cdn_uuid: String,
     pub cdn_base_url: String,
@@ -2472,6 +2473,7 @@ impl CommandQueue {
                             asset_id: self.read_message_pod(),
                             asset_type: self.read_message_pod(),
                             name: self.message_names.read(),
+                            unique_name: self.message_names.read(),
                             cdn_uuid: self.message_names.read(),
                             cdn_base_url: self.message_names.read(),
                             file_extension: self.message_names.read(),

@@ -1780,6 +1780,7 @@ impl CommandServer {
                                             asset.file_asset_base().asset_id(),
                                             core_type,
                                             asset.file_asset_base().name().to_owned(),
+                                            asset.file_asset_base().unique_name(),
                                             asset.file_asset_base().cdn_uuid_str(),
                                             asset.file_asset_base().cdn_base_url().to_owned(),
                                             asset.file_extension().to_owned(),
@@ -1793,11 +1794,12 @@ impl CommandServer {
                         m.write(handle);
                         m.write(request_id);
                         m.write(values.len());
-                        for (asset_id, core_type, name, cdn_uuid, cdn_base_url, extension) in values
+                        for (asset_id, core_type, name, unique_name, cdn_uuid, cdn_base_url, extension) in values
                         {
                             m.write(asset_id);
                             m.write(core_type);
                             m.write_name(name);
+                            m.write_name(unique_name);
                             m.write_name(cdn_uuid);
                             m.write_name(cdn_base_url);
                             m.write_name(extension);

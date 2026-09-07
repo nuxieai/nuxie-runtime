@@ -40,7 +40,7 @@ impl Fill {
         self.base.base.update_with_path_kind(value, kind, None);
     }
     pub fn path_flags(&self) -> PathFlags {
-        if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u32 {
+        if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u8 {
             PathFlags::LOCAL_CLOCKWISE
         } else {
             PathFlags::LOCAL
@@ -110,7 +110,7 @@ impl ShapePaintBehavior for Fill {
     }
 
     fn pick_path_kind(&self) -> ShapePaintPathKind {
-        if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u32 {
+        if self.base.fill_rule() == nuxie_render_api::FillRule::Clockwise as u8 {
             ShapePaintPathKind::LocalClockwise
         } else {
             ShapePaintPathKind::Local
@@ -118,7 +118,7 @@ impl ShapePaintBehavior for Fill {
     }
 
     fn fill_rule(&self) -> Option<u32> {
-        Some(self.base.fill_rule())
+        Some(u32::from(self.base.fill_rule()))
     }
 
     fn initialize_render_paint(

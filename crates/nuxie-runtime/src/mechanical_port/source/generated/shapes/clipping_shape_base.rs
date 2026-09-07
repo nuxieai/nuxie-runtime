@@ -14,7 +14,7 @@ pub trait ClippingShapeBaseCallbacks:
 pub struct ClippingShapeBase {
     pub base: Component,
     source_id: u32,
-    fill_rule: u32,
+    fill_rule: u8,
     is_visible: bool,
 }
 
@@ -62,10 +62,10 @@ impl ClippingShapeBase {
         self.source_id = value;
         true
     }
-    pub fn fill_rule(&self) -> u32 {
+    pub fn fill_rule(&self) -> u8 {
         self.fill_rule
     }
-    pub fn set_fill_rule(&mut self, value: u32, callbacks: &mut impl ClippingShapeBaseCallbacks) {
+    pub fn set_fill_rule(&mut self, value: u8, callbacks: &mut impl ClippingShapeBaseCallbacks) {
         if !self.set_fill_rule_value(value) {
             return;
         }
@@ -76,7 +76,7 @@ impl ClippingShapeBase {
         );
     }
 
-    pub(crate) fn set_fill_rule_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_fill_rule_value(&mut self, value: u8) -> bool {
         if self.fill_rule == value {
             return false;
         }
@@ -127,7 +127,7 @@ impl ClippingShapeBase {
                 true
             }
             Self::FILL_RULE_PROPERTY_KEY => {
-                self.fill_rule = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.fill_rule = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::IS_VISIBLE_PROPERTY_KEY => {

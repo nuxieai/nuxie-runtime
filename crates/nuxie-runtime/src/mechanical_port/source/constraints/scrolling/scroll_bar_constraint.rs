@@ -262,6 +262,16 @@ impl ScrollBarConstraint {
             .filter(|added| *added)
             .expect("resolved ScrollConstraint component");
         self.base.build_dependencies();
+        let thumb_is_layout = self.with_thumb_mut(|thumb| thumb.mark_interaction_target()).is_some();
+        if thumb_is_layout {
+            if let Some(track) = self.track_handle() {
+                track.with_mut(|track| {
+                    if let Some(layout) = track.as_layout_component_mut() {
+                        layout.mark_interaction_target();
+                    }
+                });
+            }
+        }
     }
 
     pub fn on_added_dirty(&mut self, context: &mut dyn CoreContext) -> StatusCode {

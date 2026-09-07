@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     animation::listener_invocation::ListenerInvocation,
-    core::CoreHandle,
+    core::{CoreHandle, CoreObject},
     core_context::CoreContext,
     generated::animation::{
         state_machine_base::StateMachineBase, state_machine_listener_base::StateMachineListenerBase,
@@ -9,6 +9,26 @@ use crate::mechanical_port::source::{
     listener_type::ListenerType,
     status_code::StatusCode,
 };
+const POINTER_HIT_LISTENER_TYPES: [ListenerType; 9] = [
+    ListenerType::Enter,
+    ListenerType::Exit,
+    ListenerType::Down,
+    ListenerType::Up,
+    ListenerType::Move,
+    ListenerType::Click,
+    ListenerType::DragStart,
+    ListenerType::DragEnd,
+    ListenerType::Drag,
+];
+
+// Preserve virtual hasListener dispatch for both current and legacy single
+// listeners when the complete occurrence is available at the caller.
+pub(crate) fn has_pointer_listeners(listener: &dyn CoreObject) -> bool {
+    POINTER_HIT_LISTENER_TYPES
+        .iter()
+        .copied()
+        .any(|kind| listener.state_machine_listener_has(kind).unwrap_or(false))
+}
 #[derive(Default)]
 pub struct StateMachineListener {
     pub base: StateMachineListenerBase,
@@ -22,8 +42,27 @@ impl StateMachineListener {
     pub fn on_added_dirty(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
         StatusCode::Ok
     }
-    pub fn on_added_clean(&mut self, _context: &mut dyn CoreContext) -> StatusCode {
+    pub fn on_added_clean(&mut self, context: &mut dyn CoreContext) -> StatusCode {
+        self.on_added_clean_with_pointer(context, self.has_pointer_listeners())
+    }
+    pub(crate) fn on_added_clean_with_pointer(
+        &mut self,
+        context: &mut dyn CoreContext,
+        has_pointer: bool,
+    ) -> StatusCode {
+        if has_pointer {
+            if let Some(target) = context.resolve(self.base.target_id()) {
+                target.with_mut(|target| {
+                    if let Some(layout) = target.as_layout_component_mut() {
+                        layout.mark_listener_target();
+                    }
+                });
+            }
+        }
         StatusCode::Ok
+    }
+    pub fn has_pointer_listeners(&self) -> bool {
+        self.has_listeners(&POINTER_HIT_LISTENER_TYPES)
     }
     pub fn has_listener(&self, kind: ListenerType) -> bool {
         self.listener_input_types.iter().any(|value| {

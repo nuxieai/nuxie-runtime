@@ -16,8 +16,8 @@ pub trait StrokeBaseCallbacks:
 pub struct StrokeBase {
     pub base: ShapePaint,
     thickness: f32,
-    cap: u32,
-    join: u32,
+    cap: u8,
+    join: u8,
     transform_affects_stroke: bool,
 }
 
@@ -64,10 +64,10 @@ impl StrokeBase {
         self.thickness = value;
         true
     }
-    pub fn cap(&self) -> u32 {
+    pub fn cap(&self) -> u8 {
         self.cap
     }
-    pub fn set_cap(&mut self, value: u32, callbacks: &mut impl StrokeBaseCallbacks) {
+    pub fn set_cap(&mut self, value: u8, callbacks: &mut impl StrokeBaseCallbacks) {
         if !self.set_cap_value(value) {
             return;
         }
@@ -75,17 +75,17 @@ impl StrokeBase {
         StrokeBaseCallbacks::notify_property_changed(callbacks, Self::CAP_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_cap_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_cap_value(&mut self, value: u8) -> bool {
         if self.cap == value {
             return false;
         }
         self.cap = value;
         true
     }
-    pub fn join(&self) -> u32 {
+    pub fn join(&self) -> u8 {
         self.join
     }
-    pub fn set_join(&mut self, value: u32, callbacks: &mut impl StrokeBaseCallbacks) {
+    pub fn set_join(&mut self, value: u8, callbacks: &mut impl StrokeBaseCallbacks) {
         if !self.set_join_value(value) {
             return;
         }
@@ -93,7 +93,7 @@ impl StrokeBase {
         StrokeBaseCallbacks::notify_property_changed(callbacks, Self::JOIN_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_join_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_join_value(&mut self, value: u8) -> bool {
         if self.join == value {
             return false;
         }
@@ -149,11 +149,11 @@ impl StrokeBase {
                 true
             }
             Self::CAP_PROPERTY_KEY => {
-                self.cap = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.cap = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::JOIN_PROPERTY_KEY => {
-                self.join = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.join = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             Self::TRANSFORM_AFFECTS_STROKE_PROPERTY_KEY => {

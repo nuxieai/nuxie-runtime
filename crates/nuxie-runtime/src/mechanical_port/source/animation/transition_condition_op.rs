@@ -1,4 +1,4 @@
-#[repr(i32)]
+#[repr(u8)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TransitionConditionOp {
     Equal = 0,

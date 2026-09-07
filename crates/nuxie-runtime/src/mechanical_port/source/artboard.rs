@@ -684,7 +684,10 @@ impl Artboard {
     }
 
     pub fn added_to_host(&mut self) {
-        self.base.base.just_added_to_host = true;
+        self.base.base.set_layout_flag(
+            crate::mechanical_port::source::layout_component::LayoutComponentFlags::JustAddedToHost,
+            true,
+        );
     }
 
     // TESTING exposes addObject in the pinned header. This is only the live
@@ -971,15 +974,19 @@ impl Artboard {
                     let layout = current_layout.take().unwrap();
                     let proxy = layout
                         .with_mut(|layout| {
-                            layout
-                                .as_layout_component_mut()
-                                .and_then(LayoutComponent::proxy)
+                            layout.as_layout_component_mut().and_then(|layout| {
+                                if layout.needs_drawable_proxy() {
+                                    layout.proxy()
+                                } else {
+                                    None
+                                }
+                            })
                         })
                         .flatten();
                     if let Some(proxy) = proxy {
                         drawables.insert(i, proxy);
+                        i += 1;
                     }
-                    i += 1;
                     layouts.pop();
                     current_layout = layouts.last().cloned();
                     if current_layout.is_none()
@@ -1005,9 +1012,13 @@ impl Artboard {
         while let Some(layout) = layouts.pop() {
             if let Some(proxy) = layout
                 .with_mut(|layout| {
-                    layout
-                        .as_layout_component_mut()
-                        .and_then(LayoutComponent::proxy)
+                    layout.as_layout_component_mut().and_then(|layout| {
+                        if layout.needs_drawable_proxy() {
+                            layout.proxy()
+                        } else {
+                            None
+                        }
+                    })
                 })
                 .flatten()
             {
@@ -1740,16 +1751,11 @@ impl Artboard {
         } else {
             background
         };
-        self.base.base.local_path().rewind();
-        self.base
-            .base
-            .local_path()
-            .add_rect(background, PathDirection::Clockwise);
-        self.base.base.world_path().rewind();
-        self.base
-            .base
-            .world_path()
-            .add_rect(clip, PathDirection::Clockwise);
+        let paths = self.base.base.mutable_render_paths();
+        paths.local.rewind();
+        paths.local.add_rect(background, PathDirection::Clockwise);
+        paths.world.rewind();
+        paths.world.add_rect(clip, PathDirection::Clockwise);
     }
 
     pub(crate) fn update_after_layout_super_handle(root: &CoreHandle, value: ComponentDirt) {
@@ -2330,7 +2336,12 @@ impl Artboard {
         }
         let factory = self.factory().expect("Artboard renderer factory");
         if self.clip() {
-            let path = self.base.base.local_path().render_path(&factory);
+            let path = self
+                .base
+                .base
+                .mutable_render_paths()
+                .local
+                .render_path(&factory);
             renderer.clip_path(path);
         }
         let world_transform = self.world_transform();
@@ -2354,6 +2365,7 @@ impl Artboard {
                     crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::LocalClockwise => self.base.base.local_clockwise_path(),
                     crate::mechanical_port::source::shapes::paint::shape_paint::ShapePaintPathKind::World => self.base.base.world_path(),
                 };
+                let Some(path) = path else { return; };
                 behavior.shape_paint_mut().draw_with_factory(renderer, path, world_transform, false, None, true, fill_rule, &factory);
             });
         }
@@ -2721,14 +2733,14 @@ impl Artboard {
     pub fn clip_path(
         &mut self,
     ) -> &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath {
-        self.base.base.world_path()
+        &mut self.base.base.mutable_render_paths().world
     }
 
     #[cfg(test)]
     pub fn background_path(
         &mut self,
     ) -> &mut crate::mechanical_port::source::shapes::paint::shape_paint_path::ShapePaintPath {
-        self.base.base.local_path()
+        &mut self.base.base.mutable_render_paths().local
     }
 
     #[cfg(feature = "tools")]

@@ -160,3 +160,13 @@ fn upstream_fl_bc_multi_listener_scripted_action_assertion() {
     };
     compare_case("multi_listeners", &runtime).unwrap_or_else(|error| panic!("{error:#}"));
 }
+#[test]
+fn upstream_layout_occluded_by_rectangle_pointer_test() {
+    // layout_test.cpp at 61f00897: initial draw plus five pointer-down/up
+    // frames at 25, 60, 150, 300, and 450; each click advances by 0.1.
+    let Some(runtime) = runtime_root("upstream layout hit-order Silver assertion") else {
+        return;
+    };
+    compare_case("layout_order_pointer_test", &runtime)
+        .unwrap_or_else(|error| panic!("{error:#}"));
+}

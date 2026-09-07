@@ -773,8 +773,8 @@ impl ScriptNode {
                     .map(|stroke| {
                         (
                             stroke.base.thickness(),
-                            stroke.base.cap(),
-                            stroke.base.join(),
+                            u32::from(stroke.base.cap()),
+                            u32::from(stroke.base.join()),
                         )
                     });
                 Some(ScriptPaint::from_fresh(paint, stroke))

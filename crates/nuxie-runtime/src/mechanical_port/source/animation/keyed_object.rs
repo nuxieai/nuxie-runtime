@@ -39,6 +39,7 @@ impl KeyedObject {
         if !context.resolves_object(self.base.object_id()) {
             return StatusCode::MissingObject;
         }
+        let core_object = context.resolve_object(self.base.object_id());
         let mut index = 0;
         while index < self.keyed_properties.len() {
             let property_key = self.keyed_properties[index]
@@ -49,6 +50,15 @@ impl KeyedObject {
             if !context.object_supports_property(self.base.object_id(), property_key) {
                 self.keyed_properties.remove(index);
                 continue;
+            }
+            if property_key == u32::from(crate::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY) {
+                if let Some(object) = &core_object {
+                    object.with_mut(|object| {
+                        if let Some(layout) = object.as_layout_component_mut() {
+                            layout.mark_clip_may_be_dynamic();
+                        }
+                    });
+                }
             }
             let code = self.keyed_properties[index]
                 .with_downcast_mut::<KeyedProperty, _>(|property| property.on_added_dirty(context))

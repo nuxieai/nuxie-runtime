@@ -10,7 +10,7 @@ pub trait StateMachineFireActionBaseCallbacks {
 
 pub struct StateMachineFireActionBase {
     pub base: Core,
-    occurs_value: u32,
+    occurs_value: u8,
 }
 
 impl Default for StateMachineFireActionBase {
@@ -32,12 +32,12 @@ impl StateMachineFireActionBase {
     pub fn core_type(&self) -> u16 {
         Self::TYPE_KEY
     }
-    pub fn occurs_value(&self) -> u32 {
+    pub fn occurs_value(&self) -> u8 {
         self.occurs_value
     }
     pub fn set_occurs_value(
         &mut self,
-        value: u32,
+        value: u8,
         callbacks: &mut impl StateMachineFireActionBaseCallbacks,
     ) {
         if !self.set_occurs_value_value(value) {
@@ -47,7 +47,7 @@ impl StateMachineFireActionBase {
         callbacks.notify_property_changed(Self::OCCURS_VALUE_PROPERTY_KEY);
     }
 
-    pub(crate) fn set_occurs_value_value(&mut self, value: u32) -> bool {
+    pub(crate) fn set_occurs_value_value(&mut self, value: u8) -> bool {
         if self.occurs_value == value {
             return false;
         }
@@ -77,7 +77,7 @@ impl StateMachineFireActionBase {
     ) -> bool {
         match property_key {
             Self::OCCURS_VALUE_PROPERTY_KEY => {
-                self.occurs_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                self.occurs_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader) as u8;
                 true
             }
             _ => false,

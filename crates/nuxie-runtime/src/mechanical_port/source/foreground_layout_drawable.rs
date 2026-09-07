@@ -94,6 +94,9 @@ impl ForegroundLayoutDrawable {
                         ShapePaintPathKind::Local => parent.local_path(),
                         ShapePaintPathKind::LocalClockwise => parent.local_clockwise_path(),
                     };
+                    let Some(path) = path else {
+                        return;
+                    };
                     paint
                         .shape_paint_mut()
                         .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
@@ -130,7 +133,7 @@ impl ForegroundLayoutDrawable {
                             ShapePaintPathKind::Local => parent.local_path(),
                             ShapePaintPathKind::LocalClockwise => parent.local_clockwise_path(),
                         };
-                        use_path(path);
+                        use_path(path?);
                         Some(())
                     })
                     .flatten()

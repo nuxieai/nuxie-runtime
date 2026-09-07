@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-ed92313af34f5a8928647d021ee497b6d95d949a}
+ref=${RIVE_RUNTIME_REF:-61f00897013eba8c57ee2002c33e6ee47d476eff}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/layout_order_pointer_test.riv|039c181c5acb8c8eef63dab84ac473606c93876821ffc0877efc832a90e557ae|61f00897013eba8c57ee2002c33e6ee47d476eff|layout_order_pointer_test.riv"
   "sync/swappable_artboards_focus.riv|b36ee050fe0dccb447a00893ac7f89599f459eea53c5f4ecddef1a1f5b065fa0|081f85a690f26a4e8cceead05bd9c3f86707eae2|swappable_artboards_focus.riv"
   "sync/nested_artboard_rotated.riv|038b7acad1bb413a1452d6bda3bf61788e26ead8d5bd7ad5512ebda27c33caea|e289232b776cf315863ad995ca987982e50445ab|layout/nested_artboard_rotated.riv"
   "sync/text_background_feather_test.riv|8b9856e161949d835339a0b7666a920857578cbde8b06dade66daa645a2913ce|d6107a91f7a2798893356605fa96cff3cea41c8f|text_background_feather_test.riv"

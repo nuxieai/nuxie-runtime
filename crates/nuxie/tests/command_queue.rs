@@ -4509,6 +4509,7 @@ fn file_assets_listed_image_asset() {
     assert_eq!(assets.len(), 1);
     let asset = &assets[0];
     assert_eq!(asset.name, "one.png");
+    assert_eq!(asset.unique_name, "one-45008");
     assert_eq!(asset.asset_id, 45008);
     assert_eq!(asset.cdn_uuid, "edcb1816-8405-4983-acd2-16db48d85df4");
     assert_eq!(asset.cdn_base_url, "https://public.uat.rive.app/cdn/uuid");
@@ -4522,6 +4523,7 @@ fn file_assets_listed_font_asset() {
     assert_eq!(assets.len(), 1);
     let asset = &assets[0];
     assert_eq!(asset.name, "Inter");
+    assert_eq!(asset.unique_name, "Inter-43276");
     assert_eq!(asset.asset_id, 43276);
     assert_eq!(asset.cdn_base_url, "https://public.uat.rive.app/cdn/uuid");
     assert_eq!(asset.file_extension, "ttf");

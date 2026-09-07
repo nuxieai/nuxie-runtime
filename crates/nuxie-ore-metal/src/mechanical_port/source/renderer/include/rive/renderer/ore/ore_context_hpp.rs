@@ -38,6 +38,7 @@
 use super::*;
 
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::ptr::NonNull;
 use std::rc::{Rc, Weak as RcWeak};
@@ -169,6 +170,12 @@ impl BufferErrorSink for ContextState {
 
 pub trait ContextApi {
     fn contextBase(&self) -> &Context;
+    fn findInternedBindGroupLayout(&self, layoutId: u64) -> Option<AnyResourceHandle> {
+        self.contextBase().findInternedBindGroupLayout(layoutId)
+    }
+    fn internBindGroupLayout(&self, layoutId: u64, layout: AnyResourceHandle) {
+        self.contextBase().internBindGroupLayout(layoutId, layout);
+    }
     fn canvasTargetFormat(&self) -> TextureFormat {
         TextureFormat::rgba8unorm
     }
@@ -288,6 +295,9 @@ pub trait ContextApi {
 // which converts implicitly to std::unique_ptr<Context> for cross-backend
 // use). Code that only needs the cross-backend API takes Context*.
 pub struct Context {
+    // Strong layout references shared by projections of this same context.
+    // Drop these before the resource manager/state and recording buffers.
+    internedLayouts: Rc<RefCell<HashMap<u64, AnyResourceHandle>>>,
     pub(crate) state: Arc<ContextState>,
     activeRenderPass: Rc<RefCell<Option<RcWeak<dyn ActiveRenderPass>>>>,
     deferredRecording: Rc<Cell<bool>>,
@@ -300,6 +310,7 @@ impl Context {
     // a second backend or independent recording/active-pass state machine.
     pub(crate) fn shared_base(&self) -> Self {
         Self {
+            internedLayouts: self.internedLayouts.clone(),
             state: self.state.clone(),
             activeRenderPass: self.activeRenderPass.clone(),
             deferredRecording: self.deferredRecording.clone(),
@@ -308,6 +319,14 @@ impl Context {
     }
 
     // public:
+
+    pub fn findInternedBindGroupLayout(&self, layoutId: u64) -> Option<AnyResourceHandle> {
+        self.internedLayouts.borrow().get(&layoutId).cloned()
+    }
+
+    pub fn internBindGroupLayout(&self, layoutId: u64, layout: AnyResourceHandle) {
+        self.internedLayouts.borrow_mut().insert(layoutId, layout);
+    }
 
     // virtual ~Context() = default;
     // Rust's default drop glue supplies the virtual-destructor boundary for
@@ -486,6 +505,7 @@ impl Context {
         domainFinalReleases: ResourceFinalReleaseDrain,
     ) -> Self {
         Self {
+            internedLayouts: Rc::new(RefCell::new(HashMap::new())),
             state: ContextState::newWithFinalReleaseDrain(features, manager, domainFinalReleases),
             activeRenderPass: Rc::new(RefCell::new(None)),
             deferredRecording: Rc::new(Cell::new(std::env::var_os("RIVE_ORE_DEFER").is_some())),

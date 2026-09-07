@@ -7,6 +7,7 @@ mod ore_deferred_multipass;
 mod ore_deferred_replay;
 mod ore_deferred_resource;
 mod ore_gm_helper;
+mod ore_layout_intern;
 mod ore_render_deferred_canvas;
 mod render_canvas_dag;
 mod render_deferred_2d;

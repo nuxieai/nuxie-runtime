@@ -237,7 +237,7 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
 }
 "#;
     let wgsl = format!("// {marker}\n{WGSL}");
-    const EMPTY_BINDING_MAP: &[u8] = &[2, 1, 14, 0, 0, 0, 0, 0];
+    const EMPTY_BINDING_MAP: &[u8] = &[3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
     let entries = [
         (0, "default_vertex", "physical_vertex_0"),
         (0, "chosen_vertex", "physical_vertex_1"),

@@ -75,7 +75,7 @@ mod shader_layout_tests {
         assert!(entries[1].textureMultisampled);
         assert_eq!(
             populateBindGroupLayoutEntriesFromShader(&mut entries[..1], Some(&shader), 1, &[]),
-            1
+            2
         );
         assert!(!entries[0].hasDynamicOffset);
         assert_eq!(
@@ -85,7 +85,7 @@ mod shader_layout_tests {
         assert_eq!(entries[0].binding, 7);
         assert_eq!(
             populateBindGroupLayoutEntriesFromShader(&mut [], Some(&shader), 1, &[]),
-            0
+            2
         );
     }
 }
@@ -152,6 +152,7 @@ fn sampleTypeFromBindingMap(sample: TextureSampleType) -> SampleType {
 
 /// Fill entries from the shader's binding map, preserving caller-owned fields
 /// not written upstream. The slice length represents `maxEntries`.
+/// Returns the required count, which may exceed the provided slice length.
 /// `dynamicUBOBindings` contains WGSL binding values within `groupIndex`.
 pub fn populateBindGroupLayoutEntriesFromShader(
     entries: &mut [BindGroupLayoutEntry],
@@ -164,15 +165,15 @@ pub fn populateBindGroupLayoutEntriesFromShader(
     };
     let mut n = 0;
     for i in 0..shader.m_bindingMap.size() {
-        if n == entries.len() {
-            break;
-        }
         let e = shader.m_bindingMap.at(i);
         if u32::from(e.group) != groupIndex {
             continue;
         }
-        let out = &mut entries[n];
+        let index = n;
         n += 1;
+        let Some(out) = entries.get_mut(index) else {
+            continue;
+        };
         out.binding = u32::from(e.binding);
         out.kind = bindingKindFromResource(e.kind);
         let mut visibility = 0;
@@ -204,13 +205,25 @@ pub fn populateBindGroupLayoutEntriesFromShader(
     n as u32
 }
 
-/// Derive at most sixteen entries and create the layout through the backend.
+/// Intern by baked identity, with heap storage for groups wider than sixteen.
 pub fn makeBindGroupLayoutFromShader(
     ctx: &mut dyn ContextApi,
     shader: Option<&ShaderModule>,
     groupIndex: u32,
     dynamicUBOBindings: &[u32],
 ) -> Option<AnyResourceHandle> {
+    let layoutId = if dynamicUBOBindings.is_empty() {
+        shader.map_or(BindingMap::kNoLayoutId, |shader| {
+            shader.m_bindingMap.layoutIdForGroup(groupIndex)
+        })
+    } else {
+        BindingMap::kNoLayoutId
+    };
+    if layoutId != BindingMap::kNoLayoutId {
+        if let Some(hit) = ctx.findInternedBindGroupLayout(layoutId) {
+            return Some(hit);
+        }
+    }
     let mut entries = [BindGroupLayoutEntry::default(); 16];
     let n = populateBindGroupLayoutEntriesFromShader(
         &mut entries,
@@ -218,12 +231,28 @@ pub fn makeBindGroupLayoutFromShader(
         groupIndex,
         dynamicUBOBindings,
     );
-    ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
+    let mut spilled = Vec::new();
+    let entries = if n > entries.len() as u32 {
+        spilled.resize(n as usize, BindGroupLayoutEntry::default());
+        populateBindGroupLayoutEntriesFromShader(
+            &mut spilled, shader, groupIndex, dynamicUBOBindings,
+        );
+        spilled.as_slice()
+    } else {
+        entries.as_slice()
+    };
+    let layout = ctx.makeBindGroupLayout(&BindGroupLayoutDesc {
         groupIndex,
-        entries: Some(&entries),
+        entries: Some(entries),
         entryCount: n,
         ..BindGroupLayoutDesc::default()
-    })
+    });
+    if layoutId != BindingMap::kNoLayoutId {
+        if let Some(layout) = &layout {
+            ctx.internBindGroupLayout(layoutId, layout.clone());
+        }
+    }
+    layout
 }
 
 // Map ore::BindingKind (public layout API) ↔ ore::ResourceKind (binding-map

@@ -1,10 +1,10 @@
 //! Metal branch of tests/gm/ore_gm_helper.hpp, plus the owned Rust GM host.
 use crate::deferred::cmd::{deferred_replayer::DeferredFrameSink, render_replay::RendererOwner};
 use crate::{
+    RenderMode,
     native_metal::{
         NativeMetalContextOptions, NativeMetalFactory, NativeMetalFrame, ShaderCompilationMode,
     },
-    RenderMode,
 };
 use nuxie_ore_metal::context::FrameDescriptor;
 pub(super) use nuxie_ore_metal::{
@@ -312,7 +312,7 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
     let header = fixture("gm/ore_gm_shaders.rstb.hpp");
     assert_eq!(
         format!("{:x}", Sha256::digest(&header)),
-        "1f47ed8572e119758e6791a9a4cc5b1a9cde38d94593c97a509727b50043a3e1"
+        "0d2a8e76b7a3bfcc39e5e0dc470a815042d44aa7f26a1284881ece38b002b3fb"
     );
     let header = String::from_utf8(header).unwrap();
     let data = header
@@ -332,7 +332,7 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
         .map(|s| u8::from_str_radix(s.trim_start_matches("0x"), 16).unwrap())
         .collect();
     const OFFSETS: [usize; 14] = [
-        0, 5038, 10035, 17407, 29306, 37119, 43700, 49316, 55246, 60817, 68744, 77064, 82552, 90987,
+        0, 5058, 10075, 17557, 29566, 37399, 44090, 49771, 55766, 61447, 69484, 77869, 83422, 91967,
     ];
     let mut envelope = vec![0];
     envelope.extend_from_slice(&bytes[OFFSETS[id as usize]..OFFSETS[id as usize + 1]]);

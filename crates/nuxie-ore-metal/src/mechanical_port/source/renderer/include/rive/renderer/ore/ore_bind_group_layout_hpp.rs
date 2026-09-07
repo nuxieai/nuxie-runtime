@@ -42,6 +42,8 @@ use super::ore_types_hpp::BindGroupLayoutEntry;
 // implemented in the paired ore_bind_group_layout_cpp.rs and exposed through
 // the public bind_group_layout module. Slices carry the pointer/count pairs;
 // Option<&ShaderModule> preserves the nullable upstream shader argument.
+// Population returns the total required group count, even when the caller's
+// slice is shorter. Only the slice's prefix is written; retry with more room.
 
 // Public Ore type — created via `Context::makeBindGroupLayout`. Carries the
 // user-supplied entries plus per-backend baked layout handles.
@@ -205,7 +207,7 @@ mod tests {
     use crate::types::StageVisibility;
 
     fn binding_map_blob(entry: BindingMapEntry) -> Vec<u8> {
-        let mut blob = vec![2, 1, 14, 0, 1, 0, 0, 0];
+        let mut blob = vec![3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0];
         blob.extend_from_slice(&[
             entry.group,
             entry.binding,

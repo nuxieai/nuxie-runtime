@@ -316,11 +316,12 @@ mod tests {
         original.finalize();
 
         let blob = original.toBlob();
-        assert_eq!(blob.len(), 50);
+        assert_eq!(blob.len(), 54);
         assert_eq!(blob[0], BindingMap::kBlobVersion);
         assert_eq!(blob[1], BindingMap::kAllocatorVersion);
         assert_eq!(&blob[2..4], &[14, 0]);
         assert_eq!(&blob[4..8], &[3, 0, 0, 0]);
+        assert_eq!(&blob[8..12], &[9, 0, 0, 0]);
 
         let mut restored = BindingMap::default();
         assert!(BindingMap::fromBlob(
@@ -443,14 +444,15 @@ mod tests {
         let current_entry_size = u16::from_le_bytes([blob[2], blob[3]]);
         const EXTRA_TRAILING: u16 = 4;
         let future_entry_size = current_entry_size + EXTRA_TRAILING;
-        let mut future_blob = vec![0u8; 8 + usize::from(future_entry_size)];
+        let mut future_blob = vec![0u8; 12 + usize::from(future_entry_size)];
         future_blob[0] = BindingMap::kBlobVersion;
         future_blob[1] = BindingMap::kAllocatorVersion;
         future_blob[2..4].copy_from_slice(&future_entry_size.to_le_bytes());
         future_blob[4] = 1;
-        future_blob[8..8 + usize::from(current_entry_size)]
-            .copy_from_slice(&blob[8..8 + usize::from(current_entry_size)]);
-        future_blob[8 + usize::from(current_entry_size)..].fill(0xff);
+        future_blob[8] = 9;
+        future_blob[12..12 + usize::from(current_entry_size)]
+            .copy_from_slice(&blob[12..12 + usize::from(current_entry_size)]);
+        future_blob[12 + usize::from(current_entry_size)..].fill(0xff);
 
         let mut out = BindingMap::default();
         assert!(BindingMap::fromBlob(
@@ -466,10 +468,11 @@ mod tests {
 
     #[test]
     fn binding_map_forward_compat_smaller_entry_size_rejected() {
-        let mut blob = vec![0u8; 8];
+        let mut blob = vec![0u8; 12];
         blob[0] = BindingMap::kBlobVersion;
         blob[1] = BindingMap::kAllocatorVersion;
         blob[2..4].copy_from_slice(&10u16.to_le_bytes());
+        blob[8] = 9;
         let mut out = BindingMap::default();
         assert!(!BindingMap::fromBlob(
             Some(&blob),
@@ -480,15 +483,16 @@ mod tests {
 
     #[test]
     fn binding_map_accepts_unknown_enum_bytes_and_nonzero_bool() {
-        let mut blob = vec![0u8; 8 + 14usize];
+        let mut blob = vec![0u8; 12 + 14usize];
         blob[0] = BindingMap::kBlobVersion;
         blob[1] = BindingMap::kAllocatorVersion;
         blob[2..4].copy_from_slice(&14u16.to_le_bytes());
         blob[4] = 1;
-        blob[8 + 2] = 0xfa;
-        blob[8 + 11] = 0xfb;
-        blob[8 + 12] = 0xfc;
-        blob[8 + 13] = 0x7f;
+        blob[8] = 9;
+        blob[12 + 2] = 0xfa;
+        blob[12 + 11] = 0xfb;
+        blob[12 + 12] = 0xfc;
+        blob[12 + 13] = 0x7f;
 
         let mut out = BindingMap::default();
         assert!(BindingMap::fromBlob(
@@ -501,10 +505,61 @@ mod tests {
         assert_eq!(out.at(0).textureSampleType.0, 0xfc);
         assert!(out.at(0).textureMultisampled);
         let serialized = out.toBlob();
-        assert_eq!(serialized[8 + 2], 0xfa);
-        assert_eq!(serialized[8 + 11], 0xfb);
-        assert_eq!(serialized[8 + 12], 0xfc);
-        assert_eq!(serialized[8 + 13], 1);
+        assert_eq!(serialized[12 + 2], 0xfa);
+        assert_eq!(serialized[12 + 11], 0xfb);
+        assert_eq!(serialized[12 + 12], 0xfc);
+        assert_eq!(serialized[12 + 13], 1);
+    }
+
+    #[test]
+    fn binding_map_layout_ids_round_trip_and_are_structural() {
+        let build = |binding| {
+            let mut map = BindingMap::default();
+            map.push(&make_entry(
+                0,
+                0,
+                ResourceKind::UniformBuffer,
+                0,
+                0,
+                BindingMap::kAbsent,
+                3,
+                0,
+            ));
+            map.push(&make_entry(
+                1,
+                binding,
+                ResourceKind::SampledTexture,
+                3,
+                3,
+                BindingMap::kAbsent,
+                3,
+                0,
+            ));
+            map.finalize();
+            map.computeLayoutIds();
+            map
+        };
+        let a = build(1);
+        assert_eq!(a.groupLayoutCount(), 2);
+        assert_ne!(a.layoutIdForGroup(0), BindingMap::kNoLayoutId);
+        assert_ne!(a.layoutIdForGroup(1), BindingMap::kNoLayoutId);
+        assert_ne!(a.layoutIdForGroup(0), a.layoutIdForGroup(1));
+        assert_eq!(a.layoutIdForGroup(2), BindingMap::kNoLayoutId);
+        let same = build(1);
+        assert_eq!(same.layoutIdForGroup(0), a.layoutIdForGroup(0));
+        assert_eq!(same.layoutIdForGroup(1), a.layoutIdForGroup(1));
+        let other = build(2);
+        assert_ne!(other.layoutIdForGroup(1), a.layoutIdForGroup(1));
+        assert_eq!(other.layoutIdForGroup(0), a.layoutIdForGroup(0));
+        let blob = a.toBlob();
+        let mut restored = BindingMap::default();
+        assert!(BindingMap::fromBlob(
+            Some(&blob),
+            blob.len(),
+            Some(&mut restored)
+        ));
+        assert_eq!(restored.layoutIdForGroup(0), a.layoutIdForGroup(0));
+        assert_eq!(restored.layoutIdForGroup(1), a.layoutIdForGroup(1));
     }
 
     #[test]
@@ -722,6 +777,13 @@ pub struct BindingMapEntry {
 // the source spelling for translated method signatures.
 pub type Entry = BindingMapEntry;
 
+/// Equal backend-scoped ids share one bind group layout.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GroupLayout {
+    pub group: u8,
+    pub layoutId: u64,
+}
+
 impl Default for BindingMapEntry {
     fn default() -> Self {
         Self {
@@ -745,6 +807,7 @@ impl Default for BindingMapEntry {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BindingMap {
     pub(crate) m_entries: Vec<Entry>,
+    pub(crate) m_groupLayouts: Vec<GroupLayout>,
     #[cfg(feature = "with-rive-tools")]
     pub(crate) m_finalized: bool,
 }
@@ -765,7 +828,9 @@ impl BindingMap {
     // RSTB blob version byte. Bumped when the on-disk schema changes in a
     // way that renders old blobs unreadable. A mismatch on load is a loud
     // error, never a silent misbind.
-    pub const kBlobVersion: u8 = 2;
+    // v3 adds group layout ids; in-tree producers rebake instead of accepting v2.
+    pub const kBlobVersion: u8 = 3;
+    pub const kNoLayoutId: u64 = 0;
 
     // Allocator version currently supported. Pipelines load with this
     // value; any blob stamped with a different version fails `fromBlob`
@@ -833,6 +898,21 @@ impl BindingMap {
     // `WITH_RIVE_TOOLS`).
     pub fn at(&self, i: usize) -> &Entry {
         &self.m_entries[i]
+    }
+
+    pub fn layoutIdForGroup(&self, group: u32) -> u64 {
+        self.m_groupLayouts
+            .iter()
+            .find(|entry| u32::from(entry.group) == group)
+            .map_or(Self::kNoLayoutId, |entry| entry.layoutId)
+    }
+
+    pub fn groupLayoutCount(&self) -> usize {
+        self.m_groupLayouts.len()
+    }
+
+    pub fn groupLayoutAt(&self, i: usize) -> &GroupLayout {
+        &self.m_groupLayouts[i]
     }
 
     // ----------------------------------------------------------------

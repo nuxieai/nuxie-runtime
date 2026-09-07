@@ -386,7 +386,7 @@ mod tests {
     }
 
     fn binding_map_blob(group: u8, binding: u8) -> Vec<u8> {
-        let mut blob = vec![2, 1, 14, 0, 1, 0, 0, 0];
+        let mut blob = vec![3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0];
         blob.extend_from_slice(&[
             group, binding, 0, 1, 0, 7, 0, 0xff, 0xff, 0xff, 0xff, 0, 0, 0,
         ]);

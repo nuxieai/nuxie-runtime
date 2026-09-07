@@ -2587,6 +2587,33 @@ pub enum DrawType {
     renderPassResolve = 22,
 }
 
+pub const fn drawTypeHasPipelineDynamicState(draw_type: DrawType) -> bool {
+    match draw_type {
+        DrawType::msaaDynamicMidpointFans | DrawType::msaaDynamicOuterCubics => true,
+        DrawType::midpointFanPatches
+        | DrawType::midpointFanCenterAAPatches
+        | DrawType::outerCurvePatches
+        | DrawType::interiorTriangulation
+        | DrawType::featherAtlasBlit
+        | DrawType::imageRect
+        | DrawType::imageMesh
+        | DrawType::msaaStrokes
+        | DrawType::msaaMidpointFanBorrowedCoverage
+        | DrawType::msaaMidpointFans
+        | DrawType::msaaMidpointFanStencilReset
+        | DrawType::msaaMidpointFanPathsStencil
+        | DrawType::msaaMidpointFanPathsCover
+        | DrawType::msaaOuterCubicBorrowedCoverage
+        | DrawType::msaaOuterCubics
+        | DrawType::msaaOuterCubicStencilReset
+        | DrawType::msaaOuterCubicPathsStencil
+        | DrawType::msaaOuterCubicPathsCover
+        | DrawType::clipReset
+        | DrawType::renderPassInitialize
+        | DrawType::renderPassResolve => false,
+    }
+}
+
 // Source-name spellings used by the translated Metal unit.  These are
 // associated constants on the one canonical GPU enum, not a second DTO
 // universe; all ABI and identity remain `gpu::DrawType`.

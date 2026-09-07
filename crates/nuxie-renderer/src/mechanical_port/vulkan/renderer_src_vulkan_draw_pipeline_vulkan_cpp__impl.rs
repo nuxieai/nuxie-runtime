@@ -145,7 +145,7 @@ pub(crate) fn createKey(props: &PipelineProps, platformFeatures: &PlatformFeatur
     );
     add_bits_to_key(
         key,
-        u64::from(vkutil_decl::hasPipelineDynamicState(props.drawType)),
+        u64::from(crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(props.drawType)),
         1,
     )
 }
@@ -444,7 +444,7 @@ impl DrawPipelineVulkan {
         let mut dynamicStates = [vk::DynamicState::VIEWPORT; 8];
         dynamicStates[1] = vk::DynamicState::SCISSOR;
         let mut dynamicStateCount = 2;
-        if vkutil_decl::hasPipelineDynamicState(props.drawType) {
+        if crate::mechanical_port::source::renderer::include::rive::renderer::gpu_hpp::drawTypeHasPipelineDynamicState(props.drawType) {
             dynamicStates[2..7].copy_from_slice(&[
                 vk::DynamicState::DEPTH_WRITE_ENABLE,
                 vk::DynamicState::STENCIL_COMPARE_MASK,

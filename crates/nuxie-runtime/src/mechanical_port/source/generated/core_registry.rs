@@ -2129,7 +2129,10 @@ pub fn component_update_handle(
             if let Some(node) = object.as_node_mut() {
                 node.update_world_transform_before_super();
             }
-            let overridden = if let Some(layout) = object.as_layout_component_mut() {
+            let overridden = if let Some(nested) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>() {
+                nested.compose_world_transform();
+                true
+            } else if let Some(layout) = object.as_layout_component_mut() {
                 layout.compose_world_transform();
                 true
             } else if let Some(text) = object.as_text_mut() {
@@ -2228,12 +2231,6 @@ pub fn component_update_handle(
         crate::mechanical_port::source::nested_artboard::NestedArtboard::update_after_transform_occurrence(handle, dirt);
         if handle.core_type() == Some(crate::mechanical_port::source::generated::nested_artboard_leaf_base::NestedArtboardLeafBase::TYPE_KEY) {
             crate::mechanical_port::source::nested_artboard_leaf::NestedArtboardLeaf::update_after_nested_artboard_super_occurrence(handle, dirt);
-        } else {
-            handle.with_mut(|object| {
-                if let Some(owner) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::nested_artboard_layout::NestedArtboardLayout>() {
-                    owner.update_after_nested_artboard_super(dirt);
-                }
-            });
         }
     }
     if handle

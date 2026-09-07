@@ -1,7 +1,6 @@
 use crate::mechanical_port::source::{
     artboard::{Artboard, RuntimeArtboardInstanceHandle, RuntimeArtboardInstanceWeakHandle},
     artboard_host::ArtboardHost,
-    component_dirt::ComponentDirt,
     core::CoreHandle,
     core_context::CoreContext,
     data_bind::data_context::RuntimeDataContextHandle,
@@ -74,28 +73,37 @@ impl NestedArtboardLayout {
         self.update_height_override();
     }
 
-    pub(crate) fn update_after_nested_artboard_super(&mut self, value: ComponentDirt) {
-        if !value.contains(ComponentDirt::WORLD_TRANSFORM) {
-            return;
-        }
+    // Compose the layout slot minus mounted origin in parent space before
+    // constraints run. A post-update recomposition would erase their result.
+    pub fn compose_world_transform(&mut self) {
         let Some(instance) = self.base.base.artboard_instance_handle(0) else {
+            self.base.base.compose_world_transform();
             return;
         };
-        let layout_position =
-            instance.with_artboard(|instance| Vec2D::new(instance.layout_x(), instance.layout_y()));
-        let mut world = *self.base.base.mutable_world_transform();
-        let parent_origin = self
+        let mut base = instance.with_artboard(|instance| {
+            Vec2D::new(instance.layout_x(), instance.layout_y()) - instance.origin()
+        });
+        let parent = self
             .base
             .base
             .parent_handle()
-            .and_then(|parent| parent.with_downcast::<Artboard, _>(Artboard::origin));
+            .expect("mounted NestedArtboardLayout parent");
+        let (parent_origin, parent_world) = parent
+            .with(|parent| {
+                (
+                    parent.as_artboard().map(Artboard::origin),
+                    parent
+                        .as_world_transform_component()
+                        .map(|parent| *parent.world_transform())
+                        .unwrap_or_else(Mat2D::identity),
+                )
+            })
+            .expect("live NestedArtboardLayout parent");
         if let Some(origin) = parent_origin {
-            world = Mat2D::from_translation(origin + layout_position) * world;
-        } else {
-            world = Mat2D::from_translation(layout_position) * world;
+            base += origin;
         }
-        let origin = instance.with_artboard(|instance| instance.origin());
-        *self.base.base.mutable_world_transform() = Mat2D::from_translation(-origin) * world;
+        *self.base.base.mutable_world_transform() =
+            parent_world * Mat2D::from_translation(base) * *self.base.base.transform();
     }
 
     pub(crate) fn layout_constraint_handles(&self) -> Vec<CoreHandle> {

@@ -2,11 +2,12 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-34f6df47431ec17762a5764ae3055375f09aace1}
+ref=${RIVE_RUNTIME_REF:-e289232b776cf315863ad995ca987982e50445ab}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/nested_artboard_rotated.riv|038b7acad1bb413a1452d6bda3bf61788e26ead8d5bd7ad5512ebda27c33caea|e289232b776cf315863ad995ca987982e50445ab|layout/nested_artboard_rotated.riv"
   "sync/text_background_feather_test.riv|8b9856e161949d835339a0b7666a920857578cbde8b06dade66daa645a2913ce|d6107a91f7a2798893356605fa96cff3cea41c8f|text_background_feather_test.riv"
   "sync/grid_placement_bound.riv|02dca529414c584c38e7c438e501e276d89337588d9042381120d330784380d0|3f4047a85f11fecfde8c4d906c0c1654aa12b015|layout/grid_placement_bound.riv"
   "sync/joystick_databound_keyframe_test.riv|ca3e052d533a32143279f8e035f95ca53461a4f5d5fdf782bd0e63332bbe2c63|afda7a160cd72ea079e2cd25580518b22330646e|joystick_databound_keyframe_test.riv"

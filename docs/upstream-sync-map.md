@@ -7,7 +7,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `34f6df47431ec17762a5764ae3055375f09aace1`
+- LAST_SYNCED_SHA: `e289232b776cf315863ad995ca987982e50445ab`
 - Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
@@ -20,6 +20,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `e289232b776cf315863ad995ca987982e50445ab` | Compose nested-artboard layout slot/origin inside the parent's transform before constraints, using the composeWorldTransform override. Translate the three rotated-parent assertions against actual solved layout values, preserving Taffy. | — |
 | `34f6df47431ec17762a5764ae3055375f09aace1` | Create deferred canvases as device-free shells with stable image identity; allocate backing on the replay context for content and ORE. Port supported backend allocation hooks, host projections, tests and GMs; unsupported D3D backends are not added. | — |
 | `dee5342ad10517f65bb2bf8fa6effd810f1ba3d9` | Port command-server import-routing regression with distinct recording-session/device identities, deferred host and ORE identity checks. Rust golden/player paths already omit upstream's removed post-import render-context overrides. | — |
 | `d6107a91f7a2798893356605fa96cff3cea41c8f` | Feather text backgrounds through clockwise outer/counterclockwise hole contours, background dependency ordering and paint invalidation. Port ring-area/dependency assertions, changed fill-rule assertion, and the exact one-draw feather Silver producer. | — |

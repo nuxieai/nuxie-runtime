@@ -45,7 +45,7 @@ use super::webgpu_wagyu_decl::{
     WGPUWagyuShaderLanguage_GLSLRAW, WGPUWagyuShaderLanguage_WGSL, WGPUWagyuShaderModuleDescriptor,
 };
 use nuxie_ore_metal::bind_group_layout::{
-    BindGroupLayout, validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
+    validatePipelineDesc, NativeSlotScope,
 };
 use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
@@ -588,9 +588,6 @@ pub(crate) fn makePipeline(
     let vertexModule = vertexModuleOwner
         .downcast_ref::<ShaderModuleWGPU>()
         .expect("WebGPU pipeline vertex module must be ShaderModuleWGPU");
-    // Rust's erased handle does exact concrete downcasts; restore the C++
-    // derived-to-base ShaderModule binding-map copy performed by Pipeline.
-    *pipeline.m_bindingMap = vertexModule.m_bindingMap.clone();
     let mut vertexState = WGPUVertexState::default();
     vertexState.module = vertexModule.native().Get();
     vertexState.entryPoint = stringView(desc.vertexEntryPoint);
@@ -684,19 +681,14 @@ pub(crate) fn makePipeline(
         };
     }
 
-    // A C++ BindGroupLayoutWGPU* implicitly projects to its BindGroupLayout*
-    // base before the shared validator runs. Rust resource handles retain the
-    // concrete payload, so make that projection explicitly at this backend
-    // boundary, as the GL and Vulkan implementations do.
+    // Validate concrete backend ownership before projecting through shared payloads.
     let layoutHandles = desc.bindGroupLayouts.unwrap_or_default();
     let layoutHandles = layoutHandles.get(..bindGroupLayoutCount)?;
-    let mut layoutBases = Vec::with_capacity(bindGroupLayoutCount);
     for layout in layoutHandles {
         let Some(layoutOwner) = layout else {
-            layoutBases.push(None);
             continue;
         };
-        let Some(layout) = layoutOwner.downcast_ref::<BindGroupLayoutWGPU>() else {
+        let Some(_) = layoutOwner.downcast_ref::<BindGroupLayoutWGPU>() else {
             let error = "bind-group layout does not belong to the WebGPU backend".to_owned();
             if let Some(output) = outError.as_deref_mut() {
                 *output = error;
@@ -705,22 +697,15 @@ pub(crate) fn makePipeline(
             }
             return None;
         };
-        layoutBases.push(Some(&**layout as &BindGroupLayout));
     }
 
     let mut error = String::new();
-    let layoutsValid = validateLayoutBasesAgainstBindingMap(
+    if !validatePipelineDesc(
+        desc,
         &pipeline.m_bindingMap,
-        desc.bindGroupLayouts.map(|_| layoutBases.as_slice()),
-        desc.bindGroupLayoutCount,
+        NativeSlotScope::perStage,
         Some(&mut error),
-    );
-    let colorsValid = validateColorRequiresFragment(
-        desc.colorCount,
-        desc.fragmentModule.is_some(),
-        Some(&mut error),
-    );
-    if !layoutsValid || !colorsValid {
+    ) {
         if let Some(output) = outError.as_deref_mut() {
             *output = error;
         } else {

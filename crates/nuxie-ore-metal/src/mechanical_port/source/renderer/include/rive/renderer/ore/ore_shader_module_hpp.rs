@@ -338,8 +338,8 @@ mod tests {
     use super::*;
 
     fn valid_binding_map() -> Vec<u8> {
-        // version=2, allocator=1, entry size=14, entry count=0
-        vec![3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0]
+        // version=3, allocator=2, entry size=14, entry count=0
+        vec![3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0]
     }
 
     fn fixup_blob(records: &[(u8, u8, &[u8])]) -> Vec<u8> {

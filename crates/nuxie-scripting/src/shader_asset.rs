@@ -54,7 +54,7 @@ const SUPPLEMENTAL_REFLECTION_VERSION: u8 = 1;
 const MAX_RSTB_BYTES: usize = 4 * 1024 * 1024;
 const MAX_SHADER_MODULE_BYTES: usize = 1024 * 1024;
 const BINDING_MAP_BLOB_VERSION: u8 = 3;
-const BINDING_MAP_ALLOCATOR_VERSION: u8 = 1;
+const BINDING_MAP_ALLOCATOR_VERSION: u8 = 2;
 const BINDING_MAP_ENTRY_WIRE_SIZE: usize = 14;
 const BINDING_MAP_ABSENT: u16 = u16::MAX;
 
@@ -1098,7 +1098,7 @@ mod tests {
     const IMPORTED_GPU_CANVAS_UBO_WGSL: &str =
         include_str!("../tests/fixtures/imported-gpu-canvas-ubo-triangle.wgsl");
     const IMPORTED_GPU_CANVAS_BINDING_MAP: &[u8] = &[
-        0x03, 0x01, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 9, 0, 0, 0, 0x00, 0x00, 0x00, 0x02, 0x00,
+        0x03, 0x02, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 9, 0, 0, 0, 0x00, 0x00, 0x00, 0x02, 0x00,
         0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00,
     ];
 
@@ -1205,7 +1205,7 @@ mod tests {
     }
 
     fn native_binding_map() -> Vec<u8> {
-        let mut map = vec![3, 1];
+        let mut map = vec![3, 2];
         put_u16(&mut map, 14);
         put_u32(&mut map, 3);
         put_u16(&mut map, 9);
@@ -1538,8 +1538,8 @@ mod tests {
         let payload = imported_gpu_canvas_webgpu_payload();
         assert_eq!(
             format!("{:x}", Sha256::digest(&payload[1..])),
-            "98eb42158743bf0cae64489a1c1362fe94c5046d07fc898956bd31a695b76db4",
-            "f4bb3025e263 source/reflection fixture with the 1cdecb8e v3 header; not an unchanged historical artifact",
+            "d388dd1bf3dd6c91af932ab2d5ad1c1cf912a80ed9c47c3fa2405ddd17d2b241",
+            "f4bb3025e263 source/reflection fixture with the d7fff883 v3/allocator2 header; not an unchanged historical artifact",
         );
         let shader = decode_shader_asset("scene", &payload)
             .expect("WebGPU selects target-0 WGSL and mandatory target-16 binding map");
@@ -1895,11 +1895,12 @@ mod tests {
     fn malformed_binding_maps_fail_closed() {
         let source = imported_gpu_canvas_source_container();
         for malformed in [
-            vec![3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0],
+            vec![3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0], // retired allocator v1
+            vec![3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0],
             vec![2, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0],
-            vec![3, 1, 13, 0, 0, 0, 0, 0, 9, 0, 0, 0],
-            vec![3, 1, 14, 0, 0, 0, 0, 0, 8, 0, 1, 0],
-            vec![3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 1, 0],
+            vec![3, 2, 13, 0, 0, 0, 0, 0, 9, 0, 0, 0],
+            vec![3, 2, 14, 0, 0, 0, 0, 0, 8, 0, 1, 0],
+            vec![3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 1, 0],
         ] {
             let payload = rstb_payload(&[
                 (WGSL_SOURCE_TARGET, source.clone()),

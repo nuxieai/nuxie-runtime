@@ -182,11 +182,12 @@ unsafe impl GpuResourcePayload for Pipeline {
 
 impl Pipeline {
     pub(crate) fn new(desc: &PipelineDesc<'_>) -> Option<Self> {
-        let mut m_bindingMap = BindingMap::default();
-        let module = desc.vertexModule.or(desc.fragmentModule);
-        if let Some(module) = module.and_then(AnyResourceHandle::shaderModuleBase) {
-            m_bindingMap = module.m_bindingMap.clone();
-        }
+        let m_bindingMap = crate::bind_group_layout::bindingMapForStages(
+            desc.vertexModule
+                .and_then(AnyResourceHandle::shaderModuleBase),
+            desc.fragmentModule
+                .and_then(AnyResourceHandle::shaderModuleBase),
+        );
         let mut m_textureSamplerPairs = Vec::new();
         for module in [desc.vertexModule, desc.fragmentModule]
             .into_iter()
@@ -293,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn pipeline_copies_vertex_binding_map_and_falls_back_to_fragment() {
+    fn pipeline_merges_stage_binding_maps_and_supports_fragment_only() {
         let mut vertex_module = ShaderModule::new();
         let vertex_blob = binding_map_blob(0, 1);
         assert!(BindingMap::fromBlob(
@@ -320,6 +321,8 @@ mod tests {
             Some(&mut fragment_module.m_bindingMap),
         ));
         let expected_fragment = fragment_module.m_bindingMap.clone();
+        let mut expected_merged = expected_vertex;
+        expected_merged.replaceStage(&expected_fragment, crate::binding_map::Stage::FS);
         fragment_module
             .m_textureSamplerPairs
             .push(TextureSamplerPair {
@@ -335,7 +338,7 @@ mod tests {
             ..PipelineDesc::default()
         };
         let pipeline = Pipeline::new(&desc).expect("vertex pipeline");
-        assert_eq!(&*pipeline.m_bindingMap, &expected_vertex);
+        assert_eq!(&*pipeline.m_bindingMap, &expected_merged);
         assert_eq!(pipeline.m_textureSamplerPairs.len(), 2);
         assert_eq!(pipeline.m_textureSamplerPairs[0].textureGroup, 0);
         assert_eq!(pipeline.m_textureSamplerPairs[1].textureGroup, 4);
@@ -386,7 +389,7 @@ mod tests {
     }
 
     fn binding_map_blob(group: u8, binding: u8) -> Vec<u8> {
-        let mut blob = vec![3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0];
+        let mut blob = vec![3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0];
         blob.extend_from_slice(&[
             group, binding, 0, 1, 0, 7, 0, 0xff, 0xff, 0xff, 0xff, 0, 0, 0,
         ]);

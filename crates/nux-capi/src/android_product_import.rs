@@ -81,8 +81,10 @@ end
 
     const PINNED_GPU_CANVAS_WGSL: &str =
         include_str!("../tests/fixtures/univ-2781-gpu-canvas.wgsl");
+    // Authored test reflection for the pinned WGSL source, emitted with the
+    // current v3/allocator-v2 header; not an unchanged historical RSTB blob.
     const PINNED_GPU_CANVAS_BINDING_MAP: &[u8] = &[
-        0x03, 0x01, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 9, 0, 0, 0, 0x00, 0x00, 0x00, 0x02, 0x00,
+        0x03, 0x02, 0x0e, 0x00, 0x01, 0x00, 0x00, 0x00, 9, 0, 0, 0, 0x00, 0x00, 0x00, 0x02, 0x00,
         0xff, 0xff, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00,
     ];
 
@@ -228,9 +230,16 @@ end
         bytes
     }
 
-    struct ShaderOccurrence;
+    struct ShaderOccurrence(nuxie_ore_metal::gpu_resource::AnyResourceHandle);
 
     impl RenderGpuCanvasShader for ShaderOccurrence {
+        fn ore_shader_entry(
+            &self,
+            _stage: nuxie_render_api::GpuCanvasShaderStage,
+            _physical_entry: &str,
+        ) -> Option<nuxie_ore_metal::gpu_resource::AnyResourceHandle> {
+            Some(self.0.clone())
+        }
         fn as_any(&self) -> &dyn Any {
             self
         }
@@ -239,9 +248,18 @@ end
     struct ShaderProbeFactory {
         inner: RecordingFactory,
         shader_count: Rc<Cell<usize>>,
+        gpu: runtime_test_support::recording_gpu::RecordingGpu,
     }
 
     impl Factory for ShaderProbeFactory {
+        fn is_render_context(&self) -> bool {
+            true
+        }
+
+        fn ore(&mut self) -> Option<nuxie_render_api::OreContextHandle> {
+            Some(self.gpu.context.clone())
+        }
+
         fn make_render_buffer(
             &mut self,
             buffer_type: RenderBufferType,
@@ -295,7 +313,7 @@ end
 
         fn make_gpu_canvas_shader(
             &mut self,
-            _shader: &GpuCanvasShader,
+            shader: &GpuCanvasShader,
         ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
             self.shader_count.set(
                 self.shader_count
@@ -303,7 +321,9 @@ end
                     .checked_add(1)
                     .expect("fixture shader count overflow"),
             );
-            Ok(Arc::new(ShaderOccurrence))
+            Ok(Arc::new(ShaderOccurrence(
+                self.gpu.shader(self.shader_count.get() as u64, shader),
+            )))
         }
     }
 
@@ -328,6 +348,7 @@ end
         let mut factory = PersistentFactory::new(ShaderProbeFactory {
             inner: RecordingFactory::new(),
             shader_count: Rc::clone(&shader_count),
+            gpu: runtime_test_support::recording_gpu::RecordingGpu::new(),
         });
         let imported = match crate::import_file_with_prepared_host_commands(
             bytes,
@@ -375,15 +396,15 @@ end
         );
         let payload = shader_payload();
         let payload_digest: [u8; 32] = Sha256::digest(&payload).into();
-        assert_eq!(payload.len(), 739);
+        assert_eq!(payload.len(), 743);
         assert_eq!(
             payload_digest,
             [
-                0xba, 0x47, 0x8e, 0x0e, 0xdb, 0xc5, 0xf7, 0xbf, 0xaa, 0x73, 0x20, 0x90, 0xb1, 0x30,
-                0xb1, 0xc9, 0xd0, 0x6c, 0x1d, 0x60, 0x40, 0x54, 0x99, 0x56, 0xd1, 0xcc, 0xe0, 0x1e,
-                0xbe, 0xdf, 0x87, 0xca,
+                0xc8, 0xb5, 0xc0, 0x0c, 0x48, 0xb1, 0x85, 0xec, 0xf3, 0xfb, 0xf2, 0x24, 0x69, 0xf0,
+                0xea, 0xa4, 0x0b, 0x08, 0x1b, 0xf7, 0xac, 0x5d, 0x66, 0xc5, 0xe7, 0xd7, 0x06, 0x02,
+                0x4c, 0x90, 0x87, 0x71,
             ],
-            "the target-0/target-16 RSTB payload must remain pinned"
+            "the synthetic target-0/target-16 v3/allocator-v2 payload must match its construction"
         );
         let bytes = imported_file();
 

@@ -154,7 +154,7 @@ fn put_string(bytes: &mut Vec<u8>, value: &str) {
 }
 
 fn complete_shader_payload(color: &str) -> Vec<u8> {
-    const EMPTY_BINDING_MAP: &[u8] = &[3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+    const EMPTY_BINDING_MAP: &[u8] = &[3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
     let entries: &[(u8, &str, &str)] = &[
         (0, "first_vertex", "vs_first"),
         (1, "first_fragment", "fs_first"),

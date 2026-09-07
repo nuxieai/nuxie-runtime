@@ -937,22 +937,16 @@ fn makePipelineCurrent(
         None => None,
     };
 
-    // Restore the C++ derived-to-base copy made by Pipeline(desc). Rust's
-    // erased base constructor cannot discover ShaderModuleGL on its own.
-    *pipeline.m_bindingMap = vertexModule.m_bindingMap.clone();
-
     use nuxie_ore_metal::bind_group_layout::{
-        validateColorRequiresFragment, validateLayoutBasesAgainstBindingMap,
+        validatePipelineDesc, NativeSlotScope,
     };
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;
     let layoutHandles = desc
         .bindGroupLayouts
         .unwrap_or_default()
         .get(..layoutCount)?;
-    let mut layoutBases = Vec::with_capacity(layoutCount);
     for layout in layoutHandles {
         let Some(layoutOwner) = layout else {
-            layoutBases.push(None);
             continue;
         };
         let Some(layout) = layoutOwner.downcast_ref::<BindGroupLayoutGL>() else {
@@ -971,17 +965,12 @@ fn makePipelineCurrent(
             );
             return None;
         }
-        layoutBases.push(Some(&**layout));
     }
     let mut validationError = String::new();
-    if !validateLayoutBasesAgainstBindingMap(
+    if !validatePipelineDesc(
+        desc,
         &pipeline.m_bindingMap,
-        desc.bindGroupLayouts.map(|_| layoutBases.as_slice()),
-        desc.bindGroupLayoutCount,
-        Some(&mut validationError),
-    ) || !validateColorRequiresFragment(
-        desc.colorCount,
-        desc.fragmentModule.is_some(),
+        NativeSlotScope::perKind,
         Some(&mut validationError),
     ) {
         publishPipelineError(context, &mut outError, validationError);

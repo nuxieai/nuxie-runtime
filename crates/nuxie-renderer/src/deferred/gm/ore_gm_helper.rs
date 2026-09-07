@@ -320,7 +320,7 @@ pub(super) fn shader(ctx: &mut dyn ContextApi, id: u32) -> AnyResourceHandle {
     let header = fixture("gm/ore_gm_shaders.rstb.hpp");
     assert_eq!(
         format!("{:x}", Sha256::digest(&header)),
-        "0d2a8e76b7a3bfcc39e5e0dc470a815042d44aa7f26a1284881ece38b002b3fb"
+        "47acb8487b4e252705531a62ce97f3c7a2eaaefef231f57b2e15e45b2490b51c"
     );
     let header = String::from_utf8(header).unwrap();
     let data = header

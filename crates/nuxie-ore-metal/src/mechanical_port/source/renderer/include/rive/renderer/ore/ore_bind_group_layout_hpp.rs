@@ -207,7 +207,7 @@ mod tests {
     use crate::types::StageVisibility;
 
     fn binding_map_blob(entry: BindingMapEntry) -> Vec<u8> {
-        let mut blob = vec![3, 1, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0];
+        let mut blob = vec![3, 2, 14, 0, 1, 0, 0, 0, 9, 0, 0, 0];
         blob.extend_from_slice(&[
             entry.group,
             entry.binding,

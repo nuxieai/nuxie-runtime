@@ -237,7 +237,7 @@ fn physical_fragment_1() -> @location(0) vec4<f32> {
 }
 "#;
     let wgsl = format!("// {marker}\n{WGSL}");
-    const EMPTY_BINDING_MAP: &[u8] = &[3, 1, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
+    const EMPTY_BINDING_MAP: &[u8] = &[3, 2, 14, 0, 0, 0, 0, 0, 9, 0, 0, 0];
     let entries = [
         (0, "default_vertex", "physical_vertex_0"),
         (0, "chosen_vertex", "physical_vertex_1"),
@@ -506,6 +506,15 @@ impl GpuRecordingFactory {
 }
 
 impl Factory for GpuRecordingFactory {
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
+        // Explicit device-free test occurrence for the RenderContext's
+        // deferred constructor; the generic Factory default is unsupported.
+        Ok(recording_gpu::canvas(width, height))
+    }
     fn is_render_context(&self) -> bool {
         true
     }

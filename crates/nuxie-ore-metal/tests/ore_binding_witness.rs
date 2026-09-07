@@ -64,10 +64,11 @@ fragment fs_mainOutput fs_main(
 }
 "#;
 
-// BindingMap v3, two 14-byte rows, no baked ids. Authored bindings 0 and 7 resolve to
+// Authored BindingMap v3/allocator v2 fixture, not an unchanged extracted blob.
+// Two 14-byte rows, no baked ids. Authored bindings 0 and 7 resolve to
 // Metal buffer slots 0 and 1 for vertex, fragment, and compute stages.
 const BINDING_WITNESS_MAP: [u8; 40] = [
-    3, 1, 14, 0, 2, 0, 0, 0, 9, 0, 0, 0, // header
+    3, 2, 14, 0, 2, 0, 0, 0, 9, 0, 0, 0, // header
     0, 0, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // group 0, binding 0 -> slot 0
     0, 7, 0, 7, 0, 1, 0, 1, 0, 1, 0, 0, 0, 0, // group 0, binding 7 -> slot 1
 ];
@@ -91,7 +92,7 @@ fn pinned_binding_witness_draws_through_ore_metal_without_a_backend_facade() {
     );
     assert_eq!(
         format!("{:x}", Sha256::digest(BINDING_WITNESS_MAP)),
-        "dffe52aab70d795f00c1219a79aa9c9f85f615f59ed72419e2aae0a04336e260"
+        "dfed0bf5c38527839b7ac95a5c857a6230b0bb631150aeb7ad0db25c500aebc9"
     );
 
     let device = MTLCreateSystemDefaultDevice().expect("the macOS ORE witness requires Metal");

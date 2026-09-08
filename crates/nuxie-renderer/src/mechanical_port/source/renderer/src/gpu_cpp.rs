@@ -2244,7 +2244,7 @@ const _: [(); OuterCubicPatchSegmentSpan as usize] =
 
 // Exact source-owned value from renderer/src/shaders/constants.glsl, which
 // gpu.cpp includes directly and the generated shaders pair with shift 7/mask 0x7f.
-const STORAGE_TEXTURE_WIDTH: u32 = 128;
+const STORAGE_TEXTURE_WIDTH: u32 = 256;
 const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 4.0;
 const GLSL_ENABLE_CLIPPING: &[u8] = b"ENABLE_CLIPPING\0";
 const GLSL_ENABLE_CLIP_RECT: &[u8] = b"ENABLE_CLIP_RECT\0";
@@ -3134,6 +3134,36 @@ pub fn image_draw_instance(
     writeTranslate(&mut out.m_translate, matrix);
     writeTranslate(&mut out.m_clipRectInverseTranslate, clip);
     out
+}
+
+#[cfg(test)]
+mod storage_texture_tests {
+    use super::*;
+
+    #[test]
+    fn storage_upload_rows_match_shader_texel_addresses() {
+        // Shader ABI: x = index & 0xff, y = index >> 8.
+        // Exercise short rows and both sides of multiple row boundaries.
+        for structure in [
+            StorageBufferStructure::uint32x2,
+            StorageBufferStructure::uint32x4,
+            StorageBufferStructure::float32x4,
+        ] {
+            let stride = StorageBufferElementSizeInBytes(structure) as usize;
+            for count in [1, 127, 128, 129, 255, 256, 257, 513] {
+                let (width, height) = StorageTextureSize(count * stride, structure);
+                for index in 0..count {
+                    let (x, y) = (index & 0xff, index >> 8);
+                    assert!(x < width as usize && y < height as usize);
+                    assert_eq!(y * width as usize + x, index);
+                }
+                assert!(
+                    width as usize * height as usize * stride
+                        <= StorageTextureBufferSize(count * stride, structure)
+                );
+            }
+        }
+    }
 }
 
 pub fn StorageTextureSize(

@@ -26,6 +26,7 @@ use crate::mechanical_port::source::{
         render_context_impl_hpp::RenderContextImpl,
         render_target_hpp::RenderTarget,
         texture_hpp::Texture,
+        triangulation_controller_hpp::TriangulationThresholds,
     },
 };
 use std::{ffi::c_void, pin::Pin};
@@ -228,6 +229,12 @@ impl ExactSourceBackend for NullBackend {
                 .beginFrameExecutable(&FrameDescriptor {
                     renderTargetWidth: self.width,
                     renderTargetHeight: self.height,
+                    // Compare geometry, not two independent wall-clock budgets.
+                    // Keep triangulation enabled for every eligible path.
+                    triangulationThresholds: TriangulationThresholds {
+                        frameBudgetMs: f32::INFINITY,
+                        ..Default::default()
+                    },
                     ..Default::default()
                 });
         }

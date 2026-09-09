@@ -332,6 +332,10 @@ impl DeferredFrameSink for AndroidVulkanFrameSink {
         self.native.persistent_context().unwrap()
     }
 
+    fn render_context(&mut self) -> Option<PersistentFactoryContext> {
+        self.native.persistent_context()
+    }
+
     fn begin_screen_frame(&mut self, target: u64) -> Option<RendererOwner> {
         assert_eq!(target, 0);
         if self.failure.is_some() {

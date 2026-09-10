@@ -1,6 +1,7 @@
 import json
 import subprocess
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -38,8 +39,10 @@ class SlimRuntimeSourceTests(unittest.TestCase):
         extension_manifest = (
             REPO_ROOT / "crates/nux-apple-product-extension/Cargo.toml"
         ).read_text()
-        self.assertIn('version = "0.9.7"', capi_manifest)
-        self.assertIn('version = "0.9.7"', extension_manifest)
+        self.assertEqual(
+            tomllib.loads(capi_manifest)["package"]["version"],
+            tomllib.loads(extension_manifest)["package"]["version"],
+        )
         self.assertNotIn("legacy-migration", capi_manifest)
         for crate in REMOVED_CRATES:
             self.assertNotIn(crate, capi_manifest)

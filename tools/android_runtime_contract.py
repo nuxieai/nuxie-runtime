@@ -92,7 +92,7 @@ PROVENANCE = re.compile(
     r'\{"schemaVersion":6,"rootPackage":"nux-capi"[^{}\r\n]*\}'
 )
 EXPECTED_NEEDED = {
-    "libnux_capi.so": {"libc++_shared.so", "libc.so", "libdl.so", "libm.so"},
+    "libnux_capi.so": {"libc++_shared.so", "libc.so", "libdl.so", "liblog.so", "libm.so"},
     "libc++_shared.so": {"libc.so", "libdl.so", "libm.so"},
 }
 

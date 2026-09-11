@@ -2,10 +2,14 @@
   "updated": "2026-09-11",
   "focus": "Combined wrapped painting and geometry-driven ordering",
   "status": "Nested paint composition passes bounded profiles; mixed reversal and general sizing unresolved",
-  "current": "Geometry-selected line groups pass32/32opaque/translucent geometry/pixel frames for both mixed-reversal row modes, with132extra records. Nested subtree chains pass their bounded profiles. Cross-sizing and tiny/zero separation failures remain preserved.",
-  "next": "Extend geometry-selected groups to columns, unequal line sizes and independent alignment; fix wrapper percentages and auto-cross stretch, then establish resource ceilings.",
+  "current": "Geometry-selected groups pass32/32opaque/translucent frames for mixed-reversal rows, with132extra records. Direct native auto-cross stretch bypass passes96/96frames. Cross-percentages and tiny/zero separation failures remain preserved.",
+  "next": "Extend geometry-selected groups to columns, unequal line sizes and independent alignment. Resolve cross percentages and intrinsic/bounded stretch, then establish resource ceilings and public compiler lowering.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Empty auto-cross stretch bypass",
+      "path": "tools/html-to-riv/validation/wrapped-auto-stretch-bypass-receipt.json"
+    },
     {
       "label": "Translucent line-group exclusivity evidence",
       "path": "tools/html-to-riv/validation/mixed-wrap-groups-alpha-receipt.json"
@@ -217,8 +221,8 @@
   ],
   "activeWork": [
     {
-      "name": "Auto-cross stretch composition",
-      "work": "Testing direct native cross-Fill participants beside wrapped positional siblings to address the preserved stretch failure."
+      "name": "General wrapped composition",
+      "work": "Combine line-group selection with independent alignment and sizing; extend axes/metrics, preserve diagnostics and measure resource limits."
     }
   ],
   "publication": {

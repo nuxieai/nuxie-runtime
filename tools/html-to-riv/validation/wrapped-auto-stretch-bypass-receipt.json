@@ -1,0 +1,165 @@
+{
+  "status": "passed-experimental-empty-auto-cross-stretch-bypass",
+  "scope": "Exact-fixture ordinary-file composition, not public compiler qualification; overrides raw driver public labels. Only empty auto-cross stretch items bypass the perpendicular wrapper; fixed positional siblings retain wrappers. No runtime changes.",
+  "targetBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "42791fcbc5dee9ef6c38a38d051590c047dedab3ddb77f5ed2f1dff9d0ab647a",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "baseCompilerSha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+  "artifactHashes": {
+    "adapter.py": "42791fcbc5dee9ef6c38a38d051590c047dedab3ddb77f5ed2f1dff9d0ab647a",
+    "augment": "52bdff738bb40394ee6929dd48734e0bf2befa1194cfcc5d39d14ddc426f5556",
+    "src/main.rs": "aa9edd7bb41a90d1bed611e28c203ac20dad6e4969fa491a422977ec10200bb4",
+    "src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "rebuild-receipt.json": "fe03da73162adbec6c4e01a439b6495a18aabb7a58428dbe6df78e58e57b0827",
+    "pairs.json": "01b20249fc23117d08f71ec1f0770325dd2176b3ff3e243d2d2285d3898f3f94",
+    "chrome-cases.json": "19562ec07bc148d881a5b5b2f85b6a567c2af573555380727ceeb17ccb473e0d",
+    "render/receipt.json": "a7d03dfc256ba8d82aecde12073733bb304a34cb04b5d7969fd3966b906b08da",
+    "matrix.json": "0159ae92ce1afabe3d40a01157e552cee1a5fed0367a2a0874cf8e843d768c12",
+    "reproductions.json": "e85f2ce6c49aed8af6a2b9991b42c983a5a303be34ba9f5008aef07d5281dc80",
+    "visual-direct.json": "4c9390088e8b1b2c16087a3ab574929f6012969d4aa2369541353f8910492bfa",
+    "collect-evidence.py": "961f45bc8aa00b43b5f4abb39d83b65ae5a1fc3fd043faf4f53f7dc367b028db",
+    "visual-0.png": "133cd56ca9ea803541fb5a026e808c347e5c744e5c3736f1a87710039ba8243f",
+    "visual-3.png": "d54e7daca03eb39eba5bb0df184a100f2e476cdbb87057953dc791328fcdc3af",
+    "visual-6.png": "464c719335c7e8c24a0c3a354d48d56210bb52792df22a398b9b032c67ecdf28",
+    "visual-9.png": "8f71c8827c03f145af4092d28ed4ca9aca0275d838e59c2ded1ee4d7ea3780e7",
+    "visual-transfer.json": "4a3a03ffde3205f5cb207f50745b88def6e3c11eeac186a8cf49dacd52c334d2",
+    "complete-visual.py": "d271b66484ef971b9c546478b36d2d151ab9d5d3290f4f25a7048004cb775915",
+    "visual-additional-0.png": "2fee79ef1413cfedde264e5cb56ed635c1575c554f99c19254973208e04965fc",
+    "visual-additional-4.png": "83bb93de546d0404a68e74e1b48a60ce1c5c0f6ba210f0a00660baf5e25dcc87",
+    "visual-additional-8.png": "4287d45b1d24234033c90367b7ecd8aa730e8d3f9cea06f0b82386c038550ccf",
+    "visual-additional-12.png": "cfe0e481be9cbd4c53adb82dedc39fbd7972eb08f2dc9fd6e0ce920c9057452b",
+    "visual-additional-16.png": "36c11e75a0b4a74b7d0204033a8ccee859771806c7057c01d6a1dc76ba9477e2",
+    "visual-additional-20.png": "95a58e3f70b07dd1a027a373111e48bb8870213326aaedc263dfe6ddb8a3052b"
+  },
+  "totals": {
+    "scenes": 12,
+    "frames": 96,
+    "geometryPassed": 96,
+    "pixelsPassed": 96,
+    "clearPassed": 192,
+    "exactRivAndParsedMapReproductions": 12
+  },
+  "matrix": [
+    {
+      "name": "auto-stretch-bypass-row-wrap-flex-start-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-row-wrap-center-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-row-wrap-flex-end-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-row-wrap-reverse-flex-start-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-row-wrap-reverse-center-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-row-wrap-reverse-flex-end-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-column-wrap-flex-start-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-column-wrap-center-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-column-wrap-flex-end-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-column-wrap-reverse-flex-start-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-column-wrap-reverse-center-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "auto-stretch-bypass-column-wrap-reverse-flex-end-wrapper",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    }
+  ],
+  "visualReview": {
+    "directPairs": 36,
+    "frames": [
+      0,
+      1,
+      2
+    ],
+    "sheets": [
+      "visual-0.png",
+      "visual-3.png",
+      "visual-6.png",
+      "visual-9.png",
+      "visual-additional-0.png",
+      "visual-additional-4.png",
+      "visual-additional-8.png",
+      "visual-additional-12.png",
+      "visual-additional-16.png",
+      "visual-additional-20.png"
+    ],
+    "exactRgbaTransfers": 60,
+    "coverageFrames": 96,
+    "result": "All36 distinct Chrome/native pairs directly inspected with no visible divergence. All60 remaining frames are proven exact decoded RGBA matches to reviewed frames independently for Chrome and native. No crop, extension, or tolerance adjustment used."
+  },
+  "buildProvenance": "Copied reconstructed augmenter matches rebuild-receipt rebuiltSha256; copied main.rs and wire.rs retain its saved source. Original reconstruction command paths refer to line-alignment-wrappers-r1.",
+  "limits": [
+    "Only explicit align-self:stretch with empty auto cross size tested; auto/normal equivalents need public grammar and lowering tests.",
+    "Fixed cross-size stretch must not bypass blindly.",
+    "Intrinsic content, cross bounds, percentage cross size and combined nested subtree paint composition are not qualified by this receipt."
+  ],
+  "manifestSha256": "25b792a3de3aedd64a7d3baa3e2c0383c971fc5dba23ded2782152d77b7e1cf0",
+  "evidenceDirectory": "tools/html-to-riv/output/wrapped-auto-stretch-bypass-r1"
+}

@@ -1835,12 +1835,54 @@ pub(crate) fn build_interior_tessellation(
     let outer_patch_count = outer_patch_contours.iter().map(Vec::len).sum::<usize>();
     let patch_count = outer_patch_count + grout.len() + interior_strips.len();
     let half_vertex_count = (patch_count * OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN) as i32;
+    // Analytic coverage needs both windings; MSAA stencil coverage must see
+    // only one, otherwise mirrored interiors cancel their forward copies.
+    let msaa_reverse = msaa
+        && msaa_fill_requires_reverse_from_area(
+            coarse_area,
+            transform,
+            if clockwise_override && fill_rule != FillRule::Clockwise {
+                FillRule::NonZero
+            } else {
+                fill_rule
+            },
+        );
+    let direction_count = if msaa { 1 } else { 2 };
+    let push_patch = |spans: &mut Vec<TessVertexSpan>, span: TessVertexSpan, offset: i32| {
+        let x0 = base + offset;
+        let x1 = x0 + OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32;
+        if !msaa {
+            push_double_sided_tessellation_spans(
+                spans,
+                span,
+                x0,
+                x1,
+                base,
+                half_vertex_count,
+                negate_coverage,
+            );
+        } else if msaa_reverse {
+            push_reverse_tessellation_spans(spans, span, x0, x1, base, base + half_vertex_count);
+        } else {
+            push_forward_tessellation_spans(
+                spans,
+                span.points,
+                span.join_tangent,
+                x0,
+                x1,
+                OUTER_CUBIC_PATCH_SEGMENT_SPAN as u32,
+                1,
+                OUTER_CUBIC_PATCH_JOIN_SEGMENT_COUNT as u32,
+                span.contour_id_with_flags,
+            );
+        }
+    };
     let mut spans = Vec::with_capacity(patch_count + 1);
     push_padding_span(&mut spans, 0, base);
     let mut contours = Vec::with_capacity(cubic_contours.len());
     let mut curve_offset = 0i32;
     for (contour_index, patches) in outer_patch_contours.iter().enumerate() {
-        let forward_base = if negate_coverage {
+        let forward_base = if msaa || negate_coverage {
             base
         } else {
             base + half_vertex_count
@@ -1848,7 +1890,11 @@ pub(crate) fn build_interior_tessellation(
         contours.push(ContourData::new(
             [0.0, 0.0],
             1,
-            (forward_base + curve_offset) as u32,
+            if msaa_reverse {
+                (base + half_vertex_count - curve_offset - 1) as u32
+            } else {
+                (forward_base + curve_offset) as u32
+            },
         ));
         for patch in patches {
             let (points, join_tangent, flags) = match patch {
@@ -1878,15 +1924,7 @@ pub(crate) fn build_interior_tessellation(
                     | flags
                     | u32::from(negate_coverage) * NEGATE_PATH_FILL_COVERAGE_FLAG,
             );
-            push_double_sided_tessellation_spans(
-                &mut spans,
-                span,
-                base + curve_offset,
-                base + curve_offset + OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
-                base,
-                half_vertex_count,
-                negate_coverage,
-            );
+            push_patch(&mut spans, span, curve_offset);
             curve_offset += OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32;
         }
     }
@@ -1910,18 +1948,10 @@ pub(crate) fn build_interior_tessellation(
                 | RETROFIT_TRI_STRIP_CONTOUR_FLAG
                 | u32::from(negate_coverage) * NEGATE_PATH_FILL_COVERAGE_FLAG,
         );
-        push_double_sided_tessellation_spans(
-            &mut spans,
-            span,
-            base + curve_offset,
-            base + curve_offset + OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32,
-            base,
-            half_vertex_count,
-            negate_coverage,
-        );
+        push_patch(&mut spans, span, curve_offset);
         curve_offset += OUTER_CUBIC_PATCH_SEGMENT_SPAN_PLUS_JOIN as i32;
     }
-    push_final_padding(&mut spans, base + half_vertex_count * 2);
+    push_final_padding(&mut spans, base + half_vertex_count * direction_count);
     Some(InteriorTessellation {
         spans,
         path: PathData::new(
@@ -1939,7 +1969,7 @@ pub(crate) fn build_interior_tessellation(
         triangulator_negate_winding,
         max_triangle_vertex_count,
         base_instance: 1,
-        instance_count: (patch_count * 2) as u32,
+        instance_count: (patch_count * direction_count as usize) as u32,
     })
 }
 
@@ -2105,7 +2135,6 @@ pub(crate) fn msaa_fill_requires_reverse(
     msaa_fill_requires_reverse_from_area(path_coarse_area(path), transform, fill_rule)
 }
 
-#[cfg(test)]
 pub(crate) fn msaa_fill_requires_reverse_from_area(
     coarse_area: f32,
     transform: Mat2D,
@@ -2951,9 +2980,61 @@ mod tests {
         .unwrap();
         assert!(patch_count > 0);
         assert_eq!(tessellation.max_triangle_vertex_count, 0);
-        assert_eq!(tessellation.instance_count as usize, patch_count * 2);
+        // MSAA stencil winding must see each interior once, not a forward
+        // triangle and its mirrored copy cancelling each other.
+        assert_eq!(tessellation.instance_count as usize, patch_count);
         assert_eq!(tessellation.contours.len(), 1);
         assert!(interior_cubic_contours(&path, true)[0].is_empty());
+    }
+
+    #[test]
+    fn msaa_interior_emits_one_winding_for_reflected_and_reversed_paths() {
+        for reversed in [false, true] {
+            let mut path = RawPath::new();
+            path.move_to(0.0, 0.0);
+            for (x, y) in if reversed {
+                [(0.0, 400.0), (400.0, 400.0), (400.0, 0.0)]
+            } else {
+                [(400.0, 0.0), (400.0, 400.0), (0.0, 400.0)]
+            } {
+                path.line_to(x, y);
+            }
+            path.close();
+            for reflected in [false, true] {
+                let transform =
+                    Mat2D([if reflected { -1.0 } else { 1.0 }, 0.0, 0.0, 1.0, 0.0, 0.0]);
+                for fill_rule in [FillRule::NonZero, FillRule::EvenOdd] {
+                    let triangulator =
+                        Rc::new(InnerFanTriangulator::new(&path, path.bounds().unwrap()));
+                    let tessellation = build_interior_tessellation(
+                        &path,
+                        transform,
+                        fill_rule,
+                        false,
+                        triangulator,
+                        true,
+                    )
+                    .unwrap();
+                    let geometry: Vec<_> = tessellation
+                        .spans
+                        .iter()
+                        .filter(|span| {
+                            span.contour_id_with_flags & RETROFIT_TRI_STRIP_CONTOUR_FLAG != 0
+                        })
+                        .collect();
+                    assert!(!geometry.is_empty());
+                    let reverse = fill_rule == FillRule::NonZero && (reversed != reflected);
+                    for span in geometry {
+                        assert!(
+                            span.reflection_y.is_nan(),
+                            "MSAA must not emit mirrored coverage"
+                        );
+                        let (start, end) = span.x_range();
+                        assert_eq!(start > end, reverse);
+                    }
+                }
+            }
+        }
     }
 
     #[test]

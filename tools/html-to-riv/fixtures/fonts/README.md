@@ -25,3 +25,20 @@ The decoded subset SHA-256 is
 `b481b059ee94961c7b18585a596935aaa7cc44b68879c096d2cd06922e0431b1`.
 Roboto is distributed under Apache-2.0; the license copied from the source
 artifact is in `LICENSE-ROBOTO.txt`.
+
+## Full font for typography experiments
+
+`roboto-regular.ttf` is the full, unmodified `Roboto-Regular.ttf` extracted from
+the same Maven artifact above (168,260 bytes). Both archive and extracted font
+SHA-256 hashes were verified against the recorded values before copying it into
+this compiler-owned fixture directory. It uses the existing Apache-2.0
+`LICENSE-ROBOTO.txt`; no new font dependency or system installation is needed.
+
+The font contains 1294 glyphs (`maxp.numGlyphs`). Local `fc-scan` reports
+Roboto Regular, all printable ASCII U+0020–U+007E, Latin-1/Latin Extended-A, and
+portions of Greek/Cyrillic. This is not a claim of arbitrary Unicode coverage
+or Chrome/native typography qualification. Use the exact same font bytes in
+both the ordinary Rive asset and browser `@font-face` reference.
+
+Download, extraction hashes, SFNT count and complete `fc-scan` charset output
+are preserved in `../../output/roboto-full-provenance-r1/receipt.json`.

@@ -2,10 +2,18 @@
   "updated": "2026-09-11",
   "focus": "Ordinary embedded text: fidelity investigation",
   "status": "Font provisioning proved; text remains unqualified",
-  "current": "Embedded font bytes decode through the unchanged importer and survive original/clone resize. Read-only glyph advance matches Chrome, but line metrics differ. Three ordinary placement/paint candidates produce24preserved pixel failures under unchanged local limits. Existing solid-fill qualifications remain unchanged.",
-  "next": "Investigate ordinary line-box and glyph coverage compositions, then expand to multiple sizes/fonts/glyphs. Keep text and font shorthand unadmitted until browser/native fidelity is proved.",
+  "current": "Ordinary embedded text survives import and original/clone resize. Expanded paint/font experiments pass 48 of 88 additional frames, but small-size fidelity fails. All 11 new review sheets inspected; text remains unadmitted. Existing solid-fill qualifications are unchanged.",
+  "next": "Test compiler-owned derivative font outlines with identity and shaping controls. Continue independent backlog work while typography remains unresolved.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Expanded text checkpoint: 48/88 passes, failures preserved",
+      "path": "tools/html-to-riv/validation/ordinary-text-matrix-receipt.json"
+    },
+    {
+      "label": "Expanded text matrix and visual review",
+      "path": "tools/html-to-riv/validation/ordinary-text-review.md"
+    },
     {
       "label": "Text experiment and preserved failures",
       "path": "tools/html-to-riv/validation/ordinary-text-review.md"

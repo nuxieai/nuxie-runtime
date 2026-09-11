@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Intrinsic first-baseline measurement",
-  "status": "Bounded automatic-height baseline metrics validated",
-  "current": "16 additional intrinsic scenes pass 128 geometry/pixel frames and 256 clear controls with full visual coverage. 87 Rust/24 Node tests pass; 288 prior outputs are identical. Existing fractional pixel failures remain preserved.",
-  "next": "Investigate last-baseline groups and broader nested/responsive baseline metrics, then continue the full backlog.",
+  "focus": "Last-baseline ordinary-file composition",
+  "status": "Last-baseline composition proven in experimental fixtures",
+  "current": "30 last-baseline experiments pass 240 geometry/pixel frames and 480 clear controls with visual coverage and exact reproduction. Public last-baseline syntax remains diagnostic; existing intrinsic first-baseline checkpoint remains unchanged.",
+  "next": "Implement compiler-derived first/last summaries and separate group measurements, then qualify public last-baseline input against Chrome and the immutable renderer.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Last-baseline ordinary-file composition experiment",
+      "path": "tools/html-to-riv/validation/last-baseline-experiment-receipt.json"
+    },
     {
       "label": "Intrinsic first-baseline qualification",
       "path": "tools/html-to-riv/validation/public-baseline-intrinsic-receipt.json"
@@ -165,8 +169,8 @@
   ],
   "activeWork": [
     {
-      "name": "Remaining baseline forms",
-      "work": "Last baseline and broader nested/responsive expressions remain unresolved; intrinsic empty/column profile is qualified."
+      "name": "Public last-baseline lowering",
+      "work": "Ordinary parent-bottom landmark plus descent offset works in 30 exact fixtures; derive metrics and validate public transport and broader compositions."
     }
   ],
   "publication": {

@@ -1,0 +1,44 @@
+{
+  "status": "experimental-composition-proven",
+  "publicAdmission": false,
+  "scope": "30 exact fixture adapters; not compiler-derived last-baseline support",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "frames": 240,
+  "geometryPass": 240,
+  "pixelPass": 240,
+  "clearPass": 480,
+  "visual": {
+    "directPairs": 30,
+    "exactDecodedTransfers": 210,
+    "review": "All30 frame1 pairs reviewed by experiment agent; root additionally reviewed first16 pairs."
+  },
+  "reproducedScenes": 30,
+  "browserOnlySemanticCases": 14,
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/last-baseline-landmark-r1/experiment-manifest.json",
+      "sha256": "ea784277d42c427a0c82fefcf49f6010b39fbecc8722ea9c456186ae70aec35d"
+    },
+    {
+      "path": "tools/html-to-riv/output/last-baseline-landmark-r1/FINDINGS.md",
+      "sha256": "57f70e0869b91e9423f190fcf590727b445d33be20ddb058240839ccbb9f59c9"
+    },
+    {
+      "path": "tools/html-to-riv/output/last-baseline-landmark-r1/render/receipt.json",
+      "sha256": "335f42fded75fca5563ea6d0f1d46b32b20d04a4f36b2ee7166e2d738e0563f2"
+    },
+    {
+      "path": "tools/html-to-riv/output/last-baseline-landmark-r1/reproduction.json",
+      "sha256": "d4204b48564878430a0dbdb56c6ce1f1b92d89047687fd795d81ab98030e8848"
+    },
+    {
+      "path": "tools/html-to-riv/output/last-baseline-landmark-r1/visual-transfer.json",
+      "sha256": "d7dd7bec39566285decd17a4305d56ab35341e975bd0f55e619c2593baaf9f82"
+    },
+    {
+      "path": "tools/html-to-riv/output/last-baseline-browser-r1/manifest.json",
+      "sha256": "01065b7a2834122de07d202ff8c9005f2abda57644389323b28faea36cacdb7a"
+    }
+  ]
+}

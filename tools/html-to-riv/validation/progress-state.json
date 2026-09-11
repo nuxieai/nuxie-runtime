@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "CSS order qualified on immutable runtime",
-  "status": "Order qualified; memory regression fixed",
-  "current": "19 scenes pass 152 geometry/pixel frames and 304 clear checks with complete visual review. 70 Rust and 18 Node tests pass; 168 prior fixtures retain identical bytes/maps. Sorting memory is back near the previous compiler in the measured inherited-variable stress case.",
-  "next": "Investigate L03 align-self using ordinary sizing modes and layout wrappers; validate oversized and intrinsic contexts before admission.",
+  "focus": "Core align-self values validated using ordinary file wrappers",
+  "status": "L03 partial: baseline and additional alignment forms remain",
+  "current": "45 scenes pass 360 geometry/pixel frames and 720 clear checks with complete visual coverage. 76 Rust and20 Node tests pass;187 prior fixtures retain identical output. Failed parallel wrapper preserved; perpendicular wrapper needs no runtime changes.",
+  "next": "Continue L03 with normal/logical and safe alignment candidates, then synthesized box baseline experiments. Do not treat missing direct properties as proof of impossibility.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Align-self composition and preserved failed candidate",
+      "path": "tools/html-to-riv/validation/public-align-self-receipt.json"
+    },
     {
       "label": "CSS order qualification and output regression",
       "path": "tools/html-to-riv/validation/public-order-receipt.json"

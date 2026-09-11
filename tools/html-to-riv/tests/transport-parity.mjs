@@ -166,3 +166,15 @@ test("CSS order has exact CLI/WASM parity",async()=>{
  assert.equal(fixtures.length,19);
  await assertCorpusParity(fixtures);
 });
+
+test("align-self ordinary wrapper corpus has exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-align-self-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,33);
+ await assertCorpusParity(fixtures);
+});
+
+test("align-self edge contexts have exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-align-self-edge-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,12);
+ await assertCorpusParity(fixtures);
+});

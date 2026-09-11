@@ -126,3 +126,8 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## CSS order
 
 `validation/public-order-cases.json` covers 19 cases and 152 original/clone resize frames. Geometry, pixels and 304 clear controls pass, with 24 directly reviewed viewport pairs and 128 exact image transfers. All 168 distinct prior fixtures produce identical Rive/source-map bytes against the previous frozen compiler. See `validation/order-review.md` and `validation/public-order-receipt.json`; those checks do not change historical fractional-paint limitations.
+
+
+## Align-self compositions
+
+`validation/public-align-self-cases.json` and `public-align-self-edge-cases.json` cover45 scenes/360 passing geometry and pixel frames, with720 clear checks. All frames have direct visual review or exact image-transfer proof. The failed parallel-axis wrapper remains preserved, alongside the passing perpendicular composition.76 Rust/20 Node tests pass;187 prior fixtures retain identical bytes/maps. L03 remains partial for unadmitted alignment forms. See `validation/align-self-review.md` and `validation/public-align-self-receipt.json`.

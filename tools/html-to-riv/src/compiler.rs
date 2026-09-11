@@ -29,6 +29,30 @@ fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Dir
         _ => Err(unsupported(source, "flex-direction admits column, column-reverse, row, row-reverse, inherit, initial and unset")),
     }
 }
+#[derive(Clone, Copy)]
+enum SelfAlignment { Auto, Stretch, Start, Center, End }
+impl SelfAlignment {
+    fn stretches(self) -> bool { matches!(self, Self::Auto | Self::Stretch) }
+    fn wrapper_alignment(self, parent: Direction) -> Option<u32> {
+        // The wrapper's main axis is the authored parent's cross axis.
+        // Its native flow is reversed: flex-start therefore anchors physical
+        // bottom/right, while center is independent of flow reversal.
+        match self {
+            Self::Center => Some(if parent.is_row() { 3 } else { 1 }),
+            Self::End => Some(0),
+            _ => None,
+        }
+    }
+}
+fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result<SelfAlignment, Diagnostic> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "auto" | "initial" | "unset" => Ok(SelfAlignment::Auto),
+        "stretch" => Ok(SelfAlignment::Stretch), "flex-start" => Ok(SelfAlignment::Start),
+        "center" => Ok(SelfAlignment::Center), "flex-end" => Ok(SelfAlignment::End),
+        "inherit" => Ok(parent),
+        _ => Err(unsupported(source, "align-self currently admits auto, stretch, flex-start, center, flex-end and CSS-wide inherit/initial/unset; other alignments need ordinary-file validation")),
+    }
+}
 fn computed_order(text: &str, parent: i32, source: &str) -> Result<i32, Diagnostic> {
     // Inspect the authored integer lexeme: cssparser's integer field saturates
     // out-of-range values, and ordinary number serialization can lose precision.
@@ -59,9 +83,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { self_alignment: SelfAlignment::Auto, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -164,7 +188,7 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction", "order"].contains(&d.name.as_str()) {
+             "font-size", "background", "background-color", "color", "display", "flex-direction", "order", "align-self"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -193,6 +217,7 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         }
         // Display remains flex; direction is independent of the column authoring reset.
         "display" if matches!(value.as_str(), "flex" | "inherit") => {}
+        "align-self" => { computed_alignment(&value, SelfAlignment::Auto, &d.source)?; }
         "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
     }
@@ -248,6 +273,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
     }
     for d in &declarations {
         match d.name.as_str() {
+            "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
@@ -323,6 +349,44 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
 
 struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String> }
 impl Emitter {
+    fn layout_box(&mut self, name: &str, parent_id: u32, direction: Direction, alignment: u32,
+        parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool) -> Result<u32, Diagnostic> {
+        let object_id = self.records.len() as u32 - 1;
+            let mut layout = Record::new("LayoutComponent");
+            layout.set("name", Value::String(name.into()))?;layout.set("parentId", Value::Uint(parent_id))?;
+            layout.set("styleId", Value::Uint(object_id + 1))?;
+            let mut layout_style = Record::new("LayoutComponentStyle");
+            layout_style.set("flexDirectionValue", Value::Uint(direction.wire()))?;
+            layout_style.set("layoutAlignmentType", Value::Uint(alignment))?;
+            for (axis, size) in [("width", sizes[0]), ("height", sizes[1])] {
+                let (value, units, scale) = match size {
+                    Size::Pixels(v) => (v, 1, 0), Size::Percent(v) => (v, 2, 0),
+                    // Baseline LayoutParticipant maps Fill on the cross axis to
+                    // auto + align-self:stretch. Hug on the main axis gives
+                    // auto + flex:0 0 auto. Using 100% here incorrectly resolves
+                    // indefinite containing blocks and bypasses intrinsic sizing.
+                    Size::Auto if stretch && (axis == "width") != parent_direction.is_row() => (0., 3, 1),
+                    Size::Auto => (0., 3, 2),
+                };
+                layout.set(axis, Value::Float(value))?;
+                layout_style.set(&format!("{axis}UnitsValue"), Value::Uint(units))?;
+                layout_style.set(if axis == "width" { "layoutWidthScaleType" } else { "layoutHeightScaleType" }, Value::Uint(scale))?;
+            }
+            for (name, bound) in [("minWidth", bounds[0]), ("minHeight", bounds[1]), ("maxWidth", bounds[2]), ("maxHeight", bounds[3])] {
+                let (value, units) = match bound {
+                    // Omitted zero minima and absent maxima preserve the existing
+                    // zero-content-minimum profile's byte output.
+                    Size::Pixels(0.) if name.starts_with("min") => continue,
+                    Size::Pixels(v) => (v, 1), Size::Percent(v) => (v, 2),
+                    Size::Auto if name.starts_with("min") => (0., 3),
+                    Size::Auto => continue,
+                };
+                layout_style.set(name, Value::Float(value))?;
+                layout_style.set(&format!("{name}UnitsValue"), Value::Uint(units))?;
+            }
+            self.records.push(layout);self.records.push(layout_style);
+        Ok(object_id)
+    }
     fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize) -> Result<(), Diagnostic> {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
         let mut elements = Vec::new();
@@ -359,40 +423,32 @@ impl Emitter {
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
                 return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
             }
-            let object_id = self.records.len() as u32 - 1;
-            let mut layout = Record::new("LayoutComponent");
-            layout.set("name", Value::String(id.clone()))?;layout.set("parentId", Value::Uint(parent_id))?;
-            layout.set("styleId", Value::Uint(object_id + 1))?;
-            let mut layout_style = Record::new("LayoutComponentStyle");
-            layout_style.set("flexDirectionValue", Value::Uint(style.direction.wire()))?;
-            layout_style.set("layoutAlignmentType", Value::Uint(style.direction.alignment()))?;
-            for (axis, size) in [("width", style.width), ("height", style.height)] {
-                let (value, units, scale) = match size {
-                    Size::Pixels(v) => (v, 1, 0), Size::Percent(v) => (v, 2, 0),
-                    // Baseline LayoutParticipant maps Fill on the cross axis to
-                    // auto + align-self:stretch. Hug on the main axis gives
-                    // auto + flex:0 0 auto. Using 100% here incorrectly resolves
-                    // indefinite containing blocks and bypasses intrinsic sizing.
-                    Size::Auto if (axis == "width") != parent_style.direction.is_row() => (0., 3, 1),
-                    Size::Auto => (0., 3, 2),
-                };
-                layout.set(axis, Value::Float(value))?;
-                layout_style.set(&format!("{axis}UnitsValue"), Value::Uint(units))?;
-                layout_style.set(if axis == "width" { "layoutWidthScaleType" } else { "layoutHeightScaleType" }, Value::Uint(scale))?;
+            let mut sizes = [style.width, style.height];
+            let mut bounds = [style.min_width, style.min_height, style.max_width, style.max_height];
+            let mut authored_parent = parent_id;
+            let mut native_parent_direction = parent_style.direction;
+            let mut stretch = style.self_alignment.stretches();
+            if let Some(alignment) = style.self_alignment.wrapper_alignment(parent_style.direction) {
+                let main = if parent_style.direction.is_row() { 0 } else { 1 };
+                let mut outer_sizes = [Size::Auto; 2];
+                outer_sizes[main] = sizes[main];
+                let mut outer_bounds = [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto];
+                outer_bounds[main] = bounds[main];
+                outer_bounds[main + 2] = bounds[main + 2];
+                // A perpendicular single-child wrapper aligns on its main
+                // axis and stretches the authored box on its cross axis.
+                // This transfers constrained automatic main sizes as well as
+                // fixed sizes, without percentage substitution or flex growth.
+                native_parent_direction = if parent_style.direction.is_row() { Direction::Column } else { Direction::Row };
+                authored_parent = self.layout_box("", parent_id, native_parent_direction, alignment,
+                    parent_style.direction, outer_sizes, outer_bounds, true)?;
+                sizes[main] = Size::Auto;
+                stretch = true;
+                bounds[main] = Size::Pixels(0.);
+                bounds[main + 2] = Size::Auto;
             }
-            for (name, bound) in [("minWidth", style.min_width), ("minHeight", style.min_height), ("maxWidth", style.max_width), ("maxHeight", style.max_height)] {
-                let (value, units) = match bound {
-                    // Omitted zero minima and absent maxima preserve the existing
-                    // zero-content-minimum profile's byte output.
-                    Size::Pixels(0.) if name.starts_with("min") => continue,
-                    Size::Pixels(v) => (v, 1), Size::Percent(v) => (v, 2),
-                    Size::Auto if name.starts_with("min") => (0., 3),
-                    Size::Auto => continue,
-                };
-                layout_style.set(name, Value::Float(value))?;
-                layout_style.set(&format!("{name}UnitsValue"), Value::Uint(units))?;
-            }
-            self.records.push(layout);self.records.push(layout_style);
+            let object_id = self.layout_box(&id, authored_parent, style.direction, style.direction.alignment(),
+                native_parent_direction, sizes, bounds, stretch)?;
             let background = style.background.used(style.foreground);
             if background >> 24 != 0 {
                 let fill_id = self.records.len() as u32 - 1;

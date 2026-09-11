@@ -1,0 +1,51 @@
+{
+  "status": "qualified-core-align-self-profile; L03 partial",
+  "scope": "auto/stretch/flex-start/center/flex-end and inherit/initial/unset in the admitted single-line box profile. Baseline and other alignment forms remain unresolved and rejected.",
+  "runs": [
+    {
+      "path": "output/public-align-self-r2/receipt.json",
+      "sha256": "05dd95bd5abcbf409fe22420c4640d8a02a909ef2ea80fb8bba0b0687cdc7534",
+      "scenes": 33,
+      "frames": 264,
+      "directVisualPairs": 40,
+      "exactTransferPairs": 224,
+      "visualProof": "output/public-align-self-r2/visual-transfer.json",
+      "visualProofSha256": "916f22d8015bcc0c272746dd45f8a3c9c149ec89ad900e2e07eb018efd1a54eb"
+    },
+    {
+      "path": "output/public-align-self-edge-r1/receipt.json",
+      "sha256": "9e32e18ae61a30fa2d4d4d9d1ebaab156b9b5adae96185482ab09e1009c9a9c0",
+      "scenes": 12,
+      "frames": 96,
+      "directVisualPairs": 15,
+      "exactTransferPairs": 81,
+      "visualProof": "output/public-align-self-edge-r1/visual-transfer.json",
+      "visualProofSha256": "026ca92bf68d57efded5e1df62b4098fe94252f37121c90122cca5b9bc8560f9"
+    }
+  ],
+  "scenes": 45,
+  "geometryPassed": 360,
+  "pixelsPassed": 360,
+  "clearChecksPassed": 720,
+  "checkpoint": "output/public-align-self-checkpoint-r1/manifest.json",
+  "checkpointSha256": "ad397dac77d950c84d58c9b709fc50387ce1d795d89cb99f9c60ec45df44ab42",
+  "publicTests": {
+    "rust": 76,
+    "node": 20,
+    "typescript": "pass"
+  },
+  "priorOutputRegression": {
+    "fixtures": 187,
+    "sameRivAndSourceMaps": 187,
+    "manifest": "output/align-self-byte-regression-r1/manifest.json",
+    "sha256": "71dbbaaae43c94e60593b6c312b0687faac3e9e93834c597dc33a6b10504abf9"
+  },
+  "preservedFailure": {
+    "run": "output/public-align-self-r1/receipt.json",
+    "sha256": "478ef633ac8265c3cb1ba82e1e7ec86730cc54010608c869bd22dd1fe2d9e6d3",
+    "geometryFailed": 72,
+    "pixelFailed": 72,
+    "checkpoint": "output/align-self-parallel-wrapper-checkpoint-r1/manifest.json"
+  },
+  "immutableSourceGuard": "pass; no changes outside compiler module"
+}

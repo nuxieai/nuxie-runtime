@@ -1,0 +1,110 @@
+[
+  {
+    "name": "align-end-oversized-row",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:100px;height:100px;flex-direction:row;background:navy}#a{width:40px;height:140px;align-self:flex-end;background:coral}#b{width:30px;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-end-oversized-row-reverse",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:100px;height:100px;flex-direction:row-reverse;background:navy}#a{width:40px;height:140px;align-self:flex-end;background:coral}#b{width:30px;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-end-oversized-column",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:100px;height:100px;flex-direction:column;background:navy}#a{width:140px;height:40px;align-self:flex-end;background:coral}#b{width:30px;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-end-oversized-column-reverse",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:100px;height:100px;flex-direction:column-reverse;background:navy}#a{width:140px;height:40px;align-self:flex-end;background:coral}#b{width:30px;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-auto-minimum-row",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:180px;height:160px;flex-direction:row;background:navy}#a{height:40px;min-width:auto;max-width:60px;align-self:center;background:teal}#b{width:120px;height:20px;background:coral}#c{width:30px;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-auto-minimum-column",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:180px;height:160px;flex-direction:column;background:navy}#a{width:40px;min-height:auto;max-height:60px;align-self:center;background:teal}#b{height:120px;width:20px;background:coral}#c{width:30px;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-nested-perpendicular-wrappers",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div><div id=\"d\"></div></div>",
+    "css": "#p{width:180px;height:140px;flex-direction:row;background:navy}#a{width:100px;height:80px;align-self:center;flex-direction:column;background:teal}#b{height:40px;width:60px;align-self:flex-end;flex-direction:row;background:gold}#c{width:20px;height:20px;align-self:center;background:coral}#d{width:30px;height:30px;align-self:flex-end;background:purple}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-percent-intrinsic-row",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:180px;height:100px;flex-direction:row;background:navy}#a{align-self:center;background:teal}#b{width:50%;min-width:40px;height:30px;background:coral}#c{width:30px;height:50px;align-self:flex-end;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-fixed-main-clamp-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:180px;height:160px;flex-direction:row;background:navy}#a{width:20px;min-width:60px;max-width:80px;height:30px;align-self:center;background:teal}#b{width:120px;min-width:60px;max-width:80px;height:30px;align-self:flex-end;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-fixed-main-clamp-height",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:180px;height:160px;flex-direction:column;background:navy}#a{height:20px;min-height:60px;max-height:80px;width:30px;align-self:center;background:teal}#b{height:120px;min-height:60px;max-height:80px;width:30px;align-self:flex-end;background:gold}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-order-alpha-overlap-row",
+    "html": "<div id=\"p\"><div id=\"c\"></div><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{width:180px;height:100px;flex-direction:row;background:navy}#a{width:80px;height:60px;align-self:center;order:1;flex-direction:row;background:teal}#b{width:120px;height:60px;background:coral}#c{width:40px;height:100px;align-self:flex-end;order:2;background:rgb(255 215 0 / 50%)}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  },
+  {
+    "name": "align-order-alpha-overlap-row-reverse",
+    "html": "<div id=\"p\"><div id=\"c\"></div><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{width:180px;height:100px;flex-direction:row-reverse;background:navy}#a{width:80px;height:60px;align-self:center;order:1;flex-direction:row-reverse;background:teal}#b{width:120px;height:60px;background:coral}#c{width:40px;height:100px;align-self:flex-end;order:2;background:rgb(255 215 0 / 50%)}",
+    "features": [
+      "L03",
+      "ordinary align-self edge compositions"
+    ]
+  }
+]

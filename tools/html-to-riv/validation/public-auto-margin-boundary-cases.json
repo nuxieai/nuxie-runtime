@@ -1,0 +1,508 @@
+[
+  {
+    "name": "auto-margin-boundary-row-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{width:auto;align-self:flex-start}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-min-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{width:auto;min-width:300px;max-width:500px;align-self:flex-start}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-max-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{width:auto;max-width:90px;align-self:flex-start}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-cross-space-around",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-around}#b{margin-top:auto;margin-bottom:auto}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-cross-space-evenly",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-evenly}#b{margin-top:auto;margin-bottom:auto}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-baseline-sibling",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#a{align-self:baseline}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-reverse-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row-reverse;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{width:auto;align-self:flex-start}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-reverse-min-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row-reverse;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{width:auto;min-width:300px;max-width:500px;align-self:flex-start}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-reverse-max-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row-reverse;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{width:auto;max-width:90px;align-self:flex-start}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-reverse-cross-space-around",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row-reverse;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-around}#b{margin-top:auto;margin-bottom:auto}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-reverse-cross-space-evenly",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row-reverse;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;align-self:center;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-evenly}#b{margin-top:auto;margin-bottom:auto}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-row-reverse-baseline-sibling",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:row-reverse;background:#162540}#a{width:60px;height:30px;background:#f07f5080}#b{width:40px;height:50px;margin-left:auto;background:#ffd700a0}#leaf{width:10px;height:20px;background:white}#c{width:30px;height:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#a{align-self:baseline}",
+    "viewports": [
+      [
+        400,
+        80
+      ],
+      [
+        200,
+        240
+      ],
+      [
+        120,
+        400
+      ],
+      [
+        400,
+        80
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;margin-top:auto;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{height:auto;align-self:flex-start}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-min-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;margin-top:auto;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{height:auto;min-height:300px;max-height:500px;align-self:flex-start}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-max-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;margin-top:auto;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{height:auto;max-height:90px;align-self:flex-start}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-cross-space-around",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-around}#b{margin-left:auto;margin-right:auto}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-cross-space-evenly",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-evenly}#b{margin-left:auto;margin-right:auto}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-reverse-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column-reverse;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;margin-top:auto;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{height:auto;align-self:flex-start}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-reverse-min-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column-reverse;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;margin-top:auto;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{height:auto;min-height:300px;max-height:500px;align-self:flex-start}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-reverse-max-intrinsic-parent",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column-reverse;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;margin-top:auto;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{height:auto;max-height:90px;align-self:flex-start}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-reverse-cross-space-around",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column-reverse;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-around}#b{margin-left:auto;margin-right:auto}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  },
+  {
+    "name": "auto-margin-boundary-column-reverse-cross-space-evenly",
+    "html": "<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div><div id=footer></div>",
+    "css": "#p{width:50%;height:50%;flex-direction:column-reverse;background:#162540}#a{height:60px;width:30px;background:#f07f5080}#b{height:40px;width:50px;align-self:center;background:#ffd700a0}#leaf{height:10px;width:20px;background:white}#c{height:30px;width:20px;background:#008080a0}#footer{width:120px;height:10px;background:green}#p{justify-content:space-evenly}#b{margin-left:auto;margin-right:auto}",
+    "viewports": [
+      [
+        80,
+        400
+      ],
+      [
+        240,
+        200
+      ],
+      [
+        400,
+        120
+      ],
+      [
+        80,
+        400
+      ]
+    ]
+  }
+]

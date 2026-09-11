@@ -1,11 +1,31 @@
 {
   "updated": "2026-09-11",
-  "focus": "Public wrapping lowering and conservative admission",
-  "status": "Combined wrapping proven in bounded experiments; sizing primitive staged in compiler",
-  "current": "Combined percentage slots and nested paint pass384/384geometry and pixels with full visual coverage. Optimized paint groups reduce cost; the compiler-private variable-count sizing graph reproduces48experimental outputs exactly. Public wrapping admission remains pending.",
-  "next": "Resolve visibility-gate exactness and coordinate bounds, integrate optimized paint lowering with scene-wide cost accounting, then qualify guarded public wrapping through original HTML/CSS. Continue intrinsic and normal/stretch line distribution work.",
+  "focus": "Automatic margins and guarded wrapping integration",
+  "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
+  "current": "Public auto margins pass688geometry/680pixel comparisons;8fractional descendant failures retained.111Rust/31Node tests pass and482prior outputs are unchanged. Private wrapping sizing and paint primitives reproduce the proven files; snapped gating fixes bounded rounding cases.",
+  "next": "Investigate remaining fractional margin pixel limits; derive layout-coordinate certificates and integrate snapped gating before public wrapping. Continue independent grow/shrink and remaining backlog work.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public auto margins, retained pixel failures and regression",
+      "path": "tools/html-to-riv/validation/public-auto-margins-final-receipt.json"
+    },
+    {
+      "label": "Fixed-spacer fractional failure control",
+      "path": "tools/html-to-riv/validation/auto-margin-fractional-control-receipt.json"
+    },
+    {
+      "label": "Compiler-private wrapping paint lowering",
+      "path": "tools/html-to-riv/validation/wrapping-paint-lowering-receipt.json"
+    },
+    {
+      "label": "Snapped visibility gate with threshold control",
+      "path": "tools/html-to-riv/validation/wrapped-snapped-gate-receipt.json"
+    },
+    {
+      "label": "Conditional anchor error bound",
+      "path": "tools/html-to-riv/validation/wrapped-anchor-error-audit.md"
+    },
     {
       "label": "Combined optimized sizing and paint",
       "path": "tools/html-to-riv/validation/wrapped-combined-optimized-receipt.json"
@@ -253,8 +273,12 @@
   ],
   "activeWork": [
     {
-      "name": "Public wrapping implementation",
-      "work": "Sizing graph is staged with exact-output evidence; optimized paint composition and coordinate admission guards are next."
+      "name": "Automatic margin qualification",
+      "work": "Implementation and boundary corpus complete;8pixel failures persist with fixed-spacer control reproducing exact geometry and native pixels."
+    },
+    {
+      "name": "Public wrapping integration",
+      "work": "Private sizing/paint code is staged. Snapped gates require layout-derived error/separation bounds and scene-wide resource admission."
     }
   ],
   "publication": {

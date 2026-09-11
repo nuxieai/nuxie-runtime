@@ -1,0 +1,37 @@
+{
+  "status": "partially-validated-auto-margin-implementation",
+  "fullyQualified": false,
+  "counts": {
+    "scenes": 86,
+    "frames": 688,
+    "geometryPass": 688,
+    "pixelPass": 680,
+    "pixelFailures": 8,
+    "clearPass": 1376,
+    "exactCliReproductions": 86,
+    "newDirectPairsReviewed": 50,
+    "priorDistinctPairsTransferred": 106,
+    "withinRunTransferredFrames": 532,
+    "automatedOnlyFrames": 0
+  },
+  "hashes": {
+    "tools/html-to-riv/output/public-auto-margins-r3/experiment-manifest.json": "8435fe0d8c72411c45059522683d51b5485dadbeb6446f566275a940846cf78d",
+    "tools/html-to-riv/output/public-auto-margins-boundaries-r1/experiment-manifest.json": "c2785b72e744b03b64790b8291fdb2ef14f823b1282c739b59996efa08caef87",
+    "tools/html-to-riv/output/public-auto-margins-r3/source-hashes.json": "e1a12b47f3990f17022e7e85c2112fad4360c370cb11ac38d8dc77fbd3c7cf49",
+    "tools/html-to-riv/output/public-auto-margins-r3/render/receipt.json": "7972a4e1dc5e3080adb051c06834e4083a49f8839b8752c942634c65f8fcd1b9",
+    "tools/html-to-riv/output/public-auto-margins-boundaries-r1/render/receipt.json": "6b70ad52dabd39fd3379c0cc4ea0390b2b84fa680f95932f6aeb8827bea98705",
+    "tools/html-to-riv/validation/auto-margins-implementation-review.md": "7a5b8e047e9b85643a99ddf95af1916d285ceda9815ee050510a41a2c44b2559",
+    "tools/html-to-riv/output/public-auto-margins-r3/build-provenance.json": "04d513399833a2c8848f03d455b7e1db804da790b4467d4e2e8ed7db5675bdd7",
+    "tools/html-to-riv/output/auto-margin-byte-regression-r2/manifest.json": "d041da55b8fa526ba6904857210e9e9940c6be04f3fe696f4254791eafcb3d85",
+    "tools/html-to-riv/output/public-auto-margins-checkpoint-r1/manifest.json": "7ad3bba9ba5b7f1bfb0a3a4a2d7809e0e4b6e0dd9d746e8fc292f2e6085defff",
+    "tools/html-to-riv/validation/auto-margin-fractional-control-receipt.json": "c027406495d768eaaa0f1c8a4a566d51a3ac37760661a8b9ce308ccb1c6d4961"
+  },
+  "tests": {
+    "rust": 111,
+    "node": 31,
+    "typescript": "pass",
+    "immutableSourceGuard": "pass",
+    "priorByteIdenticalOutputs": 482
+  },
+  "recordBound": "At most6additional margin records perauthoreditem;49152at8192elements, excludingunrelatedexistingcompositions."
+}

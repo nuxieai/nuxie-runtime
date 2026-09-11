@@ -16,6 +16,7 @@ pub(super) struct Child {
     pub used_height: Option<f32>,
     pub participates: bool,
     pub last: bool,
+    pub vertical_auto_margin: bool,
 }
 
 fn bounded_height(style: &Style, intrinsic: Option<f32>) -> Option<f32> {
@@ -39,7 +40,8 @@ pub(super) fn summarize(style: &Style, children: &[Child]) -> Option<Metric> {
     // child of a column begins at y=0. Its baseline propagates through a box
     // with fixed or provable intrinsic height. Other topology and responsive
     // nested anchors need separate proof.
-    if !matches!(style.direction, Direction::Column) || style.spacing.distributes() { return None; }
+    if !matches!(style.direction, Direction::Column) || style.spacing.distributes()
+        || children.iter().any(|child| child.vertical_auto_margin) { return None; }
     let intrinsic = if matches!(style.height, Size::Auto) {
         let mut sum = 0.0_f32;
         for child in children {
@@ -85,7 +87,8 @@ pub(super) fn used_height(style: &Style, children: &[Child]) -> Option<f32> {
 pub(super) fn summarize_last(style: &Style, children: &[Child], height: Option<f32>) -> Option<Metric> {
     let height = height?;
     let ascent = if children.is_empty() { height } else {
-        if !matches!(style.direction, Direction::Column) || style.spacing.distributes() { return None; }
+        if !matches!(style.direction, Direction::Column) || style.spacing.distributes()
+        || children.iter().any(|child| child.vertical_auto_margin) { return None; }
         let last = children.iter().max_by_key(|child| (child.order, child.index))?;
         let Ascent::Fixed(last_ascent) = last.last_metric?.ascent else { return None };
         let preceding = ordered(children).into_iter().filter(|child| child.index != last.index).try_fold(0.0_f32, |sum, child| {

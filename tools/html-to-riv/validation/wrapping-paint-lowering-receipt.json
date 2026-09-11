@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "status": "validated-private-wrapping-paint-lowering",
+  "publicAdmission": false,
+  "newUnitTests": 4,
+  "libTestsAtCheckpoint": 12,
+  "exactExperimentalFileMatches": 48,
+  "exactRepeatedModuleOutputs": 48,
+  "benchmarkOrNewPixelClaims": false,
+  "preflight": "For nonempty paint sum: 8N-5+7N(N-1)/2+3R+2(R-1)+2S; R=sum((j+1)*Pj), S=sum(j*Pj). All-zero plans return0. Checked usize arithmetic and finalu32 object-capacity check.",
+  "validation": [
+    "Distinct valid slot handles",
+    "Layout paint geometry strictly within its own slot, without crossing another plan slot",
+    "Unique Fill parented to supplied geometry",
+    "Unique SolidColor parented to supplied Fill",
+    "Finite positional line fraction",
+    "All invalid-plan checks before original color mutations"
+  ],
+  "callerProofs": [
+    "logical packing and within-item paint order",
+    "independent slot geometry",
+    "line-separation DistanceConstraint behavior",
+    "finite coordinate/mask bounds",
+    "whole-scene resource budget"
+  ],
+  "hashes": {
+    "output/wrapping-paint-module-r1/manifest.json": "47324d4b935f3c69702d7d617a934b8b26e1d549ea407657e6e5b6016fc072ca",
+    "output/wrapping-paint-module-r1/reproductions.json": "19a0c848c216449553cce28c081cde7d08fb673d1d2f721c869c0b10655e0922",
+    "output/wrapping-paint-module-r1/repeat-reproductions.json": "92edc12b366cd57b98fb7c366da0d6b3a924ac4b3d2d82d1d4b9af1e13e4bbe2",
+    "output/wrapping-paint-module-r1/unit-tests-r2.log": "0b60ce776c350ad1b051e0062aa6b1ebc51fa19a28fdf6019cbda44c7c5c1ac9",
+    "src/wrapping_paint.rs": "78e355541d10a3ccd01d67a67bd64f02c80aca936b70fff0fe5571f1eb6690cf",
+    "src/wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "validation/wrapped-combined-optimized-receipt.json": "6718a74fb91d5792578df4b6b05016b196f86dc0975111218a0972b6150ffa89"
+  }
+}

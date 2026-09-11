@@ -246,3 +246,31 @@ test("unresolved spacing contexts have CLI/WASM diagnostic parity",async()=>{
   assert.equal(compiler.compile(document).ok,true);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('automatic margins preserve CLI/WASM bytes and authored source maps',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-auto-margin-expanded-cases.json',import.meta.url)));
+ assert.equal(fixtures.length,64);
+ await assertCorpusParity(fixtures);
+});
+
+test('unresolved automatic-margin combinations have CLI/WASM diagnostic parity',async()=>{
+ const compiler=await createCompiler(wasm);const dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-margin-diagnostics-'));
+ try {
+  const html='<div id="p"><div id="b"></div></div>';
+  for(const [index,css] of ['#b{margin:10px}','#p{flex-direction:row;justify-content:space-around}#b{margin-left:auto}','#p{flex-direction:row}#b{align-self:baseline;margin-left:auto}'].entries()) {
+   const value={html,css,width:240,height:160},prefix=path.join(dir,String(index));
+   fs.writeFileSync(prefix+'.json',JSON.stringify(value));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'});
+   const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...value});
+   assert.equal(cli.status,1,css);assert.equal(result.ok,false,css);
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),css);
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+ } finally {fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('automatic-margin intrinsic and composition boundaries have CLI/WASM parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-auto-margin-boundary-cases.json',import.meta.url)));
+ assert.equal(fixtures.length,22);
+ await assertCorpusParity(fixtures);
+});

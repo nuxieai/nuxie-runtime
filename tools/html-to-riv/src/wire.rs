@@ -4,6 +4,7 @@ use crate::Diagnostic;
 use nuxie_schema::{FieldKind, definition_by_name};
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
 pub(crate) enum Value {
     Uint(u32),
     Float(f32),
@@ -12,6 +13,7 @@ pub(crate) enum Value {
     Bytes(Vec<u8>),
     Bool(bool),
 }
+#[derive(Clone)]
 pub(crate) struct Record {
     pub kind: &'static str,
     properties: BTreeMap<u16, Value>,
@@ -23,6 +25,16 @@ impl Record {
             kind,
             properties: BTreeMap::new(),
         }
+    }
+    pub fn get(&self, name: &str) -> Option<&Value> {
+        let mut definition = definition_by_name(self.kind);
+        while let Some(d) = definition {
+            if let Some(property) = d.properties.iter().find(|p| p.name == name) {
+                return self.properties.get(&property.key.int);
+            }
+            definition = d.runtime_parent.and_then(definition_by_name);
+        }
+        None
     }
     pub fn set(&mut self, name: &str, value: Value) -> Result<(), Diagnostic> {
         let mut definition = definition_by_name(self.kind);

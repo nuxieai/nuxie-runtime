@@ -1,0 +1,16 @@
+{
+  "status": "verified-fixed-spacer-control",
+  "scope": "Only eight target frames, not the other resize states",
+  "targetGeometryPass": 8,
+  "targetPixelPass": 0,
+  "targetExactPriorGeometryAndNativeRgba": 8,
+  "targetExactPriorChromeRgba": 8,
+  "clearPass": 32,
+  "exactRivAndParsedMapReproductions": 2,
+  "directControlPairs": 2,
+  "exactTargetTransfers": 6,
+  "hashes": {
+    "tools/html-to-riv/output/auto-margin-fractional-control-r1/experiment-manifest.json": "76a05c5e91169035543c59e3d6d8d37664e467e633f1bacbeed767c00a35eb8e",
+    "tools/html-to-riv/validation/auto-margin-fractional-control-review.md": "5a37ca8a3d54ba880b468fbc3a68c3388bbe70d6c156ef1b27a2cda5a0d85c75"
+  }
+}

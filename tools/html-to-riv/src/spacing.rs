@@ -26,12 +26,15 @@ pub(super) fn computed(text: &str, parent: Spacing, source: &str) -> Result<Spac
 }
 pub(super) fn emit(emitter: &mut Emitter, parent_id: u32, parent: &Style, edge: bool) -> Result<(), Diagnostic> {
     if !parent.spacing.distributes() { return Ok(()); }
-    // N authored children require N+1 spacers, each exactly two records. The
-    // global 8192-element limit bounds this by 32768 additional records.
-    let id = emitter.layout_box("", parent_id, Direction::Column, 0, parent.direction,
-        [Size::Pixels(0.); 2], [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto], false, [false; 4])?;
-    let row = parent.direction.is_row();
     let weight = if edge && matches!(parent.spacing, Spacing::Around) { 0.5 } else { 1. };
+    emit_weight(emitter, parent_id, parent.direction, weight)
+}
+
+/// Ordinary main-axis flex participant shared by spacing and automatic margins.
+pub(super) fn emit_weight(emitter: &mut Emitter, parent_id: u32, direction: Direction, weight: f32) -> Result<(), Diagnostic> {
+    let id = emitter.layout_box("", parent_id, Direction::Column, 0, direction,
+        [Size::Pixels(0.); 2], [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto], false, [false; 4])?;
+    let row = direction.is_row();
     emitter.records[id as usize + 1].set(if row { "fractionalWidth" } else { "fractionalHeight" }, Value::Float(weight))?;
     emitter.records[id as usize + 2].set(if row { "layoutWidthScaleType" } else { "layoutHeightScaleType" }, Value::Uint(1))?;
     Ok(())

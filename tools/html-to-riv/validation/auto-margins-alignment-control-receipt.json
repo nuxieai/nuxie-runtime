@@ -1,0 +1,28 @@
+{
+  "status": "failed-auto-margin-alignment-control",
+  "publicAdmission": false,
+  "counts": {
+    "cases": 64,
+    "frames": 512,
+    "geometryPass": 440,
+    "pixelPass": 432,
+    "clearPass": 1024,
+    "exactReproductions": 64,
+    "directPairsPrepared": 110,
+    "exactTransfers": 402
+  },
+  "newDirectPairsReviewed": 44,
+  "priorDistinctPairsTransferred": 66,
+  "withinRunTransferredFrames": 402,
+  "automatedOnlyFrames": 0,
+  "hashes": {
+    "tools/html-to-riv/output/public-auto-margins-r2/experiment-manifest.json": "de6e57fec1b9cf15e41084f5e5ad69136bf2d213adf5fd50d36b2e40d7745bef",
+    "tools/html-to-riv/output/public-auto-margins-r2/render/receipt.json": "3a94b3c541135af903d6e66cad313b0218d752b045567521fe14f686a8ad21dc",
+    "tools/html-to-riv/output/public-auto-margins-r2/source-hashes.json": "f716374bfb266dec528f4cb9d1efb8b072cb30fd1a0d375061f441bcad8d4bf8",
+    "tools/html-to-riv/output/public-auto-margins-r2/matrix.json": "422d9f40fcce235d6c568047f346b5ca22795724d95cde1b7a74a9c46095536b",
+    "tools/html-to-riv/output/public-auto-margins-r2/reproductions.json": "1bd306269f605a72a47f986fbf91f2604597a4109d33581f5dff1937a4ac28b7",
+    "tools/html-to-riv/output/public-auto-margins-r2/prior-review-transfers.json": "0e836dfe37a88679ae2cfab71b9db117bb49d01f1edb145eccf5e8b59f1481db",
+    "tools/html-to-riv/output/public-auto-margins-r2/visual-transfer-verified.json": "6b2bf095048328d2538632a15aaf7fd750b19f99899a8292ea7012c9aec87bbe",
+    "tools/html-to-riv/validation/auto-margins-alignment-control-review.md": "b952aae043fdfb9e36a51b39d293000e0bcb402170b6bf3820b13c225c0df29a"
+  }
+}

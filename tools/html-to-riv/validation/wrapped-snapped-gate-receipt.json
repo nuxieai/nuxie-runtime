@@ -1,0 +1,478 @@
+{
+  "status": "experimental-gate-positive-results-with-preserved-transition-failure",
+  "scope": "Experimental snapped unsigned ordinary-RIV gate; overrides raw driver public labels. No public/runtime source changes or general CSS qualification.",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1",
+  "targetBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "epsilon": 0.015625,
+  "epsilonStatus": "Explicit experimental constant, not a layout-derived bound or public admission rule",
+  "distance": 65536,
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "5bcb032898139dbd3678f1724038b7584bd4f76970fa045b9bdf61b823c1a570",
+    "probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "baseCompilerSha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+  "artifactHashes": {
+    "experiment-manifest.json": "faa62dd5d6268e8b20b213886d589925e7b2e1d6a550b5bf128cf8fdde220611",
+    "review.md": "dd5bd07130dd6c57398e7b81ba7894d3a0806ecf7c40bcfd9f3d27afaf206a22",
+    "src/main.rs": "2d4e34d68f7760b75402ef91f299c098fb71e9983d28ce66c9fea8683fd3be74",
+    "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "adapter.py": "5bcb032898139dbd3678f1724038b7584bd4f76970fa045b9bdf61b823c1a570",
+    "augment": "898ab4455f2a55937c28d37b271525a9104248fafbcdd59980e026b863e03dbb",
+    "node-probe.rs": "d1ddace846419faf1a01051ad2bc38f0d7699b7caf135bc56a41b86a28a58ffc",
+    "node-probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "augment-command.json": "89e59050a735e9761be7c69f739ba675e9f607750ec90a2911a3911559aa8511",
+    "probe-command.json": "b93122644af9bac3d69cdfb6d9c1cf3d2c6f27149aca506977e5a4ec81a01ac7",
+    "rustc-version.txt": "4cc234933847a36bed75a45855f5f774dffefa91f46f27571e2be8af23f5adf0",
+    "pairs.json": "15b657142f91fb70dfbf52c0047aca7d71991f57ac2efec9ca9429642319d00d",
+    "rounding-pair.json": "22af52aa0df7bbc2654ec676d2ea02f19593c88943cac541e724d4599258431f",
+    "render/source-cases.json": "d6d0191d5ecd59426ff3ce3bbd4ec052532e1de6fae49f7c765f01a92d7d50c9",
+    "render-rounding/source-cases.json": "22af52aa0df7bbc2654ec676d2ea02f19593c88943cac541e724d4599258431f",
+    "render/receipt.json": "a6dd87365958d13894bfeb9e2dabb3645a435a2a24f9b3326209c34f45904408",
+    "render-rounding/receipt.json": "18c3fc7a9ff9d17b32cda7fb25db85cebf712178a2dd7a95542493ddda8139b8",
+    "observed.json": "f0e57c6ff7672015d439bc91ce2de613856375284194561e0b29076cacc9f128",
+    "reproductions.json": "e5b9191205017e5c94c807553b136f1b1b1005e4833ab19501c11fdb1c48e98e",
+    "visual-transfers.json": "653effb8fc557ff3839527a6b9f951109201f232f288f89f38fd8f71c844e67e",
+    "collect.py": "1016bff9b7090eb969aa92c0c5e42c09c46b46f1072977b0ea0daf89c201c47e",
+    "visual-0.png": "e7105aab6851c4deb7fd6756dccdf0bd35b9a36b2a3f5e84c3d5e1e93818bd78",
+    "visual-4.png": "7fb7675c05508d6884a753dbd18f9c9806f65850889373ce918531dc31fe6754",
+    "visual-8.png": "20133a3405cef97bf4fbecb2ff44dd52ed89a358bf4a3bd729daf930f65536f6"
+  },
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/deps/libnuxie_runtime-a47d7ecb86bb59ae.rlib": "221771c957c549b5fa73b5788028a4f2ea7c8b7e6306d5102d940f75b4b429c6",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/deps/libnuxie_render_api-1c540122ba14263b.rlib": "f34089cf9dcc88c44cb1a77aa71cfaaaf5c028ac2724b55e8b1597822a56b8d3"
+  },
+  "buildCommands": {
+    "augment-command.json": [
+      "rustc",
+      "--edition=2024",
+      "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1/src/main.rs",
+      "--extern",
+      "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+      "--extern",
+      "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+      "-L",
+      "dependency=tools/html-to-riv/target/debug/deps",
+      "-C",
+      "debuginfo=0",
+      "-o",
+      "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1/augment"
+    ],
+    "probe-command.json": [
+      "rustc",
+      "--edition=2024",
+      "-C",
+      "debuginfo=0",
+      "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1/node-probe.rs",
+      "-o",
+      "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1/node-probe",
+      "-L",
+      "dependency=/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/deps",
+      "--extern",
+      "nuxie_runtime=/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/deps/libnuxie_runtime-a47d7ecb86bb59ae.rlib",
+      "--extern",
+      "nuxie_render_api=/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/deps/libnuxie_render_api-1c540122ba14263b.rlib",
+      "-L",
+      "native=/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/build/libhydrogen-sys-22672b1f884c061a/out"
+    ]
+  },
+  "observer": {
+    "scope": "Read-only ordinary public APIs; all WorldTransformComponents included. Non-layout dimensions are zero placeholders. No runtime mutations.",
+    "sourceSha256": "d1ddace846419faf1a01051ad2bc38f0d7699b7caf135bc56a41b86a28a58ffc",
+    "binarySha256": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "baselineObserverSha256": "91adadd3c6d2408d038eac082825519513a1fd506045397bc62028f3a6efdda8",
+    "exactlyTwoObservationSubstitutionsVerified": true,
+    "unifiedDiff": "--- immutable-baseline-toolchain-r2/baseline-probe.rs\n+++ wrapped-snapped-gate-r1/node-probe.rs\n@@ -51,9 +51,9 @@\n             let geometry = instance.with_artboard(|artboard| {\n                 artboard.objects().iter().enumerate().filter_map(|(object_id,object)| {\n                     object.as_ref()?.with(|object| {\n-                        let layout = object.as_layout_component()?.layout();\n+                        let size = object.as_layout_component().map(|l| (l.layout().width(),l.layout().height())).unwrap_or((0.,0.));\n                         let world = object.as_world_transform_component()?.world_transform();\n-                        Some((object_id,layout.width(),layout.height(),*world.values()))\n+                        Some((object_id,size.0,size.1,*world.values()))\n                     }).flatten()\n                 }).collect::<Vec<_>>()\n             });\n",
+    "immutableDependencyIdentity": {
+      "manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72",
+      "source-identity.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+      "build-command.json": "cf7b99fdf24e494c24361378404c446c04370e4550275ed561fcf2d19eb4c850",
+      "dependency-command.json": "de83cf4b5404a6920f552c6b74cfb6dca59f779c74aaaf93622fe05334f1297a",
+      "dependency-features.txt": "c79a79d77e173ff4427e1bbb0bae61a5567c958d7bca418a7eb6727afd4bdbf2",
+      "probe-command.json": "36cdb556ea1d8dbd02e48781f6821540c1438d414c31c9e6f299fcdf24f3780b"
+    },
+    "nativeArchives": {
+      "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/baseline-build/debug/build/libhydrogen-sys-22672b1f884c061a/out/libhydrogen.a": "9b5603db2640894d2a9d093e4eb05c6658bc1cf1095a30331df7f7a8658176ac"
+    }
+  },
+  "totals": {
+    "scenes": 11,
+    "frames": 88,
+    "geometryPassed": 88,
+    "pixelsPassed": 80,
+    "clearPassed": 176,
+    "exactSignals": 80,
+    "exactRivAndParsedMapReproductions": 11
+  },
+  "matrix": [
+    {
+      "name": "zero",
+      "inputGap": 0,
+      "anchorTranslation": 0,
+      "expected": 0,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 0,
+        "difference": 0,
+        "absolute": 0,
+        "dead": 0,
+        "normalized": 0,
+        "snapped": 0,
+        "leader": 65536
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "subepsilon",
+      "inputGap": 0.0078125,
+      "anchorTranslation": 0,
+      "expected": 0,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 0.0078125,
+        "difference": 0.0078125,
+        "absolute": 0.0078125,
+        "dead": 0,
+        "normalized": 0,
+        "snapped": 0,
+        "leader": 65536
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "epsilon",
+      "inputGap": 0.015625,
+      "anchorTranslation": 0,
+      "expected": 0,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 0.015625,
+        "difference": 0.015625,
+        "absolute": 0.015625,
+        "dead": 0,
+        "normalized": 0,
+        "snapped": 0,
+        "leader": 65536
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "transition",
+      "inputGap": 0.016125,
+      "anchorTranslation": 0,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 0,
+      "exactSignalFrames": 0,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 0.016125,
+        "difference": 0.016125,
+        "absolute": 0.016125,
+        "dead": 0.00049999915,
+        "normalized": 0.00049999915,
+        "snapped": 0.0009999983,
+        "leader": 65536
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "threshold",
+      "inputGap": 0.016625,
+      "anchorTranslation": 0,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 0.016625,
+        "difference": 0.016625,
+        "absolute": 0.016625,
+        "dead": 0.0010000002,
+        "normalized": 65536,
+        "snapped": 65536,
+        "leader": 0
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "above-threshold",
+      "inputGap": 0.016725,
+      "anchorTranslation": 0,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 0.016725,
+        "difference": 0.016725,
+        "absolute": 0.016725,
+        "dead": 0.0011,
+        "normalized": 65536,
+        "snapped": 65536,
+        "leader": 0
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "gap41",
+      "inputGap": 41,
+      "anchorTranslation": 0,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 41,
+        "difference": 41,
+        "absolute": 41,
+        "dead": 40.984375,
+        "normalized": 65536,
+        "snapped": 65536,
+        "leader": 0
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "negative-gap41",
+      "inputGap": -41,
+      "anchorTranslation": 0,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": -41,
+        "difference": -41,
+        "absolute": 41,
+        "dead": 40.984375,
+        "normalized": 65536,
+        "snapped": 65536,
+        "leader": 0
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "translated-residual",
+      "inputGap": 0.001953125,
+      "anchorTranslation": 16384,
+      "expected": 0,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 16384,
+        "anchorB": 16384.002,
+        "difference": 0.001953125,
+        "absolute": 0.001953125,
+        "dead": 0,
+        "normalized": 0,
+        "snapped": 0,
+        "leader": 65536
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "translated-gap41",
+      "inputGap": 41,
+      "anchorTranslation": 16384,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 16384,
+        "anchorB": 16425,
+        "difference": 41,
+        "absolute": 41,
+        "dead": 40.984375,
+        "normalized": 65536,
+        "snapped": 65536,
+        "leader": 0
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    },
+    {
+      "name": "normalizer-rounding",
+      "inputGap": 41.015625,
+      "anchorTranslation": 0,
+      "expected": 65536,
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "exactSignalFrames": 8,
+      "observedFrame0": {
+        "anchorA": 0,
+        "anchorB": 41.015625,
+        "difference": 41.015625,
+        "absolute": 41.015625,
+        "dead": 41,
+        "normalized": 65535.996,
+        "snapped": 65536,
+        "leader": 0
+      },
+      "sameSignalAcrossAllFrames": true,
+      "addedRecords": 32
+    }
+  ],
+  "reproductions": [
+    {
+      "case": "zero",
+      "rivSha256": "1d212eab0269a90b0639e4142ad551de76588906414393d7a2b733ccf10bec7a",
+      "parsedMapExact": true
+    },
+    {
+      "case": "subepsilon",
+      "rivSha256": "a34aa0077f689230fd885b2e23497dff55da28720570fe5880b85a3c460af9c0",
+      "parsedMapExact": true
+    },
+    {
+      "case": "epsilon",
+      "rivSha256": "daa607f3245f318a845252b0de3984a0b2892e1e282f25c1c70e95d8d942b61c",
+      "parsedMapExact": true
+    },
+    {
+      "case": "transition",
+      "rivSha256": "08f8cbac348d43836510befa8d00c32b41d31372f0b65402856c5a04be49a308",
+      "parsedMapExact": true
+    },
+    {
+      "case": "threshold",
+      "rivSha256": "0ec2b9993f17f117378ef0f8635dc577f676374b37e8d02ae97b721dd4d46f4a",
+      "parsedMapExact": true
+    },
+    {
+      "case": "above-threshold",
+      "rivSha256": "dbc79d9f2735734ae6c5f70bd35701adebcf7a744fb8b741a27047828858a274",
+      "parsedMapExact": true
+    },
+    {
+      "case": "gap41",
+      "rivSha256": "19692b04fc6b02663b8a69445074a84e1664d16ed074a2d646b35f370071e51d",
+      "parsedMapExact": true
+    },
+    {
+      "case": "negative-gap41",
+      "rivSha256": "8d0e03ddcd23290557ae728e2635643c6c2a8652a1973407990da017ea38cbac",
+      "parsedMapExact": true
+    },
+    {
+      "case": "translated-residual",
+      "rivSha256": "92f72da70aef9da1d27f0c77e2b0bfeaf73cfe9972ae73f1421d97fc8408792f",
+      "parsedMapExact": true
+    },
+    {
+      "case": "translated-gap41",
+      "rivSha256": "853f7001c27978cb31327914dc352eccaed2e9561f7b1a7d403dee6230372892",
+      "parsedMapExact": true
+    },
+    {
+      "case": "normalizer-rounding",
+      "rivSha256": "d6192c4e0041ac7387495333096e8dcd551c783e25e944a2302f9ed590b29082",
+      "parsedMapExact": true
+    }
+  ],
+  "visualCoverage": {
+    "directPairs": 11,
+    "directSheets": [
+      "visual-0.png",
+      "visual-4.png",
+      "visual-8.png"
+    ],
+    "directFrames": [
+      {
+        "case": "zero",
+        "frame": 0
+      },
+      {
+        "case": "subepsilon",
+        "frame": 0
+      },
+      {
+        "case": "epsilon",
+        "frame": 0
+      },
+      {
+        "case": "transition",
+        "frame": 0
+      },
+      {
+        "case": "threshold",
+        "frame": 0
+      },
+      {
+        "case": "above-threshold",
+        "frame": 0
+      },
+      {
+        "case": "gap41",
+        "frame": 0
+      },
+      {
+        "case": "negative-gap41",
+        "frame": 0
+      },
+      {
+        "case": "translated-residual",
+        "frame": 0
+      },
+      {
+        "case": "translated-gap41",
+        "frame": 0
+      },
+      {
+        "case": "normalizer-rounding",
+        "frame": 0
+      }
+    ],
+    "transferredPairs": 77,
+    "independentImageChecks": 154,
+    "transferRule": "Each Chrome/native frame independently has exact fullRGBA origin crop [0,0,100,80] equal to directly reviewed frame0 crop and all remaining pixels opaque white.",
+    "transferSha256": "653effb8fc557ff3839527a6b9f951109201f232f288f89f38fd8f71c844e67e",
+    "observations": "Transition case visibly retains native coral badge while Chrome is blank. No visible divergence in ten passing cases."
+  },
+  "limitations": [
+    "Constant anchor Nodes exercise arithmetic, not actual CSS line anchor calculation or a dynamic wrap transition.",
+    "0 < post-dead-zone magnitude < 0.001 remains nonbinary; transition is a retained failure.",
+    "Nominal threshold success does not prove all threshold rounding cases.",
+    "No layout error bound, finite coordinate/mask proof, arbitrary transform support, zero-line separation or production performance claim."
+  ]
+}

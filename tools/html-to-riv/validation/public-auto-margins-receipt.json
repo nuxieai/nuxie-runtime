@@ -1,0 +1,27 @@
+{
+  "status": "failed-public-auto-margin-candidate",
+  "publicAdmission": false,
+  "compilerSourceBuildProvenance": "No contemporaneous compiler source/build snapshot; frozen binary and driver bindings only",
+  "counts": {
+    "cases": 48,
+    "frames": 384,
+    "geometryPass": 304,
+    "pixelPass": 304,
+    "clearPass": 768,
+    "exactReproductions": 48,
+    "directPairsPrepared": 86,
+    "exactTransfers": 298
+  },
+  "directPairsReviewed": 86,
+  "exactVisualTransfers": 298,
+  "automatedOnlyFrames": 0,
+  "hashes": {
+    "tools/html-to-riv/output/public-auto-margins-r1/experiment-manifest.json": "9633dfc817394e562e926f2279de01ad9d9cf97b439814770b97276e7222bef0",
+    "tools/html-to-riv/output/public-auto-margins-r1/render/receipt.json": "9fe0a265251ff9b9d1fab9978d81296da730b6b8c41ec0371a704a768db5d819",
+    "tools/html-to-riv/output/public-auto-margins-r1/matrix.json": "4af1c8adf144a57e46b4e07d0ee8470300f13b5d8cebb922839db08b3a51a36b",
+    "tools/html-to-riv/output/public-auto-margins-r1/reproductions.json": "bbff9016095ef90805bbaf1e04f2388bcb2f8ca21f01986a52963e0fdae4e087",
+    "tools/html-to-riv/output/public-auto-margins-r1/visual-direct.json": "34e88bc70805d1685825af1500b1dea9a2bd2d1a04f25928f8954a63b88abd32",
+    "tools/html-to-riv/output/public-auto-margins-r1/visual-transfer-verified.json": "37d0a0ef01dfa7483062d64a5f566f29b63427803f24c206065e69e357bd71c3",
+    "tools/html-to-riv/validation/auto-margins-review.md": "b1d17078c932baa9bd714701606db3fe1fad1dab8fd235213a498bb8b9632629"
+  }
+}

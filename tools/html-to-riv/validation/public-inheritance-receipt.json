@@ -1,0 +1,276 @@
+{
+  "scope": "Inherited currentColor resolves at each descendant; literal inherited colors remain literal. Top-level host reset inherited background unit control also passes. Other CSSwide inheritance contexts are pending.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "before": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-before/receipt.json",
+    "sha256": "f36d112d05034c32f027077281042a0bb8aee8c1c8d50117426dfdb26aab01fd",
+    "geometryPass": 8,
+    "pixelPass": 0
+  },
+  "after": {
+    "geometryPass": 24,
+    "pixelPass": 24,
+    "visualCoverage": [
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 0,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-0.review.png",
+        "sheetSha256": "b3d9e8335877f81bcb7cadf400eba3c276b5bd39ae3428df8d0cbbe1d47e20c8",
+        "chromeSha256": "721ace9a30afa21ab8746e1a2f4d9c388b9257bcadc19d0fc9592eea6643be9d",
+        "nativeSha256": "8abf04b7e4ad6b854812d4ca72a9dd405eb862db1b81624ce3618b31850d51bf"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 1,
+        "reviewedFrame": 1,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-1.review.png",
+        "sheetSha256": "1353b59676e7ae78875a088c0a526d98b87a1fe3a2f41d03ead8606311d6a62e",
+        "chromeSha256": "55dbafc2a0930329e2e8aecc76581d05cb76f33d6512bd92245a0ac83b20f86c",
+        "nativeSha256": "5743e79492684a2a4f53bd906924afc0bc95be395a44d9f3a048bbe7ee65f6ff"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 2,
+        "reviewedFrame": 2,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-2.review.png",
+        "sheetSha256": "612aee9d67af0abc8269cc8dbd8bc8e5b52b34d14e2858306f7283e978af6bad",
+        "chromeSha256": "70f5e16994f62e353c486382163de3ac8f5d74bd9c44682f17221600ed870691",
+        "nativeSha256": "6af054cd8e9ab05554e0b379d2af532971628be670767cd019ed388cf968443b"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 3,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-0.review.png",
+        "sheetSha256": "b3d9e8335877f81bcb7cadf400eba3c276b5bd39ae3428df8d0cbbe1d47e20c8",
+        "chromeSha256": "721ace9a30afa21ab8746e1a2f4d9c388b9257bcadc19d0fc9592eea6643be9d",
+        "nativeSha256": "8abf04b7e4ad6b854812d4ca72a9dd405eb862db1b81624ce3618b31850d51bf"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 4,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-0.review.png",
+        "sheetSha256": "b3d9e8335877f81bcb7cadf400eba3c276b5bd39ae3428df8d0cbbe1d47e20c8",
+        "chromeSha256": "721ace9a30afa21ab8746e1a2f4d9c388b9257bcadc19d0fc9592eea6643be9d",
+        "nativeSha256": "8abf04b7e4ad6b854812d4ca72a9dd405eb862db1b81624ce3618b31850d51bf"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 5,
+        "reviewedFrame": 1,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-1.review.png",
+        "sheetSha256": "1353b59676e7ae78875a088c0a526d98b87a1fe3a2f41d03ead8606311d6a62e",
+        "chromeSha256": "55dbafc2a0930329e2e8aecc76581d05cb76f33d6512bd92245a0ac83b20f86c",
+        "nativeSha256": "5743e79492684a2a4f53bd906924afc0bc95be395a44d9f3a048bbe7ee65f6ff"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 6,
+        "reviewedFrame": 2,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-2.review.png",
+        "sheetSha256": "612aee9d67af0abc8269cc8dbd8bc8e5b52b34d14e2858306f7283e978af6bad",
+        "chromeSha256": "70f5e16994f62e353c486382163de3ac8f5d74bd9c44682f17221600ed870691",
+        "nativeSha256": "6af054cd8e9ab05554e0b379d2af532971628be670767cd019ed388cf968443b"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-currentcolor-chain",
+        "frame": 7,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-currentcolor-chain/frame-0.review.png",
+        "sheetSha256": "b3d9e8335877f81bcb7cadf400eba3c276b5bd39ae3428df8d0cbbe1d47e20c8",
+        "chromeSha256": "721ace9a30afa21ab8746e1a2f4d9c388b9257bcadc19d0fc9592eea6643be9d",
+        "nativeSha256": "8abf04b7e4ad6b854812d4ca72a9dd405eb862db1b81624ce3618b31850d51bf"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 0,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-0.review.png",
+        "sheetSha256": "5f01187d4bdd1c9c8586de92c17382e1c47113486716b2cc5f6dd11d56f42a79",
+        "chromeSha256": "c72ba3ece497b6c34ed10c2371bf91617ffb10fc9b3a5c1a2aebf3db4b0f655f",
+        "nativeSha256": "923c558fea032e21c704f391ae569c1c4e82a5566e5b52e1f2d38e7bb77f2031"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 1,
+        "reviewedFrame": 1,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-1.review.png",
+        "sheetSha256": "f36a769793bde10fb85747b412a8566d43dcd027f2b035e515d1d95f8b5e2742",
+        "chromeSha256": "eda2cd2bd57cee08ace0dc0f1097c033fba3383bfaa356bae812357a3f7aa356",
+        "nativeSha256": "7f44827545f199fe6cc21a436672dcc672dac31f6877da92a9ddfe5214fc2206"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 2,
+        "reviewedFrame": 2,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-2.review.png",
+        "sheetSha256": "f6c52197c5bd12c5e907009d765aa14c7e8d9d93a9c7756ed3addcdff0d38cd7",
+        "chromeSha256": "b7b1c86c3130c5093e73affdcd44b986c58a61b9a937a96882554f446982fde4",
+        "nativeSha256": "e11256db264abdb8f80f6053260392c4b25d52495fd4098440e4d806aa5b113a"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 3,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-0.review.png",
+        "sheetSha256": "5f01187d4bdd1c9c8586de92c17382e1c47113486716b2cc5f6dd11d56f42a79",
+        "chromeSha256": "c72ba3ece497b6c34ed10c2371bf91617ffb10fc9b3a5c1a2aebf3db4b0f655f",
+        "nativeSha256": "923c558fea032e21c704f391ae569c1c4e82a5566e5b52e1f2d38e7bb77f2031"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 4,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-0.review.png",
+        "sheetSha256": "5f01187d4bdd1c9c8586de92c17382e1c47113486716b2cc5f6dd11d56f42a79",
+        "chromeSha256": "c72ba3ece497b6c34ed10c2371bf91617ffb10fc9b3a5c1a2aebf3db4b0f655f",
+        "nativeSha256": "923c558fea032e21c704f391ae569c1c4e82a5566e5b52e1f2d38e7bb77f2031"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 5,
+        "reviewedFrame": 1,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-1.review.png",
+        "sheetSha256": "f36a769793bde10fb85747b412a8566d43dcd027f2b035e515d1d95f8b5e2742",
+        "chromeSha256": "eda2cd2bd57cee08ace0dc0f1097c033fba3383bfaa356bae812357a3f7aa356",
+        "nativeSha256": "7f44827545f199fe6cc21a436672dcc672dac31f6877da92a9ddfe5214fc2206"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 6,
+        "reviewedFrame": 2,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-2.review.png",
+        "sheetSha256": "f6c52197c5bd12c5e907009d765aa14c7e8d9d93a9c7756ed3addcdff0d38cd7",
+        "chromeSha256": "b7b1c86c3130c5093e73affdcd44b986c58a61b9a937a96882554f446982fde4",
+        "nativeSha256": "e11256db264abdb8f80f6053260392c4b25d52495fd4098440e4d806aa5b113a"
+      },
+      {
+        "run": "public-inheritance-r1",
+        "name": "public-inheritance-literal-control",
+        "frame": 7,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/public-inheritance-literal-control/frame-0.review.png",
+        "sheetSha256": "5f01187d4bdd1c9c8586de92c17382e1c47113486716b2cc5f6dd11d56f42a79",
+        "chromeSha256": "c72ba3ece497b6c34ed10c2371bf91617ffb10fc9b3a5c1a2aebf3db4b0f655f",
+        "nativeSha256": "923c558fea032e21c704f391ae569c1c4e82a5566e5b52e1f2d38e7bb77f2031"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 0,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-0.review.png",
+        "sheetSha256": "daefc7e54a803a83c3d765bef4982032a32accb41aec4c53cf22ddb82aaad6a2",
+        "chromeSha256": "09af71618a04fec4e6bfc05f19e9f737e1f8b0d9b66362e68dcca2aa0492af8b",
+        "nativeSha256": "2400b696675c95bd2a3e7f2174577d2787c3c358bd1c6fc4931810d3ff4f016b"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 1,
+        "reviewedFrame": 1,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-1.review.png",
+        "sheetSha256": "7d152996a9ba23f898efde44680ace2719adc9f34f34a920f2d17c2a1326857c",
+        "chromeSha256": "86d80e383e023bb587cb9683cc954732a2bf55c3319bc1774af2f1320f1db79e",
+        "nativeSha256": "5ca773d022dc7bc36465af59e8b57fdd4d715760f2645aca73e377210f67dd90"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 2,
+        "reviewedFrame": 2,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-2.review.png",
+        "sheetSha256": "c499d37867a4cbb0fcbb5c27204591dafb72a07651ef3e2075f9c7e652eaff14",
+        "chromeSha256": "922dedb3217850b6718311f76027d0d6a159bb9c4627ac8d06595c782a14edaf",
+        "nativeSha256": "8a5d152bb25f90fef144968babae4e42a1474a6713044076f9cbfb456d0afde3"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 3,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-0.review.png",
+        "sheetSha256": "daefc7e54a803a83c3d765bef4982032a32accb41aec4c53cf22ddb82aaad6a2",
+        "chromeSha256": "09af71618a04fec4e6bfc05f19e9f737e1f8b0d9b66362e68dcca2aa0492af8b",
+        "nativeSha256": "2400b696675c95bd2a3e7f2174577d2787c3c358bd1c6fc4931810d3ff4f016b"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 4,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-0.review.png",
+        "sheetSha256": "daefc7e54a803a83c3d765bef4982032a32accb41aec4c53cf22ddb82aaad6a2",
+        "chromeSha256": "09af71618a04fec4e6bfc05f19e9f737e1f8b0d9b66362e68dcca2aa0492af8b",
+        "nativeSha256": "2400b696675c95bd2a3e7f2174577d2787c3c358bd1c6fc4931810d3ff4f016b"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 5,
+        "reviewedFrame": 1,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-1.review.png",
+        "sheetSha256": "7d152996a9ba23f898efde44680ace2719adc9f34f34a920f2d17c2a1326857c",
+        "chromeSha256": "86d80e383e023bb587cb9683cc954732a2bf55c3319bc1774af2f1320f1db79e",
+        "nativeSha256": "5ca773d022dc7bc36465af59e8b57fdd4d715760f2645aca73e377210f67dd90"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 6,
+        "reviewedFrame": 2,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-2.review.png",
+        "sheetSha256": "c499d37867a4cbb0fcbb5c27204591dafb72a07651ef3e2075f9c7e652eaff14",
+        "chromeSha256": "922dedb3217850b6718311f76027d0d6a159bb9c4627ac8d06595c782a14edaf",
+        "nativeSha256": "8a5d152bb25f90fef144968babae4e42a1474a6713044076f9cbfb456d0afde3"
+      },
+      {
+        "run": "public-inherited-currentcolor-after",
+        "name": "inherited-currentcolor",
+        "frame": 7,
+        "reviewedFrame": 0,
+        "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/inherited-currentcolor/frame-0.review.png",
+        "sheetSha256": "daefc7e54a803a83c3d765bef4982032a32accb41aec4c53cf22ddb82aaad6a2",
+        "chromeSha256": "09af71618a04fec4e6bfc05f19e9f737e1f8b0d9b66362e68dcca2aa0492af8b",
+        "nativeSha256": "2400b696675c95bd2a3e7f2174577d2787c3c358bd1c6fc4931810d3ff4f016b"
+      }
+    ]
+  },
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-compiler-checkpoint-r2/manifest.json",
+    "sha256": "a7e7f82b3e22ca241ff8006274c0d03231de00bcc8f4e96cf0221768851a32bf"
+  },
+  "tests": {
+    "rust": 17,
+    "node": 7,
+    "cliWasmCorpusPairs": 57,
+    "typescript": "passed strict noEmit"
+  },
+  "runs": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inheritance-r1/receipt.json",
+      "sha256": "05bcd077a010c43daf39847409719973c94835cb286a1ca9b6574c06ccb93f88"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-inherited-currentcolor-after/receipt.json",
+      "sha256": "2a88f87e5fd2d2ab3fdec0fcaa086d6aeffaa7ade6fa8631f0b46923f2c95947"
+    }
+  ]
+}

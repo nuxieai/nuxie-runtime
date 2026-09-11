@@ -10,9 +10,9 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 
 | ID | Feature | Status | Evidence / next action |
 | --- | --- | --- | --- |
-| A01 | Standard CSS named colors | partial | Compiler-owned named-color parser restored; four color tests pass and ordinary named-color fill experiment passes8original/clone frames. Public HTML/CSS and WASM parity pending. See validation/ordinary-layout-review.md. |
-| A02 | HSL/HSLA | partial | Compiler-owned HSL/HSLA parser restored; syntax/color tests and HSL/alpha ordinary-file experiments pass. Public compiler admission/parity pending. See validation/ordinary-layout-review.md. |
-| A03 | `inherit` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A01 | Standard CSS named colors | partial | All 148 named colors now pass public HTML/CSS native pixels and original/clone resizing; CLI/WASM parity and visual review recorded. Qualification remains bounded to box fills; see validation/public-color-receipt.json. |
+| A02 | HSL/HSLA | partial | Public HSL/HSLA admission, 24 angle/alpha/clamping boundary swatches, CLI/WASM parity and immutable native visual comparisons pass. Broader contexts remain open; see validation/public-color-receipt.json. |
+| A03 | `inherit` | partial | Corrected inherited currentColor with preserved 8-frame failure and 24 passing/reviewed native regression frames. Size/layout inheritance remains pending. See validation/public-inheritance-receipt.json. |
 | A04 | `initial` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A05 | `unset` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A06 | Solid-color `background` shorthand | pending | Immutable-target audit and revalidation required; historical status: qualified. |

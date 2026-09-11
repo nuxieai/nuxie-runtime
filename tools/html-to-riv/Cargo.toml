@@ -8,9 +8,20 @@ publish = false
 # Authoring resolution is isolated from the immutable runtime workspace.
 [workspace]
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "html-to-riv"
+path = "src/main.rs"
+
 [dependencies]
 cssparser = "0.37"
 nuxie-schema = { path = "../../crates/nuxie-schema" }
+scraper = { version = "0.27", default-features = false, features = ["errors", "deterministic"] }
+selectors = "0.38"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 
 [profile.dev]
 debug = 0

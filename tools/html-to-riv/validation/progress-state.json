@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Ordinary Rive capability proofs",
-  "status": "Immutable baseline exercised; compiler rework active",
-  "current": "Fresh unchanged runtime build, bytes-only import/clone/resize probe and isolated color/wire primitives are working. Seven file experiments:56geometry checks pass;50pixel comparisons pass and6direct-corner failures are preserved. A bounded file-level corner composition passes8/8. All21unique image pairs reviewed.",
-  "next": "Restore public HTML/CSS admission around proved native/file-composition paths; validate color parity and broaden corner-wrapper boundary cases. Runtime remains immutable.",
+  "focus": "Public compiler and immutable color validation",
+  "status": "Public interfaces restored; feature qualification continues",
+  "current": "Public Rust/CLI/WASM/JavaScript compiler checkpoint: 160 geometry/pixel comparisons pass with visual evidence. All 148 named colors and 24 HSL boundary swatches covered. Corrected inherited currentColor; preserved 8 failing pre-fix frames. 17 Rust tests, 7 Node tests, 57 corpus parity pairs and strict TypeScript pass.",
+  "next": "Expand inherit/initial/unset to sizing with browser/native proof, preserving computed percentage semantics and rejecting unproved layout contexts. Continue all 99 backlog items.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Inheritance correction and preserved failure",
+      "path": "tools/html-to-riv/validation/public-inheritance-receipt.json"
+    },
+    {
+      "label": "Public color validation receipt",
+      "path": "tools/html-to-riv/validation/public-color-receipt.json"
+    },
+    {
+      "label": "All named colors and HSL gallery",
+      "path": "tools/html-to-riv/output/public-color-palettes-r1/gallery.html"
+    },
     {
       "label": "Ordinary-file experiments and limitations",
       "path": "tools/html-to-riv/validation/ordinary-layout-review.md"
@@ -19,16 +31,7 @@
       "path": "tools/html-to-riv/output/immutable-layout-native-r3/gallery.html"
     }
   ],
-  "activeWork": [
-    {
-      "name": "Compiler",
-      "work": "Selective restoration of authoring code; no runtime-policy output."
-    },
-    {
-      "name": "Capability proofs",
-      "work": "Existing layout/fill paths and bounded corner composition demonstrated; broader contexts remain open."
-    }
-  ],
+  "activeWork": [],
   "publication": {
     "status": "reverted",
     "revertPr": "https://github.com/nuxieai/nuxie-runtime/pull/629",

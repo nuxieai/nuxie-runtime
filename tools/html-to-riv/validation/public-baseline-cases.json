@@ -1,0 +1,126 @@
+[
+  {
+    "name": "named-rebeccapurple",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:rebeccapurple;}",
+    "features": [
+      "A01"
+    ]
+  },
+  {
+    "name": "named-aliceblue",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:aliceblue;}",
+    "features": [
+      "A01"
+    ]
+  },
+  {
+    "name": "named-darkslategrey",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:darkslategrey;}",
+    "features": [
+      "A01"
+    ]
+  },
+  {
+    "name": "named-transparent",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:transparent;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "hsl-modern",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(200 100% 40%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsl-legacy",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(120,100%,25%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsla-alpha",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsla(270,50%,40%,0.5);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsl-slash-alpha",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(30 100% 50% / 25%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsl-wrapped-hue",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(480 100% 25%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "currentcolor-inherited",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{color:coral;background-color:currentColor;}#inner{width:50%;height:50%;background-color:currentColor;}",
+    "features": [
+      "A01",
+      "A03"
+    ]
+  },
+  {
+    "name": "cascade-specificity",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}div{background-color:blue;}#outer{background-color:rebeccapurple;}div{background-color:coral;}",
+    "features": [
+      "A01",
+      "cascade"
+    ]
+  },
+  {
+    "name": "cascade-source-order",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:red;}#outer{background-color:hsl(240 100% 50%);}",
+    "features": [
+      "A02",
+      "cascade"
+    ]
+  },
+  {
+    "name": "nested-percentage",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:coral;}#inner{width:50%;height:50%;background-color:rebeccapurple;}#leaf{width:50%;height:50%;background-color:aliceblue;}",
+    "features": [
+      "percentage-sizing"
+    ]
+  },
+  {
+    "name": "fractional-child",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(120 100% 25%);}#inner{width:80.5px;height:50%;background-color:rebeccapurple;}",
+    "features": [
+      "fractional-sizing"
+    ]
+  },
+  {
+    "name": "nested-alpha",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:coral;}#inner{width:50%;height:50%;background-color:hsla(270,50%,40%,0.5);}",
+    "features": [
+      "A02",
+      "percentage-sizing"
+    ]
+  }
+]

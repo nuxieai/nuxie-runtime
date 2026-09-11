@@ -1,0 +1,750 @@
+[
+  {
+    "name": "named-colors-all-148",
+    "html": "<div id=\"outer\"><div id=\"swatch-aliceblue\"></div><div id=\"swatch-antiquewhite\"></div><div id=\"swatch-aqua\"></div><div id=\"swatch-aquamarine\"></div><div id=\"swatch-azure\"></div><div id=\"swatch-beige\"></div><div id=\"swatch-bisque\"></div><div id=\"swatch-black\"></div><div id=\"swatch-blanchedalmond\"></div><div id=\"swatch-blue\"></div><div id=\"swatch-blueviolet\"></div><div id=\"swatch-brown\"></div><div id=\"swatch-burlywood\"></div><div id=\"swatch-cadetblue\"></div><div id=\"swatch-chartreuse\"></div><div id=\"swatch-chocolate\"></div><div id=\"swatch-coral\"></div><div id=\"swatch-cornflowerblue\"></div><div id=\"swatch-cornsilk\"></div><div id=\"swatch-crimson\"></div><div id=\"swatch-cyan\"></div><div id=\"swatch-darkblue\"></div><div id=\"swatch-darkcyan\"></div><div id=\"swatch-darkgoldenrod\"></div><div id=\"swatch-darkgray\"></div><div id=\"swatch-darkgreen\"></div><div id=\"swatch-darkgrey\"></div><div id=\"swatch-darkkhaki\"></div><div id=\"swatch-darkmagenta\"></div><div id=\"swatch-darkolivegreen\"></div><div id=\"swatch-darkorange\"></div><div id=\"swatch-darkorchid\"></div><div id=\"swatch-darkred\"></div><div id=\"swatch-darksalmon\"></div><div id=\"swatch-darkseagreen\"></div><div id=\"swatch-darkslateblue\"></div><div id=\"swatch-darkslategray\"></div><div id=\"swatch-darkslategrey\"></div><div id=\"swatch-darkturquoise\"></div><div id=\"swatch-darkviolet\"></div><div id=\"swatch-deeppink\"></div><div id=\"swatch-deepskyblue\"></div><div id=\"swatch-dimgray\"></div><div id=\"swatch-dimgrey\"></div><div id=\"swatch-dodgerblue\"></div><div id=\"swatch-firebrick\"></div><div id=\"swatch-floralwhite\"></div><div id=\"swatch-forestgreen\"></div><div id=\"swatch-fuchsia\"></div><div id=\"swatch-gainsboro\"></div><div id=\"swatch-ghostwhite\"></div><div id=\"swatch-gold\"></div><div id=\"swatch-goldenrod\"></div><div id=\"swatch-gray\"></div><div id=\"swatch-green\"></div><div id=\"swatch-greenyellow\"></div><div id=\"swatch-grey\"></div><div id=\"swatch-honeydew\"></div><div id=\"swatch-hotpink\"></div><div id=\"swatch-indianred\"></div><div id=\"swatch-indigo\"></div><div id=\"swatch-ivory\"></div><div id=\"swatch-khaki\"></div><div id=\"swatch-lavender\"></div><div id=\"swatch-lavenderblush\"></div><div id=\"swatch-lawngreen\"></div><div id=\"swatch-lemonchiffon\"></div><div id=\"swatch-lightblue\"></div><div id=\"swatch-lightcoral\"></div><div id=\"swatch-lightcyan\"></div><div id=\"swatch-lightgoldenrodyellow\"></div><div id=\"swatch-lightgray\"></div><div id=\"swatch-lightgreen\"></div><div id=\"swatch-lightgrey\"></div><div id=\"swatch-lightpink\"></div><div id=\"swatch-lightsalmon\"></div><div id=\"swatch-lightseagreen\"></div><div id=\"swatch-lightskyblue\"></div><div id=\"swatch-lightslategray\"></div><div id=\"swatch-lightslategrey\"></div><div id=\"swatch-lightsteelblue\"></div><div id=\"swatch-lightyellow\"></div><div id=\"swatch-lime\"></div><div id=\"swatch-limegreen\"></div><div id=\"swatch-linen\"></div><div id=\"swatch-magenta\"></div><div id=\"swatch-maroon\"></div><div id=\"swatch-mediumaquamarine\"></div><div id=\"swatch-mediumblue\"></div><div id=\"swatch-mediumorchid\"></div><div id=\"swatch-mediumpurple\"></div><div id=\"swatch-mediumseagreen\"></div><div id=\"swatch-mediumslateblue\"></div><div id=\"swatch-mediumspringgreen\"></div><div id=\"swatch-mediumturquoise\"></div><div id=\"swatch-mediumvioletred\"></div><div id=\"swatch-midnightblue\"></div><div id=\"swatch-mintcream\"></div><div id=\"swatch-mistyrose\"></div><div id=\"swatch-moccasin\"></div><div id=\"swatch-navajowhite\"></div><div id=\"swatch-navy\"></div><div id=\"swatch-oldlace\"></div><div id=\"swatch-olive\"></div><div id=\"swatch-olivedrab\"></div><div id=\"swatch-orange\"></div><div id=\"swatch-orangered\"></div><div id=\"swatch-orchid\"></div><div id=\"swatch-palegoldenrod\"></div><div id=\"swatch-palegreen\"></div><div id=\"swatch-paleturquoise\"></div><div id=\"swatch-palevioletred\"></div><div id=\"swatch-papayawhip\"></div><div id=\"swatch-peachpuff\"></div><div id=\"swatch-peru\"></div><div id=\"swatch-pink\"></div><div id=\"swatch-plum\"></div><div id=\"swatch-powderblue\"></div><div id=\"swatch-purple\"></div><div id=\"swatch-rebeccapurple\"></div><div id=\"swatch-red\"></div><div id=\"swatch-rosybrown\"></div><div id=\"swatch-royalblue\"></div><div id=\"swatch-saddlebrown\"></div><div id=\"swatch-salmon\"></div><div id=\"swatch-sandybrown\"></div><div id=\"swatch-seagreen\"></div><div id=\"swatch-seashell\"></div><div id=\"swatch-sienna\"></div><div id=\"swatch-silver\"></div><div id=\"swatch-skyblue\"></div><div id=\"swatch-slateblue\"></div><div id=\"swatch-slategray\"></div><div id=\"swatch-slategrey\"></div><div id=\"swatch-snow\"></div><div id=\"swatch-springgreen\"></div><div id=\"swatch-steelblue\"></div><div id=\"swatch-tan\"></div><div id=\"swatch-teal\"></div><div id=\"swatch-thistle\"></div><div id=\"swatch-tomato\"></div><div id=\"swatch-turquoise\"></div><div id=\"swatch-violet\"></div><div id=\"swatch-wheat\"></div><div id=\"swatch-white\"></div><div id=\"swatch-whitesmoke\"></div><div id=\"swatch-yellow\"></div><div id=\"swatch-yellowgreen\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;background-color:white;}#swatch-aliceblue{width:100%;height:8px;background-color:aliceblue;}#swatch-antiquewhite{width:100%;height:8px;background-color:antiquewhite;}#swatch-aqua{width:100%;height:8px;background-color:aqua;}#swatch-aquamarine{width:100%;height:8px;background-color:aquamarine;}#swatch-azure{width:100%;height:8px;background-color:azure;}#swatch-beige{width:100%;height:8px;background-color:beige;}#swatch-bisque{width:100%;height:8px;background-color:bisque;}#swatch-black{width:100%;height:8px;background-color:black;}#swatch-blanchedalmond{width:100%;height:8px;background-color:blanchedalmond;}#swatch-blue{width:100%;height:8px;background-color:blue;}#swatch-blueviolet{width:100%;height:8px;background-color:blueviolet;}#swatch-brown{width:100%;height:8px;background-color:brown;}#swatch-burlywood{width:100%;height:8px;background-color:burlywood;}#swatch-cadetblue{width:100%;height:8px;background-color:cadetblue;}#swatch-chartreuse{width:100%;height:8px;background-color:chartreuse;}#swatch-chocolate{width:100%;height:8px;background-color:chocolate;}#swatch-coral{width:100%;height:8px;background-color:coral;}#swatch-cornflowerblue{width:100%;height:8px;background-color:cornflowerblue;}#swatch-cornsilk{width:100%;height:8px;background-color:cornsilk;}#swatch-crimson{width:100%;height:8px;background-color:crimson;}#swatch-cyan{width:100%;height:8px;background-color:cyan;}#swatch-darkblue{width:100%;height:8px;background-color:darkblue;}#swatch-darkcyan{width:100%;height:8px;background-color:darkcyan;}#swatch-darkgoldenrod{width:100%;height:8px;background-color:darkgoldenrod;}#swatch-darkgray{width:100%;height:8px;background-color:darkgray;}#swatch-darkgreen{width:100%;height:8px;background-color:darkgreen;}#swatch-darkgrey{width:100%;height:8px;background-color:darkgrey;}#swatch-darkkhaki{width:100%;height:8px;background-color:darkkhaki;}#swatch-darkmagenta{width:100%;height:8px;background-color:darkmagenta;}#swatch-darkolivegreen{width:100%;height:8px;background-color:darkolivegreen;}#swatch-darkorange{width:100%;height:8px;background-color:darkorange;}#swatch-darkorchid{width:100%;height:8px;background-color:darkorchid;}#swatch-darkred{width:100%;height:8px;background-color:darkred;}#swatch-darksalmon{width:100%;height:8px;background-color:darksalmon;}#swatch-darkseagreen{width:100%;height:8px;background-color:darkseagreen;}#swatch-darkslateblue{width:100%;height:8px;background-color:darkslateblue;}#swatch-darkslategray{width:100%;height:8px;background-color:darkslategray;}#swatch-darkslategrey{width:100%;height:8px;background-color:darkslategrey;}#swatch-darkturquoise{width:100%;height:8px;background-color:darkturquoise;}#swatch-darkviolet{width:100%;height:8px;background-color:darkviolet;}#swatch-deeppink{width:100%;height:8px;background-color:deeppink;}#swatch-deepskyblue{width:100%;height:8px;background-color:deepskyblue;}#swatch-dimgray{width:100%;height:8px;background-color:dimgray;}#swatch-dimgrey{width:100%;height:8px;background-color:dimgrey;}#swatch-dodgerblue{width:100%;height:8px;background-color:dodgerblue;}#swatch-firebrick{width:100%;height:8px;background-color:firebrick;}#swatch-floralwhite{width:100%;height:8px;background-color:floralwhite;}#swatch-forestgreen{width:100%;height:8px;background-color:forestgreen;}#swatch-fuchsia{width:100%;height:8px;background-color:fuchsia;}#swatch-gainsboro{width:100%;height:8px;background-color:gainsboro;}#swatch-ghostwhite{width:100%;height:8px;background-color:ghostwhite;}#swatch-gold{width:100%;height:8px;background-color:gold;}#swatch-goldenrod{width:100%;height:8px;background-color:goldenrod;}#swatch-gray{width:100%;height:8px;background-color:gray;}#swatch-green{width:100%;height:8px;background-color:green;}#swatch-greenyellow{width:100%;height:8px;background-color:greenyellow;}#swatch-grey{width:100%;height:8px;background-color:grey;}#swatch-honeydew{width:100%;height:8px;background-color:honeydew;}#swatch-hotpink{width:100%;height:8px;background-color:hotpink;}#swatch-indianred{width:100%;height:8px;background-color:indianred;}#swatch-indigo{width:100%;height:8px;background-color:indigo;}#swatch-ivory{width:100%;height:8px;background-color:ivory;}#swatch-khaki{width:100%;height:8px;background-color:khaki;}#swatch-lavender{width:100%;height:8px;background-color:lavender;}#swatch-lavenderblush{width:100%;height:8px;background-color:lavenderblush;}#swatch-lawngreen{width:100%;height:8px;background-color:lawngreen;}#swatch-lemonchiffon{width:100%;height:8px;background-color:lemonchiffon;}#swatch-lightblue{width:100%;height:8px;background-color:lightblue;}#swatch-lightcoral{width:100%;height:8px;background-color:lightcoral;}#swatch-lightcyan{width:100%;height:8px;background-color:lightcyan;}#swatch-lightgoldenrodyellow{width:100%;height:8px;background-color:lightgoldenrodyellow;}#swatch-lightgray{width:100%;height:8px;background-color:lightgray;}#swatch-lightgreen{width:100%;height:8px;background-color:lightgreen;}#swatch-lightgrey{width:100%;height:8px;background-color:lightgrey;}#swatch-lightpink{width:100%;height:8px;background-color:lightpink;}#swatch-lightsalmon{width:100%;height:8px;background-color:lightsalmon;}#swatch-lightseagreen{width:100%;height:8px;background-color:lightseagreen;}#swatch-lightskyblue{width:100%;height:8px;background-color:lightskyblue;}#swatch-lightslategray{width:100%;height:8px;background-color:lightslategray;}#swatch-lightslategrey{width:100%;height:8px;background-color:lightslategrey;}#swatch-lightsteelblue{width:100%;height:8px;background-color:lightsteelblue;}#swatch-lightyellow{width:100%;height:8px;background-color:lightyellow;}#swatch-lime{width:100%;height:8px;background-color:lime;}#swatch-limegreen{width:100%;height:8px;background-color:limegreen;}#swatch-linen{width:100%;height:8px;background-color:linen;}#swatch-magenta{width:100%;height:8px;background-color:magenta;}#swatch-maroon{width:100%;height:8px;background-color:maroon;}#swatch-mediumaquamarine{width:100%;height:8px;background-color:mediumaquamarine;}#swatch-mediumblue{width:100%;height:8px;background-color:mediumblue;}#swatch-mediumorchid{width:100%;height:8px;background-color:mediumorchid;}#swatch-mediumpurple{width:100%;height:8px;background-color:mediumpurple;}#swatch-mediumseagreen{width:100%;height:8px;background-color:mediumseagreen;}#swatch-mediumslateblue{width:100%;height:8px;background-color:mediumslateblue;}#swatch-mediumspringgreen{width:100%;height:8px;background-color:mediumspringgreen;}#swatch-mediumturquoise{width:100%;height:8px;background-color:mediumturquoise;}#swatch-mediumvioletred{width:100%;height:8px;background-color:mediumvioletred;}#swatch-midnightblue{width:100%;height:8px;background-color:midnightblue;}#swatch-mintcream{width:100%;height:8px;background-color:mintcream;}#swatch-mistyrose{width:100%;height:8px;background-color:mistyrose;}#swatch-moccasin{width:100%;height:8px;background-color:moccasin;}#swatch-navajowhite{width:100%;height:8px;background-color:navajowhite;}#swatch-navy{width:100%;height:8px;background-color:navy;}#swatch-oldlace{width:100%;height:8px;background-color:oldlace;}#swatch-olive{width:100%;height:8px;background-color:olive;}#swatch-olivedrab{width:100%;height:8px;background-color:olivedrab;}#swatch-orange{width:100%;height:8px;background-color:orange;}#swatch-orangered{width:100%;height:8px;background-color:orangered;}#swatch-orchid{width:100%;height:8px;background-color:orchid;}#swatch-palegoldenrod{width:100%;height:8px;background-color:palegoldenrod;}#swatch-palegreen{width:100%;height:8px;background-color:palegreen;}#swatch-paleturquoise{width:100%;height:8px;background-color:paleturquoise;}#swatch-palevioletred{width:100%;height:8px;background-color:palevioletred;}#swatch-papayawhip{width:100%;height:8px;background-color:papayawhip;}#swatch-peachpuff{width:100%;height:8px;background-color:peachpuff;}#swatch-peru{width:100%;height:8px;background-color:peru;}#swatch-pink{width:100%;height:8px;background-color:pink;}#swatch-plum{width:100%;height:8px;background-color:plum;}#swatch-powderblue{width:100%;height:8px;background-color:powderblue;}#swatch-purple{width:100%;height:8px;background-color:purple;}#swatch-rebeccapurple{width:100%;height:8px;background-color:rebeccapurple;}#swatch-red{width:100%;height:8px;background-color:red;}#swatch-rosybrown{width:100%;height:8px;background-color:rosybrown;}#swatch-royalblue{width:100%;height:8px;background-color:royalblue;}#swatch-saddlebrown{width:100%;height:8px;background-color:saddlebrown;}#swatch-salmon{width:100%;height:8px;background-color:salmon;}#swatch-sandybrown{width:100%;height:8px;background-color:sandybrown;}#swatch-seagreen{width:100%;height:8px;background-color:seagreen;}#swatch-seashell{width:100%;height:8px;background-color:seashell;}#swatch-sienna{width:100%;height:8px;background-color:sienna;}#swatch-silver{width:100%;height:8px;background-color:silver;}#swatch-skyblue{width:100%;height:8px;background-color:skyblue;}#swatch-slateblue{width:100%;height:8px;background-color:slateblue;}#swatch-slategray{width:100%;height:8px;background-color:slategray;}#swatch-slategrey{width:100%;height:8px;background-color:slategrey;}#swatch-snow{width:100%;height:8px;background-color:snow;}#swatch-springgreen{width:100%;height:8px;background-color:springgreen;}#swatch-steelblue{width:100%;height:8px;background-color:steelblue;}#swatch-tan{width:100%;height:8px;background-color:tan;}#swatch-teal{width:100%;height:8px;background-color:teal;}#swatch-thistle{width:100%;height:8px;background-color:thistle;}#swatch-tomato{width:100%;height:8px;background-color:tomato;}#swatch-turquoise{width:100%;height:8px;background-color:turquoise;}#swatch-violet{width:100%;height:8px;background-color:violet;}#swatch-wheat{width:100%;height:8px;background-color:wheat;}#swatch-white{width:100%;height:8px;background-color:white;}#swatch-whitesmoke{width:100%;height:8px;background-color:whitesmoke;}#swatch-yellow{width:100%;height:8px;background-color:yellow;}#swatch-yellowgreen{width:100%;height:8px;background-color:yellowgreen;}",
+    "features": [
+      "A01"
+    ],
+    "viewports": [
+      [
+        240,
+        1200
+      ],
+      [
+        390,
+        1280
+      ],
+      [
+        768,
+        1216
+      ],
+      [
+        240,
+        1200
+      ]
+    ],
+    "swatchHeight": 8,
+    "swatches": [
+      {
+        "id": "swatch-aliceblue",
+        "color": "aliceblue"
+      },
+      {
+        "id": "swatch-antiquewhite",
+        "color": "antiquewhite"
+      },
+      {
+        "id": "swatch-aqua",
+        "color": "aqua"
+      },
+      {
+        "id": "swatch-aquamarine",
+        "color": "aquamarine"
+      },
+      {
+        "id": "swatch-azure",
+        "color": "azure"
+      },
+      {
+        "id": "swatch-beige",
+        "color": "beige"
+      },
+      {
+        "id": "swatch-bisque",
+        "color": "bisque"
+      },
+      {
+        "id": "swatch-black",
+        "color": "black"
+      },
+      {
+        "id": "swatch-blanchedalmond",
+        "color": "blanchedalmond"
+      },
+      {
+        "id": "swatch-blue",
+        "color": "blue"
+      },
+      {
+        "id": "swatch-blueviolet",
+        "color": "blueviolet"
+      },
+      {
+        "id": "swatch-brown",
+        "color": "brown"
+      },
+      {
+        "id": "swatch-burlywood",
+        "color": "burlywood"
+      },
+      {
+        "id": "swatch-cadetblue",
+        "color": "cadetblue"
+      },
+      {
+        "id": "swatch-chartreuse",
+        "color": "chartreuse"
+      },
+      {
+        "id": "swatch-chocolate",
+        "color": "chocolate"
+      },
+      {
+        "id": "swatch-coral",
+        "color": "coral"
+      },
+      {
+        "id": "swatch-cornflowerblue",
+        "color": "cornflowerblue"
+      },
+      {
+        "id": "swatch-cornsilk",
+        "color": "cornsilk"
+      },
+      {
+        "id": "swatch-crimson",
+        "color": "crimson"
+      },
+      {
+        "id": "swatch-cyan",
+        "color": "cyan"
+      },
+      {
+        "id": "swatch-darkblue",
+        "color": "darkblue"
+      },
+      {
+        "id": "swatch-darkcyan",
+        "color": "darkcyan"
+      },
+      {
+        "id": "swatch-darkgoldenrod",
+        "color": "darkgoldenrod"
+      },
+      {
+        "id": "swatch-darkgray",
+        "color": "darkgray"
+      },
+      {
+        "id": "swatch-darkgreen",
+        "color": "darkgreen"
+      },
+      {
+        "id": "swatch-darkgrey",
+        "color": "darkgrey"
+      },
+      {
+        "id": "swatch-darkkhaki",
+        "color": "darkkhaki"
+      },
+      {
+        "id": "swatch-darkmagenta",
+        "color": "darkmagenta"
+      },
+      {
+        "id": "swatch-darkolivegreen",
+        "color": "darkolivegreen"
+      },
+      {
+        "id": "swatch-darkorange",
+        "color": "darkorange"
+      },
+      {
+        "id": "swatch-darkorchid",
+        "color": "darkorchid"
+      },
+      {
+        "id": "swatch-darkred",
+        "color": "darkred"
+      },
+      {
+        "id": "swatch-darksalmon",
+        "color": "darksalmon"
+      },
+      {
+        "id": "swatch-darkseagreen",
+        "color": "darkseagreen"
+      },
+      {
+        "id": "swatch-darkslateblue",
+        "color": "darkslateblue"
+      },
+      {
+        "id": "swatch-darkslategray",
+        "color": "darkslategray"
+      },
+      {
+        "id": "swatch-darkslategrey",
+        "color": "darkslategrey"
+      },
+      {
+        "id": "swatch-darkturquoise",
+        "color": "darkturquoise"
+      },
+      {
+        "id": "swatch-darkviolet",
+        "color": "darkviolet"
+      },
+      {
+        "id": "swatch-deeppink",
+        "color": "deeppink"
+      },
+      {
+        "id": "swatch-deepskyblue",
+        "color": "deepskyblue"
+      },
+      {
+        "id": "swatch-dimgray",
+        "color": "dimgray"
+      },
+      {
+        "id": "swatch-dimgrey",
+        "color": "dimgrey"
+      },
+      {
+        "id": "swatch-dodgerblue",
+        "color": "dodgerblue"
+      },
+      {
+        "id": "swatch-firebrick",
+        "color": "firebrick"
+      },
+      {
+        "id": "swatch-floralwhite",
+        "color": "floralwhite"
+      },
+      {
+        "id": "swatch-forestgreen",
+        "color": "forestgreen"
+      },
+      {
+        "id": "swatch-fuchsia",
+        "color": "fuchsia"
+      },
+      {
+        "id": "swatch-gainsboro",
+        "color": "gainsboro"
+      },
+      {
+        "id": "swatch-ghostwhite",
+        "color": "ghostwhite"
+      },
+      {
+        "id": "swatch-gold",
+        "color": "gold"
+      },
+      {
+        "id": "swatch-goldenrod",
+        "color": "goldenrod"
+      },
+      {
+        "id": "swatch-gray",
+        "color": "gray"
+      },
+      {
+        "id": "swatch-green",
+        "color": "green"
+      },
+      {
+        "id": "swatch-greenyellow",
+        "color": "greenyellow"
+      },
+      {
+        "id": "swatch-grey",
+        "color": "grey"
+      },
+      {
+        "id": "swatch-honeydew",
+        "color": "honeydew"
+      },
+      {
+        "id": "swatch-hotpink",
+        "color": "hotpink"
+      },
+      {
+        "id": "swatch-indianred",
+        "color": "indianred"
+      },
+      {
+        "id": "swatch-indigo",
+        "color": "indigo"
+      },
+      {
+        "id": "swatch-ivory",
+        "color": "ivory"
+      },
+      {
+        "id": "swatch-khaki",
+        "color": "khaki"
+      },
+      {
+        "id": "swatch-lavender",
+        "color": "lavender"
+      },
+      {
+        "id": "swatch-lavenderblush",
+        "color": "lavenderblush"
+      },
+      {
+        "id": "swatch-lawngreen",
+        "color": "lawngreen"
+      },
+      {
+        "id": "swatch-lemonchiffon",
+        "color": "lemonchiffon"
+      },
+      {
+        "id": "swatch-lightblue",
+        "color": "lightblue"
+      },
+      {
+        "id": "swatch-lightcoral",
+        "color": "lightcoral"
+      },
+      {
+        "id": "swatch-lightcyan",
+        "color": "lightcyan"
+      },
+      {
+        "id": "swatch-lightgoldenrodyellow",
+        "color": "lightgoldenrodyellow"
+      },
+      {
+        "id": "swatch-lightgray",
+        "color": "lightgray"
+      },
+      {
+        "id": "swatch-lightgreen",
+        "color": "lightgreen"
+      },
+      {
+        "id": "swatch-lightgrey",
+        "color": "lightgrey"
+      },
+      {
+        "id": "swatch-lightpink",
+        "color": "lightpink"
+      },
+      {
+        "id": "swatch-lightsalmon",
+        "color": "lightsalmon"
+      },
+      {
+        "id": "swatch-lightseagreen",
+        "color": "lightseagreen"
+      },
+      {
+        "id": "swatch-lightskyblue",
+        "color": "lightskyblue"
+      },
+      {
+        "id": "swatch-lightslategray",
+        "color": "lightslategray"
+      },
+      {
+        "id": "swatch-lightslategrey",
+        "color": "lightslategrey"
+      },
+      {
+        "id": "swatch-lightsteelblue",
+        "color": "lightsteelblue"
+      },
+      {
+        "id": "swatch-lightyellow",
+        "color": "lightyellow"
+      },
+      {
+        "id": "swatch-lime",
+        "color": "lime"
+      },
+      {
+        "id": "swatch-limegreen",
+        "color": "limegreen"
+      },
+      {
+        "id": "swatch-linen",
+        "color": "linen"
+      },
+      {
+        "id": "swatch-magenta",
+        "color": "magenta"
+      },
+      {
+        "id": "swatch-maroon",
+        "color": "maroon"
+      },
+      {
+        "id": "swatch-mediumaquamarine",
+        "color": "mediumaquamarine"
+      },
+      {
+        "id": "swatch-mediumblue",
+        "color": "mediumblue"
+      },
+      {
+        "id": "swatch-mediumorchid",
+        "color": "mediumorchid"
+      },
+      {
+        "id": "swatch-mediumpurple",
+        "color": "mediumpurple"
+      },
+      {
+        "id": "swatch-mediumseagreen",
+        "color": "mediumseagreen"
+      },
+      {
+        "id": "swatch-mediumslateblue",
+        "color": "mediumslateblue"
+      },
+      {
+        "id": "swatch-mediumspringgreen",
+        "color": "mediumspringgreen"
+      },
+      {
+        "id": "swatch-mediumturquoise",
+        "color": "mediumturquoise"
+      },
+      {
+        "id": "swatch-mediumvioletred",
+        "color": "mediumvioletred"
+      },
+      {
+        "id": "swatch-midnightblue",
+        "color": "midnightblue"
+      },
+      {
+        "id": "swatch-mintcream",
+        "color": "mintcream"
+      },
+      {
+        "id": "swatch-mistyrose",
+        "color": "mistyrose"
+      },
+      {
+        "id": "swatch-moccasin",
+        "color": "moccasin"
+      },
+      {
+        "id": "swatch-navajowhite",
+        "color": "navajowhite"
+      },
+      {
+        "id": "swatch-navy",
+        "color": "navy"
+      },
+      {
+        "id": "swatch-oldlace",
+        "color": "oldlace"
+      },
+      {
+        "id": "swatch-olive",
+        "color": "olive"
+      },
+      {
+        "id": "swatch-olivedrab",
+        "color": "olivedrab"
+      },
+      {
+        "id": "swatch-orange",
+        "color": "orange"
+      },
+      {
+        "id": "swatch-orangered",
+        "color": "orangered"
+      },
+      {
+        "id": "swatch-orchid",
+        "color": "orchid"
+      },
+      {
+        "id": "swatch-palegoldenrod",
+        "color": "palegoldenrod"
+      },
+      {
+        "id": "swatch-palegreen",
+        "color": "palegreen"
+      },
+      {
+        "id": "swatch-paleturquoise",
+        "color": "paleturquoise"
+      },
+      {
+        "id": "swatch-palevioletred",
+        "color": "palevioletred"
+      },
+      {
+        "id": "swatch-papayawhip",
+        "color": "papayawhip"
+      },
+      {
+        "id": "swatch-peachpuff",
+        "color": "peachpuff"
+      },
+      {
+        "id": "swatch-peru",
+        "color": "peru"
+      },
+      {
+        "id": "swatch-pink",
+        "color": "pink"
+      },
+      {
+        "id": "swatch-plum",
+        "color": "plum"
+      },
+      {
+        "id": "swatch-powderblue",
+        "color": "powderblue"
+      },
+      {
+        "id": "swatch-purple",
+        "color": "purple"
+      },
+      {
+        "id": "swatch-rebeccapurple",
+        "color": "rebeccapurple"
+      },
+      {
+        "id": "swatch-red",
+        "color": "red"
+      },
+      {
+        "id": "swatch-rosybrown",
+        "color": "rosybrown"
+      },
+      {
+        "id": "swatch-royalblue",
+        "color": "royalblue"
+      },
+      {
+        "id": "swatch-saddlebrown",
+        "color": "saddlebrown"
+      },
+      {
+        "id": "swatch-salmon",
+        "color": "salmon"
+      },
+      {
+        "id": "swatch-sandybrown",
+        "color": "sandybrown"
+      },
+      {
+        "id": "swatch-seagreen",
+        "color": "seagreen"
+      },
+      {
+        "id": "swatch-seashell",
+        "color": "seashell"
+      },
+      {
+        "id": "swatch-sienna",
+        "color": "sienna"
+      },
+      {
+        "id": "swatch-silver",
+        "color": "silver"
+      },
+      {
+        "id": "swatch-skyblue",
+        "color": "skyblue"
+      },
+      {
+        "id": "swatch-slateblue",
+        "color": "slateblue"
+      },
+      {
+        "id": "swatch-slategray",
+        "color": "slategray"
+      },
+      {
+        "id": "swatch-slategrey",
+        "color": "slategrey"
+      },
+      {
+        "id": "swatch-snow",
+        "color": "snow"
+      },
+      {
+        "id": "swatch-springgreen",
+        "color": "springgreen"
+      },
+      {
+        "id": "swatch-steelblue",
+        "color": "steelblue"
+      },
+      {
+        "id": "swatch-tan",
+        "color": "tan"
+      },
+      {
+        "id": "swatch-teal",
+        "color": "teal"
+      },
+      {
+        "id": "swatch-thistle",
+        "color": "thistle"
+      },
+      {
+        "id": "swatch-tomato",
+        "color": "tomato"
+      },
+      {
+        "id": "swatch-turquoise",
+        "color": "turquoise"
+      },
+      {
+        "id": "swatch-violet",
+        "color": "violet"
+      },
+      {
+        "id": "swatch-wheat",
+        "color": "wheat"
+      },
+      {
+        "id": "swatch-white",
+        "color": "white"
+      },
+      {
+        "id": "swatch-whitesmoke",
+        "color": "whitesmoke"
+      },
+      {
+        "id": "swatch-yellow",
+        "color": "yellow"
+      },
+      {
+        "id": "swatch-yellowgreen",
+        "color": "yellowgreen"
+      }
+    ],
+    "coverageNote": "Name inventory independently obtained from Pillow ImageColor.colormap (148 CSS names); expected colors are measured only from Chrome, not Pillow or compiler."
+  },
+  {
+    "name": "hsl-boundary-palette",
+    "html": "<div id=\"outer\"><div id=\"swatch-hue-zero\"></div><div id=\"swatch-degrees\"></div><div id=\"swatch-gradians\"></div><div id=\"swatch-turns\"></div><div id=\"swatch-radians\"></div><div id=\"swatch-negative-hue\"></div><div id=\"swatch-wrapped-hue\"></div><div id=\"swatch-negative-turn\"></div><div id=\"swatch-legacy-alpha\"></div><div id=\"swatch-slash-alpha\"></div><div id=\"swatch-zero-alpha\"></div><div id=\"swatch-full-alpha\"></div><div id=\"swatch-clamp-alpha-low\"></div><div id=\"swatch-clamp-alpha-high\"></div><div id=\"swatch-clamp-alpha-number-low\"></div><div id=\"swatch-clamp-alpha-number-high\"></div><div id=\"swatch-clamp-saturation-low\"></div><div id=\"swatch-clamp-saturation-high\"></div><div id=\"swatch-clamp-lightness-low\"></div><div id=\"swatch-clamp-lightness-high\"></div><div id=\"swatch-grey\"></div><div id=\"swatch-legacy-degrees\"></div><div id=\"swatch-modern-number-components\"></div><div id=\"swatch-fractional-alpha\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;background-color:white;}#swatch-hue-zero{width:100%;height:8px;background-color:hsl(0 100% 50%);}#swatch-degrees{width:100%;height:8px;background-color:hsl(120deg 100% 25%);}#swatch-gradians{width:100%;height:8px;background-color:hsl(200grad 100% 50%);}#swatch-turns{width:100%;height:8px;background-color:hsl(.75turn 100% 50%);}#swatch-radians{width:100%;height:8px;background-color:hsl(3.141592653589793rad 100% 50%);}#swatch-negative-hue{width:100%;height:8px;background-color:hsl(-120 100% 50%);}#swatch-wrapped-hue{width:100%;height:8px;background-color:hsl(840 100% 50%);}#swatch-negative-turn{width:100%;height:8px;background-color:hsl(-.25turn 100% 50%);}#swatch-legacy-alpha{width:100%;height:8px;background-color:hsla(270,50%,40%,0.5);}#swatch-slash-alpha{width:100%;height:8px;background-color:hsl(30 100% 50% / 25%);}#swatch-zero-alpha{width:100%;height:8px;background-color:hsl(0 100% 50% / 0);}#swatch-full-alpha{width:100%;height:8px;background-color:hsl(0 100% 50% / 1);}#swatch-clamp-alpha-low{width:100%;height:8px;background-color:hsl(0 100% 50% / -50%);}#swatch-clamp-alpha-high{width:100%;height:8px;background-color:hsl(0 100% 50% / 150%);}#swatch-clamp-alpha-number-low{width:100%;height:8px;background-color:hsla(120,100%,50%,-1);}#swatch-clamp-alpha-number-high{width:100%;height:8px;background-color:hsla(120,100%,50%,2);}#swatch-clamp-saturation-low{width:100%;height:8px;background-color:hsl(210 -50% 50%);}#swatch-clamp-saturation-high{width:100%;height:8px;background-color:hsl(210 150% 50%);}#swatch-clamp-lightness-low{width:100%;height:8px;background-color:hsl(210 100% -50%);}#swatch-clamp-lightness-high{width:100%;height:8px;background-color:hsl(210 100% 150%);}#swatch-grey{width:100%;height:8px;background-color:hsl(50 0% 50%);}#swatch-legacy-degrees{width:100%;height:8px;background-color:hsl(60deg,100%,50%);}#swatch-modern-number-components{width:100%;height:8px;background-color:hsl(180 100 50);}#swatch-fractional-alpha{width:100%;height:8px;background-color:hsl(240 80% 60% / .333333);}",
+    "features": [
+      "A02"
+    ],
+    "viewports": [
+      [
+        240,
+        208
+      ],
+      [
+        390,
+        256
+      ],
+      [
+        768,
+        224
+      ],
+      [
+        240,
+        208
+      ]
+    ],
+    "swatchHeight": 8,
+    "swatches": [
+      {
+        "id": "swatch-hue-zero",
+        "color": "hsl(0 100% 50%)"
+      },
+      {
+        "id": "swatch-degrees",
+        "color": "hsl(120deg 100% 25%)"
+      },
+      {
+        "id": "swatch-gradians",
+        "color": "hsl(200grad 100% 50%)"
+      },
+      {
+        "id": "swatch-turns",
+        "color": "hsl(.75turn 100% 50%)"
+      },
+      {
+        "id": "swatch-radians",
+        "color": "hsl(3.141592653589793rad 100% 50%)"
+      },
+      {
+        "id": "swatch-negative-hue",
+        "color": "hsl(-120 100% 50%)"
+      },
+      {
+        "id": "swatch-wrapped-hue",
+        "color": "hsl(840 100% 50%)"
+      },
+      {
+        "id": "swatch-negative-turn",
+        "color": "hsl(-.25turn 100% 50%)"
+      },
+      {
+        "id": "swatch-legacy-alpha",
+        "color": "hsla(270,50%,40%,0.5)"
+      },
+      {
+        "id": "swatch-slash-alpha",
+        "color": "hsl(30 100% 50% / 25%)"
+      },
+      {
+        "id": "swatch-zero-alpha",
+        "color": "hsl(0 100% 50% / 0)"
+      },
+      {
+        "id": "swatch-full-alpha",
+        "color": "hsl(0 100% 50% / 1)"
+      },
+      {
+        "id": "swatch-clamp-alpha-low",
+        "color": "hsl(0 100% 50% / -50%)"
+      },
+      {
+        "id": "swatch-clamp-alpha-high",
+        "color": "hsl(0 100% 50% / 150%)"
+      },
+      {
+        "id": "swatch-clamp-alpha-number-low",
+        "color": "hsla(120,100%,50%,-1)"
+      },
+      {
+        "id": "swatch-clamp-alpha-number-high",
+        "color": "hsla(120,100%,50%,2)"
+      },
+      {
+        "id": "swatch-clamp-saturation-low",
+        "color": "hsl(210 -50% 50%)"
+      },
+      {
+        "id": "swatch-clamp-saturation-high",
+        "color": "hsl(210 150% 50%)"
+      },
+      {
+        "id": "swatch-clamp-lightness-low",
+        "color": "hsl(210 100% -50%)"
+      },
+      {
+        "id": "swatch-clamp-lightness-high",
+        "color": "hsl(210 100% 150%)"
+      },
+      {
+        "id": "swatch-grey",
+        "color": "hsl(50 0% 50%)"
+      },
+      {
+        "id": "swatch-legacy-degrees",
+        "color": "hsl(60deg,100%,50%)"
+      },
+      {
+        "id": "swatch-modern-number-components",
+        "color": "hsl(180 100 50)"
+      },
+      {
+        "id": "swatch-fractional-alpha",
+        "color": "hsl(240 80% 60% / .333333)"
+      }
+    ],
+    "coverageNote": "24 accepted-syntax controls across hue units, wrapping, alpha and component clamping; this is bounded HSL coverage, not every color syntax."
+  }
+]

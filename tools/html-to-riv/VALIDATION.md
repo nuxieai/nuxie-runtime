@@ -1,19 +1,79 @@
 # Immutable-target validation
 
-The target identity is pinned in TARGET.md. Revert verification compares the complete repository tree, not a sample of runtime files. Native qualification from the reverted implementation is invalid for this target.
+The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.
 
-Run `python3 tools/html-to-riv/validation/check-target-runtime.py` before and after any build or feature gate. It checks staged/committed and working-tree changes against the pinned baseline outside this compiler module. The compiler must own its package, lockfile and authoring dependencies without changing the runtime's resolution or features. Source identity alone is necessary but not sufficient: each native receipt must also bind the effective dependency graph, build command/features, environment, binary hash and unchanged baseline import path.
+## Reproducible checks
 
-For each feature:
+Run from repository root unless stated otherwise. Authoring dependencies are resolved only by this module's standalone Cargo.lock/package-lock.json.
 
-1. Record accepted computed semantics and context-dependent rejection conditions. Identify an existing wire record/property or describe the proposed file-level composition.
-2. Test Rust, CLI and WASM/JavaScript output and diagnostics. Parse the emitted file using the baseline importer. No runtime policy artifact may be required.
-3. Render through unchanged public import/draw APIs. Diagnostic source maps may only read geometry. Include a test that imports `.riv` with all compiler metadata discarded.
-4. Compile once, then resize the same original and cloned artboards through narrow/wide/return sequences, including changed height/aspect ratio. Never recompile inside that test.
-5. Compare pinned Chrome geometry and actual native PNGs under the existing tolerances. Inspect complete unique image pairs, retain failures, and bind evidence to exact inputs and binaries.
-6. Include composition, malformed/resource-boundary and unsupported-context controls. Broaden regression according to affected semantics.
-7. Mark qualified only for the proved profile. If native semantics or a composition fail, preserve the reproducer and investigate another existing-object encoding or record the limitation. Runtime enhancement proposals are separate work.
+```sh
+python3 tools/html-to-riv/validation/check-target-runtime.py
+cargo test --manifest-path tools/html-to-riv/Cargo.toml --locked
+cargo build --manifest-path tools/html-to-riv/Cargo.toml --locked
+```
 
-Current evidence: PR #629 restored the full pre-PR tree; the mutation inventory covers 778 changed paths; source audits cover all 36 former capabilities, 44 renderer/interface/stream files and 62 runtime/vendor paths. These are audit facts, not replacement visual qualification.
+The target check compares pinned source outside this compiler module, including staged/committed and working-tree changes. Run it again after build/feature validation. Do not alter the runtime workspace dependency resolution or features to make a compiler test pass.
 
-First executable baseline: `python3 tools/html-to-riv/validation/build-baseline.py NEW_OUTPUT` builds from the unchanged root workspace and links `baseline-probe.rs` to the exact runtime rlibs. `cargo test --manifest-path tools/html-to-riv/Cargo.toml --locked` runs isolated authoring tests. See validation/ordinary-layout-review.md for the first56frame visual experiment and its honest limits.
+For WASM, rustup must have `wasm32-unknown-unknown` installed. On hosts where default rustc is Homebrew's compiler, explicitly select rustup's compiler:
+
+```sh
+RUSTC="$(rustup which rustc)" cargo build \
+  --manifest-path tools/html-to-riv/Cargo.toml --locked \
+  --target wasm32-unknown-unknown --lib
+npm ci --prefix tools/html-to-riv
+node --test tools/html-to-riv/tests/transport-parity.mjs
+node tools/html-to-riv/node_modules/typescript/bin/tsc \
+  --noEmit --strict --module nodenext --moduleResolution nodenext \
+  --target es2022 --lib es2022,dom tools/html-to-riv/tests/types.mts
+python3 tools/html-to-riv/validation/check-target-runtime.py
+```
+
+Transport tests default to `tools/html-to-riv/target/debug/html-to-riv` and `tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm`; override with `HTML_TO_RIV_BIN` and `HTML_TO_RIV_WASM` to test frozen artifacts. They require `public-baseline-cases.json`, `public-color-palettes.json` and `public-inheritance-cases.json`; missing fixtures fail rather than skip.
+
+The seven Node tests cover exact Rive bytes/source maps across CLI/WASM, all 15 baseline cases, both palettes and both inheritance scenes at three viewports, rejected-style diagnostic parity, strict document contracts, output ownership across failures/reuse, and direct ABI 2 buffer reset checks. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
+
+## Immutable native/browser run
+
+Build a fresh baseline toolchain through the unchanged root workspace, with compiler-owned output paths:
+
+```sh
+python3 tools/html-to-riv/validation/build-baseline.py \
+  tools/html-to-riv/output/my-baseline-toolchain
+```
+
+This records build command/features and dependency artifacts, then links the read-only probe to the exact baseline runtime rlibs. Native receipts must bind the effective dependency graph, command/features, environment, binary hashes and unchanged import path; source identity alone is insufficient. Metal builds require a supported Apple host/toolchain. Use a fresh output directory for each command below:
+
+```sh
+node tools/html-to-riv/validation/check-public-baseline.mjs \
+  tools/html-to-riv/validation/public-baseline-cases.json \
+  tools/html-to-riv/target/debug/html-to-riv \
+  tools/html-to-riv/output/my-baseline-toolchain/baseline-probe \
+  tools/html-to-riv/output/my-baseline-toolchain/renderer-replay \
+  tools/html-to-riv/output/my-public-baseline
+
+node tools/html-to-riv/validation/check-public-baseline.mjs \
+  tools/html-to-riv/validation/public-color-palettes.json \
+  tools/html-to-riv/target/debug/html-to-riv \
+  tools/html-to-riv/output/my-baseline-toolchain/baseline-probe \
+  tools/html-to-riv/output/my-baseline-toolchain/renderer-replay \
+  tools/html-to-riv/output/my-color-palettes
+```
+
+Install the Playwright-managed Chromium binary if absent (`tools/html-to-riv/node_modules/.bin/playwright install chromium`). The driver requires Chrome 153.0.8010.12, device scale 1 and `src/reset.css`. It compiles each fixture once at 390×160, imports **only `.riv`** into the baseline observer, and resizes original and clone through four viewports. Default sequence:240×160→390×200→768×120→240×160; palettes supply explicit taller sizes so every swatch is visible. Source maps are used only afterward to join measured object bounds to DOM IDs. No policy or map is passed into import.
+
+The baseline Metal backend is raster ordering. Its historical CLI mode token must not be mistaken for proof that the forced-clockwise or newly added ordinary-Atomics APIs are present. Read `effectiveMode` and bound toolchain evidence in each receipt. Do not transfer corrected Atomics images from the reverted renderer.
+
+## Qualification workflow
+
+1. Record accepted semantics and context-dependent rejections, with an ordinary wire property or proposed file-level composition.
+2. Run authoring/transport tests and baseline bytes-only import; metadata must be dispensable.
+3. Compile once, resize originals/clones without recompilation, and include changed height/aspect ratio and return-to-start checks.
+4. Compare pinned Chrome geometry and actual native PNGs under existing gates in `validation/pixels.mjs`; do not widen tolerances to pass a feature.
+5. Inspect complete unique image pairs, including every visible palette cell. Preserve failures. Bind reviews to exact HTML/CSS/reset/assets/viewports, emitted bytes, stream, native/browser PNG and immutable toolchain hashes.
+6. Add malformed/resource boundaries, unsupported contexts and relevant composition tests. Mark only the demonstrated profile qualified; alternative encodings require their own evidence.
+
+Current durable public evidence is `validation/public-color-receipt.json`: 136 frames passed geometry/pixel gates (120 baseline and 16 palette frames). All six unique palette pairs were reviewed; 45 unchanged baseline pairs transferred prior review through exact image identity. The subsequent inheritance correction is bound in `validation/public-inheritance-receipt.json`: 24 additional passing/reviewed frames and 8 preserved pre-fix pixel failures. The final compiler checkpoint binds binaries and source hashes in `output/public-compiler-checkpoint-r2/manifest.json`, including exact recompiled bytes/maps for all 20 rendered scenes. The initial scope remains provisional: this does not establish a qualified release or broader CSS admission.
+
+Earlier source audits cover 36 former custom capabilities, 44 renderer/interface/stream files and 62 runtime/vendor paths; these establish mutation scope, not replacement support. The first 56-frame ordinary-layout experiment and its preserved corner failures remain documented in `validation/ordinary-layout-review.md`.
+
+Run `public-inheritance-cases.json` through the same native driver command above to reproduce the inherited currentColor and literal-control scenes.

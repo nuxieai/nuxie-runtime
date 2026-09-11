@@ -21,6 +21,11 @@ pub trait FlexboxContainerStyle: CoreStyle {
         Style::<Self::CustomIdent>::DEFAULT.gap
     }
 
+    /// Truncate resolved gaps to CSS layout's 1/64px precision before allocation.
+    fn quantize_gap(&self) -> bool { false }
+    /// Use CSS intrinsic inline contributions for nested column flex items.
+    fn css_intrinsic_sizing(&self) -> bool { false }
+
     // Alignment properties
 
     /// How should content contained within this item be aligned in the cross/block axis

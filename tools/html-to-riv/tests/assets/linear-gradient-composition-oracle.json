@@ -1,0 +1,1247 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "linear-gradient-composition-opaque-border",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-image:linear-gradient(to right,red,blue);border:12px solid black;}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted gradient plus existing solid border. Control: opaque border hides image paint in the border area."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-transparent-border-repeat-x",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-image:linear-gradient(to right,red,blue);border:16px solid transparent;}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted implicit CSS defaults must repeat the padding-box-sized image beneath the border; inspect left/right edges for wrapped opposite endpoint colors, not clamped colors."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-transparent-border-repeat-y",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-image:linear-gradient(to bottom,red,blue);border:16px solid transparent;}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted implicit repeat must tile vertically beneath transparent top/bottom borders."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-translucent-asymmetric-border",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-image:linear-gradient(to right,red,blue);border-style:solid;border-width:7px 23px 15px 11px;border-color:rgba(0,0,0,.4);}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted asymmetric border exposes image tiling and alpha composition under all four border sides."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-corner-transparent-border",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-image:linear-gradient(to bottom right,red 20%,lime 50%,blue 80%);border:16px solid transparent;}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted corner gradient requires two-dimensional image tiling at border corners; extrapolating the gradient line is not equivalent."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-border-wider-than-tile",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;width:80px;height:100px;box-sizing:content-box;background-image:linear-gradient(to right,red,blue);border:90px solid transparent;}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted content-box geometry makes borders wider than the image tile; tests more than one repeated copy and overflow."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 260,
+              "height": 280
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 260,
+              "height": 280
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 260,
+              "height": 280
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-padding-origin",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;padding:17px 29px;background-image:linear-gradient(to right,red,blue);}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted default image origin includes padding. Compare gradient endpoints against padding box rather than content box."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-fractional-border",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;margin-left:.25px;width:83%;border:1.5px solid transparent;background-image:linear-gradient(to right,red,blue);}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted fractional borders test positioning area versus snapped painting bounds during resizing."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20.25,
+              "y": 20,
+              "width": 166,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20.25,
+              "y": 20,
+              "width": 290.5,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20.25,
+              "y": 20,
+              "width": 604.234375,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-base-color-alpha",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-color:lime;background-image:linear-gradient(to right,rgba(255,0,0,0),rgba(0,0,255,.5));}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted background-color remains below transparent image pixels; image must not clear the color longhand."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-base-color-after-image",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-image:linear-gradient(to right,rgba(255,0,0,0),rgba(0,0,255,.5));background-color:lime;}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted equivalent longhand order must retain the same color/image composition."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-shorthand-clears-base",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;background-color:lime;background:linear-gradient(to right,transparent,rgba(0,0,255,.5));}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted background shorthand resets the previously authored color to transparent."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-rounded-alpha",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;border-radius:45px 16px 30px 8px / 25px 36px 12px 40px;background-color:lime;background-image:linear-gradient(35deg,transparent,rgba(0,0,255,.6));}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted elliptical rounded outer clip applies consistently to base color and image; inspect antialiased curve fringes."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-rounded-transparent-border",
+      "html": "<div id=\"frame\"><div id=\"gradient\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;border:12px solid transparent;border-radius:40% / 35%;background-image:linear-gradient(to right,red,blue);}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted responsive rounded border must retain implicit tile phase and outer clipping together."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-rounded-child-visible",
+      "html": "<div id=\"frame\"><div id=\"gradient\"><div id=\"child\"></div></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;border-radius:36px;background-image:linear-gradient(to right,red,blue);}#child{width:70px;height:70px;background:lime;margin-top:-12px;margin-left:-12px}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted radius clips own background but does not by itself clip overflowing descendants."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            },
+            "child": {
+              "x": 8,
+              "y": 8,
+              "width": 70,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            },
+            "child": {
+              "x": 8,
+              "y": 8,
+              "width": 70,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            },
+            "child": {
+              "x": 8,
+              "y": 8,
+              "width": 70,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-rounded-child-hidden",
+      "html": "<div id=\"frame\"><div id=\"gradient\"><div id=\"child\"></div></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;border-radius:36px;overflow:hidden;background-image:linear-gradient(to right,red,blue);}#child{width:70px;height:70px;background:lime;margin-top:-12px;margin-left:-12px}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted overflow hidden clips descendants while retaining the own rounded gradient background."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            },
+            "child": {
+              "x": 8,
+              "y": 8,
+              "width": 70,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            },
+            "child": {
+              "x": 8,
+              "y": 8,
+              "width": 70,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            },
+            "child": {
+              "x": 8,
+              "y": 8,
+              "width": 70,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-content-clip-margin",
+      "html": "<div id=\"frame\"><div id=\"gradient\"><div id=\"child\"></div></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;padding:20px;border:8px solid rgba(0,0,0,.4);overflow:clip;overflow-clip-margin:content-box 0px;background-image:linear-gradient(to right,red,blue);}#child{width:120%;height:150px;background:rgba(0,255,0,.5)}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted content-edge overflow clip must constrain descendants without truncating the box background."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 48,
+              "width": 172.796875,
+              "height": 150
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 48,
+              "width": 352.796875,
+              "height": 150
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 48,
+              "width": 806.390625,
+              "height": 150
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-opacity-overlap",
+      "html": "<div id=\"frame\"><div id=\"gradient\"><div id=\"child\"></div></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;background:#444;}#gradient{width:100%;height:140px;opacity:.5;background-color:lime;background-image:linear-gradient(to right,transparent,blue);border:10px solid rgba(0,0,0,.5);border-radius:24px;}#child{width:65%;height:80px;background:red;margin:20px}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted group opacity applies once to the composed background, image, border and overlapping child."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            },
+            "child": {
+              "x": 50,
+              "y": 50,
+              "width": 117,
+              "height": 80
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            },
+            "child": {
+              "x": 50,
+              "y": 50,
+              "width": 214.5,
+              "height": 80
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            },
+            "child": {
+              "x": 50,
+              "y": 50,
+              "width": 460.1875,
+              "height": 80
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "linear-gradient-composition-nested-gradients",
+      "html": "<div id=\"frame\"><div id=\"gradient\"><div id=\"child\"></div></div></div>",
+      "css": "#frame{width:100%;padding:20px;background:white;}#gradient{width:100%;height:140px;padding:18px;background-image:linear-gradient(to bottom,red,blue);border-radius:24px;}#child{width:70%;height:90px;background-image:linear-gradient(to top right,transparent,lime);border-radius:16px}",
+      "font": false,
+      "image": false,
+      "expectedCompile": {
+        "status": "accepted",
+        "reason": "Accepted parent and child image tables must coexist and resolve from their own resized boxes."
+      },
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 200,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 38,
+              "width": 114.796875,
+              "height": 90
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 350,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 38,
+              "width": 219.796875,
+              "height": 90
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 180
+            },
+            "gradient": {
+              "x": 20,
+              "y": 20,
+              "width": 728,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 38,
+              "width": 484.390625,
+              "height": 90
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,374 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-rounding-00",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.8px;height:auto;aspect-ratio:1 / 96;background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-01",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.8px;height:auto;aspect-ratio:calc(1e308px / 1e308in);background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-02",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.8px;height:auto;aspect-ratio:2;background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-03",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.808px;height:auto;aspect-ratio:1 / 96;background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-04",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.808px;height:auto;aspect-ratio:calc(1e308px / 1e308in);background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-05",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.808px;height:auto;aspect-ratio:2;background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-06",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.796875px;height:auto;aspect-ratio:1 / 96;background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-07",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.796875px;height:auto;aspect-ratio:calc(1e308px / 1e308in);background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-08",
+      "font": false,
+      "html": "<div id=ratio></div>",
+      "css": "#ratio{width:448.796875px;height:auto;aspect-ratio:2;background:#8cf}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 224.390625
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

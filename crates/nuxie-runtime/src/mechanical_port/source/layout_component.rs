@@ -25,11 +25,11 @@ use crate::mechanical_port::source::{
         },
         layout_style_applier::{
             LayoutStyleApplier, LayoutSyncContext, YGAlign, YGDimension, YGDirection, YGDisplay,
-            YGFlexDirection, YGFloatOptional, YGPositionType, YGStyle, YGUnit, YGValue,
+            YGFlexDirection, YGFloatOptional, YGJustify, YGPositionType, YGStyle, YGUnit, YGValue,
         },
     },
     math::{aabb::Aabb, mat2d::Mat2D, raw_path::RawPath, vec2d::Vec2D},
-    renderer::{RenderPath, Renderer},
+    renderer::{RenderPath, RenderPaint, RenderPaintStyle, Renderer},
     shapes::{
         paint::{shape_paint::ShapePaintPathKind, shape_paint_path::ShapePaintPath},
         path::Path,
@@ -145,6 +145,7 @@ struct LayoutTreeCache {
     tree: taffy::prelude::TaffyTree<LayoutMeasureContext>,
     nodes: Vec<CachedLayoutNode>,
     root: usize,
+    css_baselines: bool,
 }
 
 #[repr(u16)]
@@ -171,6 +172,146 @@ pub(crate) struct LayoutRenderPaths {
     pub background: RawPath,
     pub local: ShapePaintPath,
     pub world: ShapePaintPath,
+    pub css_clip: ShapePaintPath,
+    pub css_overflow_rect: ShapePaintPath,
+    pub css_border: ShapePaintPath,
+    pub css_border_side: ShapePaintPath,
+    pub css_border_paint: Option<Box<RenderPaint>>,
+    pub css_gradient: ShapePaintPath,
+    pub css_gradient_paint: Option<Box<RenderPaint>>,
+}
+
+/// Explicit CSS flex-item alignment, separate from Rive's sizing-derived rules.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CssAlignSelf {
+    Auto,
+    FlexStart,
+    Center,
+    FlexEnd,
+    Stretch,
+    Baseline,
+}
+impl CssAlignSelf {
+    fn runtime_alignment(self) -> YGAlign {
+        match self {
+            Self::Auto => YGAlign::Auto,
+            Self::FlexStart => YGAlign::FlexStart,
+            Self::Center => YGAlign::Center,
+            Self::FlexEnd => YGAlign::FlexEnd,
+            Self::Stretch => YGAlign::Stretch,
+            Self::Baseline => YGAlign::Baseline,
+        }
+    }
+}
+
+/// Independent CSS factors; construction rejects non-finite or negative values.
+/// None on a layout occurrence preserves Rive's shared fractional weight.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CssFlexFactors {
+    grow: f32,
+    shrink: f32,
+}
+impl CssFlexFactors {
+    pub fn new(grow: f32, shrink: f32) -> Option<Self> {
+        (grow.is_finite() && shrink.is_finite() && grow >= 0.0 && shrink >= 0.0)
+            .then_some(Self { grow, shrink })
+    }
+}
+
+/// Explicit CSS main-axis alignment, independent of Rive's combined encoding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CssJustifyContent {
+    FlexStart,
+    Center,
+    FlexEnd,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+impl CssJustifyContent {
+    fn runtime_alignment(self) -> YGJustify {
+        match self {
+            Self::FlexStart => YGJustify::FlexStart,
+            Self::Center => YGJustify::Center,
+            Self::FlexEnd => YGJustify::FlexEnd,
+            Self::SpaceBetween => YGJustify::SpaceBetween,
+            Self::SpaceAround => YGJustify::SpaceAround,
+            Self::SpaceEvenly => YGJustify::SpaceEvenly,
+        }
+    }
+}
+
+/// Explicit CSS flex-line alignment, independent of Rive's item alignment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CssAlignContent {
+    FlexStart,
+    Center,
+    FlexEnd,
+    Stretch,
+    SpaceBetween,
+    SpaceAround,
+    SpaceEvenly,
+}
+impl CssAlignContent {
+    fn runtime_alignment(self) -> YGAlign {
+        match self {
+            Self::FlexStart => YGAlign::FlexStart,
+            Self::Center => YGAlign::Center,
+            Self::FlexEnd => YGAlign::FlexEnd,
+            Self::Stretch => YGAlign::Stretch,
+            Self::SpaceBetween => YGAlign::SpaceBetween,
+            Self::SpaceAround => YGAlign::SpaceAround,
+            Self::SpaceEvenly => YGAlign::SpaceEvenly,
+        }
+    }
+}
+
+/// Opt-in one-axis CSS clip. The other axis remains unrestricted; unlike the
+/// ordinary two-axis clip, border radii do not shape this strip.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CssOverflowAxis { Horizontal, Vertical }
+
+/// The reference box for an opt-in CSS overflow clip margin.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CssOverflowClipBox { Content, Padding, Border }
+
+/// A validated computed offset. This does not itself enable clipping: the
+/// compiler/host must first determine whether the computed overflow applies it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CssOverflowClipMargin {
+    origin: CssOverflowClipBox,
+    pixels: f32,
+}
+
+impl CssOverflowClipMargin {
+    pub fn new(origin: CssOverflowClipBox, pixels: f32) -> Option<Self> {
+        pixels.is_finite().then_some(Self { origin, pixels })
+    }
+
+    /// Resolve from current layout, never from dimensions captured at import.
+    /// Border and padding edges come from the live solved layout. Public
+    /// compiler border admission additionally requires border painting support.
+    fn insets(self, layout: &LayoutComponent) -> [f32; 4] {
+        let (left, top, right, bottom) = match self.origin {
+            CssOverflowClipBox::Content => (layout.padding_left() + layout.layout_border.left(),
+                layout.padding_top() + layout.layout_border.top(),
+                layout.padding_right() + layout.layout_border.right(),
+                layout.padding_bottom() + layout.layout_border.bottom()),
+            CssOverflowClipBox::Padding => (layout.layout_border.left(), layout.layout_border.top(),
+                layout.layout_border.right(), layout.layout_border.bottom()),
+            CssOverflowClipBox::Border => (0., 0., 0., 0.),
+        };
+        [left, top, right, bottom]
+    }
+
+    pub fn bounds(self, layout: &LayoutComponent) -> Option<Aabb> {
+        let [left, top, right, bottom] = self.insets(layout);
+        let bounds = Aabb::new(left - self.pixels, top - self.pixels,
+            layout.layout_width() - right + self.pixels,
+            layout.layout_height() - bottom + self.pixels);
+        [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y]
+            .into_iter().all(f32::is_finite).then_some(bounds)
+    }
 }
 
 pub struct LayoutComponent {
@@ -185,6 +326,8 @@ pub struct LayoutComponent {
     layout: Layout,
     layout_padding: LayoutPadding,
     solved_padding: LayoutPadding,
+    layout_border: LayoutPadding,
+    solved_border: LayoutPadding,
     animation_data_a: LayoutAnimationData,
     animation_data_b: LayoutAnimationData,
     inherited_interpolator: Option<CoreHandle>,
@@ -193,6 +336,25 @@ pub struct LayoutComponent {
     inherited_direction: LayoutDirection,
     layout_flags: u16,
     render_paths: Option<Box<LayoutRenderPaths>>,
+    css_overflow_axis: Option<CssOverflowAxis>,
+    css_overflow_clip_margin: Option<CssOverflowClipMargin>,
+    css_pixel_bounds: bool,
+    css_corner_radii: Option<super::css_corner_radii::CssCornerRadii>,
+    css_gradient: Option<super::css_linear_gradient::CssLinearGradient>,
+    css_border_geometry: bool,
+    css_border_color: Option<u32>,
+    css_border_side_colors: Option<[u32; 4]>,
+    css_percentage_spacing: bool,
+    css_relative_position: bool,
+    css_positioned: Option<bool>,
+    css_content_box: bool,
+    css_ratio_content_box: bool,
+    css_ratio_size_limit: bool,
+    css_ratio_pair: Option<[u32; 2]>,
+    css_align_self: Option<CssAlignSelf>,
+    css_align_content: Option<CssAlignContent>,
+    css_justify_content: Option<CssJustifyContent>,
+    css_flex_factors: Option<CssFlexFactors>,
     proxy: Option<Rc<RefCell<DrawableProxy>>>,
     width_override: f32,
     width_unit_value_override: i8,
@@ -220,6 +382,8 @@ impl Default for LayoutComponent {
             layout: Layout::default(),
             layout_padding: LayoutPadding::default(),
             solved_padding: LayoutPadding::default(),
+            layout_border: LayoutPadding::default(),
+            solved_border: LayoutPadding::default(),
             animation_data_a: LayoutAnimationData::default(),
             animation_data_b: LayoutAnimationData::default(),
             inherited_interpolator: None,
@@ -231,6 +395,25 @@ impl Default for LayoutComponent {
                 | LayoutComponentFlags::PositionTopChanged as u16
                 | LayoutComponentFlags::ComposeTransform as u16,
             render_paths: None,
+            css_overflow_axis: None,
+            css_overflow_clip_margin: None,
+            css_pixel_bounds: false,
+            css_corner_radii: None,
+            css_gradient: None,
+            css_border_geometry: false,
+            css_border_color: None,
+            css_border_side_colors: None,
+            css_percentage_spacing: false,
+            css_relative_position: false,
+            css_positioned: None,
+            css_content_box: false,
+            css_ratio_content_box: false,
+            css_ratio_size_limit: false,
+            css_ratio_pair: None,
+            css_align_self: None,
+            css_align_content: None,
+            css_justify_content: None,
+            css_flex_factors: None,
             proxy: None,
             width_override: f32::NAN,
             width_unit_value_override: -1,
@@ -278,7 +461,7 @@ impl LayoutComponent {
         self.render_paths.get_or_insert_with(Default::default)
     }
     pub fn needs_drawable_proxy(&self) -> bool {
-        self.base.clip()
+        self.css_gradient.is_some() || self.css_overflow_axis.is_some() || self.base.clip()
             || !self.paints.shape_paints().is_empty()
             || self.has_layout_flag(LayoutComponentFlags::ForceDrawableProxy)
     }
@@ -327,6 +510,25 @@ impl LayoutComponent {
     pub fn clone_core(&self) -> Self {
         let mut callbacks = Self::default();
         let mut twin = self.base.clone_into(&mut callbacks);
+        twin.css_overflow_axis = self.css_overflow_axis;
+        twin.css_overflow_clip_margin = self.css_overflow_clip_margin;
+        twin.css_pixel_bounds = self.css_pixel_bounds;
+        twin.css_corner_radii = self.css_corner_radii;
+        twin.css_gradient = self.css_gradient.clone();
+        twin.css_border_geometry = self.css_border_geometry;
+        twin.css_border_color = self.css_border_color;
+        twin.css_border_side_colors = self.css_border_side_colors;
+        twin.css_percentage_spacing = self.css_percentage_spacing;
+        twin.css_relative_position = self.css_relative_position;
+        twin.css_positioned = self.css_positioned;
+        twin.css_content_box = self.css_content_box;
+        twin.css_ratio_content_box = self.css_ratio_content_box;
+        twin.css_ratio_size_limit = self.css_ratio_size_limit;
+        twin.css_ratio_pair = self.css_ratio_pair;
+        twin.css_align_self = self.css_align_self;
+        twin.css_align_content = self.css_align_content;
+        twin.css_justify_content = self.css_justify_content;
+        twin.css_flex_factors = self.css_flex_factors;
         twin.set_layout_flag(
             LayoutComponentFlags::ComposeTransform,
             self.has_layout_flag(LayoutComponentFlags::ComposeTransform),
@@ -1107,10 +1309,14 @@ impl LayoutComponent {
         self.layout.height()
     }
     pub fn inner_width(&self) -> f32 {
-        self.layout.width() - self.layout_padding.left() - self.layout_padding.right()
+        let inner = self.layout.width() - self.layout_padding.left() - self.layout_padding.right();
+        if self.css_border_geometry { (inner - self.layout_border.left() - self.layout_border.right()).max(0.0) }
+        else { inner }
     }
     pub fn inner_height(&self) -> f32 {
-        self.layout.height() - self.layout_padding.top() - self.layout_padding.bottom()
+        let inner = self.layout.height() - self.layout_padding.top() - self.layout_padding.bottom();
+        if self.css_border_geometry { (inner - self.layout_border.top() - self.layout_border.bottom()).max(0.0) }
+        else { inner }
     }
     pub fn padding_left(&self) -> f32 {
         self.layout_padding.left()
@@ -1463,16 +1669,83 @@ impl LayoutComponent {
         self.collapse_after_component(self.is_collapsed());
         StatusCode::Ok
     }
-    pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
-        let save_for_clip = self.base.clip();
-        if save_for_clip {
+    /// Open the live layout clip for both ordinary and deferred CSS paint.
+    /// The caller owns the matching restore and its own ClipSaved bookkeeping.
+    fn begin_layout_clip(&mut self, renderer: &mut Renderer) -> Option<bool> {
+        if let Some(axis) = self.css_overflow_axis {
+            let horizontal = axis == CssOverflowAxis::Horizontal;
+            let (start, extent) = self.css_axis_clip_interval(horizontal);
+            let world = nuxie_render_api::Mat2D(*self.shape_world_transform().values());
             renderer.save();
-            let factory = self
-                .with_artboard(|artboard| artboard.factory())
-                .flatten()
-                .expect("a drawable LayoutComponent has its imported factory");
+            assert!(renderer.clip_axis_transformed(horizontal, start, extent, world),
+                "CSS axis overflow requires a compatible renderer and finite layout transform");
+            return Some(true);
+        }
+        if !self.base.clip() { return Some(false); }
+        let factory = self.with_artboard(|a| a.factory()).flatten()?;
+        if let Some(margin) = self.css_overflow_clip_margin.or_else(|| self.css_border_geometry.then_some(
+            CssOverflowClipMargin { origin: CssOverflowClipBox::Padding, pixels: 0.0 })) {
+            let (bounds, radii, world) = self.paint_geometry();
+            let snapped_outsets = self.css_clip_paint_outsets(margin, bounds, world);
+            let rounded = radii.iter().any(|pair| pair[0] > 0. && pair[1] > 0.);
+            let outsets = if rounded { margin.insets(self).map(|inset| margin.pixels - inset) }
+                else { snapped_outsets };
+            let mut raw = RawPath::default();
+            assert!(super::css_clip_path::elliptical_outset_path(&mut raw, bounds, radii, outsets),
+                "CSS clip margin requires finite rounded clip geometry");
+            let paths = self.mutable_render_paths();
+            paths.css_clip.rewind_as(false, nuxie_render_api::FillRule::Clockwise);
+            paths.css_clip.add_path(&raw, Some(&world));
+            renderer.save();
+            renderer.clip_path(paths.css_clip.render_path(&factory));
+            if rounded && snapped_outsets != outsets {
+                // Blink keeps the rounded border clip and snapped overflow
+                // rectangle as separate nodes. Their intersection preserves
+                // fractional rounded edges without leaking beyond the rect.
+                let mut rect = RawPath::default();
+                assert!(super::css_clip_path::elliptical_outset_path(&mut rect, bounds, [[0.;2];4], snapped_outsets));
+                paths.css_overflow_rect.rewind_as(false, nuxie_render_api::FillRule::Clockwise);
+                paths.css_overflow_rect.add_path(&rect, Some(&world));
+                renderer.clip_path(paths.css_overflow_rect.render_path(&factory));
+            }
+        } else {
+            renderer.save();
             renderer.clip_path(self.mutable_render_paths().world.render_path(&factory));
         }
+        Some(true)
+    }
+
+    fn css_clip_paint_outsets(&self, margin: CssOverflowClipMargin, bounds: Aabb, world: Mat2D) -> [f32;4] {
+        let outsets = margin.insets(self).map(|inset| margin.pixels - inset);
+        let values = world.values();
+        if !self.css_pixel_bounds || values[0] != 1. || values[1] != 0.
+            || values[2] != 0. || values[3] != 1. { return outsets; }
+        // Derive the clip from unrounded layout dimensions, then snap once.
+        // Applying fractional insets to the already-snapped outer paint box
+        // would introduce a second rounding step and shift clip edges.
+        let snap = |edge: f32, origin: f32| (edge + origin + 0.5).floor() - origin;
+        [bounds.min_x - snap(-outsets[0], values[4]),
+         bounds.min_y - snap(-outsets[1], values[5]),
+         snap(self.layout.width() + outsets[2], values[4]) - bounds.max_x,
+         snap(self.layout.height() + outsets[3], values[5]) - bounds.max_y]
+    }
+
+    /// Open an ancestral CSS clip without painting its background or changing
+    /// ClipSaved, which belongs to the ordinary proxy/authored draw pair.
+    /// None suppresses the deferred group; true requires one renderer restore.
+    pub(crate) fn begin_css_ancestor_clip(&mut self, renderer: &mut Renderer) -> Option<bool> {
+        if self.is_hidden() || self.is_collapsed() { return None; }
+        self.begin_layout_clip(renderer)
+    }
+
+    pub fn draw_proxy(&mut self, renderer: &mut Renderer) {
+        // A content-edge clip can lie inside the background. CSS clips the
+        // descendants, so open this override only after painting the box.
+        let defer_margin_clip = (self.css_overflow_clip_margin.is_some()
+            && self.css_overflow_axis.is_none() && self.base.clip())
+            || (self.css_border_geometry && (self.base.clip() || self.css_overflow_axis.is_some()));
+        let save_for_clip = !defer_margin_clip && self.begin_layout_clip(renderer)
+            .expect("a drawable LayoutComponent has its imported factory");
         self.set_layout_flag(LayoutComponentFlags::ClipSaved, save_for_clip);
         let world = self.shape_world_transform();
         let mut paint_index = 0;
@@ -1500,12 +1773,389 @@ impl LayoutComponent {
                     .draw_with_fill_rule(renderer, path, world, false, None, true, fill_rule);
             });
         }
+        self.draw_css_gradient(renderer);
+        self.draw_css_border(renderer);
+        if defer_margin_clip {
+            let saved = self.begin_layout_clip(renderer)
+                .expect("a drawable LayoutComponent has its imported factory");
+            self.set_layout_flag(LayoutComponentFlags::ClipSaved, saved);
+        }
     }
     pub fn draw(&mut self, renderer: &mut Renderer) {
         if self.has_layout_flag(LayoutComponentFlags::ClipSaved) {
             self.set_layout_flag(LayoutComponentFlags::ClipSaved, false);
             renderer.restore();
         }
+    }
+    /// Per-occurrence override; None restores the original Rive sizing policy.
+    /// Releases the owner borrow before synchronizing retained layout state.
+    pub fn set_css_align_self_occurrence(owner: &CoreHandle, alignment: Option<CssAlignSelf>) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_align_self != alignment;
+            layout.css_align_self = alignment;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Per-occurrence override; None restores the original Rive line alignment.
+    /// Releases the owner borrow before synchronizing retained layout state.
+    pub fn set_css_align_content_occurrence(owner: &CoreHandle, alignment: Option<CssAlignContent>) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_align_content != alignment;
+            layout.css_align_content = alignment;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Per-occurrence override; None restores the original Rive main-axis alignment.
+    /// Releases the owner borrow before synchronizing retained layout state.
+    pub fn set_css_justify_content_occurrence(owner: &CoreHandle, alignment: Option<CssJustifyContent>) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_justify_content != alignment;
+            layout.css_justify_content = alignment;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Installs independent factors; None restores ordinary Rive sizing.
+    pub fn set_css_flex_factors_occurrence(owner: &CoreHandle, factors: Option<CssFlexFactors>) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_flex_factors != factors;
+            layout.css_flex_factors = factors;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Select content-box dimensions for this occurrence. False restores the
+    /// original border-box policy; cloning retains the occurrence's selection.
+    pub fn set_css_content_box_occurrence(owner: &CoreHandle, enabled: bool) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_content_box != enabled;
+            layout.css_content_box = enabled;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Select the content box for preferred-ratio calculations only. Authored
+    /// width/height retain their own box sizing; clones retain this policy.
+    pub fn set_css_ratio_content_box_occurrence(owner: &CoreHandle, enabled: bool) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_ratio_content_box != enabled || !layout.css_ratio_size_limit;
+            layout.css_ratio_content_box = enabled;
+            layout.css_ratio_size_limit = true;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Preserve a computed CSS ratio pair across runtime layout and cloning.
+    pub fn set_css_ratio_pair_occurrence(owner: &CoreHandle, pair: Option<[u32; 2]>) -> bool {
+        if pair.is_some_and(|p| p.iter().any(|v| *v == 0 || *v > i32::MAX as u32)) { return false; }
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_ratio_pair != pair;
+            layout.css_ratio_pair = pair;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Install CSS percentage spacing for this occurrence's layout tree.
+    pub fn set_css_percentage_spacing_occurrence(owner: &CoreHandle, enabled: bool) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_percentage_spacing != enabled;
+            layout.css_percentage_spacing = enabled;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    pub(crate) fn has_absolute_position_wire(&self) -> bool {
+        self.with_style(|style| style.position_type() == YGPositionType::Absolute).unwrap_or(false)
+    }
+    /// Enable CSS containing-block ancestry for this occurrence. Some(false)
+    /// is authored static, Some(true) establishes a containing block, and None
+    /// retains legacy layout. The position wire still determines absolute flow.
+    pub fn set_css_positioned_occurrence(owner: &CoreHandle, positioned: Option<bool>) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_positioned != positioned;
+            layout.css_positioned = positioned;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Resolve this occurrence's relative insets using the final containing size.
+    pub fn set_css_relative_position_occurrence(owner: &CoreHandle, enabled: bool) -> bool {
+        let changed = owner.with_mut(|object| {
+            let layout = object.as_layout_component_mut()?;
+            let changed = layout.css_relative_position != enabled;
+            layout.css_relative_position = enabled;
+            Some(changed)
+        }).flatten();
+        let Some(changed) = changed else { return false; };
+        if changed {
+            Self::sync_style_occurrence(owner);
+            Self::mark_layout_node_dirty_occurrence(owner, false);
+            Self::mark_layout_style_dirty_occurrence(owner);
+        }
+        true
+    }
+    /// Paint uses live schema border widths; no imported paint is modified.
+    pub fn set_css_border_color(&mut self, color: Option<u32>) {
+        if self.css_border_color != color || self.css_border_side_colors.is_some() {
+            self.css_border_side_colors = None;
+            self.css_border_color = color;
+            if color.is_some() { self.mark_clip_may_be_dynamic(); }
+            self.update_render_path();
+        }
+    }
+    /// Diagnostic colors in top/right/bottom/left order, installed after the
+    /// checked uniform policy supplies border geometry and drawable proxies.
+    pub fn set_experimental_css_border_side_colors(&mut self, colors: Option<[u32; 4]>) {
+        if self.css_border_side_colors != colors {
+            self.css_border_side_colors = colors;
+            self.update_render_path();
+        }
+    }
+    pub fn set_experimental_css_gradient(&mut self, gradient: Option<super::css_linear_gradient::CssLinearGradient>) {
+        self.css_gradient = gradient;
+    }
+
+    fn draw_css_gradient(&mut self, renderer: &mut Renderer) {
+        let Some(gradient) = self.css_gradient.as_ref() else { return; };
+        let (bounds, radii, world) = self.paint_geometry();
+        let left = self.layout_border.left();
+        let top = self.layout_border.top();
+        let width = (bounds.width() - left - self.layout_border.right()).max(0.);
+        let height = (bounds.height() - top - self.layout_border.bottom()).max(0.);
+        if width == 0. || height == 0. { return; }
+        let resolved = gradient.resolve(width, height).expect("CSS gradient exceeds finite paint geometry");
+        let Some(factory) = self.with_artboard(|a| a.factory()).flatten() else { return; };
+        let opacity = self.base.base.render_opacity();
+        let colors = resolved.colors.iter().map(|color|
+            super::shapes::paint::color::color_modulate_opacity(*color, opacity)).collect::<Vec<_>>();
+        let origin_x = bounds.min_x + left;
+        let origin_y = bounds.min_y + top;
+        let tiled = left != 0. || top != 0. || self.layout_border.right() != 0. || self.layout_border.bottom() != 0.;
+        let shader = factory.with_factory_mut(|factory| {
+            if tiled {
+                factory.make_tiled_premultiplied_linear_gradient(
+                    resolved.start[0] + origin_x, resolved.start[1] + origin_y,
+                    resolved.end[0] + origin_x, resolved.end[1] + origin_y,
+                    [origin_x, origin_y, width, height], &colors, &resolved.positions)
+            } else {
+                factory.make_premultiplied_linear_gradient(
+                    resolved.start[0] + origin_x, resolved.start[1] + origin_y,
+                    resolved.end[0] + origin_x, resolved.end[1] + origin_y,
+                    &colors, &resolved.positions)
+            }
+        });
+        let mut raw = RawPath::default();
+        assert!(super::css_clip_path::elliptical_outset_path(&mut raw, bounds, radii, [0.; 4]));
+        let blend = self.base.base.blend_mode();
+        let paths = self.mutable_render_paths();
+        paths.css_gradient.rewind_as(false, nuxie_render_api::FillRule::NonZero);
+        paths.css_gradient.add_path(&raw, None);
+        let paint = paths.css_gradient_paint.get_or_insert_with(|| factory.with_factory_mut(|f| f.make_render_paint()));
+        let shader = shader.expect("CSS gradients require premultiplied interpolation support");
+        paint.shader(Some(shader.as_ref()));
+        paint.blend_mode(blend.into());
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+        renderer.draw_path(paths.css_gradient.render_path(&factory), paint.as_ref());
+        renderer.restore();
+    }
+
+    fn draw_css_border(&mut self, renderer: &mut Renderer) {
+        let Some(color) = self.css_border_color else { return; };
+        let side_colors = self.css_border_side_colors;
+        if side_colors.map_or(color >> 24 == 0, |colors| colors.iter().all(|c| c >> 24 == 0)) { return; }
+        let Some(factory) = self.with_artboard(|a| a.factory()).flatten() else { return; };
+        let (bounds, radii, world) = self.paint_geometry();
+        let borders = [self.layout_border.left(), self.layout_border.top(),
+            self.layout_border.right(), self.layout_border.bottom()];
+        let mut raw = RawPath::default();
+        assert!(super::css_clip_path::elliptical_border_ring_path(&mut raw, bounds, radii, borders),
+            "CSS border requires finite rounded geometry and nonnegative used widths");
+        if raw.points().is_empty() { return; }
+        let opacity = self.base.base.render_opacity();
+        let color = super::shapes::paint::color::color_modulate_opacity(color, opacity);
+        let blend = self.base.base.blend_mode();
+        let paths = self.mutable_render_paths();
+        paths.css_border.rewind_as(false, nuxie_render_api::FillRule::EvenOdd);
+        paths.css_border.add_path(&raw, Some(&world));
+        let paint = paths.css_border_paint.get_or_insert_with(||
+            factory.with_factory_mut(|factory| factory.make_render_paint()));
+        paint.style(RenderPaintStyle::Fill);
+        paint.color(color);
+        paint.blend_mode(blend.into());
+        if let Some(colors) = side_colors.filter(|colors| colors.iter().any(|c| *c != colors[0])) {
+            for (side, color) in colors.into_iter().enumerate() {
+                if color >> 24 == 0 || colors[..side].contains(&color) { continue; }
+                // Paint equal-color partitions together. Separate antialiased
+                // clips otherwise leave a light seam along their shared edge.
+                paths.css_border_side.rewind_as(false, nuxie_render_api::FillRule::NonZero);
+                for (matching_side, matching_color) in colors.iter().enumerate() {
+                    if *matching_color != color { continue; }
+                    let mut clip = RawPath::default();
+                    assert!(super::css_clip_path::elliptical_border_side_clip_path(&mut clip, bounds, radii, borders, matching_side));
+                    paths.css_border_side.add_path(&clip, Some(&world));
+                }
+                paint.color(super::shapes::paint::color::color_modulate_opacity(color, opacity));
+                renderer.save();
+                renderer.clip_path(paths.css_border_side.render_path(&factory));
+                renderer.draw_path(paths.css_border.render_path(&factory), paint.as_ref());
+                renderer.restore();
+            }
+        } else {
+            if let Some(colors) = side_colors {
+                paint.color(super::shapes::paint::color::color_modulate_opacity(colors[0], opacity));
+            }
+            renderer.draw_path(paths.css_border.render_path(&factory), paint.as_ref());
+        }
+    }
+    /// Border-aware content measurements and descendant clips. Ordinary Rive
+    /// behavior remains unchanged until a checked CSS host opts in.
+    pub fn set_css_border_geometry(&mut self, enabled: bool) {
+        if self.css_border_geometry != enabled {
+            self.css_border_geometry = enabled;
+            self.mark_layout_node_dirty(false);
+            self.clip_changed();
+        }
+    }
+    fn css_axis_clip_interval(&self, horizontal: bool) -> (f32, f32) {
+        let extent = if horizontal { self.layout_width() } else { self.layout_height() };
+        if !self.css_border_geometry { return (0.0, extent); }
+        let (start, end) = if horizontal { (self.layout_border.left(), self.layout_border.right()) }
+            else { (self.layout_border.top(), self.layout_border.bottom()) };
+        (start, (extent - end).max(start))
+    }
+    /// Opt-in CSS paint geometry. Logical layout and hit bounds remain unchanged.
+    pub fn set_css_pixel_bounds(&mut self, enabled: bool) {
+        if self.css_pixel_bounds != enabled {
+            self.css_pixel_bounds = enabled;
+            self.update_render_path();
+        }
+    }
+    /// Experimental occurrence policy; checked compiler/host transport is pending.
+    pub fn set_experimental_css_corner_radii(&mut self, radii: Option<super::css_corner_radii::CssCornerRadii>) {
+        if self.css_corner_radii != radii {
+            self.css_corner_radii = radii;
+            self.update_render_path();
+            self.clip_changed();
+        }
+    }
+    fn paint_geometry(&self) -> (Aabb, [[f32; 2]; 4], Mat2D) {
+        let mut radii = [0.0; 4];
+        let ltr = self.actual_direction() != LayoutDirection::Rtl;
+        self.with_style(|style| {
+            if style.base.link_corner_radius() {
+                radii.fill(style.base.corner_radius_tl());
+            } else {
+                radii = if ltr {
+                    [
+                        style.base.corner_radius_tl(),
+                        style.base.corner_radius_tr(),
+                        style.base.corner_radius_br(),
+                        style.base.corner_radius_bl(),
+                    ]
+                } else {
+                    [
+                        style.base.corner_radius_tr(),
+                        style.base.corner_radius_tl(),
+                        style.base.corner_radius_bl(),
+                        style.base.corner_radius_br(),
+                    ]
+                };
+            }
+        });
+        let mut bounds = Aabb::new(0.0, 0.0, self.layout.width(), self.layout.height());
+        let world = *self.base.base.base.base.world_transform();
+        let values = world.values();
+        if self.css_pixel_bounds && values[0] == 1.0 && values[1] == 0.0
+            && values[2] == 0.0 && values[3] == 1.0
+        {
+            let snap = |edge: f32, origin: f32| (edge + origin + 0.5).floor() - origin;
+            let min_x = snap(bounds.min_x, values[4]);
+            let min_y = snap(bounds.min_y, values[5]);
+            // Blink's SnapSizeToPixel retains a pixel when a nonzero extent
+            // exceeds four raw LayoutUnit steps (each step is 1/64 CSS px).
+            // Keep this paint-only: layout and hit bounds retain their size.
+            let preserve_extent = |min: f32, max: f32, size: f32| {
+                if max == min && (size * 64.0).trunc() > 4.0 {
+                    min + 1.0
+                } else {
+                    max
+                }
+            };
+            bounds = Aabb::new(min_x, min_y,
+                preserve_extent(min_x, snap(bounds.max_x, values[4]), self.layout.width()),
+                preserve_extent(min_y, snap(bounds.max_y, values[5]), self.layout.height()));
+        }
+        let radii = match self.css_corner_radii {
+            Some(authored) => authored.resolve_for_paint(self.layout.width(), self.layout.height(), bounds.width(), bounds.height())
+                .expect("CSS corner values must resolve to finite border-box geometry"),
+            None => radii.map(|radius| [radius, radius]),
+        };
+        (bounds, radii, world)
     }
     pub fn update_render_path(&mut self) {
         {
@@ -1516,34 +2166,19 @@ impl LayoutComponent {
             {
                 return;
             }
-            let mut radii = [0.0; 4];
-            let ltr = self.actual_direction() != LayoutDirection::Rtl;
-            self.with_style(|style| {
-                if style.base.link_corner_radius() {
-                    radii.fill(style.base.corner_radius_tl());
-                } else {
-                    radii = if ltr {
-                        [
-                            style.base.corner_radius_tl(),
-                            style.base.corner_radius_tr(),
-                            style.base.corner_radius_br(),
-                            style.base.corner_radius_bl(),
-                        ]
-                    } else {
-                        [
-                            style.base.corner_radius_tr(),
-                            style.base.corner_radius_tl(),
-                            style.base.corner_radius_bl(),
-                            style.base.corner_radius_br(),
-                        ]
-                    };
-                }
-            });
-            let bounds = Aabb::new(0.0, 0.0, self.layout.width(), self.layout.height());
-            let world = *self.base.base.base.base.world_transform();
+            let (bounds, radii, world) = self.paint_geometry();
+            let css_corners = self.css_corner_radii.is_some()
+                || (self.css_pixel_bounds && radii.iter().any(|r| *r != radii[0]));
             let paths = self.mutable_render_paths();
             paths.background.rewind();
-            Path::add_rounded_rect(&mut paths.background, bounds, radii);
+            if css_corners {
+                // CSS scales every corner by one common overlap factor. The
+                // native rounded rectangle clamps each corner independently.
+                assert!(super::css_clip_path::elliptical_outset_path(&mut paths.background, bounds, radii, [0.; 4]),
+                    "CSS corners require finite rounded geometry");
+            } else {
+                Path::add_rounded_rect(&mut paths.background, bounds, radii.map(|r| r[0]));
+            }
             paths.local.rewind();
             paths.local.add_path(&paths.background, None);
             paths
@@ -1753,6 +2388,7 @@ impl LayoutComponent {
     pub fn set_solved_layout(&mut self, layout: Layout, padding: LayoutPadding) {
         self.layout_data.solved_layout = layout;
         self.solved_padding = padding;
+        self.solved_border = LayoutPadding::default();
         self.layout_data.has_new_layout = true;
     }
     pub fn clear_layout_children(&mut self) {
@@ -1812,6 +2448,7 @@ impl LayoutComponent {
                     layout.layout_data.solved_layout =
                         Layout::new(0.0, 0.0, f32::NAN, f32::NAN);
                     layout.solved_padding = LayoutPadding::default();
+                    layout.solved_border = LayoutPadding::default();
                 } else if let Some(participant) = object
                     .as_any_mut()
                     .downcast_mut::<crate::mechanical_port::source::layout::layout_participant::LayoutParticipant>()
@@ -2091,7 +2728,7 @@ impl LayoutComponent {
                     measure: entry.measure,
                 });
             }
-            LayoutTreeCache { tree, nodes, root }
+            LayoutTreeCache { tree, nodes, root, css_baselines: false }
         }
 
         fn axis(known: Option<f32>, available: AvailableSpace) -> (f32, LayoutMeasureMode) {
@@ -2100,9 +2737,10 @@ impl LayoutComponent {
             }
             match available {
                 AvailableSpace::Definite(value) => (value, LayoutMeasureMode::AtMost),
-                AvailableSpace::MinContent | AvailableSpace::MaxContent => {
-                    (f32::NAN, LayoutMeasureMode::Undefined)
-                }
+                // A zero available extent requests the smallest unbreakable
+                // contribution. Undefined requests the unwrapped maximum.
+                AvailableSpace::MinContent => (0.0, LayoutMeasureMode::AtMost),
+                AvailableSpace::MaxContent => (f32::NAN, LayoutMeasureMode::Undefined),
             }
         }
         fn measure_host(
@@ -2166,6 +2804,28 @@ impl LayoutComponent {
             cache = build_cache(owner.clone());
             read_states(&cache).expect("rebuilt layout topology contains live nodes")
         };
+        // CSS ratio transfer amplifies gap rounding errors in ancestor flex
+        // allocation. Apply gap precision throughout this opted-in solve tree,
+        // including containers without a ratio of their own. Derive it each
+        // solve so original and cloned occurrences use the same policy.
+        let css_ratio_tree = styles.iter().any(|style| style.aspect_ratio_size_limit.is_some());
+        let css_percentage_spacing = styles.iter().any(|style| style.css_percentage_spacing);
+        for style in &mut styles {
+            style.css_percentage_spacing = css_percentage_spacing;
+            style.quantize_gap = css_ratio_tree;
+            style.css_intrinsic_sizing = css_ratio_tree;
+            if css_ratio_tree {
+                // The compiler admits pixel padding. Ancestor padding is
+                // subtracted before descendants receive their available size,
+                // so each edge needs CSS precision at this earlier boundary.
+                style.padding = style.padding.map(|padding| {
+                    let raw = padding.into_raw();
+                    if raw.tag() == taffy::style::CompactLength::LENGTH_TAG {
+                        taffy::style::LengthPercentage::length((raw.value() * 64.0).floor() / 64.0)
+                    } else { padding }
+                });
+            }
+        }
         for parent in 0..cache.nodes.len() {
             if styles[parent].display != Display::Flex {
                 continue;
@@ -2183,6 +2843,13 @@ impl LayoutComponent {
                     styles[*child].min_size.height = Dimension::length(0.0);
                 }
             }
+        }
+        let css_baselines = cache.nodes.iter().any(|entry| entry.owner.with(|object| {
+            object.as_layout_component().is_some_and(|layout| layout.css_align_self == Some(CssAlignSelf::Baseline))
+        }).unwrap_or(false));
+        if cache.css_baselines != css_baselines {
+            for entry in &cache.nodes { cache.tree.mark_dirty(entry.node).expect("valid baseline policy node"); }
+            cache.css_baselines = css_baselines;
         }
         for index in 0..cache.nodes.len() {
             let entry = &mut cache.nodes[index];
@@ -2224,9 +2891,20 @@ impl LayoutComponent {
                 .set_style(root, root_style)
                 .expect("valid calculation root");
         }
+        let position_modes: Vec<_> = cache.nodes.iter().map(|entry| entry.owner.with(|object| {
+            object.as_layout_component().and_then(|layout| layout.css_positioned)
+        }).flatten()).collect();
+        let mut parents = vec![None; cache.nodes.len()];
+        for (parent, entry) in cache.nodes.iter().enumerate() {
+            for child in &entry.children { parents[*child] = Some(parent); }
+        }
+        // Absolute descendants do not contribute to ancestor flow sizing. A
+        // bounded solve per ancestry level propagates updated containing boxes
+        // through nested absolute nodes without changing paint parentage.
+        for pass in 0..=cache.nodes.len() {
         cache
             .tree
-            .compute_layout_with_measure(
+            .compute_layout_with_measure_and_baseline(
             root,
             Size {
                 width: if size.x.is_nan() {
@@ -2277,10 +2955,58 @@ impl LayoutComponent {
                     height: known.height.unwrap_or(measured.y),
                 }
             },
+            if css_baselines { Some(|_, context, _| {
+                match context? {
+                    LayoutMeasureContext::Participant(host) => host.with(|object| object.as_text().and_then(|text| text.measured_css_baseline())).flatten(),
+                    LayoutMeasureContext::Layout(_) => None,
+                }
+            }) } else { None },
         )
         .expect("valid native layout calculation");
 
+            let mut updates = Vec::new();
+            for (index, entry) in cache.nodes.iter().enumerate() {
+                let style = cache.tree.style(entry.node).expect("live CSS position node");
+                if position_modes[index].is_none() || style.position != taffy::style::Position::Absolute { continue; }
+                let Some(parent) = parents[index] else { continue; };
+                let mut ancestor = parent;
+                let mut offset = taffy::geometry::Point { x: 0.0, y: 0.0 };
+                while ancestor != cache.root && position_modes[ancestor] != Some(true) {
+                    let layout = cache.tree.unrounded_layout(cache.nodes[ancestor].node);
+                    offset.x += layout.location.x;
+                    offset.y += layout.location.y;
+                    ancestor = parents[ancestor].expect("non-root CSS ancestor has parent");
+                }
+                let containing = cache.tree.unrounded_layout(cache.nodes[ancestor].node);
+                let context = Some((Size {
+                    width: containing.size.width - containing.border.left - containing.border.right,
+                    height: containing.size.height - containing.border.top - containing.border.bottom,
+                }, taffy::geometry::Point {
+                    x: containing.border.left - offset.x,
+                    y: containing.border.top - offset.y,
+                }));
+                if style.css_absolute_containing_block != context {
+                    let mut next = style.clone();
+                    next.css_absolute_containing_block = context;
+                    updates.push((entry.node, next));
+                }
+            }
+            if updates.is_empty() { break; }
+            assert!(pass < cache.nodes.len(), "CSS containing-block layout did not converge");
+            for (node, style) in updates { cache.tree.set_style(node, style).expect("live CSS containing-block node"); }
+        }
+
         let mut subtree_dirty = dirty.clone();
+        // A remote containing block can move a descendant while its immediate
+        // parent's own box stays unchanged. Keep that parent traversable when
+        // publishing the updated descendant layout.
+        for (index, entry) in cache.nodes.iter().enumerate() {
+            if position_modes[index].is_none() { continue; }
+            let output = cache.tree.layout(entry.node).expect("solved CSS node");
+            let next = Layout::new(output.location.x, output.location.y, output.size.width, output.size.height);
+            subtree_dirty[index] |= entry.owner.with(|object| object.as_layout_component()
+                .is_some_and(|layout| layout.layout_data.solved_layout != next)).unwrap_or(false);
+        }
         for index in 0..cache.nodes.len() {
             subtree_dirty[index] |= cache.nodes[index]
                 .children
@@ -2302,7 +3028,9 @@ impl LayoutComponent {
                 output.padding.right,
                 output.padding.bottom,
             );
-            outputs.push((entry.owner.clone(), next, padding, subtree_dirty[index]));
+            let border = LayoutPadding::new(output.border.left, output.border.top,
+                output.border.right, output.border.bottom);
+            outputs.push((entry.owner.clone(), next, padding, border, subtree_dirty[index]));
         }
         owner.with_mut(|object| {
             object
@@ -2310,11 +3038,12 @@ impl LayoutComponent {
                 .expect("layout calculation owner")
                 .layout_tree_cache = Some(cache);
         });
-        for (owner, next, padding, subtree_dirty) in outputs {
+        for (owner, next, padding, border, subtree_dirty) in outputs {
             owner.with_mut(|object| {
                 let data = if let Some(layout) = object.as_layout_component_mut() {
-                    layout.layout_data.has_new_layout |= layout.solved_padding != padding;
+                    layout.layout_data.has_new_layout |= layout.solved_padding != padding || layout.solved_border != border;
                     layout.solved_padding = padding;
+                    layout.solved_border = border;
                     &mut *layout.layout_data
                 } else {
                     object
@@ -2361,6 +3090,7 @@ impl LayoutComponent {
         }
         let next = self.layout_data.solved_layout;
         self.layout_padding = self.solved_padding;
+        self.layout_border = self.solved_border;
         if self.has_layout_flag(LayoutComponentFlags::JustAddedToHost) {
             self.set_layout_flag(LayoutComponentFlags::JustAddedToHost, false);
             self.layout = next;
@@ -2458,6 +3188,7 @@ impl LayoutComponent {
             .with_mut(|object| {
                 let layout = object.as_layout_component_mut().unwrap();
                 layout.layout_padding = layout.solved_padding;
+                layout.layout_border = layout.solved_border;
                 (
                     layout.layout_data.solved_layout,
                     layout.layout,
@@ -3143,6 +3874,33 @@ impl LayoutComponent {
         self.mark_layout_node_dirty(false);
         CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
     }
+    /// Set a live occurrence override; None restores the imported two-axis
+    /// clipping flag. Requires Renderer::clip_axis_transformed support when drawn.
+    /// Keep a proxy after clearing so later toggles also work on plain boxes.
+    pub fn set_css_overflow_axis(&mut self, axis: Option<CssOverflowAxis>) {
+        if self.css_overflow_axis != axis {
+            self.css_overflow_axis = axis;
+            self.mark_clip_may_be_dynamic();
+            self.clip_changed();
+        }
+    }
+    /// Install only for computed two-axis `clip`. Hidden and single-axis
+    /// overflow ignore CSS clip margins in the pinned Chromium profile.
+    /// Clearing restores the imported background-shaped clipping path.
+    pub fn set_css_overflow_clip_margin(&mut self, margin: Option<CssOverflowClipMargin>) {
+        if self.css_overflow_clip_margin != margin {
+            self.css_overflow_clip_margin = margin;
+            self.clip_changed();
+        }
+    }
+    pub fn css_overflow_clip_margin(&self) -> Option<CssOverflowClipMargin> {
+        self.css_overflow_clip_margin
+    }
+
+    pub fn css_overflow_axis(&self) -> Option<CssOverflowAxis> {
+        self.css_overflow_axis
+    }
+
     pub fn set_clip(&mut self, value: bool) {
         if self.base.set_clip_value(value) {
             self.clip_changed();
@@ -3225,6 +3983,19 @@ impl LayoutComponent {
         }
     }
     pub fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
+        style.taffy.box_sizing = if self.css_content_box {
+            taffy::style::BoxSizing::ContentBox
+        } else {
+            taffy::style::BoxSizing::BorderBox
+        };
+        style.taffy.aspect_ratio_pair = self.css_ratio_pair;
+        style.taffy.css_percentage_spacing = self.css_percentage_spacing;
+        style.taffy.css_relative_position = self.css_relative_position;
+        style.taffy.item_is_replaced = self.css_ratio_pair.is_some()
+            && self.with_style(|style| style.intrinsically_sized()).unwrap_or(false);
+        style.taffy.aspect_ratio_size_limit = self.css_ratio_size_limit.then_some(33_554_432.0);
+        style.taffy.aspect_ratio_box_sizing = self.css_ratio_content_box
+            .then_some(taffy::style::BoxSizing::ContentBox);
         let Some(component_style) = self.style_handle() else {
             return;
         };
@@ -3372,6 +4143,18 @@ impl LayoutComponent {
                 YGAlign::Auto
             });
         }
+        if let Some(factors) = self.css_flex_factors.filter(|_| !context.parent_is_grid) {
+            style.set_flex_grow(YGFloatOptional::new(factors.grow));
+            style.set_flex_shrink(YGFloatOptional::new(factors.shrink));
+            // CSS basis is independent of the Rive fixed/fill sizing choice.
+            style.set_flex_basis(YGValue::new(flex_basis, flex_basis_units));
+        }
+        if let Some(alignment) = self.css_align_self.filter(|value| *value != CssAlignSelf::Auto) {
+            // The compiler represents parent align-items:stretch through the
+            // child's cross-axis Fill sizing. Preserve that resolved default
+            // for CSS auto; YGAlign::Auto alone would lose the stretch.
+            style.set_align_self(alignment.runtime_alignment());
+        }
     }
 }
 
@@ -3410,6 +4193,17 @@ impl AdvancingComponent for LayoutComponent {
     }
 }
 impl LayoutStyleApplier for LayoutComponent {
+    fn apply_placement_style(&self, style: &mut YGStyle, _context: &LayoutSyncContext) {
+        if let Some(alignment) = self.css_justify_content {
+            style.set_justify_content(alignment.runtime_alignment());
+        }
+        // Container style translation couples Rive line and item alignment.
+        // The final sweep applies the explicit CSS line policy independently.
+        if let Some(alignment) = self.css_align_content {
+            style.set_align_content(alignment.runtime_alignment());
+        }
+    }
+
     fn apply_base_style(&self, style: &mut YGStyle, context: &LayoutSyncContext) {
         LayoutComponent::apply_base_style(self, style, context);
     }
@@ -3497,6 +4291,193 @@ use std::{cell::RefCell, rc::Rc};
 #[cfg(test)]
 mod packed_layout_tests {
     use super::*;
+
+    #[test]
+    fn css_border_geometry_is_opt_in_and_survives_clone() {
+        let mut layout = LayoutComponent::default();
+        layout.layout = Layout::new(0., 0., 100., 80.);
+        layout.layout_padding = LayoutPadding::new(12., 5., 18., 10.);
+        layout.layout_border = LayoutPadding::new(8., 9., 10., 11.);
+        assert_eq!((layout.inner_width(), layout.inner_height()), (70., 65.));
+        assert_eq!(layout.css_axis_clip_interval(true), (0., 100.));
+        layout.set_css_border_geometry(true);
+        assert_eq!((layout.inner_width(), layout.inner_height()), (52., 45.));
+        assert_eq!(layout.css_axis_clip_interval(true), (8., 90.));
+        assert_eq!(layout.css_axis_clip_interval(false), (9., 69.));
+        let mut clone = layout.clone_core();
+        assert!(clone.css_border_geometry);
+        clone.set_css_border_geometry(false);
+        assert!(layout.css_border_geometry);
+        layout.layout = Layout::new(0., 0., 10., 10.);
+        assert_eq!((layout.inner_width(), layout.inner_height()), (0., 0.));
+        assert_eq!(layout.css_axis_clip_interval(true), (8., 8.));
+        layout.set_css_border_geometry(false);
+        assert_eq!(layout.css_axis_clip_interval(true), (0., 10.));
+    }
+
+    #[test]
+    fn css_content_clip_snaps_final_fractional_insets() {
+        let mut layout = LayoutComponent::default();
+        layout.layout = Layout::new(0.,0.,200.,140.);
+        layout.layout_border = LayoutPadding::new(4.,4.,4.,4.);
+        layout.layout_padding = LayoutPadding::new(12.5,8.25,12.5,8.25);
+        let margin = CssOverflowClipMargin::new(CssOverflowClipBox::Content,8.).unwrap();
+        let (bounds,_,world) = layout.paint_geometry();
+        assert_eq!(layout.css_clip_paint_outsets(margin,bounds,world),[-8.5,-4.25,-8.5,-4.25]);
+        layout.set_css_pixel_bounds(true);
+        let (bounds,_,world) = layout.paint_geometry();
+        // Chrome control: x=[9,192], y=[4,136] in the local 200x140 box.
+        assert_eq!(layout.css_clip_paint_outsets(margin,bounds,world),[-9.,-4.,-8.,-4.]);
+        let translated = Mat2D::new(1.,0.,0.,1.,20.625,20.25);
+        let snapped_outer = Aabb::new(0.375,-0.25,200.375,139.75);
+        assert_eq!(layout.css_clip_paint_outsets(margin,snapped_outer,translated),[-8.,-5.,-9.,-4.]);
+        let scaled = Mat2D::new(2.,0.,0.,2.,0.,0.);
+        assert_eq!(layout.css_clip_paint_outsets(margin,bounds,scaled),[-8.5,-4.25,-8.5,-4.25]);
+    }
+
+    #[test]
+    fn css_clip_origins_distinguish_live_border_padding_and_content_edges() {
+        let mut layout = LayoutComponent::default();
+        layout.layout_padding = LayoutPadding::new(12., 5., 18., 10.);
+        for (width, border) in [(240., 8.), (768., 24.), (390., 1.), (240., 8.)] {
+            layout.layout = Layout::new(0., 0., width, 100.);
+            layout.layout_border = LayoutPadding::new(border, border + 1., border + 2., border + 3.);
+            for margin in [-8., 0., 24.] {
+                let bounds = |origin| CssOverflowClipMargin::new(origin, margin).unwrap().bounds(&layout).unwrap();
+                assert_eq!(bounds(CssOverflowClipBox::Border),
+                    Aabb::new(-margin, -margin, width + margin, 100. + margin));
+                assert_eq!(bounds(CssOverflowClipBox::Padding),
+                    Aabb::new(border - margin, border + 1. - margin,
+                        width - border - 2. + margin, 97. - border + margin));
+                assert_eq!(bounds(CssOverflowClipBox::Content),
+                    Aabb::new(border + 12. - margin, border + 6. - margin,
+                        width - border - 20. + margin, 87. - border + margin));
+            }
+        }
+    }
+
+    #[test]
+    fn css_clip_margin_bounds_follow_live_size_and_asymmetric_padding() {
+        let content = CssOverflowClipMargin::new(CssOverflowClipBox::Content, 8.).unwrap();
+        let padding = CssOverflowClipMargin::new(CssOverflowClipBox::Padding, 8.).unwrap();
+        let border = CssOverflowClipMargin::new(CssOverflowClipBox::Border, 8.).unwrap();
+        let mut layout = LayoutComponent::default();
+        for (width, height, inset) in [(240., 100., 12.), (390., 140., 20.),
+            (768., 80., 30.), (240., 100., 12.)] {
+            layout.layout = Layout::new(70., 90., width, height);
+            layout.layout_padding = LayoutPadding::new(inset, 5., 18., 10.);
+            assert_eq!(content.bounds(&layout),
+                Some(Aabb::new(inset - 8., -3., width - 10., height - 2.)));
+            assert_eq!(padding.bounds(&layout),
+                Some(Aabb::new(-8., -8., width + 8., height + 8.)));
+            assert_eq!(border.bounds(&layout), padding.bounds(&layout));
+            assert_eq!(layout.layout_width(), width);
+            assert_eq!(layout.padding_left(), inset);
+        }
+    }
+
+    #[test]
+    fn css_clip_margin_rejects_nonfinite_offsets_and_resolved_edges() {
+        for pixels in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            assert!(CssOverflowClipMargin::new(CssOverflowClipBox::Padding, pixels).is_none());
+        }
+        let margin = CssOverflowClipMargin::new(CssOverflowClipBox::Padding, f32::MAX).unwrap();
+        let mut layout = LayoutComponent::default();
+        layout.layout = Layout::new(0., 0., f32::MAX, 10.);
+        assert!(margin.bounds(&layout).is_none());
+        assert!(CssOverflowClipMargin::new(CssOverflowClipBox::Content, 0.).is_some());
+        assert!(CssOverflowClipMargin::new(CssOverflowClipBox::Content, -8.).is_some());
+    }
+
+    #[test]
+    fn css_pixel_bounds_preserve_thin_boxes_without_inflating_zero() {
+        for (size, origin, start, end) in [
+            (0.0, 0.0, 0.0, 0.0),
+            (0.0625, 0.0, 0.0, 0.0),
+            (0.078125, 0.0, 0.0, 1.0),
+            (0.25, 0.0, 0.0, 1.0),
+            (0.25, 0.5, 1.0, 2.0),
+            (0.25, 0.75, 1.0, 2.0),
+            (0.75, 0.0, 0.0, 1.0),
+            (0.75, 0.5, 1.0, 2.0),
+        ] {
+            let mut layout = LayoutComponent::default();
+            layout.set_clip(true);
+            layout.layout = Layout::new(0.0, 0.0, size, size);
+            layout.base.base.base.base.set_world_transform(
+                Mat2D::new(1.0, 0.0, 0.0, 1.0, origin, origin),
+            );
+            layout.set_css_pixel_bounds(true);
+            layout.update_render_path();
+            assert_eq!(layout.world_path().unwrap().raw_path().bounds(),
+                Aabb::new(start, start, end, end), "size={size}, origin={origin}");
+            assert_eq!(layout.layout.width(), size);
+            assert_eq!(layout.layout.height(), size);
+        }
+    }
+
+    #[test]
+    fn css_pixel_bounds_survive_clone_and_can_be_disabled() {
+        fn prepare(layout: &mut LayoutComponent) {
+            layout.set_clip(true);
+            layout.layout = Layout::new(0.0, 0.0, 80.25, 40.5);
+            layout.base.base.base.base.set_world_transform(
+                Mat2D::new(1.0, 0.0, 0.0, 1.0, 3.75, 0.5),
+            );
+            layout.update_render_path();
+        }
+        let mut source = LayoutComponent::default();
+        prepare(&mut source);
+        let raw_bounds = source.world_path().unwrap().raw_path().bounds();
+        assert_eq!(raw_bounds, Aabb::new(3.75, 0.5, 84.0, 41.0));
+        source.set_css_pixel_bounds(true);
+        let css_bounds = source.world_path().unwrap().raw_path().bounds();
+        assert_eq!(css_bounds, Aabb::new(4.0, 1.0, 84.0, 41.0));
+
+        let mut clone = source.clone_core();
+        prepare(&mut clone);
+        assert_eq!(clone.world_path().unwrap().raw_path().bounds(), css_bounds);
+        assert_eq!(clone.layout, source.layout);
+        clone.set_css_pixel_bounds(false);
+        assert_eq!(clone.world_path().unwrap().raw_path().bounds(), raw_bounds);
+        assert_eq!(source.world_path().unwrap().raw_path().bounds(), css_bounds);
+        assert_eq!(clone.layout, source.layout);
+    }
+
+    #[test]
+    fn css_corner_occurrence_resolves_after_resize_and_clone_and_clears() {
+        use super::super::css_corner_radii::{CssCornerRadii, CssRadiusValue::Percent};
+        let mut source = LayoutComponent::default();
+        source.set_clip(true);
+        source.layout = Layout::new(0.,0.,200.,80.);
+        source.set_experimental_css_corner_radii(Some(CssCornerRadii::new([[Percent(25.),Percent(25.)];4]).unwrap()));
+        assert_eq!(source.paint_geometry().1, [[50.,20.];4]);
+        assert_eq!(source.world_path().unwrap().raw_path().points()[0], Vec2D::new(0.,20.));
+        let mut clone = source.clone_core();
+        clone.layout = Layout::new(0.,0.,100.,160.);
+        clone.update_render_path();
+        assert_eq!(clone.paint_geometry().1, [[25.,40.];4]);
+        assert_eq!(clone.world_path().unwrap().raw_path().points()[0], Vec2D::new(0.,40.));
+        clone.set_experimental_css_corner_radii(None);
+        assert_eq!(clone.paint_geometry().1, [[0.;2];4]);
+        assert_eq!(clone.world_path().unwrap().raw_path().points()[0], Vec2D::new(0.,0.));
+        assert_eq!(source.paint_geometry().1, [[50.,20.];4]);
+    }
+
+    #[test]
+    fn css_corner_overflow_resolves_to_live_finite_paths() {
+        use super::super::css_corner_radii::{CssCornerRadii, CssRadiusValue::Percent};
+        let mut source = LayoutComponent::default();
+        source.set_clip(true);
+        source.layout = Layout::new(0.,0.,200.,80.);
+        source.set_experimental_css_corner_radii(Some(CssCornerRadii::new([[Percent(f32::MAX);2];4]).unwrap()));
+        assert_eq!(source.world_path().unwrap().raw_path().points()[0], Vec2D::new(0.,40.));
+        let mut clone = source.clone_core();
+        clone.layout = Layout::new(0.,0.,100.,160.);
+        clone.update_render_path();
+        assert_eq!(clone.world_path().unwrap().raw_path().points()[0], Vec2D::new(0.,80.));
+        assert_eq!(source.world_path().unwrap().raw_path().points()[0], Vec2D::new(0.,40.));
+    }
 
     #[test]
     fn plain_container_paths_and_proxy_are_lazy() {

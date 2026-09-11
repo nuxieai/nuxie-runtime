@@ -1,0 +1,46 @@
+[
+  {
+    "name": "auto-margin-root-auto",
+    "html": "<div id=\"root\"><div id=\"child\"></div></div>",
+    "css": "#root{width:140px;height:120px;margin:auto;background:#eef}#child{width:40px;height:30px;background:#8cf}"
+  },
+  {
+    "name": "auto-margin-root-auto-7px",
+    "html": "<div id=\"root\"><div id=\"child\"></div></div>",
+    "css": "#root{width:140px;height:120px;margin:auto 7px;background:#eef}#child{width:40px;height:30px;background:#8cf}"
+  },
+  {
+    "name": "auto-margin-root-4px-auto-8px",
+    "html": "<div id=\"root\"><div id=\"child\"></div></div>",
+    "css": "#root{width:140px;height:120px;margin:4px auto 8px;background:#eef}#child{width:40px;height:30px;background:#8cf}"
+  },
+  {
+    "name": "auto-margin-root-auto-3px-7px-auto",
+    "html": "<div id=\"root\"><div id=\"child\"></div></div>",
+    "css": "#root{width:140px;height:120px;margin:auto 3px 7px auto;background:#eef}#child{width:40px;height:30px;background:#8cf}"
+  },
+  {
+    "name": "auto-margin-composition-toolbar",
+    "font": true,
+    "html": "<div id=\"root\"><p id=\"brand\">Nuxie</p><p id=\"save\">Save</p><p id=\"publish\">Publish</p></div>",
+    "css": "#root{width:100%;height:90px;flex-direction:row;padding:12px;gap:8px;align-items:center;background:#eef}p{font-size:14px;line-height:20px;padding:8px;border-radius:6px}#brand{background:#cfd}#save{margin-left:auto;background:#cff}#publish{background:#ffc}"
+  },
+  {
+    "name": "auto-margin-composition-cards",
+    "font": true,
+    "html": "<div id=\"root\"><div id=\"basic\"><p id=\"btitle\">Basic</p><p id=\"bbody\">For small teams</p><p id=\"baction\">Choose</p></div><div id=\"pro\"><p id=\"ptitle\">Pro</p><p id=\"pbody\">Room for growing teams</p><p id=\"paction\">Choose</p></div></div>",
+    "css": "#root{width:100%;padding:12px;gap:12px;flex-direction:row;flex-wrap:wrap;background:#eef}#basic,#pro{width:150px;height:140px;padding:8px;gap:6px;border-radius:8px;background:#cfd}#pro{background:#cef}p{font-size:12px;line-height:16px}#btitle,#ptitle{font-size:16px;line-height:20px}#baction,#paction{margin-top:auto;padding:6px;background:#ffc;border-radius:4px}"
+  },
+  {
+    "name": "auto-margin-composition-center",
+    "font": true,
+    "html": "<div id=\"root\"><div id=\"panel\"><p id=\"title\">All set</p><p id=\"body\">Your design is ready</p></div></div>",
+    "css": "#root{width:100%;height:280px;padding:12px;background:#eef}#panel{width:180px;margin:auto;padding:12px;gap:8px;background:#cfd;border-radius:10px}#title{font-size:20px;line-height:28px}#body{font-size:14px;line-height:20px}"
+  },
+  {
+    "name": "auto-margin-composition-reverse",
+    "font": true,
+    "html": "<div id=\"root\"><p id=\"a\">Draft</p><p id=\"b\">Review</p><p id=\"c\">Ready</p></div>",
+    "css": "#root{width:100%;height:220px;padding:12px;gap:12px;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:space-between;background:#eef}p{width:95px;height:65px;padding:10px;font-size:14px;line-height:20px;border-radius:8px;background:#cfd}#b{margin-left:auto;margin-top:auto;background:#ffc}#c{background:#cef}"
+  }
+]

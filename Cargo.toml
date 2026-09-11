@@ -19,6 +19,7 @@ members = [
     "crates/nuxie-scripting",
     "crates/nuxie-script-signature",
     "tools/golden-compare",
+    "tools/html-to-riv",
     "tools/luaur-rt-test-harness",
     "tools/perf-compare",
     "tools/pixel-compare",
@@ -31,6 +32,8 @@ members = [
     "tools/silver-corpus",
 ]
 exclude = [
+    "vendor/taffy-0.12.1-rive-yoga-order",
+    "vendor/icu_casemap-2.3.0-nuxie-offsets",
     "vendor/luaur-ast-0.1.8",
     "vendor/luaur-bytecode-0.1.8",
     "vendor/luaur-common-0.1.8",

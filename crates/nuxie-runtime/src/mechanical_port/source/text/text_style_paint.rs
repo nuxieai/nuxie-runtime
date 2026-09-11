@@ -148,6 +148,39 @@ impl TextStylePaint {
         }
         0xff000000
     }
+    /// Exact eligibility for the optional solid glyph path. A foreground-color
+    /// lookup alone is insufficient: it would silently discard other paints.
+    pub(crate) fn solid_glyph_color(&self) -> Option<ColorInt> {
+        use crate::mechanical_port::source::shapes::paint::{
+            color::color_modulate_opacity, shape_paint::ShapePaintBehavior,
+        };
+        if self.paints.shape_paints().len() != 1
+            || self.opacity_paths.keys().any(|opacity| opacity.0 != 1.0)
+        {
+            return None;
+        }
+        self.paints.shape_paints()[0]
+            .with_downcast::<Fill, _>(|fill| {
+                if !fill.should_draw()
+                    || fill.base.feather().is_some()
+                    || !fill.base.effects_container.effects.is_empty()
+                    || ![
+                        nuxie_render_api::FillRule::NonZero as u8,
+                        nuxie_render_api::FillRule::Clockwise as u8,
+                    ]
+                    .contains(&fill.base.fill_rule())
+                {
+                    return None;
+                }
+                fill.base.paint()?.with_downcast::<SolidColor, _>(|color| {
+                    color_modulate_opacity(
+                        color.base.color_value() as u32,
+                        fill.base.render_opacity(),
+                    )
+                })
+            })
+            .flatten()
+    }
     pub fn shape_world_transform(&self) -> Mat2D {
         self.base
             .parent_handle()

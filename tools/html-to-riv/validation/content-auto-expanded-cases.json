@@ -1,0 +1,290 @@
+[
+  {
+    "name": "content-auto-expanded-row-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-row-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-row-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-column-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-column-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  }
+]

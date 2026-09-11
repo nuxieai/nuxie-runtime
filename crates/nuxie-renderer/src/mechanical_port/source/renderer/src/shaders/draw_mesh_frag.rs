@@ -83,6 +83,7 @@ PLS_MAIN(@drawFragmentMain)
 {
 #ifdef @FEATHER_ATLAS_BLIT
     VARYING_UNPACK(v_paint, float4);
+    VARYING_UNPACK(v_cssGradientTile, float4);
 #if defined(@ENABLE_MODULATED_IMAGE)
     VARYING_UNPACK(v_image, float3);
 #endif
@@ -106,7 +107,7 @@ PLS_MAIN(@drawFragmentMain)
 #endif
 
 #ifdef @FEATHER_ATLAS_BLIT
-    half4 color = find_paint_color(v_paint,
+    half4 color = find_paint_color(v_paint, v_cssGradientTile,
 #ifdef @ENABLE_MODULATED_IMAGE
                                    v_image,
 #endif

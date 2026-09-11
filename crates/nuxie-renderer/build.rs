@@ -491,6 +491,13 @@ fn materialize_runtime_shader_exports(generated_dir: &std::path::Path) -> io::Re
          \t}\n\
          }\n",
     );
+    // Function names are minifier outputs, not stable hand-written literals.
+    rust.push_str("#[cfg(target_vendor = \"apple\")]\npub fn source_function_literal(text: &str) -> Option<&'static objc2_foundation::NSString> {\n    Some(match text {\n");
+    for name in REQUIRED_EXPORTS.iter().filter(|name| name.ends_with("Main")) {
+        let value = values[name];
+        rust.push_str(&format!("        {:?} => objc2_foundation::ns_string!({:?}),\n", value, value));
+    }
+    rust.push_str("        _ => return None,\n    })\n}\n");
     fs::write(generated_dir.join("runtime_shader_exports.rs"), rust)
 }
 

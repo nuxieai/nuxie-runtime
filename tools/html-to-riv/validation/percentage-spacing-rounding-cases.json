@@ -1,0 +1,137 @@
+[
+  {
+    "name": "percentage-spacing-rounding-137-padding-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:2.99%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-padding-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-padding-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3.01%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-margin-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:2.99%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-margin-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:3%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-margin-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:3.01%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-combined-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:2.99%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-combined-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-137-combined-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:137px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3.01%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-padding-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:2.99%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-padding-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-padding-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3.01%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-margin-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:2.99%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-margin-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:3%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-margin-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:3.01%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-combined-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:2.99%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-combined-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-200-combined-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:200px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3.01%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-padding-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:2.99%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-padding-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-padding-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3.01%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-margin-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:2.99%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-margin-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:3%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-margin-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;margin-top:3.01%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-combined-2p99",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:2.99%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-combined-3",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  },
+  {
+    "name": "percentage-spacing-rounding-370-combined-3p01",
+    "html": "<div id=host><div id=card><div id=inner></div></div></div>",
+    "css": "#host{width:370px;height:200px;background:#eef}#card{width:100px;height:90px;padding-top:3.01%;margin-top:2%;background:#fc8}#inner{width:30px;height:20px;background:#2672cc}"
+  }
+]

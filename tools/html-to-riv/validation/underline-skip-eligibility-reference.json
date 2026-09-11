@@ -1,0 +1,2498 @@
+{
+  "chromium": "153.0.8010.12",
+  "icu_revision": "8cc91d9b6ab9991802fd208ee03a69714fd0251c",
+  "unicode": "17.0.0",
+  "excluded_scalar_count": 116917,
+  "source_sha256": {
+    "underline-character-153.cc": "eaad9f105b3b33ffa5b309818d51027f46d83ab6c8a2a5509f2539b761db975f",
+    "underline-character-data-153.h": "3d7724d334e0ab019d536b7cec054df31635c96e4d6c7d854ddaee98883dc8b2",
+    "underline-character-generator-153.cc": "a8dd3fe19e31fa4036b893f99aa02d9a7478447abcebb3646efbb08de19b822e",
+    "underline-ppucd.txt": "bccc5a5ca1baea3de767e8266d59ffa13ff99595bea37ca82415851386f57dbd",
+    "underline-emoji-sequences.txt": "12cc8267dc33cbd11ed32bcf6fc5dc2ad9c7a77bae1bdfba2f41b1b9b3ead8dd",
+    "underline-emoji-zwj-sequences.txt": "5b25441daed2322b068c5e70cda522946a4f0274df864445a1965a92e5fc5cad"
+  },
+  "excluded_intervals": [
+    [
+      47,
+      47
+    ],
+    [
+      92,
+      92
+    ],
+    [
+      95,
+      95
+    ],
+    [
+      711,
+      711
+    ],
+    [
+      714,
+      715
+    ],
+    [
+      729,
+      729
+    ],
+    [
+      4352,
+      4607
+    ],
+    [
+      8224,
+      8225
+    ],
+    [
+      8240,
+      8240
+    ],
+    [
+      8251,
+      8252
+    ],
+    [
+      8258,
+      8258
+    ],
+    [
+      8263,
+      8265
+    ],
+    [
+      8273,
+      8273
+    ],
+    [
+      8413,
+      8414
+    ],
+    [
+      8448,
+      8448
+    ],
+    [
+      8451,
+      8451
+    ],
+    [
+      8453,
+      8453
+    ],
+    [
+      8457,
+      8458
+    ],
+    [
+      8467,
+      8467
+    ],
+    [
+      8470,
+      8470
+    ],
+    [
+      8481,
+      8481
+    ],
+    [
+      8491,
+      8491
+    ],
+    [
+      8507,
+      8507
+    ],
+    [
+      8528,
+      8530
+    ],
+    [
+      8534,
+      8538
+    ],
+    [
+      8544,
+      8555
+    ],
+    [
+      8560,
+      8571
+    ],
+    [
+      8575,
+      8575
+    ],
+    [
+      8585,
+      8585
+    ],
+    [
+      8596,
+      8597
+    ],
+    [
+      8967,
+      8967
+    ],
+    [
+      8978,
+      8978
+    ],
+    [
+      8986,
+      8987
+    ],
+    [
+      9150,
+      9164
+    ],
+    [
+      9166,
+      9166
+    ],
+    [
+      9193,
+      9196
+    ],
+    [
+      9200,
+      9200
+    ],
+    [
+      9203,
+      9203
+    ],
+    [
+      9251,
+      9251
+    ],
+    [
+      9312,
+      9362
+    ],
+    [
+      9372,
+      9471
+    ],
+    [
+      9632,
+      9634
+    ],
+    [
+      9642,
+      9643
+    ],
+    [
+      9649,
+      9651
+    ],
+    [
+      9654,
+      9655
+    ],
+    [
+      9660,
+      9661
+    ],
+    [
+      9664,
+      9665
+    ],
+    [
+      9670,
+      9671
+    ],
+    [
+      9673,
+      9673
+    ],
+    [
+      9675,
+      9676
+    ],
+    [
+      9678,
+      9683
+    ],
+    [
+      9698,
+      9702
+    ],
+    [
+      9711,
+      9711
+    ],
+    [
+      9725,
+      9726
+    ],
+    [
+      9728,
+      9731
+    ],
+    [
+      9733,
+      9734
+    ],
+    [
+      9742,
+      9742
+    ],
+    [
+      9748,
+      9751
+    ],
+    [
+      9757,
+      9757
+    ],
+    [
+      9760,
+      9760
+    ],
+    [
+      9792,
+      9792
+    ],
+    [
+      9794,
+      9794
+    ],
+    [
+      9800,
+      9811
+    ],
+    [
+      9824,
+      9839
+    ],
+    [
+      9842,
+      9853
+    ],
+    [
+      9855,
+      9855
+    ],
+    [
+      9875,
+      9875
+    ],
+    [
+      9877,
+      9878
+    ],
+    [
+      9888,
+      9889
+    ],
+    [
+      9895,
+      9895
+    ],
+    [
+      9898,
+      9899
+    ],
+    [
+      9917,
+      9918
+    ],
+    [
+      9924,
+      9925
+    ],
+    [
+      9934,
+      9934
+    ],
+    [
+      9939,
+      9940
+    ],
+    [
+      9962,
+      9962
+    ],
+    [
+      9970,
+      9971
+    ],
+    [
+      9973,
+      9973
+    ],
+    [
+      9977,
+      9978
+    ],
+    [
+      9981,
+      9981
+    ],
+    [
+      9989,
+      9989
+    ],
+    [
+      9992,
+      9992
+    ],
+    [
+      9994,
+      9997
+    ],
+    [
+      10003,
+      10003
+    ],
+    [
+      10010,
+      10010
+    ],
+    [
+      10024,
+      10024
+    ],
+    [
+      10047,
+      10048
+    ],
+    [
+      10052,
+      10052
+    ],
+    [
+      10060,
+      10060
+    ],
+    [
+      10062,
+      10062
+    ],
+    [
+      10067,
+      10071
+    ],
+    [
+      10083,
+      10084
+    ],
+    [
+      10102,
+      10111
+    ],
+    [
+      10133,
+      10135
+    ],
+    [
+      10145,
+      10145
+    ],
+    [
+      10160,
+      10160
+    ],
+    [
+      10175,
+      10175
+    ],
+    [
+      11034,
+      11036
+    ],
+    [
+      11088,
+      11088
+    ],
+    [
+      11093,
+      11093
+    ],
+    [
+      11904,
+      12255
+    ],
+    [
+      12272,
+      12333
+    ],
+    [
+      12337,
+      12783
+    ],
+    [
+      12800,
+      40959
+    ],
+    [
+      43360,
+      43391
+    ],
+    [
+      44032,
+      55295
+    ],
+    [
+      63584,
+      63586
+    ],
+    [
+      63744,
+      64255
+    ],
+    [
+      65040,
+      65042
+    ],
+    [
+      65049,
+      65049
+    ],
+    [
+      65072,
+      65135
+    ],
+    [
+      65280,
+      65292
+    ],
+    [
+      65294,
+      65306
+    ],
+    [
+      65309,
+      65309
+    ],
+    [
+      65311,
+      65519
+    ],
+    [
+      65664,
+      65791
+    ],
+    [
+      94176,
+      101119
+    ],
+    [
+      110592,
+      110895
+    ],
+    [
+      110960,
+      111359
+    ],
+    [
+      126980,
+      126980
+    ],
+    [
+      127183,
+      127183
+    ],
+    [
+      127232,
+      127232
+    ],
+    [
+      127248,
+      127273
+    ],
+    [
+      127280,
+      127305
+    ],
+    [
+      127312,
+      127337
+    ],
+    [
+      127344,
+      127369
+    ],
+    [
+      127374,
+      127374
+    ],
+    [
+      127377,
+      127386
+    ],
+    [
+      127462,
+      128767
+    ],
+    [
+      128992,
+      129003
+    ],
+    [
+      129008,
+      129008
+    ],
+    [
+      129280,
+      129535
+    ],
+    [
+      129648,
+      129660
+    ],
+    [
+      129664,
+      129674
+    ],
+    [
+      129678,
+      129734
+    ],
+    [
+      129736,
+      129756
+    ],
+    [
+      129759,
+      129770
+    ],
+    [
+      129775,
+      129784
+    ],
+    [
+      131072,
+      196607
+    ]
+  ],
+  "boundary_cases": [
+    {
+      "codepoint": "002E",
+      "eligible": true
+    },
+    {
+      "codepoint": "002F",
+      "eligible": false
+    },
+    {
+      "codepoint": "0030",
+      "eligible": true
+    },
+    {
+      "codepoint": "005B",
+      "eligible": true
+    },
+    {
+      "codepoint": "005C",
+      "eligible": false
+    },
+    {
+      "codepoint": "005D",
+      "eligible": true
+    },
+    {
+      "codepoint": "005E",
+      "eligible": true
+    },
+    {
+      "codepoint": "005F",
+      "eligible": false
+    },
+    {
+      "codepoint": "0060",
+      "eligible": true
+    },
+    {
+      "codepoint": "02C6",
+      "eligible": true
+    },
+    {
+      "codepoint": "02C7",
+      "eligible": false
+    },
+    {
+      "codepoint": "02C8",
+      "eligible": true
+    },
+    {
+      "codepoint": "02C9",
+      "eligible": true
+    },
+    {
+      "codepoint": "02CA",
+      "eligible": false
+    },
+    {
+      "codepoint": "02CB",
+      "eligible": false
+    },
+    {
+      "codepoint": "02CC",
+      "eligible": true
+    },
+    {
+      "codepoint": "02D8",
+      "eligible": true
+    },
+    {
+      "codepoint": "02D9",
+      "eligible": false
+    },
+    {
+      "codepoint": "02DA",
+      "eligible": true
+    },
+    {
+      "codepoint": "10FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "1100",
+      "eligible": false
+    },
+    {
+      "codepoint": "11FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1200",
+      "eligible": true
+    },
+    {
+      "codepoint": "201F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2020",
+      "eligible": false
+    },
+    {
+      "codepoint": "2021",
+      "eligible": false
+    },
+    {
+      "codepoint": "2022",
+      "eligible": true
+    },
+    {
+      "codepoint": "202F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2030",
+      "eligible": false
+    },
+    {
+      "codepoint": "2031",
+      "eligible": true
+    },
+    {
+      "codepoint": "203A",
+      "eligible": true
+    },
+    {
+      "codepoint": "203B",
+      "eligible": false
+    },
+    {
+      "codepoint": "203C",
+      "eligible": false
+    },
+    {
+      "codepoint": "203D",
+      "eligible": true
+    },
+    {
+      "codepoint": "2041",
+      "eligible": true
+    },
+    {
+      "codepoint": "2042",
+      "eligible": false
+    },
+    {
+      "codepoint": "2043",
+      "eligible": true
+    },
+    {
+      "codepoint": "2046",
+      "eligible": true
+    },
+    {
+      "codepoint": "2047",
+      "eligible": false
+    },
+    {
+      "codepoint": "2049",
+      "eligible": false
+    },
+    {
+      "codepoint": "204A",
+      "eligible": true
+    },
+    {
+      "codepoint": "2050",
+      "eligible": true
+    },
+    {
+      "codepoint": "2051",
+      "eligible": false
+    },
+    {
+      "codepoint": "2052",
+      "eligible": true
+    },
+    {
+      "codepoint": "20DC",
+      "eligible": true
+    },
+    {
+      "codepoint": "20DD",
+      "eligible": false
+    },
+    {
+      "codepoint": "20DE",
+      "eligible": false
+    },
+    {
+      "codepoint": "20DF",
+      "eligible": true
+    },
+    {
+      "codepoint": "20FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "2100",
+      "eligible": false
+    },
+    {
+      "codepoint": "2101",
+      "eligible": true
+    },
+    {
+      "codepoint": "2102",
+      "eligible": true
+    },
+    {
+      "codepoint": "2103",
+      "eligible": false
+    },
+    {
+      "codepoint": "2104",
+      "eligible": true
+    },
+    {
+      "codepoint": "2105",
+      "eligible": false
+    },
+    {
+      "codepoint": "2106",
+      "eligible": true
+    },
+    {
+      "codepoint": "2108",
+      "eligible": true
+    },
+    {
+      "codepoint": "2109",
+      "eligible": false
+    },
+    {
+      "codepoint": "210A",
+      "eligible": false
+    },
+    {
+      "codepoint": "210B",
+      "eligible": true
+    },
+    {
+      "codepoint": "2112",
+      "eligible": true
+    },
+    {
+      "codepoint": "2113",
+      "eligible": false
+    },
+    {
+      "codepoint": "2114",
+      "eligible": true
+    },
+    {
+      "codepoint": "2115",
+      "eligible": true
+    },
+    {
+      "codepoint": "2116",
+      "eligible": false
+    },
+    {
+      "codepoint": "2117",
+      "eligible": true
+    },
+    {
+      "codepoint": "2120",
+      "eligible": true
+    },
+    {
+      "codepoint": "2121",
+      "eligible": false
+    },
+    {
+      "codepoint": "2122",
+      "eligible": true
+    },
+    {
+      "codepoint": "212A",
+      "eligible": true
+    },
+    {
+      "codepoint": "212B",
+      "eligible": false
+    },
+    {
+      "codepoint": "212C",
+      "eligible": true
+    },
+    {
+      "codepoint": "213A",
+      "eligible": true
+    },
+    {
+      "codepoint": "213B",
+      "eligible": false
+    },
+    {
+      "codepoint": "213C",
+      "eligible": true
+    },
+    {
+      "codepoint": "214F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2150",
+      "eligible": false
+    },
+    {
+      "codepoint": "2152",
+      "eligible": false
+    },
+    {
+      "codepoint": "2153",
+      "eligible": true
+    },
+    {
+      "codepoint": "2155",
+      "eligible": true
+    },
+    {
+      "codepoint": "2156",
+      "eligible": false
+    },
+    {
+      "codepoint": "215A",
+      "eligible": false
+    },
+    {
+      "codepoint": "215B",
+      "eligible": true
+    },
+    {
+      "codepoint": "215F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2160",
+      "eligible": false
+    },
+    {
+      "codepoint": "216B",
+      "eligible": false
+    },
+    {
+      "codepoint": "216C",
+      "eligible": true
+    },
+    {
+      "codepoint": "216F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2170",
+      "eligible": false
+    },
+    {
+      "codepoint": "217B",
+      "eligible": false
+    },
+    {
+      "codepoint": "217C",
+      "eligible": true
+    },
+    {
+      "codepoint": "217E",
+      "eligible": true
+    },
+    {
+      "codepoint": "217F",
+      "eligible": false
+    },
+    {
+      "codepoint": "2180",
+      "eligible": true
+    },
+    {
+      "codepoint": "2188",
+      "eligible": true
+    },
+    {
+      "codepoint": "2189",
+      "eligible": false
+    },
+    {
+      "codepoint": "218A",
+      "eligible": true
+    },
+    {
+      "codepoint": "2193",
+      "eligible": true
+    },
+    {
+      "codepoint": "2194",
+      "eligible": false
+    },
+    {
+      "codepoint": "2195",
+      "eligible": false
+    },
+    {
+      "codepoint": "2196",
+      "eligible": true
+    },
+    {
+      "codepoint": "2306",
+      "eligible": true
+    },
+    {
+      "codepoint": "2307",
+      "eligible": false
+    },
+    {
+      "codepoint": "2308",
+      "eligible": true
+    },
+    {
+      "codepoint": "2311",
+      "eligible": true
+    },
+    {
+      "codepoint": "2312",
+      "eligible": false
+    },
+    {
+      "codepoint": "2313",
+      "eligible": true
+    },
+    {
+      "codepoint": "2319",
+      "eligible": true
+    },
+    {
+      "codepoint": "231A",
+      "eligible": false
+    },
+    {
+      "codepoint": "231B",
+      "eligible": false
+    },
+    {
+      "codepoint": "231C",
+      "eligible": true
+    },
+    {
+      "codepoint": "23BD",
+      "eligible": true
+    },
+    {
+      "codepoint": "23BE",
+      "eligible": false
+    },
+    {
+      "codepoint": "23CC",
+      "eligible": false
+    },
+    {
+      "codepoint": "23CD",
+      "eligible": true
+    },
+    {
+      "codepoint": "23CE",
+      "eligible": false
+    },
+    {
+      "codepoint": "23CF",
+      "eligible": true
+    },
+    {
+      "codepoint": "23E8",
+      "eligible": true
+    },
+    {
+      "codepoint": "23E9",
+      "eligible": false
+    },
+    {
+      "codepoint": "23EC",
+      "eligible": false
+    },
+    {
+      "codepoint": "23ED",
+      "eligible": true
+    },
+    {
+      "codepoint": "23EF",
+      "eligible": true
+    },
+    {
+      "codepoint": "23F0",
+      "eligible": false
+    },
+    {
+      "codepoint": "23F1",
+      "eligible": true
+    },
+    {
+      "codepoint": "23F2",
+      "eligible": true
+    },
+    {
+      "codepoint": "23F3",
+      "eligible": false
+    },
+    {
+      "codepoint": "23F4",
+      "eligible": true
+    },
+    {
+      "codepoint": "2422",
+      "eligible": true
+    },
+    {
+      "codepoint": "2423",
+      "eligible": false
+    },
+    {
+      "codepoint": "2424",
+      "eligible": true
+    },
+    {
+      "codepoint": "245F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2460",
+      "eligible": false
+    },
+    {
+      "codepoint": "2492",
+      "eligible": false
+    },
+    {
+      "codepoint": "2493",
+      "eligible": true
+    },
+    {
+      "codepoint": "249B",
+      "eligible": true
+    },
+    {
+      "codepoint": "249C",
+      "eligible": false
+    },
+    {
+      "codepoint": "24FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "2500",
+      "eligible": true
+    },
+    {
+      "codepoint": "259F",
+      "eligible": true
+    },
+    {
+      "codepoint": "25A0",
+      "eligible": false
+    },
+    {
+      "codepoint": "25A2",
+      "eligible": false
+    },
+    {
+      "codepoint": "25A3",
+      "eligible": true
+    },
+    {
+      "codepoint": "25A9",
+      "eligible": true
+    },
+    {
+      "codepoint": "25AA",
+      "eligible": false
+    },
+    {
+      "codepoint": "25AB",
+      "eligible": false
+    },
+    {
+      "codepoint": "25AC",
+      "eligible": true
+    },
+    {
+      "codepoint": "25B0",
+      "eligible": true
+    },
+    {
+      "codepoint": "25B1",
+      "eligible": false
+    },
+    {
+      "codepoint": "25B3",
+      "eligible": false
+    },
+    {
+      "codepoint": "25B4",
+      "eligible": true
+    },
+    {
+      "codepoint": "25B5",
+      "eligible": true
+    },
+    {
+      "codepoint": "25B6",
+      "eligible": false
+    },
+    {
+      "codepoint": "25B7",
+      "eligible": false
+    },
+    {
+      "codepoint": "25B8",
+      "eligible": true
+    },
+    {
+      "codepoint": "25BB",
+      "eligible": true
+    },
+    {
+      "codepoint": "25BC",
+      "eligible": false
+    },
+    {
+      "codepoint": "25BD",
+      "eligible": false
+    },
+    {
+      "codepoint": "25BE",
+      "eligible": true
+    },
+    {
+      "codepoint": "25BF",
+      "eligible": true
+    },
+    {
+      "codepoint": "25C0",
+      "eligible": false
+    },
+    {
+      "codepoint": "25C1",
+      "eligible": false
+    },
+    {
+      "codepoint": "25C2",
+      "eligible": true
+    },
+    {
+      "codepoint": "25C5",
+      "eligible": true
+    },
+    {
+      "codepoint": "25C6",
+      "eligible": false
+    },
+    {
+      "codepoint": "25C7",
+      "eligible": false
+    },
+    {
+      "codepoint": "25C8",
+      "eligible": true
+    },
+    {
+      "codepoint": "25C9",
+      "eligible": false
+    },
+    {
+      "codepoint": "25CA",
+      "eligible": true
+    },
+    {
+      "codepoint": "25CB",
+      "eligible": false
+    },
+    {
+      "codepoint": "25CC",
+      "eligible": false
+    },
+    {
+      "codepoint": "25CD",
+      "eligible": true
+    },
+    {
+      "codepoint": "25CE",
+      "eligible": false
+    },
+    {
+      "codepoint": "25D3",
+      "eligible": false
+    },
+    {
+      "codepoint": "25D4",
+      "eligible": true
+    },
+    {
+      "codepoint": "25E1",
+      "eligible": true
+    },
+    {
+      "codepoint": "25E2",
+      "eligible": false
+    },
+    {
+      "codepoint": "25E6",
+      "eligible": false
+    },
+    {
+      "codepoint": "25E7",
+      "eligible": true
+    },
+    {
+      "codepoint": "25EE",
+      "eligible": true
+    },
+    {
+      "codepoint": "25EF",
+      "eligible": false
+    },
+    {
+      "codepoint": "25F0",
+      "eligible": true
+    },
+    {
+      "codepoint": "25FC",
+      "eligible": true
+    },
+    {
+      "codepoint": "25FD",
+      "eligible": false
+    },
+    {
+      "codepoint": "25FE",
+      "eligible": false
+    },
+    {
+      "codepoint": "25FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "2600",
+      "eligible": false
+    },
+    {
+      "codepoint": "2603",
+      "eligible": false
+    },
+    {
+      "codepoint": "2604",
+      "eligible": true
+    },
+    {
+      "codepoint": "2605",
+      "eligible": false
+    },
+    {
+      "codepoint": "2606",
+      "eligible": false
+    },
+    {
+      "codepoint": "2607",
+      "eligible": true
+    },
+    {
+      "codepoint": "260D",
+      "eligible": true
+    },
+    {
+      "codepoint": "260E",
+      "eligible": false
+    },
+    {
+      "codepoint": "260F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2613",
+      "eligible": true
+    },
+    {
+      "codepoint": "2614",
+      "eligible": false
+    },
+    {
+      "codepoint": "2617",
+      "eligible": false
+    },
+    {
+      "codepoint": "2618",
+      "eligible": true
+    },
+    {
+      "codepoint": "261C",
+      "eligible": true
+    },
+    {
+      "codepoint": "261D",
+      "eligible": false
+    },
+    {
+      "codepoint": "261E",
+      "eligible": true
+    },
+    {
+      "codepoint": "261F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2620",
+      "eligible": false
+    },
+    {
+      "codepoint": "2621",
+      "eligible": true
+    },
+    {
+      "codepoint": "263F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2640",
+      "eligible": false
+    },
+    {
+      "codepoint": "2641",
+      "eligible": true
+    },
+    {
+      "codepoint": "2642",
+      "eligible": false
+    },
+    {
+      "codepoint": "2643",
+      "eligible": true
+    },
+    {
+      "codepoint": "2647",
+      "eligible": true
+    },
+    {
+      "codepoint": "2648",
+      "eligible": false
+    },
+    {
+      "codepoint": "2653",
+      "eligible": false
+    },
+    {
+      "codepoint": "2654",
+      "eligible": true
+    },
+    {
+      "codepoint": "265F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2660",
+      "eligible": false
+    },
+    {
+      "codepoint": "266F",
+      "eligible": false
+    },
+    {
+      "codepoint": "2670",
+      "eligible": true
+    },
+    {
+      "codepoint": "2671",
+      "eligible": true
+    },
+    {
+      "codepoint": "2672",
+      "eligible": false
+    },
+    {
+      "codepoint": "267D",
+      "eligible": false
+    },
+    {
+      "codepoint": "267E",
+      "eligible": true
+    },
+    {
+      "codepoint": "267F",
+      "eligible": false
+    },
+    {
+      "codepoint": "2680",
+      "eligible": true
+    },
+    {
+      "codepoint": "2692",
+      "eligible": true
+    },
+    {
+      "codepoint": "2693",
+      "eligible": false
+    },
+    {
+      "codepoint": "2694",
+      "eligible": true
+    },
+    {
+      "codepoint": "2695",
+      "eligible": false
+    },
+    {
+      "codepoint": "2696",
+      "eligible": false
+    },
+    {
+      "codepoint": "2697",
+      "eligible": true
+    },
+    {
+      "codepoint": "269F",
+      "eligible": true
+    },
+    {
+      "codepoint": "26A0",
+      "eligible": false
+    },
+    {
+      "codepoint": "26A1",
+      "eligible": false
+    },
+    {
+      "codepoint": "26A2",
+      "eligible": true
+    },
+    {
+      "codepoint": "26A6",
+      "eligible": true
+    },
+    {
+      "codepoint": "26A7",
+      "eligible": false
+    },
+    {
+      "codepoint": "26A8",
+      "eligible": true
+    },
+    {
+      "codepoint": "26A9",
+      "eligible": true
+    },
+    {
+      "codepoint": "26AA",
+      "eligible": false
+    },
+    {
+      "codepoint": "26AB",
+      "eligible": false
+    },
+    {
+      "codepoint": "26AC",
+      "eligible": true
+    },
+    {
+      "codepoint": "26BC",
+      "eligible": true
+    },
+    {
+      "codepoint": "26BD",
+      "eligible": false
+    },
+    {
+      "codepoint": "26BE",
+      "eligible": false
+    },
+    {
+      "codepoint": "26BF",
+      "eligible": true
+    },
+    {
+      "codepoint": "26C3",
+      "eligible": true
+    },
+    {
+      "codepoint": "26C4",
+      "eligible": false
+    },
+    {
+      "codepoint": "26C5",
+      "eligible": false
+    },
+    {
+      "codepoint": "26C6",
+      "eligible": true
+    },
+    {
+      "codepoint": "26CD",
+      "eligible": true
+    },
+    {
+      "codepoint": "26CE",
+      "eligible": false
+    },
+    {
+      "codepoint": "26CF",
+      "eligible": true
+    },
+    {
+      "codepoint": "26D2",
+      "eligible": true
+    },
+    {
+      "codepoint": "26D3",
+      "eligible": false
+    },
+    {
+      "codepoint": "26D4",
+      "eligible": false
+    },
+    {
+      "codepoint": "26D5",
+      "eligible": true
+    },
+    {
+      "codepoint": "26E9",
+      "eligible": true
+    },
+    {
+      "codepoint": "26EA",
+      "eligible": false
+    },
+    {
+      "codepoint": "26EB",
+      "eligible": true
+    },
+    {
+      "codepoint": "26F1",
+      "eligible": true
+    },
+    {
+      "codepoint": "26F2",
+      "eligible": false
+    },
+    {
+      "codepoint": "26F3",
+      "eligible": false
+    },
+    {
+      "codepoint": "26F4",
+      "eligible": true
+    },
+    {
+      "codepoint": "26F5",
+      "eligible": false
+    },
+    {
+      "codepoint": "26F6",
+      "eligible": true
+    },
+    {
+      "codepoint": "26F8",
+      "eligible": true
+    },
+    {
+      "codepoint": "26F9",
+      "eligible": false
+    },
+    {
+      "codepoint": "26FA",
+      "eligible": false
+    },
+    {
+      "codepoint": "26FB",
+      "eligible": true
+    },
+    {
+      "codepoint": "26FC",
+      "eligible": true
+    },
+    {
+      "codepoint": "26FD",
+      "eligible": false
+    },
+    {
+      "codepoint": "26FE",
+      "eligible": true
+    },
+    {
+      "codepoint": "2704",
+      "eligible": true
+    },
+    {
+      "codepoint": "2705",
+      "eligible": false
+    },
+    {
+      "codepoint": "2706",
+      "eligible": true
+    },
+    {
+      "codepoint": "2707",
+      "eligible": true
+    },
+    {
+      "codepoint": "2708",
+      "eligible": false
+    },
+    {
+      "codepoint": "2709",
+      "eligible": true
+    },
+    {
+      "codepoint": "270A",
+      "eligible": false
+    },
+    {
+      "codepoint": "270D",
+      "eligible": false
+    },
+    {
+      "codepoint": "270E",
+      "eligible": true
+    },
+    {
+      "codepoint": "2712",
+      "eligible": true
+    },
+    {
+      "codepoint": "2713",
+      "eligible": false
+    },
+    {
+      "codepoint": "2714",
+      "eligible": true
+    },
+    {
+      "codepoint": "2719",
+      "eligible": true
+    },
+    {
+      "codepoint": "271A",
+      "eligible": false
+    },
+    {
+      "codepoint": "271B",
+      "eligible": true
+    },
+    {
+      "codepoint": "2727",
+      "eligible": true
+    },
+    {
+      "codepoint": "2728",
+      "eligible": false
+    },
+    {
+      "codepoint": "2729",
+      "eligible": true
+    },
+    {
+      "codepoint": "273E",
+      "eligible": true
+    },
+    {
+      "codepoint": "273F",
+      "eligible": false
+    },
+    {
+      "codepoint": "2740",
+      "eligible": false
+    },
+    {
+      "codepoint": "2741",
+      "eligible": true
+    },
+    {
+      "codepoint": "2743",
+      "eligible": true
+    },
+    {
+      "codepoint": "2744",
+      "eligible": false
+    },
+    {
+      "codepoint": "2745",
+      "eligible": true
+    },
+    {
+      "codepoint": "274B",
+      "eligible": true
+    },
+    {
+      "codepoint": "274C",
+      "eligible": false
+    },
+    {
+      "codepoint": "274D",
+      "eligible": true
+    },
+    {
+      "codepoint": "274E",
+      "eligible": false
+    },
+    {
+      "codepoint": "274F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2752",
+      "eligible": true
+    },
+    {
+      "codepoint": "2753",
+      "eligible": false
+    },
+    {
+      "codepoint": "2757",
+      "eligible": false
+    },
+    {
+      "codepoint": "2758",
+      "eligible": true
+    },
+    {
+      "codepoint": "2762",
+      "eligible": true
+    },
+    {
+      "codepoint": "2763",
+      "eligible": false
+    },
+    {
+      "codepoint": "2764",
+      "eligible": false
+    },
+    {
+      "codepoint": "2765",
+      "eligible": true
+    },
+    {
+      "codepoint": "2775",
+      "eligible": true
+    },
+    {
+      "codepoint": "2776",
+      "eligible": false
+    },
+    {
+      "codepoint": "277F",
+      "eligible": false
+    },
+    {
+      "codepoint": "2780",
+      "eligible": true
+    },
+    {
+      "codepoint": "2794",
+      "eligible": true
+    },
+    {
+      "codepoint": "2795",
+      "eligible": false
+    },
+    {
+      "codepoint": "2797",
+      "eligible": false
+    },
+    {
+      "codepoint": "2798",
+      "eligible": true
+    },
+    {
+      "codepoint": "27A0",
+      "eligible": true
+    },
+    {
+      "codepoint": "27A1",
+      "eligible": false
+    },
+    {
+      "codepoint": "27A2",
+      "eligible": true
+    },
+    {
+      "codepoint": "27AF",
+      "eligible": true
+    },
+    {
+      "codepoint": "27B0",
+      "eligible": false
+    },
+    {
+      "codepoint": "27B1",
+      "eligible": true
+    },
+    {
+      "codepoint": "27BE",
+      "eligible": true
+    },
+    {
+      "codepoint": "27BF",
+      "eligible": false
+    },
+    {
+      "codepoint": "27C0",
+      "eligible": true
+    },
+    {
+      "codepoint": "2B19",
+      "eligible": true
+    },
+    {
+      "codepoint": "2B1A",
+      "eligible": false
+    },
+    {
+      "codepoint": "2B1C",
+      "eligible": false
+    },
+    {
+      "codepoint": "2B1D",
+      "eligible": true
+    },
+    {
+      "codepoint": "2B4F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2B50",
+      "eligible": false
+    },
+    {
+      "codepoint": "2B51",
+      "eligible": true
+    },
+    {
+      "codepoint": "2B54",
+      "eligible": true
+    },
+    {
+      "codepoint": "2B55",
+      "eligible": false
+    },
+    {
+      "codepoint": "2B56",
+      "eligible": true
+    },
+    {
+      "codepoint": "2E7F",
+      "eligible": true
+    },
+    {
+      "codepoint": "2E80",
+      "eligible": false
+    },
+    {
+      "codepoint": "2FDF",
+      "eligible": false
+    },
+    {
+      "codepoint": "2FE0",
+      "eligible": true
+    },
+    {
+      "codepoint": "2FEF",
+      "eligible": true
+    },
+    {
+      "codepoint": "2FF0",
+      "eligible": false
+    },
+    {
+      "codepoint": "302D",
+      "eligible": false
+    },
+    {
+      "codepoint": "302E",
+      "eligible": true
+    },
+    {
+      "codepoint": "3030",
+      "eligible": true
+    },
+    {
+      "codepoint": "3031",
+      "eligible": false
+    },
+    {
+      "codepoint": "31EF",
+      "eligible": false
+    },
+    {
+      "codepoint": "31F0",
+      "eligible": true
+    },
+    {
+      "codepoint": "31FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "3200",
+      "eligible": false
+    },
+    {
+      "codepoint": "9FFF",
+      "eligible": false
+    },
+    {
+      "codepoint": "A000",
+      "eligible": true
+    },
+    {
+      "codepoint": "A95F",
+      "eligible": true
+    },
+    {
+      "codepoint": "A960",
+      "eligible": false
+    },
+    {
+      "codepoint": "A97F",
+      "eligible": false
+    },
+    {
+      "codepoint": "A980",
+      "eligible": true
+    },
+    {
+      "codepoint": "ABFF",
+      "eligible": true
+    },
+    {
+      "codepoint": "AC00",
+      "eligible": false
+    },
+    {
+      "codepoint": "D7FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "F85F",
+      "eligible": true
+    },
+    {
+      "codepoint": "F860",
+      "eligible": false
+    },
+    {
+      "codepoint": "F862",
+      "eligible": false
+    },
+    {
+      "codepoint": "F863",
+      "eligible": true
+    },
+    {
+      "codepoint": "F8FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "F900",
+      "eligible": false
+    },
+    {
+      "codepoint": "FAFF",
+      "eligible": false
+    },
+    {
+      "codepoint": "FB00",
+      "eligible": true
+    },
+    {
+      "codepoint": "FE0F",
+      "eligible": true
+    },
+    {
+      "codepoint": "FE10",
+      "eligible": false
+    },
+    {
+      "codepoint": "FE12",
+      "eligible": false
+    },
+    {
+      "codepoint": "FE13",
+      "eligible": true
+    },
+    {
+      "codepoint": "FE18",
+      "eligible": true
+    },
+    {
+      "codepoint": "FE19",
+      "eligible": false
+    },
+    {
+      "codepoint": "FE1A",
+      "eligible": true
+    },
+    {
+      "codepoint": "FE2F",
+      "eligible": true
+    },
+    {
+      "codepoint": "FE30",
+      "eligible": false
+    },
+    {
+      "codepoint": "FE6F",
+      "eligible": false
+    },
+    {
+      "codepoint": "FE70",
+      "eligible": true
+    },
+    {
+      "codepoint": "FEFF",
+      "eligible": true
+    },
+    {
+      "codepoint": "FF00",
+      "eligible": false
+    },
+    {
+      "codepoint": "FF0C",
+      "eligible": false
+    },
+    {
+      "codepoint": "FF0D",
+      "eligible": true
+    },
+    {
+      "codepoint": "FF0E",
+      "eligible": false
+    },
+    {
+      "codepoint": "FF1A",
+      "eligible": false
+    },
+    {
+      "codepoint": "FF1B",
+      "eligible": true
+    },
+    {
+      "codepoint": "FF1C",
+      "eligible": true
+    },
+    {
+      "codepoint": "FF1D",
+      "eligible": false
+    },
+    {
+      "codepoint": "FF1E",
+      "eligible": true
+    },
+    {
+      "codepoint": "FF1F",
+      "eligible": false
+    },
+    {
+      "codepoint": "FFEF",
+      "eligible": false
+    },
+    {
+      "codepoint": "FFF0",
+      "eligible": true
+    },
+    {
+      "codepoint": "1007F",
+      "eligible": true
+    },
+    {
+      "codepoint": "10080",
+      "eligible": false
+    },
+    {
+      "codepoint": "100FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "10100",
+      "eligible": true
+    },
+    {
+      "codepoint": "16FDF",
+      "eligible": true
+    },
+    {
+      "codepoint": "16FE0",
+      "eligible": false
+    },
+    {
+      "codepoint": "18AFF",
+      "eligible": false
+    },
+    {
+      "codepoint": "18B00",
+      "eligible": true
+    },
+    {
+      "codepoint": "1AFFF",
+      "eligible": true
+    },
+    {
+      "codepoint": "1B000",
+      "eligible": false
+    },
+    {
+      "codepoint": "1B12F",
+      "eligible": false
+    },
+    {
+      "codepoint": "1B130",
+      "eligible": true
+    },
+    {
+      "codepoint": "1B16F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1B170",
+      "eligible": false
+    },
+    {
+      "codepoint": "1B2FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1B300",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F003",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F004",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F005",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F0CE",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F0CF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F0D0",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F0FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F100",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F101",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F10F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F110",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F129",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F12A",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F12F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F130",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F149",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F14A",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F14F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F150",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F169",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F16A",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F16F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F170",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F189",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F18A",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F18D",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F18E",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F18F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F190",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F191",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F19A",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F19B",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F1E5",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F1E6",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F6FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F700",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F7DF",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F7E0",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F7EB",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F7EC",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F7EF",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F7F0",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F7F1",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F8FF",
+      "eligible": true
+    },
+    {
+      "codepoint": "1F900",
+      "eligible": false
+    },
+    {
+      "codepoint": "1F9FF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FA00",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FA6F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FA70",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FA7C",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FA7D",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FA7F",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FA80",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FA8A",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FA8B",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FA8D",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FA8E",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FAC6",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FAC7",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FAC8",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FADC",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FADD",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FADE",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FADF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FAEA",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FAEB",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FAEE",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FAEF",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FAF8",
+      "eligible": false
+    },
+    {
+      "codepoint": "1FAF9",
+      "eligible": true
+    },
+    {
+      "codepoint": "1FFFF",
+      "eligible": true
+    },
+    {
+      "codepoint": "20000",
+      "eligible": false
+    },
+    {
+      "codepoint": "2FFFF",
+      "eligible": false
+    },
+    {
+      "codepoint": "30000",
+      "eligible": true
+    }
+  ]
+}

@@ -42,6 +42,7 @@ PLS_MAIN(@drawFragmentMain)
 #endif
 {
     VARYING_UNPACK(v_paint, float4);
+    VARYING_UNPACK(v_cssGradientTile, float4);
 #ifdef @ENABLE_MODULATED_IMAGE
     VARYING_UNPACK(v_image, float3);
 #endif
@@ -76,7 +77,7 @@ PLS_MAIN(@drawFragmentMain)
 #endif
     {
         // Calculate the paint color before entering the interlock.
-        paintColor = find_paint_color(v_paint,
+        paintColor = find_paint_color(v_paint, v_cssGradientTile,
 #ifdef @ENABLE_MODULATED_IMAGE
                                       v_image,
 #endif

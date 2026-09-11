@@ -1,0 +1,5381 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "stacking-row-auto-descendant-escapes",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-zero-descendant-contained",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-negative-descendant-auto",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:auto}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-negative-descendant-zero",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:0}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-positive-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:2}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-equal-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:1}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-equal-sibling-css-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:1;order:2}#side{z-index:1;order:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 176,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 221,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 108,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 176,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 221,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 108,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 176,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 221,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 108,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-negative-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-static-flex-item-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-ancestor-clip-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-absolute-sibling-levels",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-auto-descendant-negative-sibling",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 73,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 206,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-auto-descendant-escapes",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-zero-descendant-contained",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-negative-descendant-auto",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:auto}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-negative-descendant-zero",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:0}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-positive-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:2}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-equal-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:1}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-equal-sibling-css-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:1;order:2}#side{z-index:1;order:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": -26,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 19,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 95,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 72,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 124,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 169,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 245,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 222,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 502,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 547,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 623,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 600,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-negative-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-static-flex-item-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-ancestor-clip-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-absolute-sibling-levels",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 160,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 310,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 688,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-row-reverse-auto-descendant-negative-sibling",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 130,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 175,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -3,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -26,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 280,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 325,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 147,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 124,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 658,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 703,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 525,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 502,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-auto-descendant-escapes",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-zero-descendant-contained",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-negative-descendant-auto",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:auto}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-negative-descendant-zero",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:0}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-positive-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:2}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-equal-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:1}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-equal-sibling-css-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:1;order:2}#side{z-index:1;order:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 151,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 171,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 93,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 151,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 171,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 93,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 151,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 171,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 93,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-negative-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-static-flex-item-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-ancestor-clip-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-absolute-sibling-levels",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-auto-descendant-negative-sibling",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 118,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 171,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-auto-descendant-escapes",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-zero-descendant-contained",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-negative-descendant-auto",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:auto}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-negative-descendant-zero",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:0}#inner{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-positive-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:2}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-equal-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:1}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-equal-sibling-css-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:1;order:2}#side{z-index:1;order:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 39,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 59,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 195,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 117,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 39,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 59,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 195,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 117,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 39,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 59,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 195,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 117,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-negative-sibling-order",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-static-flex-item-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 45,
+              "y": 20,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-ancestor-clip-context",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-absolute-sibling-levels",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 190,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 190,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 25,
+              "y": 20,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 70,
+              "y": 40,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 70,
+              "y": 40,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 190,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-column-reverse-auto-descendant-negative-sibling",
+      "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 170,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 65,
+              "y": 190,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": -25,
+              "y": 117,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 39,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

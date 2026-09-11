@@ -1,0 +1,2777 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "group-opacity-boundary-00",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:0}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-01",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 0)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-02",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:.5}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.5
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-03",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, .5)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.5
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-04",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:1}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-05",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 1)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-06",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:-1e100}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-07",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, -1e100)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-08",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:1e100}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-09",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 1e100)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-10",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:1e100%}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-11",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 1e100%)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-12",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:99.99999%}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999998807907104
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-13",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 99.99999%)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999998807907104
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-14",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:99.999994%}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-15",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 99.999994%)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-16",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:99.999997%}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-17",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 99.999997%)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-18",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:99.999999%}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-19",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 99.999999%)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-20",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:.99999994}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-21",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, .99999994)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-22",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:.99999997}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-23",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, .99999997)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 0.9999999403953552
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-24",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:.99999999}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-25",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, .99999999)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-26",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:100.000001%}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "group-opacity-boundary-27",
+      "html": "<div id=frame><div id=group><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#frame{position:relative;width:100%;height:320px;background:white}#group{width:60%;height:140px;background:blue;opacity:var(--alpha, 100.000001%)}#child{position:absolute;left:30px;top:30px;width:110px;height:100px;background:red;z-index:2}#sibling{position:absolute;left:60px;top:60px;width:100px;height:100px;background:lime;z-index:1}",
+      "expectedOpacity": {
+        "group": 1
+      },
+      "font": false,
+      "image": false,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 144,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 234,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 320
+            },
+            "group": {
+              "x": 0,
+              "y": 0,
+              "width": 460.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 30,
+              "y": 30,
+              "width": 110,
+              "height": 100
+            },
+            "sibling": {
+              "x": 60,
+              "y": 60,
+              "width": 100,
+              "height": 100
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

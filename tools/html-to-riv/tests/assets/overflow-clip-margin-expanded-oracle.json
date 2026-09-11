@@ -1,0 +1,1885 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "clip-margin-expanded-border-default",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:border-box}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-border-expanded",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:24px border-box}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-small-radius",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:4px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:24px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-mid-radius",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:10px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:40px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-capsule",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:50px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:80px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-small-content",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:4px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:content-box 48px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-mid-content",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:10px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:content-box 48px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-em-final-font",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:10px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:2em}#host{font-size:10px;font-size:20px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-rem",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:4px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:1.5rem}#host{font-size:20px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-origin-only",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:content-box}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-zero",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:0}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-initial",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:24px;overflow-clip-margin:initial}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-unset",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:24px;overflow-clip-margin:unset}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-inherit",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:inherit}#outer{overflow-clip-margin:content-box 24px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-noninherited",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:0}#outer{overflow-clip-margin:content-box 24px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-variable",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:4px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:var(--m)}#host{--m:border-box 24px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-fallback",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:10px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:var(--absent, content-box 24px)}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-invalid-variable",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:24px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:var(--m)}#host{--m:-8px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-comment-order",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:10px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:24px /**/ CONTENT-BOX}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "clip-margin-expanded-important",
+      "html": "<div id=outer><div id=host><div id=child></div></div><div id=sibling></div></div>",
+      "css": "#outer{width:90%;height:260px;padding:30px;background:#ddd6ee}#host{width:75%;height:100px;padding:12px 18px;position:relative;background:#e9a344;border-radius:4px;overflow:clip;}#child{width:280px;height:160px;position:relative;left:-40px;top:-35px;background:#318ea8}#sibling{width:35px;height:25px;background:#86ae83}#host{overflow-clip-margin:24px!important;overflow-clip-margin:0}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 216,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 117,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 351,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 218.25,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "outer": {
+              "x": 0,
+              "y": 0,
+              "width": 691.1875,
+              "height": 260
+            },
+            "host": {
+              "x": 30,
+              "y": 30,
+              "width": 473.390625,
+              "height": 100
+            },
+            "child": {
+              "x": 8,
+              "y": 7,
+              "width": 280,
+              "height": 160
+            },
+            "sibling": {
+              "x": 30,
+              "y": 130,
+              "width": 35,
+              "height": 25
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

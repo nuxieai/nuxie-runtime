@@ -387,6 +387,74 @@ impl Gradient {
         }
     }
 
+    /// Checked CSS construction. The interpolation mode is fixed before the
+    /// fresh intrusive allocation is shared or used as a cache key.
+    pub fn make_premultiplied_linear(
+        sx: f32, sy: f32, ex: f32, ey: f32,
+        colors: &[ColorInt], stops: &[f32],
+    ) -> Option<rcp<Gradient>> {
+        if colors.len() != stops.len() || colors.len() < 2
+            || colors.len() > super::gradient_hpp::CssGradientStopTable::MAX_STOPS
+            || ![sx, sy, ex, ey].iter().all(|v| v.is_finite())
+            || !stops.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+            || stops.windows(2).any(|v| v[0] > v[1])
+        {
+            return None;
+        }
+        // SAFETY: paired live slices have the validated count. MakeLinear
+        // returns a fresh, unshared allocation; no cached key can observe this
+        // one-time initialization of its interpolation mode.
+        let gradient = unsafe {
+            Self::MakeLinear(sx, sy, ex, ey, colors.as_ptr(), stops.as_ptr(), colors.len())
+        };
+        if gradient.get().is_null() { return None; }
+        // Preserve the ordinary source calculation when it is usable. Very
+        // short or long finite lines can under/overflow its squared f32 length;
+        // recover their representable coefficients with f64 intermediates.
+        let value = unsafe { &mut *gradient.get() };
+        if !value.m_coeffs.iter().all(|v| v.is_finite())
+            || (value.m_coeffs[0] == 0.0 && value.m_coeffs[1] == 0.0) {
+            let first = stops[0];
+            let last = stops[stops.len() - 1];
+            let (start, end) = if (first != 0.0 || last != 1.0)
+                && last - first > GRADIENT_EPSILON {
+                ([precise_mix(sx, ex, first), precise_mix(sy, ey, first)],
+                 [precise_mix(sx, ex, last), precise_mix(sy, ey, last)])
+            } else { ([sx, sy], [ex, ey]) };
+            let dx = end[0] as f64 - start[0] as f64;
+            let dy = end[1] as f64 - start[1] as f64;
+            let length_squared = dx * dx + dy * dy;
+            if !length_squared.is_finite() || length_squared == 0.0 { return None; }
+            let vx = dx / length_squared;
+            let vy = dy / length_squared;
+            let coefficients = [vx as f32, vy as f32,
+                (-(vx * start[0] as f64 + vy * start[1] as f64)) as f32];
+            if !coefficients.iter().all(|v| v.is_finite()) { return None; }
+            value.m_coeffs = coefficients;
+        }
+        value.premultiplied_interpolation = true;
+        Some(gradient)
+    }
+
+    /// A CSS image tile repeats in local x/y before projection onto the line.
+    pub fn make_tiled_premultiplied_linear(
+        sx: f32, sy: f32, ex: f32, ey: f32, tile: [f32; 4],
+        colors: &[ColorInt], stops: &[f32],
+    ) -> Option<rcp<Gradient>> {
+        if !nuxie_render_api::css_gradient_tile_is_representable(tile) {
+            return None;
+        }
+        let gradient = Self::make_premultiplied_linear(sx, sy, ex, ey, colors, stops)?;
+        let [cx, cy, cz] = unsafe { (*gradient.get()).m_coeffs };
+        // These are the exact projection lanes used by set_css_gradient_tile.
+        // Reject unrepresentable paint before it can reach the draw assertion.
+        if ![cx * tile[2], cy * tile[3], cx * tile[0] + cy * tile[1] + cz]
+            .iter().all(|v| v.is_finite()) { return None; }
+        // Fresh owner: set immutable tile metadata before publishing or caching.
+        unsafe { (*gradient.get()).css_tile = Some(tile); }
+        Some(gradient)
+    }
+
     /// Source `Gradient::MakeRadial` with the original pointer/count surface.
     pub unsafe fn MakeRadial(
         cx: f32,
@@ -511,10 +579,123 @@ impl Gradient {
                 paint_type, new_colors, new_stops, count, coeffs[0], coeffs[1], coeffs[2],
             )
         };
+        // The new owner is unshared until it enters the modulation cache.
+        unsafe { (*gradient.get()).premultiplied_interpolation = self.premultiplied_interpolation;
+            (*gradient.get()).css_tile = self.css_tile; }
         *cached_gradient = gradient;
         unsafe {
             *self.m_lastModulatedOpacity.get() = opacity;
         }
         cached_gradient.clone()
+    }
+}
+
+#[cfg(test)]
+mod css_interpolation_tests {
+    use super::*;
+    use crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::GradientContentKey;
+    use std::collections::HashMap;
+
+    #[test]
+    fn checked_css_coefficients_recover_finite_lines_and_reject_unrepresentable_paint() {
+        let colors = [0xffff0000, 0xff0000ff];
+        let stops = [0., 1.];
+        for end in [1e-30, 1e30] {
+            let gradient = Gradient::make_tiled_premultiplied_linear(
+                0., 0., end, 0., [0., 0., 10., 10.], &colors, &stops).unwrap();
+            let coefficients = unsafe { (*gradient.get()).m_coeffs };
+            assert!(coefficients.iter().all(|v| v.is_finite()));
+            assert!((coefficients[0] as f64 * end as f64 - 1.0).abs() < 1e-6);
+        }
+        assert!(Gradient::make_tiled_premultiplied_linear(
+            0., 0., 0., 0., [0., 0., 10., 10.], &colors, &stops).is_none());
+        assert!(Gradient::make_tiled_premultiplied_linear(
+            0., 0., 0.001, 0., [0., 0., 3e38, 10.], &colors, &stops).is_none());
+    }
+
+    #[test]
+    fn tiled_gradient_metadata_survives_shared_ownership_and_modulation() {
+        let colors = [0xffff0000, 0xff0000ff];
+        let stops = [0., 1.];
+        let tiles = [[0., 0., 40., 30.], [-11., 3., 27., 19.]];
+        let gradients = tiles.map(|tile| Gradient::make_tiled_premultiplied_linear(
+            0., 0., 40., 30., tile, &colors, &stops).unwrap());
+        for opacity in [1., 0.5, 0., 0.5] {
+            let mut cache = HashMap::new();
+            for (original, tile) in gradients.iter().zip(tiles) {
+                let shared = original.clone();
+                assert_eq!(unsafe { &*shared.get() }.tile(), Some(tile));
+                let modulated = unsafe { &*shared.get() }.getModulated(opacity);
+                assert_eq!(unsafe { &*modulated.get() }.tile(), Some(tile));
+                assert!(unsafe { &*modulated.get() }.interpolates_premultiplied());
+                assert_eq!(unsafe { &*original.get() }.tile(), Some(tile));
+                assert_eq!(unsafe { &*original.get() }.colors_slice(), colors);
+                cache.insert(unsafe { GradientContentKey::new(modulated) }, tile);
+            }
+            // The atlas stores only stops. Drawing retains each gradient's tile;
+            // different tile transforms should not duplicate identical stop rows.
+            assert_eq!(cache.len(), 1);
+        }
+    }
+
+    #[test]
+    fn tiled_gradient_constructor_checks_all_tile_coordinates_and_stop_inputs() {
+        let colors = [0xffff0000, 0xff0000ff];
+        for component in 0..4 {
+            for invalid in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+                let mut tile = [0., 0., 40., 30.]; tile[component] = invalid;
+                assert!(Gradient::make_tiled_premultiplied_linear(
+                    0., 0., 40., 30., tile, &colors, &[0., 1.]).is_none());
+            }
+        }
+        for component in [2, 3] {
+            for invalid in [0., -1., 1e-40] {
+                let mut tile = [0., 0., 40., 30.]; tile[component] = invalid;
+                assert!(Gradient::make_tiled_premultiplied_linear(
+                    0., 0., 40., 30., tile, &colors, &[0., 1.]).is_none());
+            }
+        }
+        assert!(Gradient::make_tiled_premultiplied_linear(
+            0., 0., 40., 30., [f32::MAX, 0., 0.5, 30.], &colors, &[0., 1.]).is_none());
+        // Small values are supported when their inverse remains representable.
+        assert!(Gradient::make_tiled_premultiplied_linear(
+            0., 0., 40., 30., [0., 0., 1e-30, 30.], &colors, &[0., 1.]).is_some());
+        assert!(Gradient::make_tiled_premultiplied_linear(
+            0., 0., 40., 30., [-10., -20., 40., 30.], &colors, &[0., 1.]).is_some());
+        assert!(Gradient::make_tiled_premultiplied_linear(
+            0., 0., 40., 30., [0., 0., 40., 30.], &colors, &[1., 0.]).is_none());
+    }
+
+    #[test]
+    fn interpolation_mode_survives_modulation_and_separates_cache_entries() {
+        let colors = [0xffff0000, 0x000000ff];
+        let stops = [0.0, 1.0];
+        let straight = unsafe {
+            Gradient::MakeLinear(0.0, 0.0, 100.0, 0.0, colors.as_ptr(), stops.as_ptr(), 2)
+        };
+        let css = Gradient::make_premultiplied_linear(0.0, 0.0, 100.0, 0.0, &colors, &stops).unwrap();
+        assert!(!unsafe { &*straight.get() }.interpolates_premultiplied());
+        assert!(unsafe { &*css.get() }.interpolates_premultiplied());
+        for opacity in [1.0, 0.5, 0.0, 0.5] {
+            let a = unsafe { &*straight.get() }.getModulated(opacity);
+            let b = unsafe { &*css.get() }.getModulated(opacity);
+            assert!(!unsafe { &*a.get() }.interpolates_premultiplied());
+            assert!(unsafe { &*b.get() }.interpolates_premultiplied());
+            assert_eq!(unsafe { &*a.get() }.colors_slice(), unsafe { &*b.get() }.colors_slice());
+            let mut cache = HashMap::new();
+            cache.insert(unsafe { GradientContentKey::new(a) }, "straight");
+            cache.insert(unsafe { GradientContentKey::new(b.clone()) }, "css");
+            assert_eq!(cache.len(), 2);
+            assert_eq!(cache.get(&unsafe { GradientContentKey::new(b) }), Some(&"css"));
+        }
+    }
+
+    #[test]
+    fn checked_css_gradient_rejects_invalid_inputs() {
+        let colors = [0xffff0000, 0x000000ff];
+        for stops in [vec![], vec![0.0], vec![0.5, 0.2], vec![-0.1, 1.0], vec![0.0, f32::NAN]] {
+            assert!(Gradient::make_premultiplied_linear(0.0, 0.0, 100.0, 0.0, &colors, &stops).is_none());
+        }
+        assert!(Gradient::make_premultiplied_linear(f32::INFINITY, 0.0, 100.0, 0.0, &colors, &[0.0, 1.0]).is_none());
     }
 }

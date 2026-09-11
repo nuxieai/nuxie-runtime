@@ -222,6 +222,20 @@ impl RiveRenderFactory {
         self.makeLinearGradientShader(sx, sy, ex, ey, colors, stops)
     }
 
+    pub fn makePremultipliedLinearGradientHandle(
+        &mut self, sx: f32, sy: f32, ex: f32, ey: f32,
+        colors: &[ColorInt], stops: &[f32],
+    ) -> Option<GradientShader> {
+        GradientShader::new(Gradient::make_premultiplied_linear(sx, sy, ex, ey, colors, stops)?)
+    }
+
+    pub fn makeTiledPremultipliedLinearGradientHandle(
+        &mut self, sx: f32, sy: f32, ex: f32, ey: f32, tile: [f32; 4],
+        colors: &[ColorInt], stops: &[f32],
+    ) -> Option<GradientShader> {
+        GradientShader::new(Gradient::make_tiled_premultiplied_linear(sx, sy, ex, ey, tile, colors, stops)?)
+    }
+
     pub fn makeRadialGradientHandle(
         &mut self,
         cx: f32,

@@ -30,7 +30,16 @@ const INVERSE_SCALE: f32 = 1.0 / STANDARD_SCALE as f32;
 const KERN_TAG: u32 = u32::from_be_bytes(*b"kern");
 
 fn suppress_legacy_kern(font: &OutlineFont<'_>) -> bool {
-    font.kern().is_ok() && font.gpos().is_err() && font.kerx().is_err()
+    // A present but empty/unrelated GPOS table does not provide kerning.
+    // HarfRust can still fall back to the legacy kern table in that case.
+    let has_gpos_kern = font.gpos().is_ok_and(|gpos| {
+        gpos.feature_list().is_ok_and(|features| {
+            features.feature_records().iter().any(|feature| {
+                feature.feature_tag() == skrifa::Tag::new(b"kern")
+            })
+        })
+    });
+    font.kern().is_ok() && !has_gpos_kern && font.kerx().is_err()
 }
 
 fn shaping_features(
@@ -52,11 +61,35 @@ fn shaping_features(
     features
 }
 
+/// Experimental host-selected spacing policy. Existing decoded Rive fonts use
+/// per-glyph spacing. Cluster spacing is currently qualified only by LTR probes.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LetterSpacingMode {
+    #[default]
+    RiveGlyph,
+    ClusterExperimental,
+    /// Cluster spacing plus suppression of optional ligatures at nonzero spacing.
+    CssLetterSpacingExperimental,
+}
+
+/// Host-selected shaping precision; does not change outline extraction.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ShapingPrecision {
+    #[default]
+    Rive,
+    /// Experimental CSS advances with 16 fractional bits per CSS pixel.
+    CssExperimental,
+}
+
 /// The HBFont owner retains Rive's run/fallback/color semantics. Only its
 /// backend is adapted: harfrust shapes, skrifa reads outlines and color tables,
 /// and unicode-bidi supplies paragraph levels. No C font or bidi pointer lives
 /// in this owner, and no legacy packed text implementation is consulted.
 pub struct HbFont {
+    shaping_precision: ShapingPrecision,
+    letter_spacing_mode: LetterSpacingMode,
+    experimental_space_breaks: bool,
+    experimental_css_tabs: bool,
     base: FontBase,
     bytes: Arc<[u8]>,
     face_index: u32,
@@ -73,6 +106,87 @@ pub struct HbFont {
 }
 
 impl HbFont {
+    /// Opt in without changing ordinary decoded fonts. Retained by all font clones.
+    pub fn with_shaping_precision(&self, precision: ShapingPrecision) -> FontRef {
+        let mut font = Self::with_stored_options(
+            self.bytes.clone(),
+            self.face_index,
+            self.axis_values.clone(),
+            self.feature_values.clone(),
+        );
+        font.shaping_precision = precision;
+        font.letter_spacing_mode = self.letter_spacing_mode;
+        font.experimental_space_breaks = self.experimental_space_breaks;
+        font.experimental_css_tabs = self.experimental_css_tabs;
+        Rc::new(font)
+    }
+
+    /// Experimental CSS default tab stops (eight space advances). This is
+    /// shaping policy, not an authored Rive property. Source indices stay intact.
+    pub fn with_experimental_css_tabs(&self, enabled: bool) -> FontRef {
+        let mut font = Self::with_stored_options(
+            self.bytes.clone(),
+            self.face_index,
+            self.axis_values.clone(),
+            self.feature_values.clone(),
+        );
+        font.shaping_precision = self.shaping_precision;
+        font.letter_spacing_mode = self.letter_spacing_mode;
+        font.experimental_space_breaks = self.experimental_space_breaks;
+        font.experimental_css_tabs = enabled;
+        Rc::new(font)
+    }
+
+    fn css_tab_advance(&self, position: f32, size: f32, spacing: f32) -> f32 {
+        let font = self.outline_font();
+        let location = self.location(&font);
+        let metrics = font.glyph_metrics(Size::new(size), LocationRef::from(&location));
+        let advance = |ch| {
+            font.charmap()
+                .map(ch)
+                .and_then(|g| metrics.advance_width(g))
+                .unwrap_or(0.0)
+        };
+        let interval = 8.0 * (advance(' ') + spacing).max(0.0);
+        if interval == 0.0 {
+            return 0.0;
+        }
+        let mut delta = ((position / interval).floor() + 1.0) * interval - position;
+        // The pinned Chromium reference uses half a space, rather than the
+        // newer CSS Text draft's half-ch rule. Keep that boundary explicit.
+        if delta < advance(' ') * 0.5 {
+            delta += interval;
+        }
+        delta
+    }
+
+    /// Experimental break opportunities for fixed-width Unicode spaces.
+    pub fn with_experimental_space_breaks(&self, enabled: bool) -> FontRef {
+        let mut font = Self::with_stored_options(
+            self.bytes.clone(),
+            self.face_index,
+            self.axis_values.clone(),
+            self.feature_values.clone(),
+        );
+        font.shaping_precision = self.shaping_precision;
+        font.letter_spacing_mode = self.letter_spacing_mode;
+        font.experimental_space_breaks = enabled;
+        font.experimental_css_tabs = self.experimental_css_tabs;
+        Rc::new(font)
+    }
+    pub fn with_letter_spacing_mode(&self, mode: LetterSpacingMode) -> FontRef {
+        let mut font = Self::with_stored_options(
+            self.bytes.clone(),
+            self.face_index,
+            self.axis_values.clone(),
+            self.feature_values.clone(),
+        );
+        font.shaping_precision = self.shaping_precision;
+        font.letter_spacing_mode = mode;
+        font.experimental_space_breaks = self.experimental_space_breaks;
+        font.experimental_css_tabs = self.experimental_css_tabs;
+        Rc::new(font)
+    }
     pub fn source_bytes(&self) -> Arc<[u8]> {
         self.bytes.clone()
     }
@@ -157,10 +271,14 @@ impl HbFont {
         };
         // Pinned Rive HarfBuzz is compiled with HB_NO_LEGACY. HarfRust has no
         // equivalent build switch, so suppress only its legacy `kern` fallback.
-        // A GPOS or kerx font retains its normal positioning path.
+        // A font with GPOS kerning or kerx retains its normal positioning path.
         let features = shaping_features(&feature_values, suppress_legacy_kern(&outline));
         Self {
             base: FontBase::new(line_metrics),
+            shaping_precision: ShapingPrecision::Rive,
+            letter_spacing_mode: LetterSpacingMode::RiveGlyph,
+            experimental_space_breaks: false,
+            experimental_css_tabs: false,
             bytes,
             face_index,
             shaper_data,
@@ -217,6 +335,17 @@ impl HbFont {
 }
 
 impl Font for HbFont {
+    fn experimental_css_tab_advance(&self, position: f32, size: f32, spacing: f32) -> Option<f32> {
+        self.experimental_css_tabs
+            .then(|| self.css_tab_advance(position, size, spacing))
+    }
+
+    fn preserves_line_break_space(&self, character: u32) -> bool {
+        self.experimental_space_breaks
+            && matches!(character,
+            0x1680 | 0x2000..=0x2006 | 0x2008..=0x200a | 0x205f | 0x3000)
+    }
+
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -301,12 +430,13 @@ impl Font for HbFont {
         for feature in features {
             values.insert(feature.tag, feature.value);
         }
-        Rc::new(Self::with_stored_options(
-            Arc::clone(&self.bytes),
-            self.face_index,
-            axes,
-            values,
-        ))
+        let mut font =
+            Self::with_stored_options(Arc::clone(&self.bytes), self.face_index, axes, values);
+        font.shaping_precision = self.shaping_precision;
+        font.letter_spacing_mode = self.letter_spacing_mode;
+        font.experimental_space_breaks = self.experimental_space_breaks;
+        font.experimental_css_tabs = self.experimental_css_tabs;
+        Rc::new(font)
     }
     fn get_path(&self, glyph: GlyphId) -> RawPath {
         let font = self.outline_font();
@@ -485,6 +615,11 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
         .build();
     let mut buffer = UnicodeBuffer::new();
     for (index, &point) in text[..text_run.unichar_count as usize].iter().enumerate() {
+        let point = if font.experimental_css_tabs && point == 9 {
+            32
+        } else {
+            point
+        };
         buffer.add(
             char::from_u32(point).unwrap_or(char::REPLACEMENT_CHARACTER),
             index as u32,
@@ -500,12 +635,41 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
             .unwrap_or(harfrust::script::UNKNOWN),
     );
     buffer.guess_segment_properties();
-    let shaped = shaper.shape(
-        buffer,
-        ShapeOptions::new()
-            .scale(Some(STANDARD_SCALE))
-            .features(&font.features),
-    );
+    let mut features = std::borrow::Cow::Borrowed(font.features.as_slice());
+    if font.letter_spacing_mode == LetterSpacingMode::CssLetterSpacingExperimental
+        && text_run.letter_spacing != 0.0
+    {
+        let features = features.to_mut();
+        for tag in [*b"liga", *b"clig", *b"dlig", *b"hlig"] {
+            let tag = Tag::from_u32(u32::from_be_bytes(tag));
+            features.retain(|feature| feature.tag != tag);
+            features.push(ShapingFeature::new(tag, 0, ..));
+        }
+    }
+    let shaping_scale = if font.shaping_precision == ShapingPrecision::Rive {
+        STANDARD_SCALE
+    } else {
+        let units_per_em = font
+            .outline_font()
+            .head()
+            .map_or(16, |head| head.units_per_em());
+        css_shaping_scale(font.shaping_precision, text_run.size, units_per_em)
+    };
+    let mut css_metrics = CssFontMetrics {
+        size: text_run.size,
+        scale: shaping_scale,
+        units: font
+            .outline_font()
+            .head()
+            .map_or(16, |head| head.units_per_em()),
+    };
+    let mut options = ShapeOptions::new()
+        .scale(Some(shaping_scale))
+        .features(features.as_ref());
+    if font.shaping_precision == ShapingPrecision::CssExperimental {
+        options = options.font_funcs(Some(&mut css_metrics));
+    }
+    let shaped = shaper.shape(buffer, options);
     let infos = shaped.glyph_infos();
     let positions = shaped.glyph_positions();
     let count = infos.len();
@@ -516,7 +680,7 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
     run.letter_spacing = text_run.letter_spacing;
     run.style_id = text_run.style_id;
     run.level = text_run.level;
-    let scale = text_run.size / STANDARD_SCALE as f32;
+    let scale = text_run.size / shaping_scale as f32;
     for index in 0..count {
         let source = if text_run.level & 1 != 0 {
             count - 1 - index
@@ -525,7 +689,19 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
         };
         run.glyphs[index] = infos[source].glyph_id as GlyphId;
         run.text_indices[index] = text_offset + infos[source].cluster;
-        let advance = positions[source].x_advance as f32 * scale + text_run.letter_spacing;
+        let next_source = if text_run.level & 1 != 0 {
+            source.checked_sub(1)
+        } else {
+            (source + 1 < count).then_some(source + 1)
+        };
+        let ends_cluster =
+            next_source.is_none_or(|next| infos[next].cluster != infos[source].cluster);
+        let spacing = if font.letter_spacing_mode == LetterSpacingMode::RiveGlyph || ends_cluster {
+            text_run.letter_spacing
+        } else {
+            0.0
+        };
+        let advance = positions[source].x_advance as f32 * scale + spacing;
         run.advances[index] = advance;
         run.xpos[index] = advance;
         run.offsets[index] = Vec2D::new(
@@ -535,6 +711,89 @@ fn shape_run(text: &[Unichar], text_run: &TextRun, text_offset: u32) -> GlyphRun
     }
     run.xpos[count] = 0.0;
     run
+}
+
+struct CssFontMetrics {
+    size: f32,
+    scale: i32,
+    units: u16,
+}
+
+impl CssFontMetrics {
+    fn factor(&self) -> f32 {
+        self.scale as f32 / f32::from(self.units.max(1))
+    }
+
+    // Preserve harfrust's built-in policy for metrics other than advance width.
+    fn rounded(&self, value: i32) -> i32 {
+        let mult = (i64::from(self.scale) << 16) / i64::from(self.units.max(1));
+        ((i64::from(value) * mult + 32768) >> 16) as i32
+    }
+}
+
+impl harfrust::font::FontFuncs for CssFontMetrics {
+    fn advance_width(
+        &mut self,
+        builtin: &harfrust::font::BuiltinFontFuncs,
+        glyph: harfrust::GlyphId,
+    ) -> i32 {
+        // Blink converts Skia's fractional advance to fixed-point by truncation.
+        // GPOS continues to use the shaper's ordinary positioning arithmetic.
+        if !self.size.is_finite() || self.size <= 0.0 {
+            return self.rounded(builtin.advance_width(glyph));
+        }
+        let pixel_width = (f64::from(builtin.advance_width(glyph)) * f64::from(self.size)
+            / f64::from(self.units.max(1))) as f32;
+        // Avoid an overflowing reciprocal for subnormal positive font sizes.
+        (f64::from(pixel_width) * f64::from(self.scale) / f64::from(self.size)) as i32
+    }
+
+    fn advance_height(
+        &mut self,
+        builtin: &harfrust::font::BuiltinFontFuncs,
+        glyph: harfrust::GlyphId,
+    ) -> i32 {
+        self.rounded(builtin.advance_height(glyph))
+    }
+
+    fn vertical_origin(
+        &mut self,
+        builtin: &harfrust::font::BuiltinFontFuncs,
+        glyph: harfrust::GlyphId,
+    ) -> (i32, i32) {
+        let (x, y) = builtin.vertical_origin(glyph);
+        (self.rounded(x), self.rounded(y))
+    }
+
+    fn extents(
+        &mut self,
+        builtin: &harfrust::font::BuiltinFontFuncs,
+        glyph: harfrust::GlyphId,
+    ) -> Option<harfrust::GlyphExtents> {
+        let mut e = builtin.extents(glyph)?;
+        let factor = self.factor();
+        let x1 = e.x_bearing as f32 * factor;
+        let y1 = e.y_bearing as f32 * factor;
+        let x2 = (e.x_bearing + e.width) as f32 * factor;
+        let y2 = (e.y_bearing + e.height) as f32 * factor;
+        e.x_bearing = x1.floor() as i32;
+        e.y_bearing = y1.floor() as i32;
+        e.width = x2.ceil() as i32 - e.x_bearing;
+        e.height = y2.ceil() as i32 - e.y_bearing;
+        Some(e)
+    }
+}
+
+// hmtx advances are u16 font units: bound their scaled values, not just the
+// scale itself. Leave signed headroom for positioning adjustments. A scale
+// near i32::MAX wraps even an ordinary two-em advance into a negative value.
+fn css_shaping_scale(precision: ShapingPrecision, size: f32, units_per_em: u16) -> i32 {
+    if precision == ShapingPrecision::Rive || !size.is_finite() || size <= 0.0 {
+        return STANDARD_SCALE;
+    }
+    (f64::from(size) * 65536.0)
+        .round()
+        .clamp(1.0, f64::from(units_per_em.max(1)) * 16384.0) as i32
 }
 
 fn glyph_path(font: &OutlineFont<'_>, location: LocationRef<'_>, glyph: GlyphId) -> RawPath {
@@ -778,11 +1037,27 @@ impl HbFont {
 
             let mut position = 0.0;
             for glyph_run in &mut glyph_runs {
-                for x_position in &mut glyph_run.xpos {
-                    let advance = *x_position;
-                    *x_position = position;
+                for index in 0..glyph_run.glyphs.len() {
+                    let mut advance = glyph_run.xpos[index];
+                    if text[glyph_run.text_indices[index] as usize] == 9 {
+                        if let Some(font) = glyph_run
+                            .font
+                            .as_ref()
+                            .and_then(|font| font.as_any().downcast_ref::<HbFont>())
+                            .filter(|font| font.experimental_css_tabs)
+                        {
+                            advance = font.css_tab_advance(
+                                position,
+                                glyph_run.size,
+                                glyph_run.letter_spacing,
+                            );
+                            glyph_run.advances[index] = advance;
+                        }
+                    }
+                    glyph_run.xpos[index] = position;
                     position += advance;
                 }
+                *glyph_run.xpos.last_mut().unwrap() = position;
             }
             paragraphs.push(Paragraph {
                 runs: glyph_runs,
@@ -1068,6 +1343,31 @@ impl skrifa::color::ColorPainter for PaintState<'_> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn css_precision_scale_is_bounded_and_legacy_is_fixed() {
+        for size in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert_eq!(
+                css_shaping_scale(ShapingPrecision::CssExperimental, size, 1000),
+                STANDARD_SCALE
+            );
+        }
+        for size in [f32::MIN_POSITIVE, 0.5, 24.0, 100_000.0, f32::MAX] {
+            assert_eq!(
+                css_shaping_scale(ShapingPrecision::Rive, size, 1000),
+                STANDARD_SCALE
+            );
+            assert!(css_shaping_scale(ShapingPrecision::CssExperimental, size, 1000) > 0);
+        }
+        assert_eq!(
+            css_shaping_scale(ShapingPrecision::CssExperimental, 24.0, 1000),
+            24 * 65536
+        );
+        assert_eq!(
+            css_shaping_scale(ShapingPrecision::CssExperimental, f32::MAX, 1000),
+            1000 * 16384
+        );
+    }
+
     fn decode_hex(input: &str) -> Vec<u8> {
         let input: String = input
             .chars()
@@ -1129,6 +1429,19 @@ mod tests {
                 .iter()
                 .any(|feature| { feature.tag == Tag::from_u32(KERN_TAG) && feature.value == 0 })
         );
+    }
+
+    #[test]
+    fn empty_gpos_does_not_enable_legacy_kern_fallback() {
+        let bytes = include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"),
+            "/tests/assets/fonts/OpenSans-Regular.ttf"));
+        let font = HbFont::decode(bytes).expect("Open Sans fixture decodes");
+        for (pair, last) in [("re", "e"), ("rd", "d")] {
+            let run = shape(&font, pair);
+            let expected = shape(&font, "r").advances[0] + shape(&font, last).advances[0];
+            assert_eq!(run.advances.iter().sum::<f32>(), expected,
+                "legacy pair kerning must stay disabled even with an empty GPOS table");
+        }
     }
 
     #[test]

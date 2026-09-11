@@ -1,0 +1,182 @@
+[
+  {
+    "name": "thin-paint-width-0-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;width:0px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;height:0px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;width:0px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;height:0px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;width:0px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;height:0px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.015625-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.015625px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.015625-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.015625px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.015625-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.015625px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.015625-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.015625px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.015625-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.015625px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.015625-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.015625px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.0625-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.0625px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.0625-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.0625px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.0625-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.0625px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.0625-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.0625px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.0625-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.0625px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.0625-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.0625px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.078125-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.078125px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.078125-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.078125px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.078125-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.078125px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.078125-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.078125px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.078125-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.078125px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.078125-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.078125px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.25-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.25px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.25-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.25px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.25-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.25px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.25-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.25px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.25-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.25px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.25-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.25px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.75-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.75px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.75-origin-0",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.75px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.75-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.75px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.75-origin-0.5",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.5px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.75px;width:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-width-0.75-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;width:0.75px;height:10px;background:#369}"
+  },
+  {
+    "name": "thin-paint-height-0.75-origin-0.75",
+    "html": "<div id=\"root\"><div id=\"thin\"></div></div>",
+    "css": "#root{width:100%;height:40px;padding:0.75px;background:#eef;align-items:flex-start}#thin{flex:none;height:0.75px;width:10px;background:#369}"
+  }
+]

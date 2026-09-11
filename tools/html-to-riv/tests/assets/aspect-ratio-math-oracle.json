@@ -1,0 +1,1543 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-math-00",
+      "ratioValue": "calc(3 / 2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(3 / 2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-01",
+      "ratioValue": "calc(1 + 2) / 2",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(1 + 2) / 2;padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-02",
+      "ratioValue": "3 / calc(1 + 1)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:3 / calc(1 + 1);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-03",
+      "ratioValue": "min(3, 2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:min(3, 2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-04",
+      "ratioValue": "max(1, 2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:max(1, 2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-05",
+      "ratioValue": "clamp(1, 3, 2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:clamp(1, 3, 2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-06",
+      "ratioValue": "auto calc(3 / 2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:auto calc(3 / 2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 82
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 82
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 82
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-07",
+      "ratioValue": "calc(3 / 2) auto",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(3 / 2) auto;padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 82
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 82
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 82
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-08",
+      "ratioValue": "calc(-1)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(-1);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-09",
+      "ratioValue": "calc(1 - 3) / 2",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(1 - 3) / 2;padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-10",
+      "ratioValue": "3 / calc(-2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:3 / calc(-2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-11",
+      "ratioValue": "calc(0 / 0)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(0 / 0);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-14",
+      "ratioValue": "calc((2 + 4) / 3)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc((2 + 4) / 3);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 60
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-15",
+      "ratioValue": "min(calc(2 * 2), 3) / max(1, 2)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:min(calc(2 * 2), 3) / max(1, 2);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 80
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "unqualifiedCases": [
+    {
+      "name": "aspect-ratio-math-12",
+      "ratioValue": "calc(1 / 0)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(1 / 0);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 18
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 18
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 18
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-math-13",
+      "ratioValue": "calc(1e-20 * 1e-20)",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:120px;height:auto;aspect-ratio:calc(1e-20 * 1e-20);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 10,
+              "y": 10,
+              "width": 120,
+              "height": 36
+            },
+            "mark": {
+              "x": 23,
+              "y": 15,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 138,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

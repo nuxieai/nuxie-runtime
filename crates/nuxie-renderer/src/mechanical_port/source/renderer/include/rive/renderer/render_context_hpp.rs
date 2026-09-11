@@ -1850,7 +1850,8 @@ impl PartialEq for GradientContentKey {
         }
         let lhs = unsafe { &*lhs };
         let rhs = unsafe { &*rhs };
-        lhs.colors_slice() == rhs.colors_slice()
+        lhs.interpolates_premultiplied() == rhs.interpolates_premultiplied()
+            && lhs.colors_slice() == rhs.colors_slice()
             && lhs.stops_slice().len() == rhs.stops_slice().len()
             && lhs
                 .stops_slice()
@@ -1875,6 +1876,7 @@ impl Hash for GradientContentKey {
             stop.to_bits().hash(state);
         }
         gradient.colors_slice().hash(state);
+        gradient.interpolates_premultiplied().hash(state);
     }
 }
 
@@ -2523,6 +2525,7 @@ pub struct LogicalFlush {
     pub(crate) m_pending_simple_grad_draws: Vec<TwoTexelRamp>,
     pub(crate) m_complex_gradients: HashMap<GradientContentKey, u16>,
     pub(crate) m_pending_complex_grad_draws: Vec<*const Gradient>,
+    pub(crate) m_complex_gradient_rows: usize,
     pub(crate) m_pending_grad_span_count: usize,
     pub(crate) m_clips: Vec<ClipInfo>,
     pub(crate) m_draws: Vec<DrawUniquePtr>,

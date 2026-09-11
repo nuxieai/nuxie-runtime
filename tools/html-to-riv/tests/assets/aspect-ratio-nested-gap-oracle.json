@@ -1,0 +1,2389 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-nested-gap-row-d1-ordinary",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:2;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 191.203125,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 166.40625,
+              "height": 83.203125
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 171.203125,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 200,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 341.203125,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 316.40625,
+              "height": 158.203125
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 321.203125,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 350,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 719.203125,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 694.40625,
+              "height": 347.203125
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 699.203125,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 728,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d1-ordinary-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:2;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 179.609375,
+              "height": 268.40625
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 154.8125,
+              "height": 77.40625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 165.40625,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 194.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 329.609375,
+              "height": 268.40625
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 304.8125,
+              "height": 152.40625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 315.40625,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 344.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 707.609375,
+              "height": 268.40625
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 682.8125,
+              "height": 341.40625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 693.40625,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 722.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d1-extreme",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:1 / 96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 191.203125,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 166.40625,
+              "height": 15975
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 171.203125,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 200,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 341.203125,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 316.40625,
+              "height": 30375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 321.203125,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 350,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 719.203125,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 694.40625,
+              "height": 66663
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 699.203125,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 728,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d1-extreme-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:1 / 96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 179.609375,
+              "height": 268.40625
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 154.8125,
+              "height": 14862
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 165.40625,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 194.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 329.609375,
+              "height": 268.40625
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 304.8125,
+              "height": 29262
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 315.40625,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 344.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 707.609375,
+              "height": 268.40625
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 682.8125,
+              "height": 65550
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 693.40625,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 722.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d2-ordinary",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:2;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 191.203125,
+              "height": 280
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 146.40625,
+              "height": 60.796875
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 121.609375,
+              "height": 60.796875
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 126.40625,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 151.203125,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 200,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 341.203125,
+              "height": 280
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 296.40625,
+              "height": 135.796875
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 271.609375,
+              "height": 135.796875
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 276.40625,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 301.203125,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 350,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 719.203125,
+              "height": 280
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 674.40625,
+              "height": 324.796875
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 649.609375,
+              "height": 324.796875
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 654.40625,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 679.203125,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 728,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d2-ordinary-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:2;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 179.609375,
+              "height": 268.40625
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 134.8125,
+              "height": 55
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 110.015625,
+              "height": 55
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 120.609375,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 145.40625,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 194.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 329.609375,
+              "height": 268.40625
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 284.8125,
+              "height": 130
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 260.015625,
+              "height": 130
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 270.609375,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 295.40625,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 344.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 707.609375,
+              "height": 268.40625
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 662.8125,
+              "height": 319
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 638.015625,
+              "height": 319
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 648.609375,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 673.40625,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 722.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d2-extreme",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:1 / 96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 191.203125,
+              "height": 280
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 146.40625,
+              "height": 11674.5
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 121.609375,
+              "height": 11674.5
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 126.40625,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 151.203125,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 200,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 341.203125,
+              "height": 280
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 296.40625,
+              "height": 26074.5
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 271.609375,
+              "height": 26074.5
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 276.40625,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 301.203125,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 350,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 719.203125,
+              "height": 280
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 674.40625,
+              "height": 62362.5
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 649.609375,
+              "height": 62362.5
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 654.40625,
+              "y": 0,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 679.203125,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 728,
+              "y": 0,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-row-d2-extreme-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:row;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:1 / 96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 179.609375,
+              "height": 268.40625
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 134.8125,
+              "height": 10561.5
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 110.015625,
+              "height": 10561.5
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 120.609375,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 145.40625,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 194.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 329.609375,
+              "height": 268.40625
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 284.8125,
+              "height": 24961.5
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 260.015625,
+              "height": 24961.5
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 270.609375,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 295.40625,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 344.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 707.609375,
+              "height": 268.40625
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 662.8125,
+              "height": 61249.5
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 638.015625,
+              "height": 61249.5
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 648.609375,
+              "y": 5.796875,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 673.40625,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 722.203125,
+              "y": 5.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d1-ordinary",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:.5;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 241.203125
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 110.203125,
+              "height": 220.40625
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 225.203125,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 241.203125
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 110.203125,
+              "height": 220.40625
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 225.203125,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 241.203125
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 110.203125,
+              "height": 220.40625
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 225.203125,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d1-ordinary-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:.5;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 228.40625,
+              "height": 229.609375
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 104.40625,
+              "height": 208.8125
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 219.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 378.40625,
+              "height": 229.609375
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 104.40625,
+              "height": 208.8125
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 219.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 756.40625,
+              "height": 229.609375
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 104.40625,
+              "height": 208.8125
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 219.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d1-extreme",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 241.203125
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 21159,
+              "height": 220.40625
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 225.203125,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 241.203125
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 21159,
+              "height": 220.40625
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 225.203125,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 241.203125
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 21159,
+              "height": 220.40625
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 225.203125,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d1-extreme-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 228.40625,
+              "height": 229.609375
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 20046,
+              "height": 208.8125
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 219.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 378.40625,
+              "height": 229.609375
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 20046,
+              "height": 208.8125
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 219.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 756.40625,
+              "height": 229.609375
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 20046,
+              "height": 208.8125
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 219.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d2-ordinary",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:.5;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 241.203125
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 23.59375,
+              "height": 206.40625
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 92.796875,
+              "height": 185.609375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 190.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 0,
+              "y": 211.203125,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 241.203125
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 23.59375,
+              "height": 206.40625
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 92.796875,
+              "height": 185.609375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 190.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 0,
+              "y": 211.203125,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 241.203125
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 23.59375,
+              "height": 206.40625
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 92.796875,
+              "height": 185.609375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 190.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 0,
+              "y": 211.203125,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d2-ordinary-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:.5;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 228.40625,
+              "height": 229.609375
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 23.59375,
+              "height": 194.8125
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 87,
+              "height": 174.015625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 184.609375,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 5.796875,
+              "y": 205.40625,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 378.40625,
+              "height": 229.609375
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 23.59375,
+              "height": 194.8125
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 87,
+              "height": 174.015625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 184.609375,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 5.796875,
+              "y": 205.40625,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 756.40625,
+              "height": 229.609375
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 23.59375,
+              "height": 194.8125
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 87,
+              "height": 174.015625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 184.609375,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 5.796875,
+              "y": 205.40625,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d2-extreme",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:0;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 241.203125
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 729,
+              "height": 206.40625
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17818.5,
+              "height": 185.609375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 190.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 0,
+              "y": 211.203125,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 241.203125
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 729,
+              "height": 206.40625
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17818.5,
+              "height": 185.609375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 190.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 0,
+              "y": 211.203125,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 241.203125
+            },
+            "wrap1": {
+              "x": 0,
+              "y": 0,
+              "width": 729,
+              "height": 206.40625
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17818.5,
+              "height": 185.609375
+            },
+            "mark": {
+              "x": 3.796875,
+              "y": 3.796875,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 0,
+              "y": 190.40625,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 0,
+              "y": 211.203125,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 0,
+              "y": 250,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-nested-gap-column-d2-extreme-padding",
+      "font": false,
+      "html": "<div id=host><div id=wrap0 class=wrapper><div id=wrap1 class=wrapper><div id=ratio><div id=mark></div></div><div id=innerpeer></div></div><div id=peer1 class=peer></div></div><div id=peer0 class=peer></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;gap:8.808px;padding:5.808px;align-items:stretch;background:#eef}.wrapper{flex:1 1 0px;flex-direction:column;gap:4.808px;align-items:flex-start;background:#ddd}.peer{width:40px;height:30px;background:#fc8}#ratio{flex:1 1 0px;aspect-ratio:96;padding:3.808px;background:#8cf}#mark{width:16px;height:12px;background:#963}#innerpeer{width:20px;height:16px;background:#9c9}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 228.40625,
+              "height": 229.609375
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 729,
+              "height": 194.8125
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 16705.5,
+              "height": 174.015625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 184.609375,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 5.796875,
+              "y": 205.40625,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 378.40625,
+              "height": 229.609375
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 729,
+              "height": 194.8125
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 16705.5,
+              "height": 174.015625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 184.609375,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 5.796875,
+              "y": 205.40625,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "wrap0": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 756.40625,
+              "height": 229.609375
+            },
+            "wrap1": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 729,
+              "height": 194.8125
+            },
+            "ratio": {
+              "x": 5.796875,
+              "y": 5.796875,
+              "width": 16705.5,
+              "height": 174.015625
+            },
+            "mark": {
+              "x": 9.59375,
+              "y": 9.59375,
+              "width": 16,
+              "height": 12
+            },
+            "innerpeer": {
+              "x": 5.796875,
+              "y": 184.609375,
+              "width": 20,
+              "height": 16
+            },
+            "peer1": {
+              "x": 5.796875,
+              "y": 205.40625,
+              "width": 40,
+              "height": 30
+            },
+            "peer0": {
+              "x": 5.796875,
+              "y": 244.203125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+[
+  {
+    "name": "composition-membership-card",
+    "font": true,
+    "html": "<article id='card'><p id='eyebrow'>MEMBERSHIP</p><h2 id='title'>Make room for more.</h2><p id='description'>Your favorite tools, together in one simple plan.</p><div id='price'><p id='amount'>$12</p><p id='period'>per month</p></div><div id='button'>Explore membership</div><p id='note'>Cancel anytime.</p></article>",
+    "css": "#card {width:100%;padding:16px;gap:8px;font-family:Inter;background-color:hsl(240 30% 96%);color:midnightblue;border-radius:16px} #eyebrow {font-size:12px;line-height:18px;color:slateblue} #title {font-size:24px;line-height:32px} #description {font-size:14px;line-height:20px;color:hsl(240 15% 40%)} #price {flex-direction:row;gap:8px;align-items:center} #amount {font-size:28px;line-height:36px} #period {font-size:12px;line-height:18px;color:slategray} #button {padding:10px;background-color:rebeccapurple;color:white;text-align:center;border-radius:8px;font-size:14px;line-height:20px} #note {font-size:12px;line-height:18px;text-align:center;color:slategray}"
+  },
+  {
+    "name": "composition-typography-metrics",
+    "font": true,
+    "html": "<div id='specimen'><p id='s12' style='font-size:12px;line-height:18px'>Text size 12</p><p id='s14' style='font-size:14px;line-height:20px'>Text size 14</p><p id='s16' style='font-size:16px;line-height:24px'>Text size 16</p><p id='s20' style='font-size:20px;line-height:28px'>Text size 20</p><p id='s22' style='font-size:22px;line-height:30px'>Text size 22</p><p id='s24' style='font-size:24px;line-height:32px'>Text size 24</p><p id='s28' style='font-size:28px;line-height:36px'>Text size 28</p></div>",
+    "css": "#specimen {width:100%;padding:12px;gap:4px;font-family:Inter;background-color:aliceblue;color:midnightblue} #specimen p {background-color:lavender}"
+  },
+  {
+    "name": "text-rasterization-small-glyphs",
+    "font": true,
+    "html": "<p id=\"text\">Hg</p>",
+    "css": "#text {font-size:20px;line-height:30px;width:30px}"
+  },
+  {
+    "name": "reverse-control-forward-row-text",
+    "font": true,
+    "html": "<div id='root'><div id='a'>First source item</div><div id='b'>Second item wraps</div><div id='c'>Third item</div></div>",
+    "css": "#root{width:100%;height:220px;flex-direction:row;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:1.5;background:#eef}#a,#b,#c{display:block;width:28%;padding:6px;background:#def}#b{background:#fed}#c{background:#dfd}"
+  },
+  {
+    "name": "reverse-control-forward-column-text",
+    "font": true,
+    "html": "<div id='root'><div id='a'>First source item</div><div id='b'>Second item wraps</div><div id='c'>Third item</div></div>",
+    "css": "#root{width:100%;height:220px;flex-direction:column;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:1.5;background:#eef}#a,#b,#c{display:block;width:28%;padding:6px;background:#def}#b{background:#fed}#c{background:#dfd}"
+  },
+  {
+    "name": "reverse-control-word-48-48",
+    "font": true,
+    "html": "<div id='word'>Second</div>",
+    "css": "#word{display:block;width:48.48px;font-family:Inter;font-size:16px;line-height:24px;color:#123;background:#eef}"
+  },
+  {
+    "name": "reverse-control-word-60",
+    "font": true,
+    "html": "<div id='word'>Second</div>",
+    "css": "#word{display:block;width:60px;font-family:Inter;font-size:16px;line-height:24px;color:#123;background:#eef}"
+  },
+  {
+    "name": "reverse-control-word-minimal",
+    "font": true,
+    "html": "<div id='word'>Second</div>",
+    "css": "#word{display:block;width:48px;font-family:Inter;font-size:16px;line-height:24px}"
+  },
+  {
+    "name": "reverse-control-word-pre-line",
+    "font": true,
+    "html": "<div id='word'>Second</div>",
+    "css": "#word{display:block;width:48px;font-family:Inter;font-size:16px;line-height:24px} #word{white-space:pre-line}"
+  },
+  {
+    "name": "order-control-no-order",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ap\"></div></div><div id=\"b\"><div id=\"bp\"></div></div><div id=\"c\"><div id=\"cp\"></div></div></div>",
+    "css": "#root{width:120px;flex-direction:row;background:#eef}#root>div{width:40px;height:40px}#a{order:2}#b{order:-1}#c{order:0}#ap,#bp,#cp{width:100px;height:40px}#ap{background:#f44}#bp{background:#48f}#cp{background:#4b6}#a,#b,#c{order:0}"
+  },
+  {
+    "name": "order-control-painted-parents",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ap\"></div></div><div id=\"b\"><div id=\"bp\"></div></div><div id=\"c\"><div id=\"cp\"></div></div></div>",
+    "css": "#root{width:120px;flex-direction:row;background:#eef}#root>div{width:40px;height:40px}#a{order:2}#b{order:-1}#c{order:0}#ap,#bp,#cp{width:100px;height:40px}#ap{background:#f44}#bp{background:#48f}#cp{background:#4b6}#a,#b,#c{background:white}"
+  },
+  {
+    "name": "order-control-no-order-painted",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ap\"></div></div><div id=\"b\"><div id=\"bp\"></div></div><div id=\"c\"><div id=\"cp\"></div></div></div>",
+    "css": "#root{width:120px;flex-direction:row;background:#eef}#root>div{width:40px;height:40px}#a{order:2}#b{order:-1}#c{order:0}#ap,#bp,#cp{width:100px;height:40px}#ap{background:#f44}#bp{background:#48f}#cp{background:#4b6}#a,#b,#c{order:0;background:white}"
+  }
+]

@@ -70,10 +70,11 @@ thread_local! {
 const RESOURCE_METALLIB: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/native_metal_resources.metallib"));
 
-const COLOR_RAMP_VERTEX_MAIN: &str = "GF";
-const COLOR_RAMP_FRAGMENT_MAIN: &str = "HF";
-const TESSELLATE_VERTEX_MAIN: &str = "YF";
-const TESSELLATE_FRAGMENT_MAIN: &str = "ZF";
+use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as shader_exports;
+const COLOR_RAMP_VERTEX_MAIN: &str = shader_exports::GLSL_colorRampVertexMain;
+const COLOR_RAMP_FRAGMENT_MAIN: &str = shader_exports::GLSL_colorRampFragmentMain;
+const TESSELLATE_VERTEX_MAIN: &str = shader_exports::GLSL_tessellateVertexMain;
+const TESSELLATE_FRAGMENT_MAIN: &str = shader_exports::GLSL_tessellateFragmentMain;
 
 /// Coherent retained owners published by one successful preparation.
 ///

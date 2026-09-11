@@ -192,8 +192,11 @@ fn replay_native_vulkan(
 }
 
 fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
-    if !matches!(mode, "msaa" | "clockwise-atomic") {
+    if !matches!(mode, "msaa" | "clockwise-atomic" | "atomics") {
         return Err(format!("unsupported renderer mode `{mode}`"));
+    }
+    if mode == "atomics" && backend != "rust-metal-atomic" {
+        return Err("ordinary `atomics` requires the `rust-metal-atomic` backend".to_owned());
     }
     if matches!(backend, "ffi-metal" | "rust-metal" | "rust-metal-atomic") && mode == "msaa" {
         return Err(
@@ -202,6 +205,23 @@ fn validate_backend_mode(backend: &str, mode: &str) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+#[cfg(all(feature = "native-metal", target_os = "macos"))]
+fn prepare_native_opacity(
+    stream: &RenderStream,
+    frame_index: usize,
+    clear: u32,
+    factory: &mut dyn nuxie_render_api::Factory,
+) -> Result<Option<Box<dyn nuxie_render_api::RenderCanvas>>, Box<dyn Error>> {
+    let frame = stream.frames.get(frame_index).ok_or("missing frame")?;
+    if !frame.commands.iter().any(|c| matches!(c,
+        nuxie_render_stream::Command::BeginOpacity(_) | nuxie_render_stream::Command::EndOpacity)) {
+        return Ok(None);
+    }
+    let mut prepared = stream.clone();
+    prepared.clear_color = Some(clear);
+    Ok(Some(prepared.render_frame_to_canvas(frame_index, factory)?))
 }
 
 #[cfg(all(feature = "native-metal", target_os = "macos"))]
@@ -222,8 +242,16 @@ fn replay_native_metal(
         },
     )?;
     let adapter = factory.adapter_name();
-    let mut frame = factory.begin_frame(clear)?;
-    stream.replay_frame(frame_index, &mut factory, &mut frame)?;
+    let canvas = prepare_native_opacity(stream, frame_index, clear, &mut factory)?;
+    let mut frame = factory.begin_frame(if canvas.is_some() { 0 } else { clear })?;
+    if let Some(canvas) = &canvas {
+        use nuxie_render_api::Renderer;
+        let image = canvas.render_image();
+        frame.draw_image(Some(image.as_ref()), nuxie_render_api::ImageSampler::default(),
+            nuxie_render_api::BlendMode::SrcOver, 1.0);
+    } else {
+        stream.replay_frame(frame_index, &mut factory, &mut frame)?;
+    }
     Ok((frame.finish()?, Some(adapter)))
 }
 
@@ -238,6 +266,7 @@ fn replay_native_metal_atomic(
 ) -> Result<(Vec<u8>, Option<String>), Box<dyn Error>> {
     let mode = match mode {
         "clockwise-atomic" => nuxie_renderer::RenderMode::ClockwiseAtomic,
+        "atomics" => nuxie_renderer::RenderMode::Atomics,
         value => return Err(format!("unsupported native Metal mode `{value}`").into()),
     };
     let mut factory = nuxie_renderer::NativeMetalFactory::new_with_mode_and_context_options(
@@ -251,8 +280,16 @@ fn replay_native_metal_atomic(
         },
     )?;
     let adapter = factory.adapter_name();
-    let mut frame = factory.begin_frame(clear)?;
-    stream.replay_frame(frame_index, &mut factory, &mut frame)?;
+    let canvas = prepare_native_opacity(stream, frame_index, clear, &mut factory)?;
+    let mut frame = factory.begin_frame(if canvas.is_some() { 0 } else { clear })?;
+    if let Some(canvas) = &canvas {
+        use nuxie_render_api::Renderer;
+        let image = canvas.render_image();
+        frame.draw_image(Some(image.as_ref()), nuxie_render_api::ImageSampler::default(),
+            nuxie_render_api::BlendMode::SrcOver, 1.0);
+    } else {
+        stream.replay_frame(frame_index, &mut factory, &mut frame)?;
+    }
     Ok((frame.finish()?, Some(adapter)))
 }
 
@@ -424,7 +461,7 @@ fn parse_options() -> Result<Options, Box<dyn Error>> {
 }
 
 fn usage() -> &'static str {
-    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-vulkan-exact|rust-webgpu-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
+    "usage: renderer-replay --stream FILE --output FILE [--backend stub|rust-vulkan-exact|rust-webgpu-exact|rust-metal|rust-metal-atomic|ffi-metal|ffi-dawn|ffi-vulkan|ffi-webgl2] [--mode msaa|clockwise-atomic|atomics] [--frame N] [--command-limit N] [--clear 0xRRGGBBAA]"
 }
 
 #[cfg(test)]
@@ -474,5 +511,45 @@ mod tests {
         validate_backend_mode("rust-metal", "clockwise-atomic").unwrap();
         validate_backend_mode("rust-metal-atomic", "clockwise-atomic").unwrap();
         validate_backend_mode("ffi-dawn", "msaa").unwrap();
+        validate_backend_mode("rust-metal-atomic", "atomics").unwrap();
+        for backend in ["stub", "rust-metal", "ffi-metal", "ffi-dawn", "rust-webgpu-exact", "rust-vulkan-exact"] {
+            assert!(validate_backend_mode(backend, "atomics").is_err());
+        }
     }
+    #[cfg(all(feature = "native-metal", target_os = "macos"))]
+    #[test]
+    fn ordinary_atomics_preserves_evenodd_border_hole() {
+        let stream = RenderStream::parse(r#"rive-golden-stream-v1
+frameSize width=240 height=320
+clearColor value=0xffffffff
+makeRenderPaint {id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+makeEmptyRenderPath {id=1,fillRule=0,path={verbs=[],points=[]}}
+drawPath path={id=1,fillRule=1,path={verbs=[move,line,line,line,close,move,line,line,line,close],points=[(20,20),(220,20),(220,160),(20,160),(32,32),(208,32),(208,148),(32,148)]}} paint={id=1,style=fill,color=0xff000000,thickness=1,join=0,cap=0,feather=0,blendMode=3,shader=0}
+frame
+"#).unwrap();
+        for (mode, expected_center) in [("atomics", [255u8; 4]), ("clockwise-atomic", [0, 0, 0, 255])] {
+            let (pixels, _) = super::replay_native_metal_atomic(&stream, 0, 240, 320, 0xffffffff, mode).unwrap();
+            let center = (80 * 240 + 100) * 4;
+            let border = (24 * 240 + 24) * 4;
+            assert_eq!(&pixels[center..center + 4], &expected_center, "{mode}");
+            assert_eq!(&pixels[border..border + 4], &[0, 0, 0, 255], "{mode}");
+        }
+    }
+
+    #[cfg(all(feature = "native-metal", target_os = "macos"))]
+    #[test]
+    fn ordinary_atomics_image_edges_preserve_full_coverage_after_axis_rotation() {
+        let white = "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c63f8ffffff7f0009fb03fd2a86e38a0000000049454e44ae426082";
+        for (width, height) in [(240, 320), (390, 320), (768, 320), (320, 320)] {
+            for rotated in [false, true] {
+                let matrix = if rotated { format!("[0,{height},-{width},0,{width},0]") }
+                    else { format!("[{width},0,0,{height},0,0]") };
+                let text = format!("rive-golden-stream-v1\nframeSize width={width} height={height}\nclearColor value=0\ndecodeImage id=1 data={white}\ntransform matrix={matrix}\ndrawImage image=1 sampler={{wrapX=0,wrapY=0,filter=0}} blendMode=3 opacity=1\nframe\n");
+                let stream = RenderStream::parse(&text).unwrap();
+                let (pixels, _) = super::replay_native_metal_atomic(&stream, 0, width, height, 0, "atomics").unwrap();
+                assert!(pixels.iter().all(|&channel| channel == 255), "image edge lost coverage: {width}x{height}, rotated={rotated}");
+            }
+        }
+    }
+
 }

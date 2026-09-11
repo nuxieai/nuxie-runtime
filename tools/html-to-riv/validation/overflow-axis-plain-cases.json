@@ -1,0 +1,42 @@
+[
+  {
+    "name": "overflow-axis-plain-x-single-plain",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-x:clip;}#b{width:80%;height:60px;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-x-single-painted",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-x:clip;background:#e9a344;}#b{width:80%;height:60px;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-x-nested-plain",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-x:clip;}#b{width:80%;height:60px;overflow-y:clip;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-x-nested-painted",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-x:clip;background:#e9a344;}#b{width:80%;height:60px;overflow-y:clip;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-y-single-plain",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-y:clip;}#b{width:80%;height:60px;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-y-single-painted",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-y:clip;background:#e9a344;}#b{width:80%;height:60px;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-y-nested-plain",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-y:clip;}#b{width:80%;height:60px;overflow-x:clip;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  },
+  {
+    "name": "overflow-axis-plain-y-nested-painted",
+    "html": "<div id=a><div id=b><div id=c></div></div></div><div id=s></div>",
+    "css": "#a{width:75%;height:80px;overflow-y:clip;background:#e9a344;}#b{width:80%;height:60px;overflow-x:clip;}#c{width:200px;height:160px;background:red}#s{width:20px;height:20px;background:blue}"
+  }
+]

@@ -1,0 +1,1813 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "stacking-overlap-row-text-auto",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#card{z-index:auto}#side{left:-60px;top:35px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-text-zero",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#side{left:-60px;top:35px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-image-auto",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#card{z-index:auto}#side{left:-60px;top:35px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-image-zero",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#side{left:-60px;top:35px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 68,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 221,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-reverse-text-auto",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#card{z-index:auto}#side{left:128px;top:35px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 120,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 155,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 155,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": -36,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 270,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 305,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 305,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 114,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 648,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 683,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 683,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 492,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-reverse-text-zero",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#side{left:128px;top:35px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 120,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 155,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 155,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": -36,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 270,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 305,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 305,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 114,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 648,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 683,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 683,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 492,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-reverse-image-auto",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#card{z-index:auto}#side{left:128px;top:35px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 120,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 155,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 155,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": -36,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 270,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 305,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 305,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 114,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 648,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 683,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 683,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 492,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-row-reverse-image-zero",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#side{left:128px;top:35px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 120,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 155,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 155,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": -36,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 270,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 305,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 305,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 114,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 648,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 683,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 683,
+              "y": 55,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 492,
+              "y": 20,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-text-auto",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#card{z-index:auto}#side{left:35px;top:-60px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-text-zero",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#side{left:35px;top:-60px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-image-auto",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#card{z-index:auto}#side{left:35px;top:-60px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-image-zero",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#side{left:35px;top:-60px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 20,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 45,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 58,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 196,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-reverse-text-auto",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#card{z-index:auto}#side{left:35px;top:113px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-reverse-text-zero",
+      "html": "<div id=host><div id=card><p id=inner>Quiet weekend</p></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#inner{display:block;font-family:Inter;font-size:20px;line-height:28px;color:#102a43;padding:6px}#side{left:35px;top:113px}",
+      "font": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-reverse-image-auto",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#card{z-index:auto}#side{left:35px;top:113px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "stacking-overlap-column-reverse-image-zero",
+      "html": "<div id=host><div id=card><img id=inner src=\"asset:photo\"></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:relative;width:100px;height:90px;background:#e9a344;z-index:0}#inner{position:absolute;left:35px;top:25px;width:110px;height:80px;background:#318ea8;z-index:3}#side{position:relative;left:-35px;top:30px;width:85px;height:70px;background:#86ae83;z-index:1}#tail{width:55px;height:45px;background:#927da1}#deep{position:absolute;left:45px;top:30px;width:90px;height:65px;background:#b95870;z-index:5}#side{left:35px;top:113px}",
+      "image": true,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "card": {
+              "x": 20,
+              "y": 150,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 55,
+              "y": 175,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 55,
+              "y": 185,
+              "width": 85,
+              "height": 70
+            },
+            "tail": {
+              "x": 20,
+              "y": 19,
+              "width": 55,
+              "height": 45
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

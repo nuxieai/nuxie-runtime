@@ -1,0 +1,4325 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "border-sides-edge-transparent-top-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:8px 12px 16px 20px;border-color:transparent red green blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        0,
+        4294901760,
+        4278222848,
+        4278190335
+      ],
+      "sideWidths": [
+        8,
+        12,
+        16,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-transparent-top-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:8px 12px 16px 20px;border-color:transparent red green blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        0,
+        4294901760,
+        4278222848,
+        4278190335
+      ],
+      "sideWidths": [
+        8,
+        12,
+        16,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 244
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 176,
+              "height": 180
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 200,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 244
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 266,
+              "height": 180
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 200,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 244
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 492.796875,
+              "height": 180
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 200,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-transparent-top-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:8px 12px 16px 20px;border-color:transparent red green blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        0,
+        4294901760,
+        4278222848,
+        4278190335
+      ],
+      "sideWidths": [
+        8,
+        12,
+        16,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-transparent-top-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:8px 12px 16px 20px;border-color:transparent red green blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        0,
+        4294901760,
+        4278222848,
+        4278190335
+      ],
+      "sideWidths": [
+        8,
+        12,
+        16,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 244
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 176,
+              "height": 180
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 200,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 244
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 266,
+              "height": 180
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 200,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 244
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 492.796875,
+              "height": 180
+            },
+            "child": {
+              "x": 52,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 200,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-none-hidden-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border:12px solid red;border-top-style:none;border-left-style:hidden;border-right-color:green;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4294901760,
+        4294901760
+      ],
+      "sideWidths": [
+        0,
+        12,
+        12,
+        0
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-none-hidden-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border:12px solid red;border-top-style:none;border-left-style:hidden;border-right-color:green;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4294901760,
+        4294901760
+      ],
+      "sideWidths": [
+        0,
+        12,
+        12,
+        0
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 232
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 156,
+              "height": 168
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 188,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 232
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 246,
+              "height": 168
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 188,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 232
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 472.796875,
+              "height": 168
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 188,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-none-hidden-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border:12px solid red;border-top-style:none;border-left-style:hidden;border-right-color:green;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4294901760,
+        4294901760
+      ],
+      "sideWidths": [
+        0,
+        12,
+        12,
+        0
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-none-hidden-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border:12px solid red;border-top-style:none;border-left-style:hidden;border-right-color:green;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4294901760,
+        4294901760
+      ],
+      "sideWidths": [
+        0,
+        12,
+        12,
+        0
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 232
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 156,
+              "height": 168
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 188,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 232
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 246,
+              "height": 168
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 188,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 232
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 472.796875,
+              "height": 168
+            },
+            "child": {
+              "x": 32,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 188,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-current-color-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;color:#663399;border:8px solid currentColor;border-left-width:16px;border-right-color:#ffaa0080;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4284887961,
+        2164238848,
+        4284887961,
+        4284887961
+      ],
+      "sideWidths": [
+        8,
+        8,
+        8,
+        16
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-current-color-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;color:#663399;border:8px solid currentColor;border-left-width:16px;border-right-color:#ffaa0080;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4284887961,
+        2164238848,
+        4284887961,
+        4284887961
+      ],
+      "sideWidths": [
+        8,
+        8,
+        8,
+        16
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 168,
+              "height": 172
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 258,
+              "height": 172
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 484.796875,
+              "height": 172
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-current-color-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;color:#663399;border:8px solid currentColor;border-left-width:16px;border-right-color:#ffaa0080;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4284887961,
+        2164238848,
+        4284887961,
+        4284887961
+      ],
+      "sideWidths": [
+        8,
+        8,
+        8,
+        16
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-current-color-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;color:#663399;border:8px solid currentColor;border-left-width:16px;border-right-color:#ffaa0080;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4284887961,
+        2164238848,
+        4284887961,
+        4284887961
+      ],
+      "sideWidths": [
+        8,
+        8,
+        8,
+        16
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 168,
+              "height": 172
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 258,
+              "height": 172
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 484.796875,
+              "height": 172
+            },
+            "child": {
+              "x": 48,
+              "y": 36,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-three-value-list-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:2px 10px 18px;border-color:red green blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4278222848
+      ],
+      "sideWidths": [
+        2,
+        10,
+        18,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-three-value-list-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:2px 10px 18px;border-color:red green blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4278222848
+      ],
+      "sideWidths": [
+        2,
+        10,
+        18,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 164,
+              "height": 176
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 254,
+              "height": 176
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 480.796875,
+              "height": 176
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-three-value-list-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:2px 10px 18px;border-color:red green blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4278222848
+      ],
+      "sideWidths": [
+        2,
+        10,
+        18,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-three-value-list-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-style:solid;border-width:2px 10px 18px;border-color:red green blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4278222848
+      ],
+      "sideWidths": [
+        2,
+        10,
+        18,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 164,
+              "height": 176
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 254,
+              "height": 176
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 480.796875,
+              "height": 176
+            },
+            "child": {
+              "x": 42,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-two-value-style-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-width:6px 12px;border-style:none solid;border-color:red blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278190335,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        0,
+        12,
+        0,
+        12
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-two-value-style-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-width:6px 12px;border-style:none solid;border-color:red blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278190335,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        0,
+        12,
+        0,
+        12
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 220
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 168,
+              "height": 156
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 176,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 220
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 258,
+              "height": 156
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 176,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 220
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 484.796875,
+              "height": 156
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 176,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-two-value-style-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-width:6px 12px;border-style:none solid;border-color:red blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278190335,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        0,
+        12,
+        0,
+        12
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-two-value-style-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-width:6px 12px;border-style:none solid;border-color:red blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278190335,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        0,
+        12,
+        0,
+        12
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 220
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 168,
+              "height": 156
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 176,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 220
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 258,
+              "height": 156
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 176,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 220
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 484.796875,
+              "height": 156
+            },
+            "child": {
+              "x": 44,
+              "y": 28,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 176,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-shorthand-order-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-left:24px solid blue;border:6px solid red;border-bottom:14px solid green;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4278222848,
+        4294901760
+      ],
+      "sideWidths": [
+        6,
+        6,
+        14,
+        6
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-shorthand-order-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-left:24px solid blue;border:6px solid red;border-bottom:14px solid green;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4278222848,
+        4294901760
+      ],
+      "sideWidths": [
+        6,
+        6,
+        14,
+        6
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 156,
+              "height": 176
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 246,
+              "height": 176
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 472.796875,
+              "height": 176
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-shorthand-order-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;border-left:24px solid blue;border:6px solid red;border-bottom:14px solid green;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4278222848,
+        4294901760
+      ],
+      "sideWidths": [
+        6,
+        6,
+        14,
+        6
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-shorthand-order-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;border-left:24px solid blue;border:6px solid red;border-bottom:14px solid green;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4278222848,
+        4294901760
+      ],
+      "sideWidths": [
+        6,
+        6,
+        14,
+        6
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 156,
+              "height": 176
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 246,
+              "height": 176
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 240
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 472.796875,
+              "height": 176
+            },
+            "child": {
+              "x": 38,
+              "y": 34,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 196,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-variables-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;--w:2px 8px 14px 20px;--c:red green blue orange;border:solid;border-width:var(--w);border-color:var(--c);border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        8,
+        14,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-variables-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;--w:2px 8px 14px 20px;--c:red green blue orange;border:solid;border-width:var(--w);border-color:var(--c);border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        8,
+        14,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 172,
+              "height": 172
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 262,
+              "height": 172
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 488.796875,
+              "height": 172
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-variables-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;--w:2px 8px 14px 20px;--c:red green blue orange;border:solid;border-width:var(--w);border-color:var(--c);border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        8,
+        14,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-variables-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;--w:2px 8px 14px 20px;--c:red green blue orange;border:solid;border-width:var(--w);border-color:var(--c);border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        8,
+        14,
+        20
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 172,
+              "height": 172
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 262,
+              "height": 172
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 236
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 488.796875,
+              "height": 172
+            },
+            "child": {
+              "x": 52,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 192,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-invalid-side-variable-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;--w:4px 12px;border:10px solid red;border-top-width:var(--w);border-left-color:blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        3,
+        10,
+        10,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-invalid-side-variable-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;--w:4px 12px;border:10px solid red;border-top-width:var(--w);border-left-color:blue;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        3,
+        10,
+        10,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 233
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 164,
+              "height": 169
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 189,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 233
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 254,
+              "height": 169
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 189,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 233
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 480.796875,
+              "height": 169
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 189,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-invalid-side-variable-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;--w:4px 12px;border:10px solid red;border-top-width:var(--w);border-left-color:blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        3,
+        10,
+        10,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-invalid-side-variable-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;--w:4px 12px;border:10px solid red;border-top-width:var(--w);border-left-color:blue;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4294901760,
+        4294901760,
+        4278190335
+      ],
+      "sideWidths": [
+        3,
+        10,
+        10,
+        10
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 233
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 164,
+              "height": 169
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 189,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 233
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 254,
+              "height": 169
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 189,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 233
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 480.796875,
+              "height": 169
+            },
+            "child": {
+              "x": 42,
+              "y": 31,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 189,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-em-fractional-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;font-size:20px;border-style:solid;border-width:.125em .275em .425em .575em;border-color:red green blue orange;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        5,
+        8,
+        11
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-em-fractional-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;font-size:20px;border-style:solid;border-width:.125em .275em .425em .575em;border-color:red green blue orange;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        5,
+        8,
+        11
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 230
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 160,
+              "height": 166
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 186,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 230
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 250,
+              "height": 166
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 186,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 230
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 476.796875,
+              "height": 166
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 186,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-em-fractional-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;font-size:20px;border-style:solid;border-width:.125em .275em .425em .575em;border-color:red green blue orange;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        5,
+        8,
+        11
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 140
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 210,
+              "height": 140
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 204
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 436.796875,
+              "height": 140
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 160,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-em-fractional-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;font-size:20px;border-style:solid;border-width:.125em .275em .425em .575em;border-color:red green blue orange;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        2,
+        5,
+        8,
+        11
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 230
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 160,
+              "height": 166
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 186,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 230
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 250,
+              "height": 166
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 186,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 230
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 476.796875,
+              "height": 166
+            },
+            "child": {
+              "x": 43,
+              "y": 30,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 186,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-overfull-r0-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;width:16px;height:12px;padding:0;border-style:solid;border-width:40px 20px 30px 60px;border-color:red green blue orange;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        40,
+        20,
+        30,
+        60
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 134
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 80,
+              "height": 70
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 90,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 134
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 80,
+              "height": 70
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 90,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 134
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 80,
+              "height": 70
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 90,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-overfull-r0-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;width:16px;height:12px;padding:0;border-style:solid;border-width:40px 20px 30px 60px;border-color:red green blue orange;border-radius:0px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        40,
+        20,
+        30,
+        60
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 146
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 96,
+              "height": 82
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 102,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 146
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 96,
+              "height": 82
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 102,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 146
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 96,
+              "height": 82
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 102,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-overfull-r90-border-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:border-box;width:60%;height:140px;padding:8px 12px;width:16px;height:12px;padding:0;border-style:solid;border-width:40px 20px 30px 60px;border-color:red green blue orange;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        40,
+        20,
+        30,
+        60
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 134
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 80,
+              "height": 70
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 90,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 134
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 80,
+              "height": 70
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 90,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 134
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 80,
+              "height": 70
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 90,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "border-sides-edge-overfull-r90-content-box",
+      "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+      "css": "#frame{width:100%;padding:20px;}#subject{box-sizing:content-box;width:60%;height:140px;padding:8px 12px;width:16px;height:12px;padding:0;border-style:solid;border-width:40px 20px 30px 60px;border-color:red green blue orange;border-radius:90px;overflow:clip;background:#eaa43d;}#child{width:240px;height:160px;background:#308da5;}#sibling{width:70px;height:24px;background:#86ae83;}",
+      "borderTarget": "subject",
+      "borderWidth": 8,
+      "sideColors": [
+        4294901760,
+        4278222848,
+        4278190335,
+        4294944000
+      ],
+      "sideWidths": [
+        40,
+        20,
+        30,
+        60
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 146
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 96,
+              "height": 82
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 102,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 146
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 96,
+              "height": 82
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 102,
+              "width": 70,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 146
+            },
+            "subject": {
+              "x": 20,
+              "y": 20,
+              "width": 96,
+              "height": 82
+            },
+            "child": {
+              "x": 80,
+              "y": 60,
+              "width": 240,
+              "height": 160
+            },
+            "sibling": {
+              "x": 20,
+              "y": 102,
+              "width": 70,
+              "height": 24
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

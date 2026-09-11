@@ -512,6 +512,15 @@ INLINE half4 dst_color_fetch(half4x4 dstSamples, int sampleMask)
     }
 }
 #endif // @FRAGMENT && @RENDER_MODE_MSAA && !@FIXED_FUNCTION_COLOR_OUTPUT
+
+// Decode a raw RGBA8 word uploaded through ColorInt's ARGB channel mapping.
+INLINE uint css_gradient_word(half4 value)
+{
+    return (uint(float(value.a) * 255. + .5) << 24u) |
+           (uint(float(value.r) * 255. + .5) << 16u) |
+           (uint(float(value.g) * 255. + .5) << 8u) |
+           uint(float(value.b) * 255. + .5);
+}
 "###;
 
 pub const PINNED_COMMON_SOURCE: &str = PINNED_COMMON_GLSL_SOURCE;

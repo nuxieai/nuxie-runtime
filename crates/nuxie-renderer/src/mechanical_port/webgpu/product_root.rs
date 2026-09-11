@@ -544,6 +544,10 @@ impl ExactSourceBackend for WebGpuProductBackend {
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
+        if mode == RenderMode::Atomics {
+            return Err(RendererError::Unsupported(
+                "ordinary atomics is not exposed by the webgpu product host"));
+        }
         if self.active_frame {
             return Err(RendererError::Device(
                 "exact WebGPU context already has an active frame".into(),
@@ -605,6 +609,7 @@ impl ExactSourceBackend for WebGpuProductBackend {
         match mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,
+            RenderMode::Atomics => unreachable!("rejected before frame setup"),
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;

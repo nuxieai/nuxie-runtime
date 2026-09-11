@@ -70,3 +70,4 @@
 __pycache__/
 *.pyc
 .land-cache/
+/output/playwright/html-to-riv/

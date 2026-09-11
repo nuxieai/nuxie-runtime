@@ -1,0 +1,253 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "source": "hello WORLD café",
+      "rendered": "Hello WORLD Café"
+    },
+    {
+      "source": "straße ßETA ﬃORD ǳUNGLE",
+      "rendered": "Straße ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "source": "hello-world foo_bar foo.bar foo/bar",
+      "rendered": "Hello-World Foo_bar Foo.Bar Foo/Bar"
+    },
+    {
+      "source": "don't o'neill l’esprit rock’n’roll",
+      "rendered": "Don't O'neill L’esprit Rock’n’roll"
+    },
+    {
+      "source": "2fast 123abc abc123def 3.14abc",
+      "rendered": "2fast 123abc Abc123def 3.14abc"
+    },
+    {
+      "source": "“hello” (world) [café]",
+      "rendered": "“Hello” (World) [Café]"
+    },
+    {
+      "source": "a b a b a b",
+      "rendered": "A B A B A B"
+    },
+    {
+      "source": "́abc élan élan",
+      "rendered": "́Abc Élan Élan"
+    },
+    {
+      "source": "αβγ οδός σΑ",
+      "rendered": "Αβγ Οδός ΣΑ"
+    },
+    {
+      "source": "中文hello привет мир",
+      "rendered": "中文Hello Привет Мир"
+    },
+    {
+      "source": "a\nb\tc",
+      "rendered": "A\nB\tC"
+    },
+    {
+      "source": "©hello @world #tag $dollar +plus =equal",
+      "rendered": "©Hello @World #Tag $Dollar +Plus =Equal"
+    },
+    {
+      "source": "ⅰtest ①test ²test",
+      "rendered": "Ⅰtest ①Test ²Test"
+    },
+    {
+      "source": "­abc a‍b a‌b",
+      "rendered": "­Abc A‍b A‌b"
+    },
+    {
+      "source": "ijsselmeer iJsselmeer",
+      "rendered": "Ijsselmeer IJsselmeer"
+    },
+    {
+      "source": "ß\nß",
+      "rendered": "ß\nß"
+    },
+    {
+      "source": "a:b a;b a,b a!b a?b",
+      "rendered": "A:B A;B A,B A!B A?B"
+    },
+    {
+      "source": "a.b",
+      "rendered": "A.B"
+    },
+    {
+      "source": "1.2abc",
+      "rendered": "1.2abc"
+    },
+    {
+      "source": "a.1b",
+      "rendered": "A.1b"
+    },
+    {
+      "source": "a:b",
+      "rendered": "A:B"
+    },
+    {
+      "source": "1:2abc",
+      "rendered": "1:2abc"
+    },
+    {
+      "source": "a:1b",
+      "rendered": "A:1b"
+    },
+    {
+      "source": "a·b",
+      "rendered": "A·b"
+    },
+    {
+      "source": "1·2abc",
+      "rendered": "1·2abc"
+    },
+    {
+      "source": "a·1b",
+      "rendered": "A·1b"
+    },
+    {
+      "source": "a·b",
+      "rendered": "A·b"
+    },
+    {
+      "source": "1·2abc",
+      "rendered": "1·2abc"
+    },
+    {
+      "source": "a·1b",
+      "rendered": "A·1b"
+    },
+    {
+      "source": "a״b",
+      "rendered": "A״b"
+    },
+    {
+      "source": "1״2abc",
+      "rendered": "1״2abc"
+    },
+    {
+      "source": "a״1b",
+      "rendered": "A״1b"
+    },
+    {
+      "source": "a‧b",
+      "rendered": "A‧b"
+    },
+    {
+      "source": "1‧2abc",
+      "rendered": "1‧2abc"
+    },
+    {
+      "source": "a‧1b",
+      "rendered": "A‧1b"
+    },
+    {
+      "source": "a︓b",
+      "rendered": "A︓b"
+    },
+    {
+      "source": "1︓2abc",
+      "rendered": "1︓2abc"
+    },
+    {
+      "source": "a︓1b",
+      "rendered": "A︓1b"
+    },
+    {
+      "source": "a﹕b",
+      "rendered": "A﹕B"
+    },
+    {
+      "source": "1﹕2abc",
+      "rendered": "1﹕2abc"
+    },
+    {
+      "source": "a﹕1b",
+      "rendered": "A﹕1b"
+    },
+    {
+      "source": "a：b",
+      "rendered": "A：B"
+    },
+    {
+      "source": "1：2abc",
+      "rendered": "1：2abc"
+    },
+    {
+      "source": "a：1b",
+      "rendered": "A：1b"
+    },
+    {
+      "source": "a．b",
+      "rendered": "A．B"
+    },
+    {
+      "source": "1．2abc",
+      "rendered": "1．2abc"
+    },
+    {
+      "source": "a．1b",
+      "rendered": "A．1b"
+    },
+    {
+      "source": "a‘b",
+      "rendered": "A‘b"
+    },
+    {
+      "source": "1‘2abc",
+      "rendered": "1‘2abc"
+    },
+    {
+      "source": "a‘1b",
+      "rendered": "A‘1b"
+    },
+    {
+      "source": "a’b",
+      "rendered": "A’b"
+    },
+    {
+      "source": "1’2abc",
+      "rendered": "1’2abc"
+    },
+    {
+      "source": "a’1b",
+      "rendered": "A’1b"
+    },
+    {
+      "source": "a'b",
+      "rendered": "A'b"
+    },
+    {
+      "source": "1'2abc",
+      "rendered": "1'2abc"
+    },
+    {
+      "source": "a'1b",
+      "rendered": "A'1b"
+    },
+    {
+      "source": "a_b",
+      "rendered": "A_b"
+    },
+    {
+      "source": "1_2abc",
+      "rendered": "1_2abc"
+    },
+    {
+      "source": "a_1b",
+      "rendered": "A_1b"
+    },
+    {
+      "source": "a.́b a:́b",
+      "rendered": "A.́B A:́B"
+    },
+    {
+      "source": "𐐨abc 𐐩test",
+      "rendered": "𐐨abc 𐐩test"
+    },
+    {
+      "source": "😀hello 😀world",
+      "rendered": "😀Hello 😀World"
+    }
+  ]
+}

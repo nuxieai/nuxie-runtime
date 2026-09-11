@@ -1,0 +1,11 @@
+/* nuxie-html-v1 authoring profile. Browser comparisons use these exact rules.
+   This is an explicit authoring stylesheet, not an emulation of UA defaults. */
+html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+html { font-size: 16px; }
+body { display: flex; flex-direction: column; align-items: stretch; }
+div, section, main, article, header, footer, p, h1, h2, h3, h4, h5, h6, span {
+  display: flex; flex-direction: column; align-items: stretch; align-content: flex-start;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; border: 0; min-width: 0; min-height: 0; flex: 0 0 auto; }
+body { font-family: Inter; font-size: 16px; font-weight: 400; line-height: 24px; color: #000; }
+h1, h2, h3, h4, h5, h6 { font-size: inherit; font-weight: inherit; }

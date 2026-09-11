@@ -1,0 +1,14 @@
+[
+  {
+    "name": "content-box-edge-content-box-ellipsis",
+    "font": true,
+    "html": "<div id=host><p id=a>Several short words wrap inside a padded element</p><div id=b></div><div id=c></div></div>",
+    "css": "#host{width:90%;height:240px;padding:9px;flex-direction:row;gap:7px;align-items:flex-start;background:#eef;}#a{box-sizing:content-box;width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:5px 11px 7px 13px;background:#8cf;font-family:Inter;font-size:16px;line-height:24px;color:#123}#inner{width:20px;height:15px;background:#963}#b,#c{width:90px;height:30px;background:#fc8;flex-shrink:1}#c{background:#9c8}"
+  },
+  {
+    "name": "content-box-edge-border-box-ellipsis",
+    "font": true,
+    "html": "<div id=host><p id=a>Several short words wrap inside a padded element</p><div id=b></div><div id=c></div></div>",
+    "css": "#host{width:90%;height:240px;padding:9px;flex-direction:row;gap:7px;align-items:flex-start;background:#eef;}#a{box-sizing:border-box;width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:5px 11px 7px 13px;background:#8cf;font-family:Inter;font-size:16px;line-height:24px;color:#123}#inner{width:20px;height:15px;background:#963}#b,#c{width:90px;height:30px;background:#fc8;flex-shrink:1}#c{background:#9c8}"
+  }
+]

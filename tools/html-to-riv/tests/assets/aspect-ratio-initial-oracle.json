@@ -1,0 +1,6085 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-row-content-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 130,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 130,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 130,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 135,
+              "height": 80.4375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 151,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 210,
+              "height": 122.625
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 226,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 399,
+              "height": 228.9375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 415,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 140,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 160,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 160,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 160,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-content-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 175,
+              "height": 93.5
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 191,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 325,
+              "height": 168.5
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 341,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 703,
+              "height": 357.5
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 719,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 106,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 106,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 106,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 111,
+              "height": 62.4375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 127,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 186,
+              "height": 104.625
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 202,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 375,
+              "height": 210.9375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 391,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 116,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 136,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 136,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 136,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-border-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 175,
+              "height": 87.5
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 191,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 325,
+              "height": 162.5
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 341,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 703,
+              "height": 351.5
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 719,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 107,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 120,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 60,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 257,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 270,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 210,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 635,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 648,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 588,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 117,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 130,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 70,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 267,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 280,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 220,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 645,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 658,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 598,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 96,
+              "y": 9,
+              "width": 135,
+              "height": 80.4375
+            },
+            "inner": {
+              "x": 109,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 49,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 171,
+              "y": 9,
+              "width": 210,
+              "height": 122.625
+            },
+            "inner": {
+              "x": 184,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 124,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 360,
+              "y": 9,
+              "width": 399,
+              "height": 228.9375
+            },
+            "inner": {
+              "x": 373,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 313,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 107,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 120,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 60,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 257,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 270,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 210,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 635,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 648,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 588,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 183,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 196,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 136,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 333,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 346,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 286,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 711,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 724,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 664,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 107,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 120,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 60,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 257,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 270,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 210,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 635,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 648,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 588,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 87,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 100,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 40,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 237,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 250,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 190,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 615,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 628,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 568,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-content-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 56,
+              "y": 9,
+              "width": 175,
+              "height": 93.5
+            },
+            "inner": {
+              "x": 69,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 56,
+              "y": 9,
+              "width": 325,
+              "height": 168.5
+            },
+            "inner": {
+              "x": 69,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 56,
+              "y": 9,
+              "width": 703,
+              "height": 357.5
+            },
+            "inner": {
+              "x": 69,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 131,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 144,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 84,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 281,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 294,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 234,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 659,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 672,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 612,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 141,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 154,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 94,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 291,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 304,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 244,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 669,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 682,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 622,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 120,
+              "y": 9,
+              "width": 111,
+              "height": 62.4375
+            },
+            "inner": {
+              "x": 133,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 73,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 195,
+              "y": 9,
+              "width": 186,
+              "height": 104.625
+            },
+            "inner": {
+              "x": 208,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 148,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 384,
+              "y": 9,
+              "width": 375,
+              "height": 210.9375
+            },
+            "inner": {
+              "x": 397,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 337,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 131,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 144,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 84,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 281,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 294,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 234,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 659,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 672,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 612,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 183,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 196,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 136,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 333,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 346,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 286,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 711,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 724,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 664,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 131,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 144,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 84,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 281,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 294,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 234,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 659,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 672,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 612,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 111,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 124,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 64,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 261,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 274,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 214,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 639,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 652,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 592,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-row-reverse-border-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 56,
+              "y": 9,
+              "width": 175,
+              "height": 87.5
+            },
+            "inner": {
+              "x": 69,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 56,
+              "y": 9,
+              "width": 325,
+              "height": 162.5
+            },
+            "inner": {
+              "x": 69,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 56,
+              "y": 9,
+              "width": 703,
+              "height": 351.5
+            },
+            "inner": {
+              "x": 69,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 84,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 84,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 84,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 94,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 94,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 94,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 135,
+              "height": 80.4375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 96.4375,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 210,
+              "height": 122.625
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 138.625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 399,
+              "height": 228.9375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 244.9375,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 114,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 114,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 114,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 46,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 46,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 46,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 124,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 124,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 124,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 124,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 124,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 124,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-content-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 438,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 241,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 438,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 241,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 438,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 241,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 66,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 66,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 66,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 76,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 76,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 76,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 111,
+              "height": 62.4375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 78.4375,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 186,
+              "height": 104.625
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 120.625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 375,
+              "height": 210.9375
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 226.9375,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 96,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 96,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 96,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 40,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 40,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 40,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 106,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 106,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 106,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 106,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 106,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 106,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-border-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 450,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 241,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 450,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 241,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 9,
+              "width": 450,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 14,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 241,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 203,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 208,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 166,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 203,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 208,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 166,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 203,
+              "width": 124,
+              "height": 68
+            },
+            "inner": {
+              "x": 22,
+              "y": 208,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 166,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 193,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 198,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 156,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 193,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 198,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 156,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 193,
+              "width": 114,
+              "height": 78
+            },
+            "inner": {
+              "x": 22,
+              "y": 198,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 156,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 190.5625,
+              "width": 135,
+              "height": 80.4375
+            },
+            "inner": {
+              "x": 22,
+              "y": 195.5625,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 153.5625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 148.375,
+              "width": 210,
+              "height": 122.625
+            },
+            "inner": {
+              "x": 22,
+              "y": 153.375,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 111.375,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 42.0625,
+              "width": 399,
+              "height": 228.9375
+            },
+            "inner": {
+              "x": 22,
+              "y": 47.0625,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 5.0625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 173,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 178,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 136,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 173,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 178,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 136,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 173,
+              "width": 124,
+              "height": 98
+            },
+            "inner": {
+              "x": 22,
+              "y": 178,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 136,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 241,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 246,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 204,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 241,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 246,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 204,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 241,
+              "width": 48,
+              "height": 30
+            },
+            "inner": {
+              "x": 22,
+              "y": 246,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 204,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 163,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 168,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 126,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 163,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 168,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 126,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 163,
+              "width": 124,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 168,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 126,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 163,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 168,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 126,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 163,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 168,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 126,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 163,
+              "width": 144,
+              "height": 108
+            },
+            "inner": {
+              "x": 22,
+              "y": 168,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 126,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-content-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 46,
+              "width": 438,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 51,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 46,
+              "width": 438,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 51,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 46,
+              "width": 438,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 51,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;aspect-ratio:2 / 1;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 221,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 226,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 184,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 221,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 226,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 184,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 221,
+              "width": 100,
+              "height": 50
+            },
+            "inner": {
+              "x": 22,
+              "y": 226,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 184,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:60px;aspect-ratio:3 / 2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 211,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 216,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 174,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 211,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 216,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 174,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 211,
+              "width": 90,
+              "height": 60
+            },
+            "inner": {
+              "x": 22,
+              "y": 216,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 174,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-percent",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:50%;aspect-ratio:16 / 9;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 208.5625,
+              "width": 111,
+              "height": 62.4375
+            },
+            "inner": {
+              "x": 22,
+              "y": 213.5625,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 171.5625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 166.375,
+              "width": 186,
+              "height": 104.625
+            },
+            "inner": {
+              "x": 22,
+              "y": 171.375,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 129.375,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 60.0625,
+              "width": 375,
+              "height": 210.9375
+            },
+            "inner": {
+              "x": 22,
+              "y": 65.0625,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 23.0625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-both",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;height:80px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 191,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 196,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 154,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 191,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 196,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 154,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 191,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 22,
+              "y": 196,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 154,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-auto",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 247,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 252,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 210,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 247,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 252,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 210,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 247,
+              "width": 48,
+              "height": 24
+            },
+            "inner": {
+              "x": 22,
+              "y": 252,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 210,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-min-height",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:100px;min-height:90px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 181,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 186,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 144,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 181,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 186,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 144,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 181,
+              "width": 100,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 186,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 144,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-max-width",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;max-width:120px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 181,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 186,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 144,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 181,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 186,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 144,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 181,
+              "width": 120,
+              "height": 90
+            },
+            "inner": {
+              "x": 22,
+              "y": 186,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 144,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-column-reverse-border-box-flex-basis",
+      "font": false,
+      "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+      "css": "#host{width:100%;height:280px;padding:9px;gap:7px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#a{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:2;}#inner{width:24px;height:18px;background:#963}#b{width:40px;height:30px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 46,
+              "width": 450,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 51,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 46,
+              "width": 450,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 51,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "a": {
+              "x": 9,
+              "y": 46,
+              "width": 450,
+              "height": 225
+            },
+            "inner": {
+              "x": 22,
+              "y": 51,
+              "width": 24,
+              "height": 18
+            },
+            "b": {
+              "x": 9,
+              "y": 9,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

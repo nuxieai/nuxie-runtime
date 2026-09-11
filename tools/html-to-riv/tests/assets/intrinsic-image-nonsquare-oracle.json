@@ -1,0 +1,5061 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "intrinsic-image-wide-row-border-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 61.1875
+            },
+            "side": {
+              "x": 150,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 97.1875
+            },
+            "side": {
+              "x": 240,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 187.90625
+            },
+            "side": {
+              "x": 466.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 197,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 197,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 197,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 42,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 42,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 42,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 69.3125
+            },
+            "side": {
+              "x": 121.984375,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 69.3125
+            },
+            "side": {
+              "x": 121.984375,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 69.3125
+            },
+            "side": {
+              "x": 121.984375,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 61.1875
+            },
+            "side": {
+              "x": 150,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 97.1875
+            },
+            "side": {
+              "x": 240,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 187.90625
+            },
+            "side": {
+              "x": 466.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-border-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 128,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 197,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 197,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 70.796875
+            },
+            "side": {
+              "x": 174,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 106.796875
+            },
+            "side": {
+              "x": 264,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 197.515625
+            },
+            "side": {
+              "x": 490.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 242,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 242,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 242,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 122,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 69,
+              "height": 36
+            },
+            "side": {
+              "x": 87,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 69,
+              "height": 36
+            },
+            "side": {
+              "x": 87,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 69,
+              "height": 36
+            },
+            "side": {
+              "x": 87,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 71.3125
+            },
+            "side": {
+              "x": 121.984375,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 71.3125
+            },
+            "side": {
+              "x": 121.984375,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 71.3125
+            },
+            "side": {
+              "x": 121.984375,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 70.796875
+            },
+            "side": {
+              "x": 174,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 106.796875
+            },
+            "side": {
+              "x": 264,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 197.515625
+            },
+            "side": {
+              "x": 490.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-row-content-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 134,
+              "height": 98
+            },
+            "side": {
+              "x": 152,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 209,
+              "height": 98
+            },
+            "side": {
+              "x": 227,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 242,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 61.1875
+            },
+            "side": {
+              "x": 10,
+              "y": 79.1875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 97.1875
+            },
+            "side": {
+              "x": 10,
+              "y": 115.1875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 187.90625
+            },
+            "side": {
+              "x": 10,
+              "y": 205.90625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 10,
+              "y": 36,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 10,
+              "y": 36,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 10,
+              "y": 36,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 69.328125
+            },
+            "side": {
+              "x": 10,
+              "y": 87.328125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 69.328125
+            },
+            "side": {
+              "x": 10,
+              "y": 87.328125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 69.328125
+            },
+            "side": {
+              "x": 10,
+              "y": 87.328125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 61.1875
+            },
+            "side": {
+              "x": 10,
+              "y": 79.1875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 97.1875
+            },
+            "side": {
+              "x": 10,
+              "y": 115.1875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 187.90625
+            },
+            "side": {
+              "x": 10,
+              "y": 205.90625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-border-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 110,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 179,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 70.796875
+            },
+            "side": {
+              "x": 10,
+              "y": 88.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 106.796875
+            },
+            "side": {
+              "x": 10,
+              "y": 124.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 197.515625
+            },
+            "side": {
+              "x": 10,
+              "y": 215.515625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 104,
+              "height": 50
+            },
+            "side": {
+              "x": 10,
+              "y": 68,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 69,
+              "height": 36
+            },
+            "side": {
+              "x": 10,
+              "y": 54,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 69,
+              "height": 36
+            },
+            "side": {
+              "x": 10,
+              "y": 54,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 69,
+              "height": 36
+            },
+            "side": {
+              "x": 10,
+              "y": 54,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 71.328125
+            },
+            "side": {
+              "x": 10,
+              "y": 89.328125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 71.328125
+            },
+            "side": {
+              "x": 10,
+              "y": 89.328125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 103.984375,
+              "height": 71.328125
+            },
+            "side": {
+              "x": 10,
+              "y": 89.328125,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 70.796875
+            },
+            "side": {
+              "x": 10,
+              "y": 88.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 106.796875
+            },
+            "side": {
+              "x": 10,
+              "y": 124.796875,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 197.515625
+            },
+            "side": {
+              "x": 10,
+              "y": 215.515625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-wide-column-content-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-wide.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 134,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 209,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 224,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 342
+            },
+            "side": {
+              "x": 150,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 612
+            },
+            "side": {
+              "x": 240,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 1292.390625
+            },
+            "side": {
+              "x": 466.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 62.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 62.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 62.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 42,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 42,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 42,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 32
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 32
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 32
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 342
+            },
+            "side": {
+              "x": 150,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 612
+            },
+            "side": {
+              "x": 240,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 1292.390625
+            },
+            "side": {
+              "x": 466.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-border-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 62.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 62.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 62.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 414
+            },
+            "side": {
+              "x": 174,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 684
+            },
+            "side": {
+              "x": 264,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 1364.390625
+            },
+            "side": {
+              "x": 490.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 68.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 68.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 68.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 36
+            },
+            "side": {
+              "x": 48,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 36
+            },
+            "side": {
+              "x": 48,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 36
+            },
+            "side": {
+              "x": 48,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 34
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 34
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 34
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 414
+            },
+            "side": {
+              "x": 174,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 684
+            },
+            "side": {
+              "x": 264,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 1364.390625
+            },
+            "side": {
+              "x": 490.796875,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-row-content-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 68.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 68.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 68.65625,
+              "y": 10,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 342
+            },
+            "side": {
+              "x": 10,
+              "y": 360,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 612
+            },
+            "side": {
+              "x": 10,
+              "y": 630,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 1292.390625
+            },
+            "side": {
+              "x": 10,
+              "y": 1310.390625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 10,
+              "y": 36,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 10,
+              "y": 36,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 10,
+              "y": 36,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 32
+            },
+            "side": {
+              "x": 10,
+              "y": 50,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 32
+            },
+            "side": {
+              "x": 10,
+              "y": 50,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 32
+            },
+            "side": {
+              "x": 10,
+              "y": 50,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 342
+            },
+            "side": {
+              "x": 10,
+              "y": 360,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 612
+            },
+            "side": {
+              "x": 10,
+              "y": 630,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 1292.390625
+            },
+            "side": {
+              "x": 10,
+              "y": 1310.390625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-border-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 44.65625,
+              "height": 80
+            },
+            "side": {
+              "x": 10,
+              "y": 98,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-natural",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-percent-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 414
+            },
+            "side": {
+              "x": 10,
+              "y": 432,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 684
+            },
+            "side": {
+              "x": 10,
+              "y": 702,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 1364.390625
+            },
+            "side": {
+              "x": 10,
+              "y": 1382.390625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-fixed-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-max-width",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 90
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-max-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 36
+            },
+            "side": {
+              "x": 10,
+              "y": 54,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 36
+            },
+            "side": {
+              "x": 10,
+              "y": 54,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 30,
+              "height": 36
+            },
+            "side": {
+              "x": 10,
+              "y": 54,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-both-auto-bare-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 34
+            },
+            "side": {
+              "x": 10,
+              "y": 52,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 34
+            },
+            "side": {
+              "x": 10,
+              "y": 52,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 48,
+              "height": 34
+            },
+            "side": {
+              "x": 10,
+              "y": 52,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-auto-natural-ratio",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 414
+            },
+            "side": {
+              "x": 10,
+              "y": 432,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 684
+            },
+            "side": {
+              "x": 10,
+              "y": 702,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 1364.390625
+            },
+            "side": {
+              "x": 10,
+              "y": 1382.390625,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "intrinsic-image-tall-column-content-box-constrained-height",
+      "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+      "image": true,
+      "font": false,
+      "imageAsset": "intrinsic-tall.png",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "photo": {
+              "x": 10,
+              "y": 10,
+              "width": 50.65625,
+              "height": 98
+            },
+            "side": {
+              "x": 10,
+              "y": 116,
+              "width": 40,
+              "height": 30
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

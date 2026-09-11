@@ -1,0 +1,146 @@
+[
+  {
+    "name": "border-plain-w1-r0-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:0px;border:1px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 1,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:1px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w1-r0-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:0px;border:1px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 1,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:1px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w1-r18-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:18px;border:1px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 1,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:1px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w1-r18-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:18px;border:1px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 1,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:1px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w1-r90-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:90px;border:1px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 1,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:1px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w1-r90-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:90px;border:1px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 1,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:1px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w8-r0-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:0px;border:8px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 8,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:8px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w8-r0-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:0px;border:8px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 8,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:8px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w8-r18-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:18px;border:8px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 8,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:8px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w8-r18-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:18px;border:8px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 8,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:8px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w8-r90-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:90px;border:8px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 8,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:8px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w8-r90-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:90px;border:8px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 8,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:8px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w24-r0-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:0px;border:24px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 24,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:24px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w24-r0-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:0px;border:24px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 24,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:24px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w24-r18-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:18px;border:24px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 24,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:24px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w24-r18-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:18px;border:24px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 24,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:24px solid #563cabff;"
+  },
+  {
+    "name": "border-plain-w24-r90-a128",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:90px;border:24px solid #563cab80;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 24,
+    "borderColor": 2153135275,
+    "borderDeclaration": "border:24px solid #563cab80;"
+  },
+  {
+    "name": "border-plain-w24-r90-a255",
+    "html": "<div id=\"frame\"><div id=\"host\"></div><div id=\"sibling\"></div></div>",
+    "css": "#frame { width:100%;padding:20px; } #host {width:60%;height:100px;padding:12px 18px;border-radius:90px;border:24px solid #563cabff;} #sibling {width:70px;height:24px;background:#86ae83;}",
+    "borderWidth": 24,
+    "borderColor": 4283841707,
+    "borderDeclaration": "border:24px solid #563cabff;"
+  }
+]

@@ -1,0 +1,662 @@
+[
+  {
+    "name": "content-auto-row-1-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-1-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-2-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-2-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-.25-.5-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-.25-.5-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-0-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-0-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-reverse-1-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-reverse-1-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-reverse-2-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-reverse-2-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-reverse-.25-.5-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-reverse-.25-.5-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-row-reverse-0-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-row-reverse-0-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:row-reverse;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-1-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-1-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-2-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-2-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-.25-.5-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-.25-.5-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-0-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-0-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-reverse-1-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-reverse-1-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-reverse-2-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-reverse-2-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:2 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-reverse-.25-.5-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-reverse-.25-.5-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:.25 .5 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-column-reverse-0-1-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text with wrapping</p></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}"
+  },
+  {
+    "name": "content-auto-column-reverse-0-1-nested",
+    "font": false,
+    "html": "<div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div>",
+    "css": "#root{width:100%;height:180px;padding:10px;gap:8px;flex-direction:column-reverse;background:#eef}#a,#b{flex:0 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#inner-a{width:35px;height:25px;background:#369}#inner-b{width:120px;height:95px;background:#2a7}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "flex-auto-intrinsic-content",
+    "font": true,
+    "html": "<div id=root><p id=a>Short</p><p id=b>Longer text</p></div>",
+    "css": "#root {width:100%;flex-direction:row;padding:10px;gap:8px} #a,#b {flex:auto;padding:8px} #a {background-color:#def} #b {background-color:#bde}"
+  },
+  {
+    "name": "content-auto-expanded-row-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-row-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-row-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-width:70px}#root>#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-row-reverse-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-column-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-column-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-natural-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-natural-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-mixed-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-mixed-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-constrained-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-constrained-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root>#a{min-height:65px}#root>#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-wrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-wrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{flex-wrap:wrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-nowrap-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-nowrap-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-indefinite-text",
+    "font": true,
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that need to wrap in narrow panels</p><p id=c>Third item</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-expanded-column-reverse-indefinite-nested-text",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-title>Short label</p><div id=a-badge></div></div><div id=b><p id=b-title>A longer paragraph with words that need to wrap in narrow panels</p><div id=b-badge></div></div><div id=c><p id=c-title>Third item</p><div id=c-badge></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#root>p,#root>div{flex:1 1 auto;padding:8px}#a{background:#def}#b{background:#bde}#c{background:#feb}[id$=\"-badge\"]{width:30px;height:12px;background:#369}#root{height:auto}"
+  },
+  {
+    "name": "content-auto-isolated-row-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-row-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-row-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-width:70px}#b{max-width:170px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-row-reverse-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-row-reverse-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-row-reverse-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-width:70px}#b{max-width:170px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-column-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-column-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-column-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-height:65px}#b{max-height:100px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-column-reverse-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-column-reverse-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-isolated-column-reverse-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-height:65px}#b{max-height:100px}#root{background:#eef}#a{background:#8cf}#b{background:#fc8}#c{background:#5a7}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-normal-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-normal-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-nowrap-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-nowrap-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-reverse-normal-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-reverse-normal-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-reverse-nowrap-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-row-reverse-nowrap-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-normal-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-normal-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-nowrap-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-nowrap-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-reverse-normal-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-reverse-normal-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:normal}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-reverse-nowrap-direct",
+    "font": true,
+    "html": "<div id=root><p id=a>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-unbreakable-column-reverse-nowrap-nested",
+    "font": true,
+    "html": "<div id=root><div id=a><p id=a-text>SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious</p></div><p id=b>Short label</p></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>p,#root>div{flex:1 1 auto;padding:8px;background:#def}p{white-space:nowrap}"
+  },
+  {
+    "name": "content-auto-composition-navigation",
+    "font": true,
+    "html": "<div id=root><div id=header><p id=brand>Nuxie</p><p id=status>Draft saved</p></div><div id=actions><p id=preview>Preview</p><p id=publish>Publish design</p><p id=share>Share</p></div><p id=detail>Your content sets the button sizes. Extra room is shared as this scene grows.</p></div>",
+    "css": "#root{width:100%;height:240px;padding:16px;gap:16px;background:#eef3f8}#header{flex-direction:row;align-items:center;gap:12px}#brand{font:24px/32px Inter;flex:1 1 auto}#status{font:12px/20px Inter;color:#496174}#actions{flex-direction:row;gap:8px;align-items:flex-start}#actions>p{flex:1 1 auto;padding:10px 12px;background:#d9e8f4;border-radius:8px;font:14px/20px Inter}#actions>#publish{background:#175c91;color:white}#detail{font:14px/20px Inter;color:#496174}"
+  },
+  {
+    "name": "content-auto-composition-project",
+    "font": true,
+    "html": "<div id=root><div id=summary><p id=eyebrow>PROJECT NOTES</p><p id=title>A place for your next idea</p><p id=body>Keep the important details together and give your next project room to grow.</p></div><div id=side><p id=label>TEAM</p><p id=member>Alex Morgan</p><p id=role>Design lead</p><p id=state>Ready for review</p></div></div>",
+    "css": "#root{width:100%;height:280px;padding:16px;gap:12px;flex-direction:row;background:#edf4f1}#summary{flex:2 1 auto;min-width:100px;padding:12px;gap:8px;background:white;border-radius:10px}#side{flex:.5 1 auto;min-width:80px;max-width:180px;padding:10px;gap:8px;background:#d5e9df;border-radius:10px}p{font:14px/20px Inter}#title{font:22px/28px Inter;color:#163f30}#eyebrow,#label{font:10px/16px Inter;color:#46695a}#role{color:#46695a}#state{padding:6px;background:#b8dcc7;border-radius:6px}"
+  },
+  {
+    "name": "content-auto-composition-plans",
+    "font": true,
+    "html": "<div id=root><div id=basic><p id=basic-title>Starter</p><p id=basic-price>Free</p><p id=basic-copy>A space to try your ideas.</p></div><div id=pro><p id=pro-title>Pro studio</p><p id=pro-price>$12</p><p id=pro-copy>More room for the projects you care about.</p></div><div id=team><p id=team-title>Team</p><p id=team-price>Let us talk</p><p id=team-copy>Build something together.</p></div></div>",
+    "css": "#root{width:100%;height:300px;padding:12px;gap:10px;flex-direction:row;flex-wrap:wrap;align-items:flex-start;background:#f4f0e8}#root>div{flex:1 1 auto;min-width:120px;max-width:280px;padding:12px;gap:8px;background:white;border-radius:10px}p{font:14px/20px Inter}#basic-price,#pro-price,#team-price{font:22px/28px Inter}#root>#pro{background:#e6dbf4}#basic-copy,#pro-copy,#team-copy{color:#62566d}"
+  }
+]

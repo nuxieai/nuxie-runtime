@@ -1,0 +1,200 @@
+[
+  {
+    "name": "group-opacity-overflow-composition-00",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0;overflow:visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-01",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0;overflow:clip}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-02",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0;overflow:clip visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-03",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0;overflow:visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-04",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0;overflow:clip}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-05",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0;overflow:clip visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-06",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0.5,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0.5;overflow:visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-07",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0.5,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0.5;overflow:clip}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-08",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0.5,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0.5;overflow:clip visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-09",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0.5,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0.5;overflow:visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-10",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0.5,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0.5;overflow:clip}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-11",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 0.5,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:0.5;overflow:clip visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-12",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 1,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:1;overflow:visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-13",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 1,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:1;overflow:clip}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-14",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 1,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:border-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:1;overflow:clip visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-15",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 1,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:1;overflow:visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-16",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 1,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:1;overflow:clip}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  },
+  {
+    "name": "group-opacity-overflow-composition-17",
+    "font": true,
+    "image": true,
+    "expectedOpacity": {
+      "group": 1,
+      "content": 0.5
+    },
+    "html": "<div id=frame><div id=group><div id=content>Clipped text and image content</div><img id=picture src=asset:photo></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px;background:white}#group{box-sizing:content-box;width:70%;height:100px;padding:8px;gap:8px;background:#d8e8ff;border:3px solid #654399;border-radius:24px / 12px;opacity:1;overflow:clip visible}#content{display:block;width:180px;font-family:Inter;font-size:16px;line-height:20px;color:#152943;opacity:.5}#picture{width:180px;height:120px}#sibling{width:90px;height:20px;background:#333}"
+  }
+]

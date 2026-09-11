@@ -106,6 +106,8 @@ pub enum YGAlign {
     SpaceAround,
     Start,
     End,
+    /// CSS-only extension; not decoded from the Rive numeric alignment field.
+    SpaceEvenly,
 }
 impl From<u8> for YGAlign {
     fn from(value: u8) -> Self {
@@ -789,6 +791,7 @@ fn align_content(v: YGAlign) -> Option<AlignContent> {
         YGAlign::FlexEnd | YGAlign::End => Some(AlignContent::FLEX_END),
         YGAlign::SpaceBetween => Some(AlignContent::SPACE_BETWEEN),
         YGAlign::SpaceAround => Some(AlignContent::SPACE_AROUND),
+        YGAlign::SpaceEvenly => Some(AlignContent::SPACE_EVENLY),
         YGAlign::Stretch => Some(AlignContent::STRETCH),
         _ => None,
     }

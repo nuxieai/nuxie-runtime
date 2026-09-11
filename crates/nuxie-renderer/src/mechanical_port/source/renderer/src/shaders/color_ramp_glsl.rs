@@ -102,6 +102,8 @@ VERTEX_MAIN(@colorRampVertexMain, Attrs, attrs, _vertexID, _instanceID)
             x += GRAD_TEXTURE_INVERSE_WIDTH;
     }
     v_rampColor = unpackColorInt(columnWithinSpan <= 1 ? @a_span.z : @a_span.w);
+    if ((yWithFlags & GRAD_SPAN_FLAG_PREMULTIPLIED) != 0u)
+        v_rampColor.rgb *= v_rampColor.a;
 
     float4 pos = pixel_coord_to_clip_coord(float2(x, y),
                                            2.,

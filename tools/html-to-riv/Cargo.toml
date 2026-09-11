@@ -1,0 +1,40 @@
+[package]
+name = "nuxie-html-to-riv"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+native-glyph-controls = ["nuxie-renderer/native-glyphs-experimental"]
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+icu_casemap = { version = "=2.3.0", path = "../../vendor/icu_casemap-2.3.0-nuxie-offsets" }
+icu_locale_core = "=2.3.0"
+icu_segmenter = { version = "=2.3.0", default-features = false, features = ["compiled_data"] }
+scraper = { version = "0.27", default-features = false, features = ["errors", "deterministic"] }
+cssparser = "0.37"
+selectors = "0.38"
+nuxie-schema = { path = "../../crates/nuxie-schema" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+png = "0.18"
+ttf-parser = "0.25"
+
+[dev-dependencies]
+nuxie-runtime = { path = "../../crates/nuxie-runtime" }
+nuxie-render-api = { path = "../../crates/nuxie-render-api" }
+nuxie-binary = { path = "../../crates/nuxie-binary" }
+nuxie-renderer = { path = "../../crates/nuxie-renderer" }
+
+[[example]]
+name = "native_glyph_composite"
+required-features = ["native-glyph-controls"]
+
+[[bin]]
+name = "html-to-riv"
+path = "src/main.rs"

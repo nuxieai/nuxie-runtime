@@ -1,0 +1,18 @@
+[
+  {
+    "name": "space-break-joiner",
+    "font": true,
+    "html": "<div id=\"root\"><p id=\"a\">one&#x2003;&#x2060;two three&#x2002;&#x2060;four five</p></div>",
+    "css": "#root{width:100%;padding:8px;background:aliceblue}#a{font:24px/36px Inter;text-align:center}",
+    "reason": "The supplied fonts have no U+2060 glyph; format-control admission currently reports missing-glyph before layout. Preserve this control for future default-ignorable character qualification.",
+    "diagnostic": "missing-glyph"
+  },
+  {
+    "name": "space-break-ogham-missing-glyph",
+    "font": true,
+    "html": "<div id=\"root\"><p id=\"a\">one\u1680two one\u2000two one\u2001two</p></div>",
+    "css": "#root{width:100%;padding:8px;background:aliceblue}#a{font:24px/36px Inter;text-align:center}",
+    "diagnostic": "missing-glyph",
+    "reason": "U+1680 has visible ink and Inter lacks its glyph. Previously the whitespace exemption admitted it and native drew tofu while Chromium used fallback. Require glyph coverage; positive case supplies Noto Sans Ogham."
+  }
+]

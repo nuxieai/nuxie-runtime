@@ -1148,6 +1148,22 @@ impl MechanicalRenderContext {
             .makeLinearGradientHandle(sx, sy, ex, ey, colors, stops)
     }
 
+    pub(super) fn make_premultiplied_linear_gradient_handle(
+        &mut self, sx: f32, sy: f32, ex: f32, ey: f32,
+        colors: &[u32], stops: &[f32],
+    ) -> Option<GradientShader> {
+        let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+        context.riveRenderFactoryMut().makePremultipliedLinearGradientHandle(sx, sy, ex, ey, colors, stops)
+    }
+
+    pub(super) fn make_tiled_premultiplied_linear_gradient_handle(
+        &mut self, sx: f32, sy: f32, ex: f32, ey: f32, tile: [f32; 4],
+        colors: &[u32], stops: &[f32],
+    ) -> Option<GradientShader> {
+        let context = unsafe { Pin::get_unchecked_mut(self.render_context.as_mut()) };
+        context.riveRenderFactoryMut().makeTiledPremultipliedLinearGradientHandle(sx, sy, ex, ey, tile, colors, stops)
+    }
+
     pub(super) fn make_radial_gradient_handle(
         &mut self,
         cx: f32,
@@ -1270,6 +1286,7 @@ impl MechanicalRenderContext {
         match self.mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,
+            RenderMode::Atomics => descriptor.disableRasterOrdering = true,
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;

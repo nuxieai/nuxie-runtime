@@ -235,8 +235,11 @@ IMAGE_RECT_VERTEX_MAIN(@drawVertexMain,
         // Inset the inner vertices to the point where coverage == 1.
         // NOTE: if width/height ever change from 1, these equations need to be
         // updated.
+        // The normal to a constant local-x edge is inverse-transpose column 0.
+        // Using column 1 here swaps the image aspect ratio and loses coverage
+        // even on pixel-aligned full-canvas images (also present in pinned C++).
         float aaRadiusX =
-            AA_RADIUS * manhattan_width(MIT[1]) / dot(M[1], MIT[1]);
+            AA_RADIUS * manhattan_width(MIT[0]) / dot(M[0], MIT[0]);
         if (aaRadiusX >= .5)
         {
             vertexPosition.x = .5;
@@ -247,7 +250,7 @@ IMAGE_RECT_VERTEX_MAIN(@drawVertexMain,
             vertexPosition.x += aaRadiusX * @a_imageRectVertex.z;
         }
         float aaRadiusY =
-            AA_RADIUS * manhattan_width(MIT[0]) / dot(M[0], MIT[0]);
+            AA_RADIUS * manhattan_width(MIT[1]) / dot(M[1], MIT[1]);
         if (aaRadiusY >= .5)
         {
             vertexPosition.y = .5;
@@ -658,11 +661,51 @@ INLINE void resolve_paint(uint pathID,
         float t = paintType == LINEAR_GRADIENT_PAINT_TYPE
                       ? /*linear*/ paintCoord.x
                       : /*radial*/ length(paintCoord);
+        float4 cssGradientTile = STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
+            pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 6u);
+        if (paintType == LINEAR_GRADIENT_PAINT_TYPE && cssGradientTile.w > .0)
+        {
+            float2 uv = paintCoord - floor(paintCoord);
+            t = dot(uv, cssGradientTile.xy) + cssGradientTile.z;
+        }
         t = clamp(t, .0, 1.);
         float x = t * translate.z + translate.w;
         float y = uintBitsToFloat(paintData.y);
+        bool premultipliedGradient = y > 1.;
+        if (premultipliedGradient) y -= 1.;
         fragColorOut =
             TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, y), .0);
+        if (premultipliedGradient)
+        {
+            uint count = css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler,
+                float2(.5 / GRAD_TEXTURE_WIDTH, y), .0));
+            float positionRow = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler,
+                float2(1.5 / GRAD_TEXTURE_WIDTH, y), .0)));
+            uint low = 0u;
+            uint high = count;
+            // Upper bound selects the last coincident stop at an exact edge.
+            for (uint iteration = 0u; iteration < 10u && low < high; ++iteration)
+            {
+                uint mid = (low + high) / 2u;
+                float stop = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler,
+                    float2((float(mid) + 2.5) / GRAD_TEXTURE_WIDTH, positionRow), .0)));
+                if (stop <= t) low = mid + 1u;
+                else high = mid;
+            }
+            uint before = low == 0u ? 0u : low - 1u;
+            uint after = min(low, count - 1u);
+            float x0 = (float(before) + 2.5) / GRAD_TEXTURE_WIDTH;
+            float x1 = (float(after) + 2.5) / GRAD_TEXTURE_WIDTH;
+            float stop0 = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x0, positionRow), .0)));
+            float stop1 = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x1, positionRow), .0)));
+            half4 c0 = TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x0, y), .0);
+            half4 c1 = TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x1, y), .0);
+            c0.rgb *= c0.a;
+            c1.rgb *= c1.a;
+            float weight = stop1 > stop0 ? clamp((t - stop0) / (stop1 - stop0), .0, 1.) : .0;
+            fragColorOut = mix(c0, c1, cast_float_to_half(weight));
+            fragColorOut = make_half4(unmultiply_rgb(fragColorOut), fragColorOut.a);
+        }
     }
     fragColorOut.a *= coverage;
 

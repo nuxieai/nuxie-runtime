@@ -139,3 +139,5 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## Baseline composition experiments
 
 `validation/baseline-landmark-review.md` records ordinary landmark constraints, percentage containing-block preservation, nested baseline positioning, and counterexamples involving changing baseline providers and automatic parent extents. `validation/baseline-landmark-receipt.json` binds the exact-fixture experiment sources, binaries, native results, visual scopes and preserved failures. Raw harness public labels do not qualify baseline language support. Baseline stays rejected by the public compiler.
+
+`validation/baseline-measurement-review.md` adds responsive maximum and intrinsic parent-extent experiments. Its receipt binds 16 passing responsive frames, 64 passing nested geometry frames with eight retained pixel failures, and an unconstrained public-compiler control reproducing the fractional pixel failure exactly. These remain experimental compositions, not public baseline admission.

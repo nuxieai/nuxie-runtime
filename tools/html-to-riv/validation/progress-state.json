@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Responsive baseline measurement and parent extent",
-  "status": "Ordinary landmark primitive validated experimentally; general baseline unresolved",
-  "current": "Landmark constraints pass24 frames for fixed/mixed/percentage boxes. Nested anchor control passes, but provider switching and automatic parent extent expose10 failing frames. Last-baseline unsafe end control passes; safe overflow counterexamples preserved.",
-  "next": "Investigate ordinary measurement compositions for maximum baseline ascent/descent and intrinsic parent extent; public baseline remains rejected.",
+  "focus": "Compiler-derived baseline measurement",
+  "status": "Responsive maximum and intrinsic extent compositions demonstrated experimentally",
+  "current": "Responsive measurement passes 16/16 geometry/pixel frames. Nested extent passes 64/64 geometry; eight pixel failures are retained. An unconstrained public-compiler control reproduces all corresponding images exactly, isolating the fractional-edge failure from baseline composition.",
+  "next": "Implement compact compiler-derived baseline summaries and evidenced measurement expressions, then validate public interfaces and combined contexts. Keep unresolved forms rejected and fractional pixel failures visible.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Responsive baseline measurement, parent extent and exact unconstrained pixel control",
+      "path": "tools/html-to-riv/validation/baseline-measurement-receipt.json"
+    },
     {
       "label": "Baseline landmarks, nested sizing failures and last-baseline overflow",
       "path": "tools/html-to-riv/validation/baseline-landmark-receipt.json"
@@ -153,8 +157,8 @@
   ],
   "activeWork": [
     {
-      "name": "Baseline measurement",
-      "work": "Landmark primitive proven in exact fixtures; responsive maximum selection and parent sizing unresolved"
+      "name": "Baseline compiler lowering",
+      "work": "Derive compact baseline summaries and measurement expressions from authored styles; no fixture-specific selection in public API"
     }
   ],
   "publication": {

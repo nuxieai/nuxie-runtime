@@ -1,0 +1,50 @@
+{
+  "status": "experimental-baseline-measurement; no public admission",
+  "responsiveMaximum": {
+    "manifest": {
+      "path": "output/baseline-responsive-measure-r1/experiment-manifest.json",
+      "sha256": "a1fd1c50396871c7767a9fe326618b8739dbbe351d12f2e89405c90dda11735b"
+    },
+    "geometryPassed": 16,
+    "pixelsPassed": 16,
+    "clearPassed": 32,
+    "directVisualPairs": 6,
+    "exactRepeatClonePairs": 10
+  },
+  "nestedExtent": {
+    "manifest": {
+      "path": "output/baseline-nested-extent-r1/experiment-manifest.json",
+      "sha256": "cbb4e2f81e38ab76c427099e724305e3665d70e75d7f5fe4a126165db4e32d8f"
+    },
+    "geometryPassed": 64,
+    "pixelsPassed": 56,
+    "pixelsFailed": 8,
+    "clearPassed": 128,
+    "visualScope": "Eight frame1 pairs directly inspected. Other frames have automated results only; no full pixel qualification.",
+    "sheets": [
+      {
+        "path": "output/baseline-nested-extent-r1/render/visual-0.png",
+        "sha256": "0884df22b6e9f9f64272b815561d21c2af42826d2fd0c469ae5848789caae14e"
+      },
+      {
+        "path": "output/baseline-nested-extent-r1/render/visual-4.png",
+        "sha256": "ceeba8c463c5041e8fa8683256f5aef385cbeb9551c645cb572eaa2e733368a7"
+      }
+    ]
+  },
+  "scope": "Exact fixtures and authored symbolic constants only. Raw driver public labels do not qualify the compiler language.",
+  "fractionalLeafControl": {
+    "manifest": {
+      "path": "output/baseline-fractional-leaf-control-r1/experiment-manifest.json",
+      "sha256": "e6f91d03b7133936d03f929adcf5d57d48899c171959b694a5f9b7d3aa2f2c3a"
+    },
+    "decodedComparison": {
+      "path": "output/baseline-fractional-leaf-control-r1/decoded-comparison.json",
+      "sha256": "1d72ee8247b1d4f5c822726ac50a8e171fc8fa2f940d0d1b08c12dccd10eb2fd"
+    },
+    "geometryPassed": 8,
+    "pixelsPassed": 6,
+    "pixelsFailed": 2,
+    "identityScope": "All eight Chrome and eight native images are decoded-pixel identical to the nested row-reverse fixed-parent fixture. This isolates the failure from baseline helpers/constraints, not a general renderer cause."
+  }
+}

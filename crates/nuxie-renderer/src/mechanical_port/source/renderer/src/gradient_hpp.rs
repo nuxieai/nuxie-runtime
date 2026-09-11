@@ -344,9 +344,6 @@ pub struct Gradient {
     pub(super) m_count: usize,
     pub(super) m_coeffs: [f32; 3],
     pub(super) m_isOpaque: UnsafeCell<gpu::TriState>,
-    // CSS opts into premultiplied interpolation; source Rive remains straight.
-    pub(super) premultiplied_interpolation: bool,
-    pub(super) css_tile: Option<[f32; 4]>,
     pub(super) m_lastModulatedGradient: UnsafeCell<rcp<Gradient>>,
     pub(super) m_lastModulatedOpacity: UnsafeCell<f32>,
     _construction_seal: GradientConstructionSeal,
@@ -407,8 +404,6 @@ impl Gradient {
             m_count: count,
             m_coeffs: [coeff_x, coeff_y, coeff_z],
             m_isOpaque: UnsafeCell::new(gpu::TriState::unknown),
-            premultiplied_interpolation: false,
-            css_tile: None,
             m_lastModulatedGradient: UnsafeCell::new(rcp::new()),
             m_lastModulatedOpacity: UnsafeCell::new(-1.0),
             _construction_seal: GradientConstructionSeal,
@@ -432,12 +427,6 @@ impl Gradient {
         coeff_z: f32,
     ) -> rcp<Gradient> {
         allocate_rcp(|| Self::new(paint_type, colors, stops, count, coeff_x, coeff_y, coeff_z))
-    }
-
-    pub fn tile(&self) -> Option<[f32; 4]> { self.css_tile }
-
-    pub fn interpolates_premultiplied(&self) -> bool {
-        self.premultiplied_interpolation
     }
 
     pub fn paintType(&self) -> gpu::PaintType {
@@ -547,76 +536,5 @@ impl nuxie_render_api::RenderShader for GradientShader {
     }
     fn as_any(&self) -> &dyn core::any::Any {
         self
-    }
-}
-
-/// Exact CSS stop data for two RGBA8 texture rows. Each u32 is transported as
-/// four independent bytes using the existing color-span upload path. Sampling
-/// must address texel centers and reconstruct position bits before interpolation.
-/// This table is not a sampled color ramp and must never use filtered lookups.
-#[derive(Debug)]
-pub struct CssGradientStopTable {
-    pub color_row: Vec<u32>,
-    pub position_row: Vec<u32>,
-}
-
-impl CssGradientStopTable {
-    pub const MAX_STOPS: usize = gpu::kGradTextureWidth as usize - 2;
-
-    pub fn new(colors: &[ColorInt], positions: &[f32]) -> Option<Self> {
-        if colors.len() != positions.len()
-            || !(2..=Self::MAX_STOPS).contains(&colors.len())
-            || !positions.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v))
-            || positions.windows(2).any(|p| p[0] > p[1])
-        {
-            return None;
-        }
-        // Column zero is metadata. Colors stay unmultiplied until shader-side
-        // interpolation, preserving all authored u8 channels and transparent RGB.
-        let mut color_row = Vec::with_capacity(colors.len() + 2);
-        color_row.push(colors.len() as u32);
-        color_row.push(0); // Filled with normalized position-row coordinate at upload.
-        color_row.extend_from_slice(colors);
-        let mut position_row = Vec::with_capacity(positions.len() + 2);
-        position_row.extend([0, 0]);
-        position_row.extend(positions.iter().map(|p| p.to_bits()));
-        Some(Self { color_row, position_row })
-    }
-}
-
-#[cfg(test)]
-mod css_stop_table_tests {
-    use super::*;
-
-    #[test]
-    fn table_retains_discontinuities_and_float_bits_without_ramp_quantization() {
-        let positions = [0.0, f32::from_bits(1), 0.5, 0.5, 0.50000006, 1.0];
-        let colors = [0xffff0000, 0, 0xffff0000, 0xff0000ff, 0x4080ff00, 0xffffffff];
-        let table = CssGradientStopTable::new(&colors, &positions).unwrap();
-        assert_eq!(table.color_row[0], 6);
-        assert_eq!(&table.color_row[2..], &colors);
-        let decoded: Vec<f32> = table.position_row[2..].iter().map(|v| f32::from_bits(*v)).collect();
-        assert_eq!(decoded, positions);
-        // Upper-bound selection selects the last coincident stop at the edge.
-        assert_eq!(decoded.partition_point(|p| *p <= 0.5) - 1, 3);
-        assert_eq!(decoded.partition_point(|p| *p <= f32::from_bits(0.5f32.to_bits()-1)) - 1, 1);
-    }
-
-    #[test]
-    fn table_capacity_covers_compiler_limit_with_endpoint_padding() {
-        // The compiler permits256 expanded authored stops and may add two
-        // exterior constant-color endpoints when resolving CSS positions.
-        for count in [258, CssGradientStopTable::MAX_STOPS] {
-            let colors = vec![0xff123456; count];
-            let positions: Vec<_> = (0..count).map(|i| i as f32/(count-1) as f32).collect();
-            let table = CssGradientStopTable::new(&colors, &positions).unwrap();
-            assert!(table.color_row.len() <= gpu::kGradTextureWidth as usize);
-            assert_eq!(table.color_row.len(), table.position_row.len());
-        }
-        let count = CssGradientStopTable::MAX_STOPS + 1;
-        assert!(CssGradientStopTable::new(&vec![0; count], &vec![0.0; count]).is_none());
-        assert!(CssGradientStopTable::new(&[0,0], &[0.0,f32::NAN]).is_none());
-        assert!(CssGradientStopTable::new(&[0,0], &[0.8,0.2]).is_none());
-        assert!(CssGradientStopTable::new(&[0,0], &[0.0]).is_none());
     }
 }

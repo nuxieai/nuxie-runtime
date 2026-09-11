@@ -21,13 +21,6 @@ TOOL_SPEC.loader.exec_module(BOUNDARY_TOOL)
 
 
 class PureRuntimeBoundaryCliTest(unittest.TestCase):
-    def test_html_compiler_cannot_enter_the_runtime_dependency_closure(self) -> None:
-        self.create_package("tools/html-to-riv", "nuxie-html-to-riv", "")
-        self.write_manifest('[dependencies]\nhtml_authoring = { package = "nuxie-html-to-riv", path = "../../tools/html-to-riv" }\n')
-        result = self.run_check()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("nuxie-html-to-riv", result.stderr)
-
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -1836,33 +1829,6 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("vendor/helper", result.stderr)
         self.assertIn("outside the protected workspace scan", result.stderr)
-
-    def test_scans_excluded_taffy_provider_and_rejects_upward_edges(self) -> None:
-        relative = "vendor/taffy-0.12.1-rive-yoga-order"
-        provider = self.create_package(relative, "taffy", "")
-        self.write_workspace('[patch.crates-io]\ntaffy = { path = "' + relative + '" }')
-        workspace = self.root / "Cargo.toml"
-        workspace.write_text(workspace.read_text().replace(
-            '[workspace]', '[workspace]\nexclude = ["' + relative + '"]'))
-        result = self.run_check()
-        self.assertEqual(result.returncode, 0, result.stderr)
-        packages, _, _, errors = BOUNDARY_TOOL.workspace_packages(self.root.resolve())
-        self.assertFalse(errors)
-        self.assertIn(relative, {path for path, _, _ in packages})
-        clean_manifest = (provider / "Cargo.toml").read_text()
-        self.create_package("tools/html-to-riv", "nuxie-html-to-riv", "")
-        for name, manifest, source in [
-            ("manifest", clean_manifest + '\n[dependencies]\nhtml = { package = "nuxie-html-to-riv", path = "../../tools/html-to-riv" }\n', "// clean\n"),
-            ("source", clean_manifest, "use nuxie_html_to_riv::CompileInput;\n"),
-            ("data include", clean_manifest, 'const FONT: &[u8] = include_bytes!("../../../tools/html-to-riv/font.ttf");\n'),
-        ]:
-            with self.subTest(name=name):
-                (self.root / "tools/html-to-riv/font.ttf").write_bytes(b"font")
-                (provider / "Cargo.toml").write_text(manifest)
-                (provider / "src/lib.rs").write_text(source)
-                result = self.run_check()
-                self.assertNotEqual(result.returncode, 0, result.stdout)
-                self.assertIn(relative, result.stderr)
 
     def test_rejects_excluded_local_provider_hidden_behind_cargo_patch(self) -> None:
         self.create_package(

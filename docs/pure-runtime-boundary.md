@@ -65,12 +65,6 @@ the adapter.
 
 ### Editor authoring
 
-`tools/html-to-riv` (`nuxie-html-to-riv`) is a standalone authoring compiler.
-It accepts HTML/CSS and explicit assets and emits `.riv` bytes and source maps.
-The dependency guard forbids baseline packages from depending on it, including
-through renamed dependencies. Its native runtime and browser validation adapters
-are tests/tools; HTML parsing and CSS resolution do not enter SDK closures.
-
 The editor layer owns Scene transactions, stable authored identities, schema
 and lowering policy, dynamic construction, authored observation, and
 authoring-only binary builders. Runtime instances and import/advance/draw
@@ -174,15 +168,8 @@ file fails closed. This is platform-backend policy, not a product-layer or
 portable-build exemption.
 Registry, git, alias, duplicate, and target-specific substitutions are
 rejected. Root Cargo path patches are resolved too: non-excluded local providers
-join the protected scan. The exact `vendor/taffy-0.12.1-rive-yoga-order`
-provider remains excluded from Cargo workspace membership, but its manifest,
-transitive local dependencies, and Rust source are included in this protection
-scan. Other excluded providers must be in the exact audited third-party set.
-Runtime text test fonts live in `crates/nuxie-runtime/tests/assets/fonts` with
-their licenses; protected tests cannot include compiler-owned font files.
-The Taffy fork likewise owns copies of its five pinned browser geometry
-snapshots under its own `tests/assets`, with source-copy hashes recorded there.
-Repository Cargo configuration may not override dependency
+join the protected scan, while excluded providers must be in the exact audited
+third-party set. Repository Cargo configuration may not override dependency
 providers through `[patch]`, `paths`, or `[source]`; committed overrides belong
 in the audited root manifest. Deprecated Cargo `[replace]` overrides are
 rejected outright.

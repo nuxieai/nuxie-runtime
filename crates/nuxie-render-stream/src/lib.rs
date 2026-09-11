@@ -1,13 +1,10 @@
 //! Typed parsing and renderer-neutral replay for `rive-golden-stream-v1`.
 
 use nuxie_render_api::{
-    Aabb, BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler,
-    ImageWrap, Mat2D, RawPath, RenderBufferFlags, RenderBufferType, RenderPaintStyle, Renderer,
-    StrokeCap, StrokeJoin,
+    BlendMode, ColorInt, Factory, FillRule, ImageDecodeError, ImageFilter, ImageSampler, ImageWrap,
+    Mat2D, RawPath, RenderBufferFlags, RenderBufferType, RenderPaintStyle, Renderer, StrokeCap,
+    StrokeJoin,
 };
-mod opacity;
-mod opacity_canvas;
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
@@ -27,16 +24,6 @@ pub struct Frame {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Resource {
-    TiledPremultipliedLinearGradient {
-        id: u64, start: (f32, f32), end: (f32, f32), tile: [f32; 4],
-        stops: Vec<GradientStop>,
-    },
-    PremultipliedLinearGradient {
-        id: u64,
-        start: (f32, f32),
-        end: (f32, f32),
-        stops: Vec<GradientStop>,
-    },
     LinearGradient {
         id: u64,
         start: (f32, f32),
@@ -70,9 +57,6 @@ pub struct GradientStop {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Command {
-    /// Isolate subsequent draws; requires preparation before the parent frame opens.
-    BeginOpacity(f32),
-    EndOpacity,
     Save,
     Restore,
     Transform(Mat2D),
@@ -81,8 +65,6 @@ pub enum Command {
         paint: Paint,
     },
     ClipPath(Path),
-    ClipOutRect(Aabb),
-    ClipAxis { horizontal: bool, min: f32, max: f32, local: Option<Mat2D> },
     DrawImage {
         image: u64,
         sampler: ImageSampler,
@@ -183,14 +165,6 @@ impl RenderStream {
                 commands.push(Command::Save);
                 continue;
             }
-            if let Some(value) = line.strip_prefix("beginOpacity opacity=") {
-                commands.push(Command::BeginOpacity(parse(value, line_number, "group opacity")?));
-                continue;
-            }
-            if line == "endOpacity" {
-                commands.push(Command::EndOpacity);
-                continue;
-            }
             if line == "restore" {
                 commands.push(Command::Restore);
                 continue;
@@ -218,53 +192,6 @@ impl RenderStream {
                 )?));
                 continue;
             }
-            if let Some(value) = line.strip_prefix("clipAxis axis=") {
-                let (value, local) = if let Some((value, matrix)) = value.split_once(" matrix=") {
-                    let matrix = Mat2D(parse_array6(matrix, line_number)?);
-                    if matrix.0.iter().any(|v| !v.is_finite()) {
-                        return Err(StreamError::new(line_number, "axis clip matrix must be finite"));
-                    }
-                    (value, Some(matrix))
-                } else { (value, None) };
-                let (axis, range) = value.split_once(" range=")
-                    .ok_or_else(|| StreamError::new(line_number, "bad axis clip"))?;
-                let horizontal = match axis {
-                    "x" => true,
-                    "y" => false,
-                    _ => return Err(StreamError::new(line_number, "axis must be x or y")),
-                };
-                let range = range.strip_prefix('[').and_then(|v| v.strip_suffix(']'))
-                    .ok_or_else(|| StreamError::new(line_number, "bad axis clip range"))?;
-                let values = range.split(',').map(|v| parse::<f32>(v,line_number,"axis clip edge"))
-                    .collect::<Result<Vec<_>,_>>()?;
-                let [min,max]: [f32;2] = values.try_into()
-                    .map_err(|_| StreamError::new(line_number,"axis clip needs two edges"))?;
-                if !min.is_finite() || !max.is_finite() {
-                    return Err(StreamError::new(line_number,"axis clip must be finite"));
-                }
-                commands.push(Command::ClipAxis {horizontal,min,max,local});
-                continue;
-            }
-            if let Some(value) = line.strip_prefix("clipOutRect rect=") {
-                let values = value
-                    .strip_prefix('[')
-                    .and_then(|v| v.strip_suffix(']'))
-                    .ok_or_else(|| StreamError::new(line_number, "bad clip rectangle"))?
-                    .split(',')
-                    .map(|v| parse::<f32>(v, line_number, "clip edge"))
-                    .collect::<Result<Vec<_>, _>>()?;
-                let [left, top, right, bottom]: [f32; 4] = values.try_into().map_err(|_| {
-                    StreamError::new(line_number, "clip rectangle needs four edges")
-                })?;
-                if [left, top, right, bottom].iter().any(|v| !v.is_finite()) {
-                    return Err(StreamError::new(
-                        line_number,
-                        "clip rectangle must be finite",
-                    ));
-                }
-                commands.push(Command::ClipOutRect(Aabb::new(left, top, right, bottom)));
-                continue;
-            }
             if let Some(value) = line.strip_prefix("clipPath path=") {
                 commands.push(Command::ClipPath(parse_path(value, line_number)?));
                 continue;
@@ -277,15 +204,6 @@ impl RenderStream {
                     path: parse_path(&value[..split], line_number)?,
                     paint: parse_paint(&value[split + 7..], line_number)?,
                 });
-                continue;
-            }
-            if let Some(value) = line.strip_prefix("makeTiledPremultipliedLinearGradient ") {
-                resources.push(parse_tiled_premultiplied_linear_gradient(value, line_number)?);
-                continue;
-            }
-            if let Some(value) = line.strip_prefix("makePremultipliedLinearGradient ") {
-                let Resource::LinearGradient { id, start, end, stops } = parse_linear_gradient(value, line_number)? else { unreachable!() };
-                resources.push(Resource::PremultipliedLinearGradient { id, start, end, stops });
                 continue;
             }
             if let Some(value) = line.strip_prefix("makeLinearGradient ") {
@@ -369,48 +287,11 @@ impl RenderStream {
         factory: &mut dyn Factory,
         renderer: &mut dyn Renderer,
     ) -> Result<(), ReplayError> {
-        let frame = self.frames.get(frame_index)
-            .ok_or(ReplayError::MissingFrame(frame_index))?;
-        // Never open an offscreen frame while the caller's frame is active.
-        // Validate the entire group structure before allocating or painting.
-        let groups = opacity::plan(frame)?;
-        if !groups.groups.is_empty() {
-            return Err(ReplayError::UnsupportedOperation("prepared opacity groups"));
-        }
-        let resources = LoadedResources::new(&self.resources, factory)?;
-        for command in &frame.commands {
-            resources.execute(command, factory, renderer)?;
-        }
-        Ok(())
-    }
-}
-
-struct LoadedResources {
-    shaders: HashMap<u64, Box<dyn nuxie_render_api::RenderShader>>,
-    images: HashMap<u64, Box<dyn nuxie_render_api::RenderImage>>,
-    buffers: HashMap<u64, Box<dyn nuxie_render_api::RenderBuffer>>,
-}
-
-impl LoadedResources {
-    fn new(resources: &[Resource], factory: &mut dyn Factory) -> Result<Self, ReplayError> {
         let mut shaders = HashMap::new();
         let mut images = HashMap::new();
         let mut buffers = HashMap::new();
-        for resource in resources {
+        for resource in &self.resources {
             match resource {
-                Resource::TiledPremultipliedLinearGradient { id, start, end, tile, stops } => {
-                    let (colors, offsets) = split_stops(stops);
-                    let shader = factory.make_tiled_premultiplied_linear_gradient(
-                        start.0, start.1, end.0, end.1, *tile, &colors, &offsets)
-                        .ok_or(ReplayError::UnsupportedOperation("tiled premultiplied linear gradients"))?;
-                    shaders.insert(*id, shader);
-                }
-                Resource::PremultipliedLinearGradient { id, start, end, stops } => {
-                    let (colors, offsets) = split_stops(stops);
-                    let shader = factory.make_premultiplied_linear_gradient(start.0, start.1, end.0, end.1, &colors, &offsets)
-                        .ok_or(ReplayError::UnsupportedOperation("premultiplied linear gradients"))?;
-                    shaders.insert(*id, shader);
-                }
                 Resource::LinearGradient {
                     id,
                     start,
@@ -459,29 +340,15 @@ impl LoadedResources {
             }
         }
 
-        Ok(Self { shaders, images, buffers })
-    }
-
-    fn execute(&self, command: &Command, factory: &mut dyn Factory, renderer: &mut dyn Renderer) -> Result<(), ReplayError> {
+        let frame = self
+            .frames
+            .get(frame_index)
+            .ok_or(ReplayError::MissingFrame(frame_index))?;
+        for command in &frame.commands {
             match command {
-                Command::BeginOpacity(_) | Command::EndOpacity => return Err(ReplayError::UnsupportedOperation("prepared opacity groups")),
                 Command::Save => renderer.save(),
                 Command::Restore => renderer.restore(),
                 Command::Transform(matrix) => renderer.transform(*matrix),
-                Command::ClipAxis {horizontal,min,max,local} => {
-                    let accepted = match local {
-                        Some(matrix) => renderer.clip_axis_transformed(*horizontal,*min,*max,*matrix),
-                        None => renderer.clip_axis(*horizontal,*min,*max),
-                    };
-                    if !accepted {
-                        return Err(ReplayError::UnsupportedOperation("clipAxis"));
-                    }
-                }
-                Command::ClipOutRect(rect) => {
-                    if !renderer.clip_out_rect(*rect) {
-                        return Err(ReplayError::UnsupportedOperation("clipOutRect"));
-                    }
-                }
                 Command::ClipPath(path) => {
                     let path = factory.make_render_path(path.raw_path.clone(), path.fill_rule);
                     renderer.clip_path(path.as_ref());
@@ -497,7 +364,7 @@ impl LoadedResources {
                     render_paint.feather(paint.feather);
                     render_paint.blend_mode(paint.blend_mode);
                     if paint.shader != 0 {
-                        let shader = self.shaders
+                        let shader = shaders
                             .get(&paint.shader)
                             .ok_or(ReplayError::MissingResource("shader", paint.shader))?;
                         render_paint.shader(Some(shader.as_ref()));
@@ -510,7 +377,7 @@ impl LoadedResources {
                     blend_mode,
                     opacity,
                 } => renderer.draw_image(
-                    resource_ref(&self.images, "image", *image)?,
+                    resource_ref(&images, "image", *image)?,
                     *sampler,
                     *blend_mode,
                     *opacity,
@@ -526,11 +393,11 @@ impl LoadedResources {
                     blend_mode,
                     opacity,
                 } => renderer.draw_image_mesh(
-                    resource_ref(&self.images, "image", *image)?,
+                    resource_ref(&images, "image", *image)?,
                     *sampler,
-                    buffer_ref(&self.buffers, *vertices)?,
-                    buffer_ref(&self.buffers, *uvs)?,
-                    buffer_ref(&self.buffers, *indices)?,
+                    buffer_ref(&buffers, *vertices)?,
+                    buffer_ref(&buffers, *uvs)?,
+                    buffer_ref(&buffers, *indices)?,
                     *vertex_count,
                     *index_count,
                     *blend_mode,
@@ -538,15 +405,13 @@ impl LoadedResources {
                 ),
                 Command::ModulateOpacity(opacity) => renderer.modulate_opacity(*opacity),
             }
+        }
         Ok(())
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReplayError {
-    InvalidOpacityGroup { command: usize, reason: &'static str },
-    Canvas(nuxie_render_api::RenderCanvasError),
-    UnsupportedOperation(&'static str),
     MissingFrame(usize),
     MissingResource(&'static str, u64),
     ImageDecode { id: u64, source: ImageDecodeError },
@@ -555,9 +420,6 @@ pub enum ReplayError {
 impl fmt::Display for ReplayError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Canvas(error) => write!(f, "opacity canvas: {error}"),
-            Self::InvalidOpacityGroup { command, reason } => write!(f, "opacity group at command {command}: {reason}"),
-            Self::UnsupportedOperation(name) => write!(f, "renderer does not support {name}"),
             Self::MissingFrame(index) => write!(f, "render stream has no frame {index}"),
             Self::MissingResource(kind, id) => write!(f, "missing {kind} resource {id}"),
             Self::ImageDecode { id, .. } => write!(f, "failed to decode image resource {id}"),
@@ -569,10 +431,7 @@ impl Error for ReplayError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
             Self::ImageDecode { source, .. } => Some(source),
-            Self::Canvas(error) => Some(error),
-            Self::InvalidOpacityGroup { .. } | Self::MissingFrame(_) | Self::MissingResource(_, _) | Self::UnsupportedOperation(_) => {
-                None
-            }
+            Self::MissingFrame(_) | Self::MissingResource(_, _) => None,
         }
     }
 }
@@ -601,25 +460,6 @@ fn buffer_ref(
     id: u64,
 ) -> Result<Option<&dyn nuxie_render_api::RenderBuffer>, ReplayError> {
     resource_ref(resources, "buffer", id)
-}
-
-fn parse_tiled_premultiplied_linear_gradient(value: &str, line: usize) -> Result<Resource, StreamError> {
-    let Resource::LinearGradient { id, start, end, stops } = parse_linear_gradient(value, line)? else { unreachable!() };
-    let text = field(value, "tile", line)?;
-    let components = text.strip_prefix('(').and_then(|v| v.strip_suffix(')'))
-        .ok_or_else(|| StreamError::new(line, "tile must be a parenthesized rectangle"))?
-        .split(',').map(|v| parse::<f32>(v, line, "tile component"))
-        .collect::<Result<Vec<_>, _>>()?;
-    let tile: [f32; 4] = components.try_into()
-        .map_err(|_| StreamError::new(line, "tile needs origin x, origin y, width and height"))?;
-    if !nuxie_render_api::css_gradient_tile_is_representable(tile)
-        || ![start.0, start.1, end.0, end.1].into_iter().all(f32::is_finite)
-        || stops.len() < 2
-        || !stops.iter().all(|s| s.offset.is_finite() && (0. ..=1.).contains(&s.offset))
-        || !stops.windows(2).all(|pair| pair[0].offset <= pair[1].offset) {
-        return Err(StreamError::new(line, "invalid tiled premultiplied linear gradient"));
-    }
-    Ok(Resource::TiledPremultipliedLinearGradient { id, start, end, tile, stops })
 }
 
 fn parse_linear_gradient(value: &str, line: usize) -> Result<Resource, StreamError> {
@@ -1020,207 +860,11 @@ frame\n";
     }
 
     #[test]
-    fn hard_difference_clip_round_trips_without_losing_half_pixel_edges() {
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        let rect = Aabb::new(f32::from_bits(0x3effffff), -1.5, 12.125, 7.75);
-        renderer.save();
-        renderer.transform(Mat2D([1.25, 0.0, 0.0, 0.8, 0.25, 0.5]));
-        assert!(renderer.clip_out_rect(rect));
-        renderer.restore();
-        let recorded = factory.stream();
-        let stream = RenderStream::parse(&recorded).unwrap();
-        assert_eq!(
-            stream.frames[0].commands,
-            vec![
-                Command::Save,
-                Command::Transform(Mat2D([1.25, 0.0, 0.0, 0.8, 0.25, 0.5])),
-                Command::ClipOutRect(rect),
-                Command::Restore,
-            ]
-        );
-        let mut replay_factory = RecordingFactory::new();
-        let mut replay_renderer = replay_factory.make_renderer();
-        stream
-            .replay_frame(0, &mut replay_factory, &mut replay_renderer)
-            .unwrap();
-        assert_eq!(recorded, replay_factory.stream());
-        let before = factory.stream();
-        assert!(!renderer.clip_out_rect(Aabb::new(f32::NAN, 0.0, 1.0, 1.0)));
-        assert_eq!(before, factory.stream());
-        // An unsupported backend must report the missing operation, not draw
-        // subsequent paths as though no exclusion were present.
-        let mut null = nuxie_render_api::NullFactory::new().make_renderer();
-        assert_eq!(
-            stream.replay_frame(0, &mut factory, &mut null),
-            Err(ReplayError::UnsupportedOperation("clipOutRect"))
-        );
-    }
-
-    #[test]
-    fn rejects_malformed_or_nonfinite_difference_clip_rectangles() {
-        for value in [
-            "[0,1,2]",
-            "[0,1,2,3,4]",
-            "[NaN,0,1,2]",
-            "[0,inf,1,2]",
-            "0,1,2,3",
-            "[0,1,no,3]",
-        ] {
-            let input = format!("rive-golden-stream-v1\nclipOutRect rect={value}\n");
-            let error = RenderStream::parse(&input).unwrap_err();
-            assert!(error.to_string().starts_with("render stream line 2:"));
-        }
-    }
-
-    #[test]
     fn rejects_unknown_commands_with_line_number() {
         let error = RenderStream::parse("rive-golden-stream-v1\nexplode\n").unwrap_err();
         assert_eq!(
             error.to_string(),
             "render stream line 2: unsupported command `explode`"
         );
-    }
-
-    #[test]
-    fn axis_clips_round_trip_and_require_backend_support() {
-        let mut factory = RecordingFactory::new();
-        let mut renderer = factory.make_renderer();
-        renderer.save();
-        renderer.transform(Mat2D([1.,0.5,0.,1.,3.,4.]));
-        assert!(renderer.clip_axis(true, f32::from_bits(0x3effffff), 7.25));
-        assert!(renderer.clip_axis(false, -3.5, 100.));
-        let local = Mat2D([0.8660254, 0.5, -0.5, 0.8660254, 100.25, 60.75]);
-        assert!(renderer.clip_axis_transformed(true, 0.25, 100.75, local));
-        renderer.restore();
-        let recorded = factory.stream();
-        let stream = RenderStream::parse(&recorded).unwrap();
-        assert_eq!(stream.frames[0].commands[2], Command::ClipAxis {
-            horizontal:true,min:f32::from_bits(0x3effffff),max:7.25,local:None
-        });
-        assert_eq!(stream.frames[0].commands[4], Command::ClipAxis {
-            horizontal: true, min: 0.25, max: 100.75, local: Some(local)
-        });
-        let mut replay_factory = RecordingFactory::new();
-        let mut replay_renderer = replay_factory.make_renderer();
-        stream.replay_frame(0,&mut replay_factory,&mut replay_renderer).unwrap();
-        assert_eq!(recorded,replay_factory.stream());
-        let before = factory.stream();
-        assert!(!renderer.clip_axis(true,f32::NAN,1.));
-        assert!(!renderer.clip_axis_transformed(true, 0., 1., Mat2D([f32::NAN; 6])));
-        assert_eq!(before,factory.stream());
-        let mut null = nuxie_render_api::NullFactory::new().make_renderer();
-        assert_eq!(stream.replay_frame(0,&mut factory,&mut null),Err(ReplayError::UnsupportedOperation("clipAxis")));
-    }
-
-    #[test]
-    fn axis_clip_parser_rejects_invalid_axes_and_ranges() {
-        for value in ["z range=[0,1]","x range=[0]","y range=[0,1,2]","x range=[NaN,1]","y range=[0,inf]","x range=0,1"] {
-            let error=RenderStream::parse(&format!("rive-golden-stream-v1\nclipAxis axis={value}\n")).unwrap_err();
-            assert!(error.to_string().starts_with("render stream line 2:"));
-        }
-    }
-}
-
-#[cfg(test)]
-mod premultiplied_gradient_tests {
-    use super::*;
-    use nuxie_render_api::{Factory, NullFactory, PersistentFactory, RecordingFactory};
-
-    #[test]
-    fn explicit_interpolation_round_trips_and_rejects_unsupported_factory() {
-        let mut source = PersistentFactory::new(RecordingFactory::new());
-        assert!(source.make_premultiplied_linear_gradient(0.,0.,100.,0., &[0xffff0000,0], &[0.,1.]).is_some());
-        let text = source.borrow().stream();
-        assert!(text.contains("makePremultipliedLinearGradient"));
-        let stream = RenderStream::parse(&format!("{text}frame\n")).unwrap();
-        assert!(matches!(stream.resources[0], Resource::PremultipliedLinearGradient { .. }));
-        let mut target = RecordingFactory::new();
-        let mut renderer = target.make_renderer();
-        stream.replay_frame(0,&mut target,&mut renderer).unwrap();
-        assert_eq!(target.stream(),text);
-        let mut unsupported = NullFactory::new();
-        let mut renderer = unsupported.make_renderer();
-        assert_eq!(stream.replay_frame(0,&mut unsupported,&mut renderer),
-            Err(ReplayError::UnsupportedOperation("premultiplied linear gradients")));
-    }
-
-    #[test]
-    fn invalid_recording_has_no_output_and_ordinary_mode_is_unchanged() {
-        let mut factory = RecordingFactory::new();
-        for (colors, stops) in [(vec![0],vec![0.]),(vec![0,1],vec![1.,0.]),(vec![0,1],vec![0.,f32::NAN])] {
-            let before=factory.stream();
-            assert!(factory.make_premultiplied_linear_gradient(0.,0.,100.,0.,&colors,&stops).is_none());
-            assert_eq!(factory.stream(),before);
-        }
-        let _ = factory.make_linear_gradient(0.,0.,100.,0., &[0xffff0000,0], &[0.,1.]);
-        let stream = RenderStream::parse(&format!("{}frame\n",factory.stream())).unwrap();
-        assert!(matches!(stream.resources[0], Resource::LinearGradient { .. }));
-        let mut null=NullFactory::new();let mut renderer=null.make_renderer();
-        stream.replay_frame(0,&mut null,&mut renderer).unwrap();
-    }
-}
-
-#[cfg(test)]
-mod tiled_premultiplied_gradient_tests {
-    use super::*;
-    use nuxie_render_api::{NullFactory, PersistentFactory, RecordingFactory};
-
-    #[test]
-    fn tiled_gradient_round_trips_without_untiled_fallback() {
-        let mut source = PersistentFactory::new(RecordingFactory::new());
-        assert!(source.make_tiled_premultiplied_linear_gradient(
-            -5., 4., 90., 40., [-12.5, 3., 120., 80.],
-            &[0x00ff0000, 0xff0000ff, 0xffffffff], &[0., 0.5, 1.]).is_some());
-        let text = source.borrow().stream();
-        assert!(text.contains("makeTiledPremultipliedLinearGradient id=1 start=(-5,4) end=(90,40) tile=(-12.5,3,120,80)"));
-        let stream = RenderStream::parse(&format!("{text}frame\n")).unwrap();
-        assert!(matches!(stream.resources[0], Resource::TiledPremultipliedLinearGradient { tile: [-12.5, 3., 120., 80.], .. }));
-        let mut target = RecordingFactory::new();
-        let mut renderer = target.make_renderer();
-        stream.replay_frame(0, &mut target, &mut renderer).unwrap();
-        assert_eq!(target.stream(), text);
-        let mut unsupported = NullFactory::new();
-        let mut renderer = unsupported.make_renderer();
-        assert_eq!(stream.replay_frame(0, &mut unsupported, &mut renderer),
-            Err(ReplayError::UnsupportedOperation("tiled premultiplied linear gradients")));
-    }
-
-    #[test]
-    fn invalid_tile_or_gradient_is_rejected_without_recording_or_consuming_ids() {
-        let mut factory = RecordingFactory::new();
-        let before = factory.stream();
-        for tile in [[0.,0.,0.,20.], [0.,0.,20.,-1.], [f32::NAN,0.,20.,20.],
-            [0.,f32::INFINITY,20.,20.], [0.,0.,f32::INFINITY,20.], [0.,0.,1e-40,20.],
-            [0.,0.,20.,1e-40], [f32::MAX,0.,0.5,20.]] {
-            assert!(factory.make_tiled_premultiplied_linear_gradient(
-                0.,0.,20.,20.,tile,&[0,1],&[0.,1.]).is_none());
-        }
-        for (colors, stops) in [(vec![0],vec![0.]), (vec![0,1],vec![1.,0.]),
-            (vec![0,1],vec![0.,f32::NAN]), (vec![0,1],vec![0.]),
-            (vec![0,1],vec![-0.1,1.])] {
-            assert!(factory.make_tiled_premultiplied_linear_gradient(
-                0.,0.,20.,20.,[0.,0.,20.,20.],&colors,&stops).is_none());
-        }
-        assert!(factory.make_tiled_premultiplied_linear_gradient(
-            0.,0.,f32::NAN,20.,[0.,0.,20.,20.],&[0,1],&[0.,1.]).is_none());
-        assert_eq!(factory.stream(), before);
-        assert!(factory.make_tiled_premultiplied_linear_gradient(
-            0.,0.,20.,20.,[-1.,-1.,20.,20.],&[0,1],&[0.5,0.5]).is_some());
-        assert!(factory.stream().contains("makeTiledPremultipliedLinearGradient id=1 "));
-    }
-
-    #[test]
-    fn malformed_tiled_stream_is_rejected_at_parse_boundary() {
-        let valid = "rive-golden-stream-v1\nmakeTiledPremultipliedLinearGradient id=1 start=(0,0) end=(20,20) tile=(0,0,20,20) stops=[{color=0xff000000,stop=0},{color=0xffffffff,stop=1}]\nframe\n";
-        assert!(RenderStream::parse(valid).is_ok());
-        for tile in ["(0,0,20)", "(0,0,20,20,1)", "[0,0,20,20]", "(0,0,0,20)",
-            "(0,0,20,-1)", "(NaN,0,20,20)", "(0,0,inf,20)", "(0,0,1e-40,20)",
-            "(0,0,20,1e-40)", "(3e38,0,0.5,20)"] {
-            assert!(RenderStream::parse(&valid.replace("(0,0,20,20)", tile)).is_err(), "{tile}");
-        }
-        assert!(RenderStream::parse(&valid.replace("tile=(0,0,20,20) ", "")).is_err());
-        assert!(RenderStream::parse(&valid.replace("end=(20,20)", "end=(NaN,20)")).is_err());
-        assert!(RenderStream::parse(&valid.replace("stop=1", "stop=-1")).is_err());
     }
 }

@@ -353,22 +353,6 @@ pub trait Font: Any {
         0
     }
 
-    /// Recompute a preserved CSS tab at a line-relative position. Ordinary
-    /// backends/policies do not opt into position-dependent tab advances.
-    fn experimental_css_tab_advance(
-        &self,
-        _position: f32,
-        _size: f32,
-        _spacing: f32,
-    ) -> Option<f32> {
-        None
-    }
-
-    /// Experimental fixed-width separators break after their preserved advance.
-    fn preserves_line_break_space(&self, _character: u32) -> bool {
-        false
-    }
-
     fn shape_text(
         &self,
         text: &[Unichar],
@@ -388,7 +372,6 @@ pub trait Font: Any {
 
         let mut paragraphs = self.on_shape_text(text, runs, text_direction_flag);
         let mut want_white_space = false;
-        let mut break_after_preserved = false;
         let reserve_size = text.len() / 4;
         let mut breaks = Vec::with_capacity(reserve_size);
         let mut joiners = Vec::with_capacity(reserve_size);
@@ -413,29 +396,6 @@ pub trait Font: Any {
                     }
                     if unicode == 0x2060 {
                         joiners.push(offset);
-                    }
-                    let preserved = glyph_run
-                        .font
-                        .as_ref()
-                        .is_some_and(|font| font.preserves_line_break_space(unicode));
-                    // A preserved separator is part of the preceding word's
-                    // fit width. A coincident end/start pair permits a break
-                    // after it without creating a collapsible-space interval.
-                    if break_after_preserved
-                        && !preserved
-                        && !is_white_space(unicode)
-                        && !matches!(unicode, 0x2060 | 0xfeff)
-                    {
-                        breaks.push(glyph_index as u32);
-                        breaks.push(glyph_index as u32);
-                    }
-                    break_after_preserved = preserved;
-                    if preserved {
-                        if !want_white_space {
-                            breaks.push(glyph_index as u32);
-                            want_white_space = true;
-                        }
-                        continue;
                     }
                     if want_white_space == is_white_space(unicode) {
                         breaks.push(glyph_index as u32);
@@ -613,7 +573,6 @@ pub struct OrderedLine {
     end_glyph_index: u32,
     runs: Vec<OrderedRun>,
     glyph_line: GlyphLine,
-    css_source_glyph_count: Option<usize>,
     y: f32,
 }
 
@@ -624,28 +583,6 @@ struct OrderedRun {
 }
 
 impl OrderedLine {
-    /// Diagnostic CSS rendering path; visual-order source runs followed by
-    /// one synthetic marker run. CSS decorations cover only source glyphs.
-    pub fn from_css_runs(runs: Vec<GlyphRun>, line: &GlyphLine, y: f32) -> Self {
-        let last = runs.len().checked_sub(1);
-        let source_glyph_count = runs
-            .iter()
-            .take(runs.len().saturating_sub(1))
-            .map(|run| run.glyphs.len())
-            .sum();
-        let end_glyph_index = runs.last().map_or(0, |run| run.glyphs.len() as u32);
-        Self {
-            start_logical: last.map(|_| 0),
-            end_logical: last,
-            start_glyph_index: 0,
-            end_glyph_index,
-            runs: runs.into_iter().enumerate().map(|(index, run)| OrderedRun { run, logical_index: Some(index) }).collect(),
-            glyph_line: line.clone(),
-            css_source_glyph_count: Some(source_glyph_count),
-            y,
-        }
-    }
-
     pub fn new(
         paragraph: &Paragraph,
         line: &GlyphLine,
@@ -662,7 +599,6 @@ impl OrderedLine {
             end_glyph_index: line.end_glyph_index,
             runs: Vec::new(),
             glyph_line: line.clone(),
-            css_source_glyph_count: None,
             y,
         };
         let mut logical_runs = Vec::new();
@@ -712,11 +648,6 @@ impl OrderedLine {
         }
         result.runs = logical_runs;
         result
-    }
-
-    /// Synthetic CSS markers paint, but do not extend source decorations.
-    pub fn decoration_glyph_count(&self) -> usize {
-        self.css_source_glyph_count.unwrap_or(usize::MAX)
     }
 
     pub fn start_logical(&self) -> Option<usize> {

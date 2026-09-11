@@ -4,7 +4,7 @@
 
 use crate::geometry::Size;
 use crate::style::AvailableSpace;
-use crate::tree::{LayoutInput, LayoutOutput, RunMode, SizingMode};
+use crate::tree::{LayoutInput, LayoutOutput, RunMode};
 use crate::RequestedAxis;
 
 /// The number of measurement constraint categories for each node in the tree.
@@ -87,8 +87,6 @@ fn size_mixed_cache_key(kd: Size<Option<f32>>, avs: Size<AvailableSpace>) -> u64
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 struct CacheKey {
-    /// Content-only measurements cannot satisfy queries that include authored sizes.
-    sizing_mode: SizingMode,
     /// The initial cached size of the node itself
     kd_available_space: u64,
     /// The initial cached size of the parent's node
@@ -120,7 +118,6 @@ impl From<&LayoutInput> for CacheKey {
         };
 
         Self {
-            sizing_mode: input.sizing_mode,
             kd_available_space: size_mixed_cache_key(input.known_dimensions, input.available_space),
             parent_size: (size_option_cache_key(input.parent_size) & NON_SIGN_BITS_MASK) | extra_bits,
         }
@@ -233,8 +230,7 @@ impl Cache {
             RunMode::PerformLayout => self.final_layout_entry.filter(|entry| entry.key == key).map(|e| e.content),
             RunMode::ComputeSize => {
                 for entry in self.measure_entries.iter().flatten().flatten() {
-                    if entry.key.sizing_mode == key.sizing_mode
-                        && entry.key.kd_available_space == key.kd_available_space
+                    if entry.key.kd_available_space == key.kd_available_space
                         && (entry.key.x_axis_parent_size() == key.x_axis_parent_size())
                     {
                         return Some(LayoutOutput::from_outer_size(entry.content));
@@ -297,22 +293,6 @@ pub enum ClearState {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn separates_content_and_inherent_measurements() {
-        let mut cache = Cache::new();
-        let mut content = LayoutInput::HIDDEN;
-        content.run_mode = RunMode::ComputeSize;
-        content.sizing_mode = SizingMode::ContentSize;
-        let inherent = LayoutInput { sizing_mode: SizingMode::InherentSize, ..content };
-        let content_size = Size { width: 92.0, height: 44.0 };
-        let inherent_size = Size { width: 110.0, height: 70.0 };
-        cache.store(&content, LayoutOutput::from_outer_size(content_size));
-        assert!(cache.get(&inherent).is_none());
-        cache.store(&inherent, LayoutOutput::from_outer_size(inherent_size));
-        assert_eq!(cache.get(&content).unwrap().size, content_size);
-        assert_eq!(cache.get(&inherent).unwrap().size, inherent_size);
-    }
 
     #[test]
     fn retains_multiple_exact_measurements_in_one_constraint_category() {

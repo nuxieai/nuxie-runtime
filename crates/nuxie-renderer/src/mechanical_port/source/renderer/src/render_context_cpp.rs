@@ -4126,7 +4126,6 @@ const K_MAX_REORDERED_DRAW_PASS_COUNT: i32 = i16::MAX as i32;
 const GRAD_SPAN_FLAG_LEFT_BORDER: u32 = 0x8000_0000;
 const GRAD_SPAN_FLAG_RIGHT_BORDER: u32 = 0x4000_0000;
 const GRAD_SPAN_FLAG_COMPLEX_BORDER: u32 = 0x2000_0000;
-const GRAD_SPAN_FLAG_PREMULTIPLIED: u32 = 0x1000_0000;
 const SORT_SUBPASS_SHIFT: u32 = 0;
 const SORT_CONTENTS_SHIFT: u32 = 3;
 const SORT_BLEND_SHIFT: u32 = 12;
@@ -5803,7 +5802,6 @@ impl LogicalFlush {
             m_pending_simple_grad_draws: Vec::new(),
             m_complex_gradients: HashMap::new(),
             m_pending_complex_grad_draws: Vec::new(),
-            m_complex_gradient_rows: 0,
             m_pending_grad_span_count: 0,
             m_clips: Vec::new(),
             m_draws: Vec::new(),
@@ -5848,7 +5846,6 @@ impl LogicalFlush {
         self.m_pending_simple_grad_draws.clear();
         self.m_complex_gradients.clear();
         self.m_pending_complex_grad_draws.clear();
-        self.m_complex_gradient_rows = 0;
         self.m_pending_grad_span_count = 0;
         self.m_clips.clear();
         self.m_draws.clear();
@@ -5899,7 +5896,6 @@ impl LogicalFlush {
             .reserve(K_DEFAULT_SIMPLE_GRADIENT_CAPACITY);
         self.m_complex_gradients = HashMap::with_capacity(K_DEFAULT_COMPLEX_GRADIENT_CAPACITY);
         self.m_pending_complex_grad_draws.clear();
-        self.m_complex_gradient_rows = 0;
         self.m_pending_complex_grad_draws.shrink_to_fit();
         self.m_pending_complex_grad_draws
             .reserve(K_DEFAULT_COMPLEX_GRADIENT_CAPACITY);
@@ -5961,8 +5957,7 @@ impl LogicalFlush {
         let stops = gradient.stops_slice();
         let stop_count = gradient.count();
         debug_assert!(stop_count > 0);
-        if !gradient.interpolates_premultiplied()
-            && (stop_count == 1 || (stop_count == 2 && stops[0] == 0.0 && stops[1] == 1.0)) {
+        if stop_count == 1 || (stop_count == 2 && stops[0] == 0.0 && stops[1] == 1.0) {
             let colors = gradient.colors_slice();
             let color_ramp = gpu::TwoTexelRamp {
                 color0: colors[0],
@@ -5974,7 +5969,7 @@ impl LogicalFlush {
             } else {
                 if gradient_data_height(
                     self.m_simple_gradients.len() + 1,
-                    self.m_complex_gradient_rows,
+                    self.m_complex_gradients.len(),
                 ) > K_MAX_TEXTURE_HEIGHT
                 {
                     return false;
@@ -6002,24 +5997,21 @@ impl LogicalFlush {
             } else {
                 if gradient_data_height(
                     self.m_simple_gradients.len(),
-                    self.m_complex_gradient_rows + if gradient.interpolates_premultiplied() { 2 } else { 1 },
+                    self.m_complex_gradients.len() + 1,
                 ) > K_MAX_TEXTURE_HEIGHT
                 {
                     return false;
                 }
-                let row = self.m_complex_gradient_rows as u16;
-                self.m_complex_gradient_rows += if gradient.interpolates_premultiplied() { 2 } else { 1 };
+                let row = self.m_complex_gradients.len() as u16;
                 let owned_key = GradientContentKey::move_from(&mut key);
                 self.m_complex_gradients.insert(owned_key, row);
                 self.m_pending_complex_grad_draws.push(gradient);
-                self.m_pending_grad_span_count += if gradient.interpolates_premultiplied() { 2 * (stop_count + 2) } else { stop_count - 1 };
+                self.m_pending_grad_span_count += stop_count - 1;
                 row
             };
             unsafe {
                 (*color_ramp_location).row = row;
-                (*color_ramp_location).col = if gradient.interpolates_premultiplied() {
-                    gpu::ColorRampLocation::kPremultipliedGradientMarker
-                } else { gpu::ColorRampLocation::kComplexGradientMarker };
+                (*color_ramp_location).col = gpu::ColorRampLocation::kComplexGradientMarker;
             }
         }
         true
@@ -6228,10 +6220,6 @@ impl LogicalFlush {
             context.platformFeatures().framebufferBottomUp,
             target_height,
         );
-        if let Some(tile) = (!draw.gradient().is_null()).then(|| unsafe { (*draw.gradient()).tile() }).flatten() {
-            assert!(aux.set_css_gradient_tile(*draw.paintMatrix(), gradient_coeffs.unwrap(), tile,
-                context.platformFeatures().framebufferBottomUp, target_height), "Invalid CSS tile transform");
-        }
         unsafe { context.m_paint_aux_data.emplace_back(aux) };
         debug_assert_eq!(
             self.m_flush_desc.firstPath + self.m_current_path_id as usize + 1,
@@ -6815,30 +6803,11 @@ impl LogicalFlush {
             self.m_complex_gradients.len(),
             self.m_pending_complex_grad_draws.len()
         );
-        let mut next_gradient_row = self.m_grad_texture_layout.complexOffsetY;
-        for gradient_ptr in &self.m_pending_complex_grad_draws {
+        for (index, gradient_ptr) in self.m_pending_complex_grad_draws.iter().enumerate() {
             let gradient = unsafe { &**gradient_ptr };
             let stops = gradient.stops_slice();
             let colors = gradient.colors_slice();
-            let y = next_gradient_row;
-            next_gradient_row += if gradient.interpolates_premultiplied() { 2 } else { 1 };
-            if gradient.interpolates_premultiplied() {
-                let mut table = super::gradient_hpp::CssGradientStopTable::new(colors, stops)
-                    .expect("checked CSS gradient table");
-                table.color_row[1] = ((y as f32 + 1.5) * self.m_grad_texture_layout.inverseHeight).to_bits();
-                for (offset, row) in [table.color_row, table.position_row].iter().enumerate() {
-                    for (column, word) in row.iter().copied().enumerate() {
-                        let left = column as u32 * ONE_TEXEL_FIXED;
-                        let right = ((column as u32 + 1) * ONE_TEXEL_FIXED).min(65535);
-                        let mut span = gpu::GradientSpan::default();
-                        // Flat unpremultiplied RGBA bytes encode either a color
-                        // or f32 bits. No filtering or alpha multiplication here.
-                        span.set(left, right, y + offset as u32, 0, word, word);
-                        unsafe { context.m_grad_span_data.emplace_back(span) };
-                    }
-                }
-                continue;
-            }
+            let y = index as u32 + self.m_grad_texture_layout.complexOffsetY;
             let m = (gpu::kGradTextureWidth as f32 - 1.0) * ONE_TEXEL_FIXED as f32;
             let a = 0.5 * ONE_TEXEL_FIXED as f32;
             let mut last_x = (stops[0] * m + a) as u32;
@@ -6848,7 +6817,6 @@ impl LogicalFlush {
                 let x = (stops[stop_index] * m + a) as u32;
                 debug_assert!(last_x <= x && x < 65536);
                 let mut flags = GRAD_SPAN_FLAG_COMPLEX_BORDER;
-                if gradient.interpolates_premultiplied() { flags |= GRAD_SPAN_FLAG_PREMULTIPLIED; }
                 if stop_index == 1 {
                     flags |= GRAD_SPAN_FLAG_LEFT_BORDER;
                 }
@@ -7559,7 +7527,7 @@ impl LogicalFlush {
         self.m_flush_desc.firstGradSpan =
             running_layout.gradSpanCount as usize + running_layout.gradSpanPaddingCount as usize;
         self.m_flush_desc.gradDataHeight =
-            self.m_grad_texture_layout.complexOffsetY + self.m_complex_gradient_rows as u32;
+            self.m_grad_texture_layout.complexOffsetY + self.m_complex_gradients.len() as u32;
         self.m_flush_desc.tessDataHeight = tess_height;
         self.m_flush_desc.clockwiseFillOverride = frame.clockwiseFillOverride;
         self.m_flush_desc.wireframe = frame.wireframe;

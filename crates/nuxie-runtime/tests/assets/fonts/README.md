@@ -1,1 +1,0 @@
-Runtime-owned font fixtures for CSS line-spacing and HarfBuzz kerning regression tests. These exact bytes were copied from the compiler browser fixtures so baseline tests have no upward dependency on the HTML compiler. Each font retains its adjacent upstream license. Compiler and runtime copies may be updated independently only with their respective regression evidence.

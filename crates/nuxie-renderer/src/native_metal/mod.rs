@@ -824,24 +824,6 @@ impl Factory for NativeMetalFactory {
         Box::new(source.unwrap_or_else(|| panic!("mechanical linear gradient owner was not valid")))
     }
 
-    fn make_premultiplied_linear_gradient(
-        &mut self, sx: f32, sy: f32, ex: f32, ey: f32,
-        colors: &[ColorInt], stops: &[f32],
-    ) -> Option<Box<dyn RenderShader>> {
-        let mechanical = self.mechanical_context().ok()?;
-        let source = mechanical.borrow_mut().make_premultiplied_linear_gradient_handle(sx, sy, ex, ey, colors, stops)?;
-        Some(Box::new(source))
-    }
-
-    fn make_tiled_premultiplied_linear_gradient(
-        &mut self, sx: f32, sy: f32, ex: f32, ey: f32, tile: [f32; 4],
-        colors: &[ColorInt], stops: &[f32],
-    ) -> Option<Box<dyn RenderShader>> {
-        let mechanical = self.mechanical_context().ok()?;
-        let source = mechanical.borrow_mut().make_tiled_premultiplied_linear_gradient_handle(sx, sy, ex, ey, tile, colors, stops)?;
-        Some(Box::new(source))
-    }
-
     fn make_radial_gradient(
         &mut self,
         cx: f32,
@@ -923,41 +905,23 @@ impl Factory for NativeMetalFactory {
         height: u32,
     ) -> Result<Box<dyn RenderCanvas>, RenderCanvasError> {
         // Recording never consults this factory's device or execution owner.
-        Ok(Box::new(
-            crate::exact_source_adapter::ExactSourceRenderCanvas::new(width, height),
-        ))
+        Ok(Box::new(crate::exact_source_adapter::ExactSourceRenderCanvas::new(width, height)))
     }
 
     fn ensure_canvas_backing(&mut self, canvas: &nuxie_render_api::RenderCanvasHandle) {
         let mut canvas = canvas.borrow_mut();
-        if canvas.is_backed() {
-            return;
-        }
+        if canvas.is_backed() { return; }
         let any: &mut dyn Any = canvas.as_mut();
-        let Some(shell) =
-            any.downcast_mut::<crate::exact_source_adapter::ExactSourceRenderCanvas>()
-        else {
-            return;
-        };
-        let Ok(mechanical) = self.mechanical_context() else {
-            return;
-        };
+        let Some(shell) = any.downcast_mut::<crate::exact_source_adapter::ExactSourceRenderCanvas>() else { return; };
+        let Ok(mechanical) = self.mechanical_context() else { return; };
         let domain = {
             let mut execution = mechanical.borrow_mut();
             let context = unsafe { Pin::get_unchecked_mut(execution.render_context_mut()) };
             context.ensureCanvasBackingExecutable(unsafe { &mut *shell.source_ptr() });
             execution.resource_domain()
         };
-        if !shell.is_backed() {
-            return;
-        }
-        let Some(backing) = NativeMetalRenderCanvas::from_source(
-            shell.ref_source(),
-            Rc::clone(&mechanical),
-            domain.clone(),
-        ) else {
-            return;
-        };
+        if !shell.is_backed() { return; }
+        let Some(backing) = NativeMetalRenderCanvas::from_source(shell.ref_source(), Rc::clone(&mechanical), domain.clone()) else { return; };
         shell.install_backing(Box::new(backing), domain, mechanical as Rc<dyn Any>);
     }
 
@@ -1261,18 +1225,6 @@ impl Renderer for NativeMetalFrame {
                 paint as *const _ as *mut _,
             );
         }
-    }
-
-    fn clip_out_rect(&mut self, rect: nuxie_render_api::Aabb) -> bool {
-        crate::hard_clip::apply(&mut self.renderer, rect)
-    }
-
-    fn clip_axis(&mut self, horizontal: bool, min: f32, max: f32) -> bool {
-        crate::axis_clip::apply(&mut self.renderer, horizontal, min, max)
-    }
-
-    fn clip_axis_transformed(&mut self, horizontal: bool, min: f32, max: f32, local: nuxie_render_api::Mat2D) -> bool {
-        crate::axis_clip::apply_transformed(&mut self.renderer, horizontal, min, max, local)
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
@@ -1910,9 +1862,6 @@ impl NativeMetalFrame {
 impl NativeMetalFrame {
     #[cfg(test)]
     pub(crate) fn finish_without_readback(self) -> Result<(), RendererError> {
-        if let Some(error) = self.renderer.checked_draw_error {
-            return Err(RendererError::NativeMetal(error.into()));
-        }
         self.mechanical
             .borrow_mut()
             .finish(self.frame_number, self.frame_number)?;
@@ -1924,12 +1873,6 @@ impl NativeMetalFrame {
     }
 
     pub fn finish_for_benchmark(self) -> Result<NativeMetalFrameOutput, RendererError> {
-        if let Some(error) = self.renderer.checked_draw_error {
-            // Drop abandons the source frame, releases queued owners and rewinds
-            // its arenas. The same factory can begin a valid subsequent frame.
-            return Err(RendererError::NativeMetal(error.into()));
-        }
-
         let source_mode = self.mechanical.borrow().mode();
         let completion = self
             .mechanical
@@ -1989,10 +1932,6 @@ impl NativeMetalFrame {
         &mut self,
         drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
     ) -> Result<NativeMetalExecutionInventory, RendererError> {
-        if let Some(error) = self.renderer.checked_draw_error {
-            self.mechanical.borrow_mut().abandon_frame();
-            return Err(RendererError::NativeMetal(error.into()));
-        }
         let source_mode = self.mechanical.borrow().mode();
         let completion = self.mechanical.borrow_mut().finish_present(
             self.frame_number,
@@ -2977,12 +2916,12 @@ fn select_native_metal_mode(
         Some(RenderMode::RasterOrdering) if !capabilities.supports_raster_ordering => Err(
             RendererError::Unsupported("native Metal device does not support raster ordering"),
         ),
-        Some(RenderMode::Atomics | RenderMode::ClockwiseAtomic) if !capabilities.supports_atomic_mode => Err(
+        Some(RenderMode::ClockwiseAtomic) if !capabilities.supports_atomic_mode => Err(
             RendererError::Unsupported("native Metal device does not support atomic mode"),
         ),
         Some(mode) => Ok(mode),
         None if capabilities.supports_raster_ordering => Ok(RenderMode::RasterOrdering),
-        None if capabilities.supports_atomic_mode => Ok(RenderMode::Atomics),
+        None if capabilities.supports_atomic_mode => Ok(RenderMode::ClockwiseAtomic),
         None => Err(RendererError::Unsupported(
             "native Metal device exposes neither raster-order nor atomic execution",
         )),
@@ -3216,209 +3155,29 @@ fn new_library_from_metallib_bytes(
 mod tests {
     use super::*;
 
-    #[cfg(feature = "renderer-metal")]
-    #[test]
-    fn offscreen_opacity_respects_parent_clip_and_restores_transform() {
-        use nuxie_render_api::{Aabb, RenderCanvas};
-        let mut factory = NativeMetalFactory::new(16, 16).unwrap();
-        let mut canvas = factory.make_metal_render_canvas(8, 8).unwrap();
-        canvas.begin_frame(0xff0000ff).unwrap().finish().unwrap();
-        let image = canvas.render_image();
-        let clip = factory.make_render_path_from_aabb(Aabb::new(6., 6., 10., 10.));
-        let sibling = factory.make_render_path_from_aabb(Aabb::new(12., 0., 16., 4.));
-        let mut paint = factory.make_render_paint();
-        paint.color(0xff00ff00);
-        let mut frame = factory.begin_frame(0xffffffff).unwrap();
-        frame.save();
-        frame.clip_path(clip.as_ref());
-        frame.translate(4., 4.);
-        frame.draw_image(Some(image.as_ref()), ImageSampler::default(), BlendMode::SrcOver, 0.5);
-        frame.restore();
-        frame.draw_path(sibling.as_ref(), paint.as_ref());
-        let pixels = frame.finish().unwrap();
-        for (x, y, expected) in [(7, 7, [127i16, 127, 255, 255]),
-            (5, 7, [255, 255, 255, 255]), (11, 7, [255, 255, 255, 255]),
-            (13, 2, [0, 255, 0, 255])] {
-            let offset = (y * 16 + x) * 4;
-            for channel in 0..4 {
-                assert!((pixels[offset + channel] as i16 - expected[channel]).abs() <= 1,
-                    "point=({x},{y}) channel={channel}: {} versus {}", pixels[offset + channel], expected[channel]);
-            }
-        }
-    }
-
-    #[cfg(feature = "renderer-metal")]
-    #[test]
-    fn nested_offscreen_opacity_preserves_transparent_pixels() {
-        use nuxie_render_api::{Aabb, RenderCanvas};
-        let mut factory = NativeMetalFactory::new(16, 16).unwrap();
-        let mut inner = factory.make_metal_render_canvas(16, 16).unwrap();
-        let mut frame = inner.begin_frame(0).unwrap();
-        let rect = factory.make_render_path_from_aabb(Aabb::new(0., 0., 8., 8.));
-        let mut paint = factory.make_render_paint();
-        paint.color(0xffff0000);
-        frame.renderer().draw_path(rect.as_ref(), paint.as_ref());
-        frame.finish().unwrap();
-        let mut outer = factory.make_metal_render_canvas(16, 16).unwrap();
-        let mut frame = outer.begin_frame(0).unwrap();
-        let image = inner.render_image();
-        frame.renderer().draw_image(Some(image.as_ref()), ImageSampler::default(), BlendMode::SrcOver, 0.5);
-        frame.finish().unwrap();
-        let image = outer.render_image();
-        let mut frame = factory.begin_frame(0xffffffff).unwrap();
-        frame.draw_image(Some(image.as_ref()), ImageSampler::default(), BlendMode::SrcOver, 0.5);
-        let pixels = frame.finish().unwrap();
-        for (x, y, expected) in [(3, 3, [255i16, 191, 191, 255]), (12, 12, [255, 255, 255, 255])] {
-            let offset = (y * 16 + x) * 4;
-            for channel in 0..4 {
-                assert!((pixels[offset + channel] as i16 - expected[channel]).abs() <= 1,
-                    "point=({x},{y}) channel={channel}: {} versus {}", pixels[offset + channel], expected[channel]);
-            }
-        }
-    }
-
-    #[cfg(feature = "renderer-metal")]
-    #[test]
-    fn offscreen_canvas_composites_overlapping_shapes_with_one_opacity() {
-        use nuxie_render_api::{Aabb, RenderCanvas};
-        let mut factory = NativeMetalFactory::new(16, 16).unwrap();
-        let mut canvas = factory.make_metal_render_canvas(16, 16).unwrap();
-        let mut group = canvas.begin_frame(0xff0000ff).unwrap();
-        let red = factory.make_render_path_from_aabb(Aabb::new(0., 0., 12., 12.));
-        let green = factory.make_render_path_from_aabb(Aabb::new(4., 4., 12., 12.));
-        let mut paint = factory.make_render_paint();
-        paint.color(0xffff0000);
-        group.renderer().draw_path(red.as_ref(), paint.as_ref());
-        paint.color(0xff00ff00);
-        group.renderer().draw_path(green.as_ref(), paint.as_ref());
-        group.finish().unwrap();
-        let image = canvas.render_image();
-        for opacity in [0., 0.5, 1.] {
-            let mut frame = factory.begin_frame(0xffffffff).unwrap();
-            frame.draw_image(Some(image.as_ref()), ImageSampler::default(), BlendMode::SrcOver, opacity);
-            let pixels = frame.finish().unwrap();
-            for (x, y, color) in [(2, 2, [255., 0., 0.]), (8, 8, [0., 255., 0.]), (14, 14, [0., 0., 255.])] {
-                let offset = (y * 16 + x) * 4;
-                for channel in 0..3 {
-                    let expected = (color[channel] * opacity + 255. * (1. - opacity)) as i16;
-                    assert!((pixels[offset + channel] as i16 - expected).abs() <= 1,
-                        "opacity={opacity} point=({x},{y}) channel={channel}: {} versus {expected}", pixels[offset + channel]);
-                }
-                assert_eq!(pixels[offset + 3], 255);
-            }
-        }
-    }
-
-    #[cfg(feature = "renderer-metal")]
-    #[test]
-    fn stream_opacity_canvas_composites_nested_groups_with_clip_and_translation() {
-        use nuxie_render_api::{Aabb, RecordingFactory};
-        use nuxie_render_stream::{Command, RenderStream};
-        let mut recording = RecordingFactory::new();
-        let mut recorder = recording.make_renderer();
-        let mut paint = recording.make_render_paint();
-        for (bounds, color) in [
-            (Aabb::new(0., 0., 12., 12.), 0xffff0000),
-            (Aabb::new(4., 4., 12., 12.), 0xff00ff00),
-            (Aabb::new(14., 0., 16., 4.), 0xff0000ff),
-        ] {
-            let path = recording.make_render_path_from_aabb(bounds);
-            paint.color(color);
-            recorder.draw_path(path.as_ref(), paint.as_ref());
-        }
-        let mut stream = RenderStream::parse(&recording.stream()).unwrap();
-        let draws = stream.frames[0].commands.clone();
-        assert_eq!(draws.len(), 3);
-        let mut clip = nuxie_render_api::RawPath::new();
-        clip.move_to(0., 0.); clip.line_to(10., 0.); clip.line_to(10., 10.);
-        clip.line_to(0., 10.); clip.close();
-        stream.frame_size = Some((16, 16));
-        stream.clear_color = Some(0xffffffff);
-        stream.frames[0].commands = vec![
-            Command::Save,
-            Command::Transform(Mat2D([1., 0., 0., 1., 2., 2.])),
-            Command::ClipPath(nuxie_render_stream::Path { fill_rule: nuxie_render_api::FillRule::NonZero, raw_path: clip }),
-            Command::BeginOpacity(0.5), draws[0].clone(),
-            Command::BeginOpacity(0.5), draws[1].clone(), Command::EndOpacity,
-            Command::EndOpacity, Command::Restore, draws[2].clone(),
-        ];
-        let mut factory = NativeMetalFactory::new(16, 16).unwrap();
-        let mut repeated = None;
-        for (outer, inner) in [(0., 0.5), (0.5, 0.), (0.5, 0.5), (0.5, 1.), (1., 0.5), (1., 1.), (0.5, 0.5)] {
-            stream.frames[0].commands[3] = Command::BeginOpacity(outer);
-            stream.frames[0].commands[5] = Command::BeginOpacity(inner);
-            let canvas = stream.render_frame_to_canvas(0, &mut factory).unwrap();
-            let image = canvas.render_image();
-            let mut frame = factory.begin_frame(0xffffffff).unwrap();
-            frame.draw_image(Some(image.as_ref()), ImageSampler::default(), BlendMode::SrcOver, 1.);
-            let pixels = frame.finish().unwrap();
-            let white = (255. * (1. - outer)) as i16;
-            let overlap = [
-                (255. * (1. - outer * inner)) as i16,
-                (255. * (1. - outer + outer * inner)) as i16,
-                white,
-            ];
-            for (x, y, expected) in [
-                (4, 4, [255, white, white]), (8, 8, overlap),
-                (13, 8, [255, 255, 255]), (1, 4, [255, 255, 255]),
-                (15, 2, [0, 0, 255]),
-            ] {
-                let offset = (y * 16 + x) * 4;
-                for c in 0..3 {
-                    assert!((pixels[offset + c] as i16 - expected[c]).abs() <= 1,
-                        "alpha=({outer},{inner}) ({x},{y}) channel{c}: {} expected {}", pixels[offset + c], expected[c]);
-                }
-                assert_eq!(pixels[offset + 3], 255);
-            }
-            if outer == 0.5 && inner == 0.5 {
-                if let Some(previous) = &repeated { assert_eq!(&pixels, previous); }
-                repeated = Some(pixels);
-            }
-        }
-    }
-
     #[cfg(feature = "native-ore-metal-experimental")]
     #[test]
     fn deferred_canvas_is_backed_by_replay_factory_with_stable_image_identity() {
-        let make_factory = || {
-            NativeMetalFactory::new_with_mode_and_context_options(
-                8,
-                8,
-                RenderMode::RasterOrdering,
-                NativeMetalContextOptions {
-                    shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous,
-                    ..Default::default()
-                },
-            )
-            .expect("live Metal factory")
-        };
+        let make_factory = || NativeMetalFactory::new_with_mode_and_context_options(
+            8, 8, RenderMode::RasterOrdering,
+            NativeMetalContextOptions { shader_compilation_mode: ShaderCompilationMode::AlwaysSynchronous, ..Default::default() },
+        ).expect("live Metal factory");
         let mut recording = make_factory();
         let recording_owner = recording.mechanical_context().unwrap();
         let recording_domain = recording_owner.borrow().resource_domain();
         let recording_weak = Rc::downgrade(&recording_owner);
         drop(recording_owner);
         let canvas: nuxie_render_api::RenderCanvasHandle = Rc::new(RefCell::new(
-            recording
-                .make_deferred_render_canvas(8, 8)
-                .expect("device-free shell"),
+            recording.make_deferred_render_canvas(8, 8).expect("device-free shell"),
         ));
         let image = canvas.borrow().render_image();
         let retained_before_replay = image.retain_image();
         let identity = image.image_identity();
         assert!(!canvas.borrow().is_backed());
         assert!(image.ore_texture_info().is_none());
-        assert!(
-            !image
-                .as_any()
-                .downcast_ref::<RiveRenderImageHandle>()
-                .unwrap()
-                .has_source_texture()
-        );
+        assert!(!image.as_any().downcast_ref::<RiveRenderImageHandle>().unwrap().has_source_texture());
         drop(recording);
-        assert!(
-            recording_weak.upgrade().is_none(),
-            "recorded shell must not retain recording execution"
-        );
+        assert!(recording_weak.upgrade().is_none(), "recorded shell must not retain recording execution");
 
         let mut replay = make_factory();
         let replay_owner = replay.mechanical_context().unwrap();
@@ -3429,30 +3188,18 @@ mod tests {
         assert!(canvas.borrow().is_backed());
         assert_eq!(canvas.borrow().render_image().image_identity(), identity);
         assert_eq!(retained_before_replay.image_identity(), identity);
-        let source = retained_before_replay
-            .as_any()
-            .downcast_ref::<RiveRenderImageHandle>()
-            .unwrap();
+        let source = retained_before_replay.as_any().downcast_ref::<RiveRenderImageHandle>().unwrap();
         assert!(source.source_base_for(&replay_domain).is_some());
         assert!(source.source_base_for(&recording_domain).is_none());
-        assert!(
-            replay
-                .make_gpu_canvas_image_view(retained_before_replay.clone())
-                .is_ok()
-        );
+        assert!(replay.make_gpu_canvas_image_view(retained_before_replay.clone()).is_ok());
         {
             let ore = replay.ore().expect("replaying device ORE context");
-            let info = retained_before_replay
-                .ore_texture_info()
-                .expect("backed image");
+            let info = retained_before_replay.ore_texture_info().expect("backed image");
             assert!(unsafe { ore.borrow_mut().wrapImageSampleView(info) }.is_some());
         }
         drop(canvas);
         drop(replay);
-        assert!(
-            replay_weak.upgrade().is_some(),
-            "retained image keeps replay texture execution alive"
-        );
+        assert!(replay_weak.upgrade().is_some(), "retained image keeps replay texture execution alive");
         assert!(retained_before_replay.ore_texture_info().is_some());
         drop(image);
         drop(retained_before_replay);
@@ -3768,13 +3515,6 @@ mod tests {
             select_native_metal_mode(both, Some(RenderMode::ClockwiseAtomic)).unwrap(),
             RenderMode::ClockwiseAtomic
         );
-        assert_eq!(
-            select_native_metal_mode(both, Some(RenderMode::Atomics)).unwrap(),
-            RenderMode::Atomics
-        );
-        let raster_only = MetalCapabilitySelection { supports_atomic_mode: false, ..both };
-        assert!(select_native_metal_mode(raster_only, Some(RenderMode::Atomics)).is_err());
-        assert!(select_native_metal_mode(raster_only, Some(RenderMode::ClockwiseAtomic)).is_err());
         assert!(matches!(
             select_native_metal_mode(both, Some(RenderMode::Msaa)),
             Err(RendererError::Unsupported(_))
@@ -3786,7 +3526,7 @@ mod tests {
         };
         assert_eq!(
             select_native_metal_mode(atomic_only, None).unwrap(),
-            RenderMode::Atomics
+            RenderMode::ClockwiseAtomic
         );
         assert!(matches!(
             select_native_metal_mode(atomic_only, Some(RenderMode::RasterOrdering)),
@@ -3904,47 +3644,5 @@ mod tests {
             6,
             "initial main pass plus one replacement pass per semantic barrier"
         );
-    }
-}
-
-#[cfg(test)]
-mod css_gradient_host_transform_tests {
-    use super::*;
-    use nuxie_render_api::{Factory, Renderer, RawPath, FillRule, RenderPaintStyle, RenderCanvas};
-
-    #[test]
-    fn tiled_gradient_host_overflow_returns_error_and_factory_recovers() {
-        for mode in [RenderMode::RasterOrdering, RenderMode::Atomics] {
-            let mut factory = NativeMetalFactory::new_with_mode(32, 32, mode).unwrap();
-            let shader = factory.make_tiled_premultiplied_linear_gradient(
-                0., 0., 10., 0., [0., 0., 1e-30, 1.], &[0xffff0000, 0xff0000ff], &[0., 1.],
-            ).unwrap();
-            let mut paint = factory.make_render_paint();
-            paint.style(RenderPaintStyle::Fill); paint.color(0xffffffff); paint.shader(Some(shader.as_ref()));
-            let mut raw = RawPath::default();
-            raw.move_to(0., 0.); raw.line_to(320000000000., 0.);
-            raw.line_to(320000000000., 32.); raw.line_to(0., 32.); raw.close();
-            let path = factory.make_render_path(raw, FillRule::NonZero);
-            let mut frame = factory.begin_frame(0xffffffff).unwrap();
-            frame.transform(Mat2D([1e-10, 0., 0., 1., 0., 0.]));
-            frame.draw_path(path.as_ref(), paint.as_ref());
-            let error = frame.finish().unwrap_err();
-            assert!(error.to_string().contains("CSS gradient host transform is not representable"), "{error}");
-            let mut canvas = factory.make_metal_render_canvas(32, 32).unwrap();
-            for scale in [1e-10, 0.] {
-                let mut frame = canvas.begin_frame(0xffffffff).unwrap();
-                frame.renderer().transform(Mat2D([scale, 0., 0., 1., 0., 0.]));
-                frame.renderer().draw_path(path.as_ref(), paint.as_ref());
-                let error = frame.finish().unwrap_err();
-                assert!(error.to_string().contains("CSS gradient host transform is not representable"), "{error}");
-                canvas.begin_frame(0xff00ff00).unwrap().finish().unwrap();
-            }
-            // The error path must retire the active frame, not poison the
-            // factory/context or leak draw ownership into its next frame.
-            for _ in 0..2 {
-                let pixels = factory.begin_frame(0xff00ff00).unwrap().finish().unwrap();
-                assert!(pixels.chunks_exact(4).all(|p| p == [0, 255, 0, 255]));
-            }
-        }
     }
 }

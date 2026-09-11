@@ -1,7 +1,0 @@
-{
-  "groups": [
-    {"properties":["width","padding","margin","gap","border-radius","font-size","line-height","font","display","box-sizing"],"values":["rgb(1 2 3)","hsl(20 30% 40%)","color-mix(in srgb, red, blue)","light-dark(red, blue)"]},
-    {"properties":["width","padding","color","font-size","font","text-decoration","display"],"values":["url('test.png')","url(test.png)","linear-gradient(red, blue)","image-set(url(test.png) 1x)"]},
-    {"properties":["color","background-color","text-decoration-color","display","box-sizing","white-space","flex-direction"],"values":["calc(20px)","min(1px, 2px)","max(1px, 2px)","clamp(1px, 2px, 3px)"]}
-  ]
-}

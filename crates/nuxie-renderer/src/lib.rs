@@ -4,14 +4,8 @@
 //! legacy Rust-WGPU renderer and does not provide automatic backend fallback.
 
 use nuxie_render_api::authored_ore_shader;
-#[cfg(all(feature = "native-glyphs-experimental", target_os = "macos"))]
-pub mod glyph_rasterizer;
-#[cfg(all(feature = "native-glyphs-experimental", target_os = "macos"))]
-pub mod glyph_adapter;
 pub mod deferred;
 mod renderer_types;
-mod hard_clip;
-mod axis_clip;
 mod stack_vector;
 pub use renderer_types::{BackendWorkMetrics, RenderMode, RendererError};
 

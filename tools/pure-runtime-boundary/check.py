@@ -56,7 +56,6 @@ UNPROTECTED_WORKSPACE_PACKAGES = {
     "nux-apple-product-extension",
     "nuxie-project-data",
     "nuxie-project-data-scripting",
-    "nuxie-html-to-riv",
 }
 PRODUCT_LAYER_PACKAGES = {
     "nux-apple-product-extension",
@@ -431,10 +430,6 @@ AUDITED_UNSCANNED_THIRD_PARTY_PATHS = {
     "vendor/vk-mem-0.5.0",
 }
 
-# Cargo excludes this upstream fork to preserve its standalone manifest, but
-# exclusion does not remove its dependencies or Rust source from protection.
-PROTECTED_EXCLUDED_PATHS = {"vendor/taffy-0.12.1-rive-yoga-order"}
-
 # These are file-level ratchet exceptions, not compliant dependencies. A new
 # file containing either marker family fails. Deleting entries is allowed and
 # should happen as the migration in docs/pure-runtime-boundary.md proceeds.
@@ -501,7 +496,7 @@ ALLOWED_INLINE_PATH_ATTRIBUTE_FILES = {
 
 EXPLICIT_PRODUCT_PATH = re.compile(
     r"\b(?:nuxie::(?:flow_session|scene)|"
-    r"nuxie_(?:authoring|html_to_riv|flow|product(?:_scripting)?|project_data)|nux_container)::"
+    r"nuxie_(?:authoring|flow|product(?:_scripting)?|project_data)|nux_container)::"
 )
 LOCAL_PRODUCT_MODULE = re.compile(
     r"^\s*(?:pub(?:\([^)]*\))?\s+)?(?:mod|use)\s+"
@@ -754,7 +749,7 @@ def workspace_packages(
                     f"Cargo.toml: path patch {patch_name!r} resolves to product "
                     f"package {patch_package_name!r}"
                 )
-            if is_excluded(relative) and relative not in PROTECTED_EXCLUDED_PATHS:
+            if is_excluded(relative):
                 if relative not in AUDITED_UNSCANNED_THIRD_PARTY_PATHS:
                     errors.append(
                         f"Cargo.toml: path patch {patch_name!r} resolves to excluded "
@@ -844,7 +839,7 @@ def workspace_packages(
                     continue
                 if not (resolved_path / "Cargo.toml").is_file():
                     continue
-                if is_excluded(implicit_relative) and implicit_relative not in PROTECTED_EXCLUDED_PATHS:
+                if is_excluded(implicit_relative):
                     continue
                 if implicit_relative not in parsed_paths:
                     pending_paths.append(implicit_relative)

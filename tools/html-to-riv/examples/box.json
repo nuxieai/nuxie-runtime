@@ -1,6 +1,0 @@
-{
-  "html": "<div id=card><div id=accent></div></div>",
-  "css": "#card { width:100%; padding:20px; background-color:#edf2f8; border-radius:16px } #accent { width:60%; height:40px; background-color:#336699; border-radius:8px }",
-  "width": 390,
-  "height": 320
-}

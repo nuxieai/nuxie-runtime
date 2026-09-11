@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Public last-baseline compiler",
-  "status": "Last-baseline profile implemented; fractional pixel limitation preserved",
-  "current": "66 public scenes: 528/528 geometry and 526/528 pixel frames pass, with 1056 clear controls and visual review. 92 Rust/26 Node tests pass; 304 prior outputs unchanged. Two fractional leaf failures remain in the failed receipt.",
-  "next": "Investigate broader baseline metrics and remaining layout backlog, preserving fractional pixel evidence and immutable-runtime boundaries.",
+  "focus": "Main-axis spacing and flex line separation",
+  "status": "Around/evenly spacer composition proven; wrapping remains unresolved",
+  "current": "40 spacer experiments pass320 geometry/pixel frames and640 clear checks, with full viewport visual review. Reverse-overflow failures preserved. Two draw-order arrangements fail to change wrapped painting; public compiler remains at last-baseline checkpoint.",
+  "next": "Implement compiler-derived around/evenly spacing with ordering/baseline context guards and public validation; continue investigating wrapped paint ordering.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Spacing composition and failed draw-order candidates",
+      "path": "tools/html-to-riv/validation/flex-spacing-experiment-receipt.json"
+    },
     {
       "label": "Public last-baseline implementation and preserved pixel failures",
       "path": "tools/html-to-riv/validation/public-last-baseline-receipt.json"
@@ -173,8 +177,12 @@
   ],
   "activeWork": [
     {
-      "name": "Remaining baseline/layout contexts",
-      "work": "Responsive participant metrics, out-of-box baselines and broader final-descendant topology remain unresolved. Continue the99-item backlog."
+      "name": "Public spacing lowering",
+      "work": "Derive ordinary flexible spacer placement from authored children and validate broader contexts."
+    },
+    {
+      "name": "Wrapped paint order",
+      "work": "DrawRules chains tested so far do not reorder layout painting; other compositions remain unresolved."
     }
   ],
   "publication": {

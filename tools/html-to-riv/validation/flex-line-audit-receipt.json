@@ -1,0 +1,18 @@
+{
+  "status": "source-audit-only",
+  "publicAdmission": false,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "findings": [
+    {
+      "path": "tools/html-to-riv/output/flex-line-audit-r1/FINDINGS.md",
+      "sha256": "e52acbea18d4d5f04fa96c1218efd86c628f1a3dd632328dd17be26fb798577e"
+    }
+  ],
+  "conclusions": [
+    "Native flexWrapValue exists",
+    "Current global reversal changes line collection",
+    "Native line/item alignment are coupled",
+    "Existing global baseline helper cannot qualify wrapped baseline groups",
+    "Draw-order composition under investigation"
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "status": "spacing-composition-proven-wrapping-unresolved",
+  "publicAdmission": false,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "spacing": {
+    "initialPass": 284,
+    "initialFrames": 320,
+    "correctedPass": 320,
+    "correctedFrames": 320,
+    "directVisualPairs": 64,
+    "exactTransfers": 256
+  },
+  "drawOrder": {
+    "arrangements": 2,
+    "geometryPassPerArrangement": 24,
+    "pixelPassPerArrangement": 0,
+    "framesPerArrangement": 24,
+    "conclusion": "Tested DrawRules chains do not alter native pixels; not a general impossibility result"
+  },
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/spacing-spacers-r2/experiment-manifest.json",
+      "sha256": "49b89f748cbb72c96bed21d8c7bccc26aff6483e7d69a74d4559405525d512c0"
+    },
+    {
+      "path": "tools/html-to-riv/output/spacing-spacers-r1/experiment-manifest.json",
+      "sha256": "268b9e36bcda364fd9644572212935051aeeb5efd1d60c778e910836373791bb"
+    },
+    {
+      "path": "tools/html-to-riv/output/spacing-spacers-r1/reproduction.json",
+      "sha256": "5d9331f8b53bfad67fc2eab1b464a7e046985091d00f69c2ff1cfe122e9e7ad6"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-draw-order-r1/experiment-manifest.json",
+      "sha256": "3d8de94c30bb04ccbe1e3414ab098f8891080571d1f471148f4091aac1643763"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-draw-order-r1/FINDINGS.md",
+      "sha256": "e61308bf56be0bd6a2e43de4c0077cedbf3b68526e06c00de841a4ed2702fa24"
+    }
+  ]
+}

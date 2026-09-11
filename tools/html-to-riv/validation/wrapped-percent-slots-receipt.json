@@ -1,0 +1,178 @@
+{
+  "status": "experimental-cross-percentage-composition-with-preserved-failures",
+  "publicAdmission": false,
+  "totals": {
+    "cases": 48,
+    "frames": 384,
+    "geometryPass": 384,
+    "pixelPass": 376,
+    "clearPass": 768,
+    "exactReproductions": 48,
+    "directPairs": 86,
+    "exactFullRgbaTransfers": 298
+  },
+  "experiments": [
+    {
+      "status": "experimental-native-sizing-and-scalar-alignment",
+      "publicAdmission": false,
+      "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+      "rawStatus": "failed-public-baseline",
+      "scope": "Fixed-main, definite cross percentage/bounds slots with constrained100%visible children; fixture adapter not public compiler. Raw driver public labels do not apply.",
+      "counts": {
+        "cases": 24,
+        "frames": 192,
+        "geometryPass": 192,
+        "pixelPass": 184,
+        "clearPass": 384,
+        "exactReproductions": 24,
+        "directPairsPrepared": 38,
+        "exactTransfers": 154
+      },
+      "visualReview": {
+        "directPairs": 38,
+        "exactFullRgbaTransfers": 154,
+        "allFramesCovered": true
+      },
+      "browser": "153.0.8010.12",
+      "backend": "rust-metal",
+      "effectiveMode": "RasterOrdering",
+      "toolHashes": {
+        "compiler": "06e97906462e500ff4aae5dbb8374d203454d081f5e737f105fa7b11a1b50cad",
+        "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+        "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+      },
+      "baseCompiler": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv",
+        "sha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b"
+      },
+      "artifactHashes": {
+        "src/main.rs": "aa21d66d8fc87e4ddac357e521c62f0b6a68b80d5fa6046f5773b2fecef23249",
+        "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+        "augment": "d4aae35a4313a3a121db46461c54ad65050ecebcac77e9b7715049aa4a0ecfd1",
+        "adapter.py": "06e97906462e500ff4aae5dbb8374d203454d081f5e737f105fa7b11a1b50cad",
+        "pairs.json": "5545add11fd005116ba774c4383b4674dce27f2db6b0cc507691bec518d1d644",
+        "chrome-cases.json": "0df5dc3efe78c1ea6a50c04784c9c1c45c9079be667be3c21acdfd273fe8a20f",
+        "build-command.json": "ed35860ccb4b8d35e47e935ff914c33d289a9c2c43c0b9372befe5aff21028a9",
+        "render/receipt.json": "07d8e8ac5445c66055a4052a0462400acbbdb00452d4303cf7c8b6665e113596",
+        "validation.log": "e4bb4470c5e0d3e7eb26d88d985cf7cb5ebc2a769f324e89a6cbaa71a1e8abc1",
+        "matrix.json": "e7cde635770cd2c69e40adfc26c67493da301f6b3afe22894ce58d8a835d1182",
+        "reproductions.json": "06dd223e6b259acf295f3cb494bd98aa016eb2baf1aa8fe64a3322fe781ce8c5",
+        "counts.json": "d2aef22c7766ba9b9f026b6609bfee302ba06c45c20ee19fda6da4165b735d97",
+        "visual-direct.json": "8c29396782ba7d50393df084a21b9cf843aa3172a881d26085c8f18537693fde",
+        "visual-transfer.json": "b1c9dec0614d14210155b2fc8ca112131dcc41c25a67246298bf806f40c9b0a0",
+        "visual-review.md": "83c1bf9859ee832ae5630ad33de62bfe1e8d19e569a515b612119a4be4b41b61",
+        "record-count.txt": "8a7fba0ef604acffe713744ab34401d9eab753f5a7544f6d5fad74aea31c316d",
+        "record-counter-binding.json": "8588d175278ccec9a82f13a766ac8babaf3ebfcd7bb207c3aba1089a8b681e4f",
+        "visual-0.png": "e54ad64e9562a9e9ee454de58e3f42169d0dc0142cb5bb9d267fb54709c31770",
+        "visual-4.png": "c9be50f6653ca752d3277154e690e3abcbd3ac94130d7da0d6ed5c550a5ccb38",
+        "visual-8.png": "06379f9a5237269e9e7c1a38306086946ba4c86c2635e5787bc8383bbbc7f219",
+        "visual-12.png": "edf3604be443715a4f5dccd0a92cb23a7f6dee41b8318330a7edea6c3d518c60",
+        "visual-16.png": "d4aba2c78a03cf920e2e4cc2a9edd17026dd4892a8d973efb17c5f096351d123",
+        "visual-20.png": "6c2306771ea6a155ade79342a3090ebade6d738ccf94edf96a9df16c4c6dd709",
+        "visual-24.png": "846e4649571a19ac7a9ba3a978dfdc06e7293358989dfa9ca9fd40ff7edb202d",
+        "visual-28.png": "eeea2e7abc6b1255f90c77e097b7dbe1444a532e66a0bd245d22f73da1eb78ef",
+        "visual-32.png": "aa62735b2447d4d50cf39c46059c9f5615ccb4017bc7c409c01c3fd8e30b7b5a",
+        "visual-36.png": "d047113f2cdbe119f62c911c7f992de1f57692d5a77607c6def67baa0f676bdb"
+      },
+      "buildProvenance": "Copied source and augmenter equal original wrapped-percent-slots-r1 build; command and dependency hashes preserved.",
+      "limits": [
+        "Normalized line separation requires bound beyond0.001 cutoff",
+        "Carry reset requires line extent below65536",
+        "Definite slots must not depend on visible child intrinsic content",
+        "Fixed three-item experiment; no public API/production resource proof",
+        "Initial eight fractional pixel failures remain preserved"
+      ],
+      "evidenceDirectory": "tools/html-to-riv/output/wrapped-percent-slots-r1",
+      "manifestSha256": "068e791bf703e6aa5f2c3578a0b5b542590d3a3c241a17bd3b39b774bf0fd11f"
+    },
+    {
+      "status": "experimental-native-sizing-and-scalar-alignment",
+      "publicAdmission": false,
+      "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+      "rawStatus": "passed-public-baseline",
+      "scope": "Fixed-main, definite cross percentage/bounds slots with constrained100%visible children; fixture adapter not public compiler. Raw driver public labels do not apply.",
+      "counts": {
+        "cases": 24,
+        "frames": 192,
+        "geometryPass": 192,
+        "pixelPass": 192,
+        "clearPass": 384,
+        "exactReproductions": 24,
+        "directPairsPrepared": 48,
+        "exactTransfers": 144
+      },
+      "visualReview": {
+        "directPairs": 48,
+        "exactFullRgbaTransfers": 144,
+        "allFramesCovered": true
+      },
+      "browser": "153.0.8010.12",
+      "backend": "rust-metal",
+      "effectiveMode": "RasterOrdering",
+      "toolHashes": {
+        "compiler": "06e97906462e500ff4aae5dbb8374d203454d081f5e737f105fa7b11a1b50cad",
+        "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+        "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+      },
+      "baseCompiler": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv",
+        "sha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b"
+      },
+      "artifactHashes": {
+        "src/main.rs": "aa21d66d8fc87e4ddac357e521c62f0b6a68b80d5fa6046f5773b2fecef23249",
+        "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+        "augment": "d4aae35a4313a3a121db46461c54ad65050ecebcac77e9b7715049aa4a0ecfd1",
+        "adapter.py": "06e97906462e500ff4aae5dbb8374d203454d081f5e737f105fa7b11a1b50cad",
+        "pairs.json": "5ee6257bb2a2d888e4023de4257ab46ef0533fd73bc4f3d0c578fff820c80195",
+        "chrome-cases.json": "3221318ed6c52bcc2132239657221ef6bef861138f48cc4a2c5003429de86184",
+        "build-command.json": "ed35860ccb4b8d35e47e935ff914c33d289a9c2c43c0b9372befe5aff21028a9",
+        "render/receipt.json": "0f64092a96b2306425623c312edc0519107bc6a879afc4760413e0c5c0c6763e",
+        "validation.log": "926a1c9bdd48d927d5012c2b09c7725278dad5194b7345d72f9053faf39ab2dc",
+        "matrix.json": "89ddc410db090948b94fbe8da09d81c754a461e29aaea95e76e6e64db3e15812",
+        "reproductions.json": "d5bf3c2cdfae8f67ab30e902d7b8f503835910dcd737589ac461363daaca5448",
+        "counts.json": "4a5d121487b98161efb50942e3b24b7517ecad53f718a49dea0004dbf5c1691a",
+        "visual-direct.json": "df33b9d2579b90fff50ee6cd8ba50fb5028394ebc7fd3136654256df4c143e2e",
+        "visual-transfer.json": "310a0a822e8a47e4b0089d2d09726c63207d9100e9c23eb8f016b944d32971c7",
+        "visual-review.md": "afd4292c2d85a0e0154ccdd76010fb79742533b688e851e3b218752decece3c4",
+        "record-count.txt": "2fdf68c8cb3378217e1dff540b3164c05a8e33d3781b72b04f6b72c7785bf706",
+        "record-counter-binding.json": "8588d175278ccec9a82f13a766ac8babaf3ebfcd7bb207c3aba1089a8b681e4f",
+        "visual-0.png": "b9a99e9530ff7316d1479e1f94535172e6ec5f66b1baf57f754e89dbec0efd46",
+        "visual-4.png": "db625493146abd15b12cfa0eee81bceb14a54ec3dd6b601f3425d2c8e9ccf89d",
+        "visual-8.png": "adf21f2823c450b1c7629f395408edd1712d69768f3c3f1d76e239ae346c6444",
+        "visual-12.png": "b5b5795a87a66a767817ae1318a0db0da2190d7c95cff3b0b69148942983d754",
+        "visual-16.png": "4e8eb4f44047e4a75b1919b2d6930340cc8715a88bba8280b99d4650db23d918",
+        "visual-20.png": "010f2e36cf526fe5e30e58eca27c2b4a86703f353d577e4e05240260e0cb0f5a",
+        "visual-24.png": "ff31fee1d199ff97d02f4244a72456f73a23aa7b4cf216d47560e46d6bdd4eea",
+        "visual-28.png": "d920c99f25e8957aba7f9cf7992b647ac82871adf5ee8433b3471b6423b424ad",
+        "visual-32.png": "7c28c059bea197e7bc90da425338216f523feb0dd62e7d22ac721b2d5d0a8639",
+        "visual-36.png": "08b158c67521b46c8eb5347a28e8aa4ca6b0a3553d3995eee5617d50b7a57ad3",
+        "visual-40.png": "317e970e8397108c4660feaeb68404cae2082a9add7e1fb396137b63112c15a6",
+        "visual-44.png": "0b5a7f2eb5ba1f40b743206149230cdf296d30260983c5868ea07bc05f01703d"
+      },
+      "buildProvenance": "Copied source and augmenter equal original wrapped-percent-slots-r1 build; command and dependency hashes preserved.",
+      "limits": [
+        "Normalized line separation requires bound beyond0.001 cutoff",
+        "Carry reset requires line extent below65536",
+        "Definite slots must not depend on visible child intrinsic content",
+        "Fixed three-item experiment; no public API/production resource proof",
+        "Initial eight fractional pixel failures remain preserved"
+      ],
+      "evidenceDirectory": "tools/html-to-riv/output/wrapped-percent-slots-aspect-r1",
+      "manifestSha256": "43259fb1748d3ff4af3f4c56315236185b9ea53c8ced00d70b79fe1cb5dac8a6"
+    }
+  ],
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/wrapped-percent-slots-r1/collect-evidence.py",
+      "sha256": "cdab337c47a07f7cfd8c3949c06fdca8a0f642ff61dd3970f7f5ee3260a5aa3e"
+    },
+    {
+      "path": "tools/html-to-riv/validation/wrapped-percent-slots-control-receipt.json",
+      "sha256": "06fae9568b0a5b76bc7ec60b80cacf9eb2d83aade16e259ac5603156c78126c3"
+    },
+    {
+      "path": "tools/html-to-riv/validation/wrapped-percent-slots-control-review.md",
+      "sha256": "2cf07f30c52bff566743c33bae28e01bf58d0a2a7172d037046aef3c63463104"
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "status": "diagnostic-control-preserved-failure",
+  "publicAdmission": false,
+  "counts": {
+    "scenes": 4,
+    "frames": 32,
+    "geometryPass": 8,
+    "pixelPass": 0,
+    "clearPass": 64,
+    "targetFrames": 8,
+    "targetGeometryPass": 8,
+    "targetPixelPass": 0,
+    "targetControlEqualsConstrainedNative": 8,
+    "directVisualTriplets": 4,
+    "cloneExactTripletTransfers": 4,
+    "otherFramesAutomatedOnly": 24,
+    "reproductions": 4
+  },
+  "hashes": {
+    "tools/html-to-riv/output/wrapped-percent-slots-control-r1/experiment-manifest.json": "06c95302a198a19c66cf8a7a57348ecd3f59f9bdedf8d930a8e08d2557c897d0",
+    "tools/html-to-riv/output/wrapped-percent-slots-control-r1/comparison.json": "43ca08c44c6093f5ebb4079446359a0ae8f16d018dcd5b4c4acd428bf440a5bb",
+    "tools/html-to-riv/output/wrapped-percent-slots-control-r1/render/receipt.json": "6971de5b789f51e9690f606bbe243d36a9267f9282aeaa4365e7ac1281959672",
+    "tools/html-to-riv/output/wrapped-percent-slots-control-r1/source-bindings.json": "dcc7942a551b01619bd639559038018340a608f32e0bf5d664eb51414ce4950e",
+    "tools/html-to-riv/output/wrapped-percent-slots-control-r1/reproductions.json": "f35f0371ab9a17d105bce0507367d63dc4a2f6c4c96bdd9074f53d0cbf6000a5",
+    "tools/html-to-riv/validation/wrapped-percent-slots-control-review.md": "2cf07f30c52bff566743c33bae28e01bf58d0a2a7172d037046aef3c63463104"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "status": "passed-experimental-bounded-matrix",
+  "publicAdmission": false,
+  "immutableBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "counts": {
+    "scenes": 16,
+    "frames": 128,
+    "geometryPass": 128,
+    "pixelPass": 128,
+    "clearPass": 256,
+    "directVisualPairs": 40,
+    "exactTransferredPairs": 88,
+    "fullAdapterReproductions": 16
+  },
+  "addedAugmentRecordsPerScene": 138,
+  "additionalWrapperRecordsWhereUsed": 6,
+  "hashes": {
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/experiment-manifest.json": "9963fb9d5ddb5cd3d3fd41ef1d1ce33fd4d098f836f7a2f18da824d8f6a8b0bd",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/verification.json": "0d85f913473a2da6d0cce81a2c399e5823c4676a7b6d25978d74e8ad341d613c",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/reproductions.json": "d78b3c9bf7906927b05830b9a29a70c888c441a8f416c01cea0607edd85f2484",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/render/receipt.json": "dfa97eec1e0fb44100f80349af1c6cf3eaaad3ba5201a317a1ff06fe5cc9a18d",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/build-command.json": "5d5184debf9a08892fc899866754cfa52c26cb54c99999f036b81b3d5651586b",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/build-source-bindings.json": "3023450d01936e88babc729df9e00260c8c492d9ffaddf2cde44e75d9b97d869",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/visual-direct.json": "5bcd542a83adf79abf839f7ac16a5e92ef8b16bb818ca98caec2ed097afea409",
+    "tools/html-to-riv/output/mixed-wrap-axes-r1/visual-transfer.json": "b1ef0bb18ae2bc859a88fbf4826fe25496776f579fd4aeacc0d3d0c9797e8573",
+    "tools/html-to-riv/validation/mixed-wrap-axes-review.md": "5c9eff919735cb8ac2de82ac5b6a0f922c65678c26f57070f45d0dc6d097b0de"
+  }
+}

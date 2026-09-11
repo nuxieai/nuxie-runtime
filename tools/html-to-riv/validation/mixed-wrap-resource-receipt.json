@@ -1,0 +1,186 @@
+{
+  "schema": 1,
+  "status": "experimental resource evidence; no public admission or Chrome/pixel qualification",
+  "targetBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "construction": "output/mixed-wrap-groups-alpha-r1/src/main.rs generalized only from three authored items to N",
+  "addedRecordFormula": "16*N*N - 12, N >= 1, one painted drawable per authored flex item",
+  "testedSizes": [
+    3,
+    8,
+    16,
+    32
+  ],
+  "mixedFlows": [
+    "row-reverse with wrap",
+    "row with wrap-reverse"
+  ],
+  "sceneCount": 8,
+  "stockLifecycleFrames": 64,
+  "timedTrialsPerScene": 3,
+  "timedFramesExactAgainstStock": 192,
+  "sameOriginalAndCloneResizeSequence": [
+    [
+      320,
+      1400
+    ],
+    [
+      640,
+      1400
+    ],
+    [
+      120,
+      1400
+    ],
+    [
+      320,
+      1400
+    ]
+  ],
+  "exactEmissionRepeats": 8,
+  "rawUnaugmentedControls": {
+    "sizes": [
+      3,
+      8,
+      16,
+      32
+    ],
+    "trialsPerSize": 3,
+    "comparisonScope": "cost only; raw files do not contain mixed wrapping"
+  },
+  "summary": [
+    {
+      "n": 3,
+      "wrap": "wrap",
+      "addedRecords": 132,
+      "totalRecords": 159,
+      "rivBytes": 1755,
+      "importMedianMs": 1.8271249999999999,
+      "initialUpdateMedianMs": 0.7595,
+      "cloneMedianMs": 0.810959,
+      "resizeMedianMs": 0.2795625,
+      "resizeMaxMs": 0.588375,
+      "recordDrawMedianMs": 0.234146,
+      "peakRssMiB": 18.96875
+    },
+    {
+      "n": 3,
+      "wrap": "wrap-reverse",
+      "addedRecords": 132,
+      "totalRecords": 159,
+      "rivBytes": 1754,
+      "importMedianMs": 1.698417,
+      "initialUpdateMedianMs": 0.643417,
+      "cloneMedianMs": 0.7518330000000001,
+      "resizeMedianMs": 0.270271,
+      "resizeMaxMs": 0.446041,
+      "recordDrawMedianMs": 0.20297900000000002,
+      "peakRssMiB": 18.96875
+    },
+    {
+      "n": 8,
+      "wrap": "wrap",
+      "addedRecords": 1012,
+      "totalRecords": 1069,
+      "rivBytes": 11516,
+      "importMedianMs": 8.914916,
+      "initialUpdateMedianMs": 2.4764169999999996,
+      "cloneMedianMs": 7.465917,
+      "resizeMedianMs": 1.5323335,
+      "resizeMaxMs": 1.922083,
+      "recordDrawMedianMs": 1.4438545,
+      "peakRssMiB": 25.40625
+    },
+    {
+      "n": 8,
+      "wrap": "wrap-reverse",
+      "addedRecords": 1012,
+      "totalRecords": 1069,
+      "rivBytes": 11511,
+      "importMedianMs": 8.577375,
+      "initialUpdateMedianMs": 2.449833,
+      "cloneMedianMs": 7.040416,
+      "resizeMedianMs": 1.509437,
+      "resizeMaxMs": 2.059625,
+      "recordDrawMedianMs": 1.4517499999999999,
+      "peakRssMiB": 25.296875
+    },
+    {
+      "n": 16,
+      "wrap": "wrap",
+      "addedRecords": 4084,
+      "totalRecords": 4189,
+      "rivBytes": 44402,
+      "importMedianMs": 65.43379200000001,
+      "initialUpdateMedianMs": 7.911207999999999,
+      "cloneMedianMs": 60.631249999999994,
+      "resizeMedianMs": 5.1054585,
+      "resizeMaxMs": 5.34125,
+      "recordDrawMedianMs": 5.385896000000001,
+      "peakRssMiB": 45.015625
+    },
+    {
+      "n": 16,
+      "wrap": "wrap-reverse",
+      "addedRecords": 4084,
+      "totalRecords": 4189,
+      "rivBytes": 44388,
+      "importMedianMs": 64.904959,
+      "initialUpdateMedianMs": 7.952084,
+      "cloneMedianMs": 60.710708000000004,
+      "resizeMedianMs": 5.1300625,
+      "resizeMaxMs": 5.6385000000000005,
+      "recordDrawMedianMs": 5.4758335,
+      "peakRssMiB": 44.984375
+    },
+    {
+      "n": 32,
+      "wrap": "wrap",
+      "addedRecords": 16372,
+      "totalRecords": 16573,
+      "rivBytes": 176274,
+      "importMedianMs": 812.393542,
+      "initialUpdateMedianMs": 30.418666,
+      "cloneMedianMs": 793.5505,
+      "resizeMedianMs": 20.4494585,
+      "resizeMaxMs": 21.033167,
+      "recordDrawMedianMs": 22.1515,
+      "peakRssMiB": 117.921875
+    },
+    {
+      "n": 32,
+      "wrap": "wrap-reverse",
+      "addedRecords": 16372,
+      "totalRecords": 16573,
+      "rivBytes": 176274,
+      "importMedianMs": 811.238875,
+      "initialUpdateMedianMs": 29.982125,
+      "cloneMedianMs": 789.9695,
+      "resizeMedianMs": 20.650166,
+      "resizeMaxMs": 21.198332999999998,
+      "recordDrawMedianMs": 22.6313535,
+      "peakRssMiB": 119.046875
+    }
+  ],
+  "artifacts": {
+    "output/mixed-wrap-resource-r1/artifact-hashes.json": "e51887f53aa855c36e4c8c7d12e7e6df47ca921f7c98df7fcb3d3e91d5d9e076",
+    "output/mixed-wrap-resource-r1/results.json": "be7e40e25b43aa6907b8b9fff4310638ccba6d9f500fa4ad0d34ad1f9a721bf4",
+    "output/mixed-wrap-resource-r1/raw-controls.json": "69ec0b4cc728f5407dd1d09ae3194357135be342a8b130992df40de138934007",
+    "output/mixed-wrap-resource-r1/summary.json": "b081c1aa92b7804dd929d382ca0c4803cbbdbb5ecc0e636f8c5ac160f50bb809",
+    "output/mixed-wrap-resource-r1/provenance.json": "202cf0131d64bc22d6292bd941c0ad330641c311fdf60f6e8832747b6a24a674",
+    "output/mixed-wrap-resource-r1/run.py": "a33219d36f819a6a8ad9badfc1951453b488a1743c53f8cfe909f78acaa80e87",
+    "output/mixed-wrap-resource-r1/raw-controls.py": "123d217c63dd00d7ea3ae665aacf899f39cd7b30377a5330d554d5e8317bf4ee",
+    "output/mixed-wrap-resource-r1/src/main.rs": "b715957c7e4c23940552dc691932e2bef565e91a40296fd9b4e50ce7ffa65de3",
+    "output/mixed-wrap-resource-r1/src/timed-probe.rs": "d56d6b2b9a6c345fab10869cceb630494ccb187317ad12d9f99b2a25abfbe648",
+    "output/mixed-wrap-resource-r1/src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "output/mixed-wrap-resource-r1/emitter-build-command.json": "6fd5d3db1fff191b5d3cad34d3c5ccf3e55ab614fe03bd8271506ff5c13f4625",
+    "output/mixed-wrap-resource-r1/probe-build-command-r2.json": "3956763fae4e3e3f0c8c4224e7d443e31c4f433a928f79bfb1196fb7e7d642cb"
+  },
+  "limitations": [
+    "Debug immutable baseline on one Apple M5 Max machine; no mobile/release or workload isolation evidence.",
+    "Import, initial update, clone, resize update and recording draw are separate timings; recording draw is not GPU rendering.",
+    "Three timing trials per scene; first trial/cold launch outliers retained.",
+    "No native pixels or Chrome equivalence claimed for these generalized scenes.",
+    "N greater than 32 and deeper/multi-paint subtrees not tested.",
+    "No public compiler or runtime edits and no resource guard installed."
+  ]
+}

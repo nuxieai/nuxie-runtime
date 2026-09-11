@@ -1,0 +1,11 @@
+{
+  "name": "@nuxie/html-to-riv-immutable-validation",
+  "version": "0.2.0-dev",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "pixelmatch": "7.2.0",
+    "pngjs": "7.0.0"
+  }
+}

@@ -16,3 +16,5 @@ The replacement compiler has no qualified release yet. All 99 previous backlog i
 The 36 former custom capabilities are unavailable on this target. That establishes that the old mechanism is unsupported, not that every associated CSS feature is impossible to represent differently. See validation/immutable-compiler-audit.md for the complete per-capability mapping and validation/immutable-runtime-audit.md and validation/immutable-renderer-audit.md for source inventories.
 
 CSS Grid, editor integration, scripts, interactions, bindings and animation stay excluded. No silent raster, fixed-layout or recompile-on-resize fallback is enabled.
+
+Initial experiments now provide56geometry/50pixelpasses and6preserved direct-corner failures, with a bounded ordinary-file corner composition passing8/8. These are not public compiler qualifications; see validation/ordinary-layout-review.md.

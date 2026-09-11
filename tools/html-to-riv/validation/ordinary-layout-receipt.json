@@ -1,0 +1,62 @@
+{
+  "status": "bounded-capability-experiments-complete",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "toolchainManifest": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json",
+  "toolchainManifestSha256": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72",
+  "probeReproductionReceipt": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-probe-r2/receipt.json",
+  "probeReproductionReceiptSha256": "aa4b1e04abf778d615d809f006fc804bfb02864ec08a4161b6c8ea34102a22c0",
+  "nativeReceipt": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-layout-native-r3/receipt.json",
+  "nativeReceiptSha256": "67a2bf166d59fa2b81470d5171ab3f8cced30e89c55ad7d1d8047a69a9800444",
+  "visualReview": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-layout-native-r3/visual-review.json",
+  "visualReviewSha256": "267fc17618b842cf8f8be757a83cf2dc46e2495bdca41b3f054b15f93abc06eb",
+  "emitterSha256": "2c48d45cb46e8017149f6633bfec8ce925cc29b6f993c26572951d49d6cd6c43",
+  "sourceFiles": {
+    "tools/html-to-riv/examples/ordinary-layout.rs": "6ea426f7020ea98b43b231cebbaf2ae3d713b235c0b49084cc7efb2f995657f3",
+    "tools/html-to-riv/src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "tools/html-to-riv/src/color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "tools/html-to-riv/Cargo.toml": "ad69fd15f04b61dc22d4681578502994b08d0d784a6d8f66229ac04c39497c9b",
+    "tools/html-to-riv/Cargo.lock": "a765c8e28602095f2fda8be61bf340bae40a75cdf72e93ecc769c538aff5aaf4",
+    "tools/html-to-riv/validation/baseline-probe.rs": "91adadd3c6d2408d038eac082825519513a1fd506045397bc62028f3a6efdda8",
+    "tools/html-to-riv/validation/check-ordinary-layout.mjs": "edde50b64432b5b58c9b70123203d0b26b9288915be9dab9043d096f2ba5cc5f",
+    "tools/html-to-riv/validation/pixels.mjs": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821"
+  },
+  "rows": 56,
+  "geometryPass": 56,
+  "pixelPass": 50,
+  "pixelFailures": 6,
+  "failingCase": "direct corners-limit; preserve the six failures",
+  "wrapperFramesPassed": 8,
+  "colorParserTestsPassed": 4,
+  "qualifiedBacklogItems": 0,
+  "scope": "No public HTML/CSS compile interface or WASM parity yet. These ordinary-file experiments establish baseline paths and a bounded corner composition candidate. General corners/layout remain unqualified.",
+  "regeneratedRiv": [
+    {
+      "mode": "solid",
+      "rivSha256": "bf4555bdd714fcb8e3aef97598467204bd5587071d878eeaa46a69f8fb522d62"
+    },
+    {
+      "mode": "fractional",
+      "rivSha256": "41c618eb6a44ba78e495ef3f8c5ac723c8aa4c417c3c7b2dcc6ca82c8e7aa067"
+    },
+    {
+      "mode": "nested",
+      "rivSha256": "cc0ec7fc54c48c7c7ce0e08857868bfa5ae4c63f37e783642f8b7bb0aa727250"
+    },
+    {
+      "mode": "corners",
+      "rivSha256": "98e56669ecfc6586b2a5a52c2ff900f7c29aa269a7eb8dfd5fff17ae9506f48e"
+    },
+    {
+      "mode": "corners-limit",
+      "rivSha256": "41eb89382b90252c8866b41649a4db686120fc4ed884815007b2ca62049bf4e9"
+    },
+    {
+      "mode": "alpha",
+      "rivSha256": "b4110df96939db76d45586e6ba2b566886199648b138a2eae89eac8cd74fd2b7"
+    },
+    {
+      "mode": "corners-wrapper",
+      "rivSha256": "9309c46ef68a7bb030417554800a53ad9b1912d388d2e614798390e1a57e8e79"
+    }
+  ]
+}

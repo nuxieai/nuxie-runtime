@@ -10,8 +10,8 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 
 | ID | Feature | Status | Evidence / next action |
 | --- | --- | --- | --- |
-| A01 | Standard CSS named colors | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| A02 | HSL/HSLA | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A01 | Standard CSS named colors | partial | Compiler-owned named-color parser restored; four color tests pass and ordinary named-color fill experiment passes8original/clone frames. Public HTML/CSS and WASM parity pending. See validation/ordinary-layout-review.md. |
+| A02 | HSL/HSLA | partial | Compiler-owned HSL/HSLA parser restored; syntax/color tests and HSL/alpha ordinary-file experiments pass. Public compiler admission/parity pending. See validation/ordinary-layout-review.md. |
 | A03 | `inherit` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A04 | `initial` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A05 | `unset` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
@@ -66,7 +66,7 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | L20 | Overflow clipping | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | P01 | Uniform solid borders | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | P02 | Individual border sides | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
-| P03 | Per-corner circular radii | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| P03 | Per-corner circular radii | investigating | Direct modest corners8/8; large top corners2/8pixels despite8/8geometry. Clipped ordinary paint-child composition8/8in bounded min-height case. All reviewed; general normalization and public admission pending. See validation/ordinary-layout-review.md. |
 | P04 | Elliptical radii | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
 | P05 | Group opacity | pending | Immutable-target audit and revalidation required; historical status: active. |
 | P06 | Linear gradients | pending | Immutable-target audit and revalidation required; historical status: qualified. |
@@ -108,4 +108,4 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | Q07 | Performance benchmarks | pending | Immutable-target audit and revalidation required; historical status: pending. |
 | Q08 | Package/version compatibility | pending | Immutable-target audit and revalidation required; historical status: pending. |
 | Q09 | Realistic composition corpus | pending | Immutable-target audit and revalidation required; historical status: partial. |
-| Q10 | Deterministic interaction matrix | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q10 | Deterministic interaction matrix | partial | Bytes-only immutable baseline probe imports once, clones once, and resizes seven scenes through four views;56geometry and50pixelpasses,6preserved corner failures. No interactions added. See validation/ordinary-layout-receipt.json. |

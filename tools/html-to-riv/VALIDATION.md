@@ -15,3 +15,5 @@ For each feature:
 7. Mark qualified only for the proved profile. If native semantics or a composition fail, preserve the reproducer and investigate another existing-object encoding or record the limitation. Runtime enhancement proposals are separate work.
 
 Current evidence: PR #629 restored the full pre-PR tree; the mutation inventory covers 778 changed paths; source audits cover all 36 former capabilities, 44 renderer/interface/stream files and 62 runtime/vendor paths. These are audit facts, not replacement visual qualification.
+
+First executable baseline: `python3 tools/html-to-riv/validation/build-baseline.py NEW_OUTPUT` builds from the unchanged root workspace and links `baseline-probe.rs` to the exact runtime rlibs. `cargo test --manifest-path tools/html-to-riv/Cargo.toml --locked` runs isolated authoring tests. See validation/ordinary-layout-review.md for the first56frame visual experiment and its honest limits.

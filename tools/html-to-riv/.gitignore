@@ -1,3 +1,5 @@
 test-results/
 output/
 __pycache__/
+target/
+node_modules/

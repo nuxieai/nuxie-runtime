@@ -1,0 +1,17 @@
+[package]
+name = "nuxie-html-to-riv"
+version = "0.2.0-dev"
+edition = "2024"
+license = "MIT"
+publish = false
+
+# Authoring resolution is isolated from the immutable runtime workspace.
+[workspace]
+
+[dependencies]
+cssparser = "0.37"
+nuxie-schema = { path = "../../crates/nuxie-schema" }
+
+[profile.dev]
+debug = 0
+incremental = false

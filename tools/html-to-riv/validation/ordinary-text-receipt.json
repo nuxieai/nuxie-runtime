@@ -1,0 +1,41 @@
+{
+  "state": "unresolved text fidelity; ordinary embedded font provisioning proved in bounded fixture",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "fontSha256": "b481b059ee94961c7b18585a596935aaa7cc44b68879c096d2cd06922e0431b1",
+  "glyphScope": "aaaa only; fixture cmap only U+0061",
+  "frames": 24,
+  "framesWithNativeInk": 24,
+  "pixelPass": 0,
+  "nativeAdvance": 69.625,
+  "chromeAdvance": 69.625,
+  "nativeLineHeight": 37.5,
+  "chromeLineHeight": 38,
+  "nativeFirstBaseline": 29.6875,
+  "chromeFontAscent": 30,
+  "candidates": [
+    {
+      "name": "native default",
+      "y": 20,
+      "stroke": 0,
+      "interiorRgbError": 8.833747927031508
+    },
+    {
+      "name": "baseline offset",
+      "y": 20.3125,
+      "stroke": 0,
+      "interiorRgbError": 9.397180762852404
+    },
+    {
+      "name": "baseline offset plus ordinary stroke",
+      "y": 20.3125,
+      "stroke": 0.2,
+      "interiorRgbError": 8.164593698175787
+    }
+  ],
+  "unchangedInteriorLimit": 6,
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/ordinary-text-checkpoint-r1/manifest.json",
+    "sha256": "d8a984bd862eeee44f1e9a50adec1981da7df181df50578661ef3f3dc1214a47"
+  },
+  "next": "Investigate glyph coverage and normal-line-height composition, then broader licensed-font/glyph/size corpus. No public text admission until fidelity and responsive line layout are proved."
+}

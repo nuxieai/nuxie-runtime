@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-11",
-  "focus": "Solid backgrounds and self-contained page paint",
-  "status": "Solid-fill profile qualified; typography groundwork next",
-  "current": "Solid-color background shorthand is implemented. Named colors, HSL/HSLA and shorthand are qualified for the admitted solid-fill profile. Fixed white page paint is encoded in ordinary Rive. Fresh full corpus: 408 geometry/pixel comparisons and 816 canvas-clear controls pass; all frames visually covered. 28 Rust tests, 9 Node tests (150 corpus parity pairs), strict TypeScript and 6 evidence-tool tests pass.",
-  "next": "Establish ordinary embedded-font text using baseline import and rendering, then implement and validate font shorthand/typography. Preserve all existing layout/paint limitations and continue the full backlog.",
+  "focus": "Ordinary embedded text: fidelity investigation",
+  "status": "Font provisioning proved; text remains unqualified",
+  "current": "Embedded font bytes decode through the unchanged importer and survive original/clone resize. Read-only glyph advance matches Chrome, but line metrics differ. Three ordinary placement/paint candidates produce24preserved pixel failures under unchanged local limits. Existing solid-fill qualifications remain unchanged.",
+  "next": "Investigate ordinary line-box and glyph coverage compositions, then expand to multiple sizes/fonts/glyphs. Keep text and font shorthand unadmitted until browser/native fidelity is proved.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Text experiment and preserved failures",
+      "path": "tools/html-to-riv/validation/ordinary-text-review.md"
+    },
+    {
+      "label": "Ordinary text Chrome/native gallery",
+      "path": "tools/html-to-riv/output/ordinary-text-native-r3/gallery.html"
+    },
     {
       "label": "Current background and canvas-independence receipt",
       "path": "tools/html-to-riv/validation/public-background-receipt.json"

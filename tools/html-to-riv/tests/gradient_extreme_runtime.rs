@@ -22,8 +22,9 @@ fn extreme_public_gradients_record_original_and_clone_resize_frames() {
         "viewports": ([240,390,768].map(|width| serde_json::json!({"width":width,
             "boxes":{"gradient":{"x":0,"y":0,"width":width,"height":140}}})))
     })).collect();
-    let oracle = serde_json::json!({"browser":"153.0.8010.12", "cases":cases});
-    assert_eq!(oracle["browser"], "153.0.8010.12");
+    // Analytic rectangle expectations; independent browser captures are produced
+    // by validation/validate-extreme-gradient-native.mjs.
+    let fixtures = serde_json::json!({"cases":cases});
     let recording =
         std::env::var_os("NUXIE_GRADIENT_EXTREME_RECORD_DIR").map(std::path::PathBuf::from);
     if let Some(out) = &recording {
@@ -32,7 +33,7 @@ fn extreme_public_gradients_record_original_and_clone_resize_frames() {
     }
     let mut records = Vec::new();
     let mut frame_count = 0;
-    for case in oracle["cases"].as_array().unwrap() {
+    for case in fixtures["cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let input = CompileInput {
             html: case["html"].as_str().unwrap().into(),
@@ -191,6 +192,6 @@ fn extreme_public_gradients_record_original_and_clone_resize_frames() {
     }
     assert_eq!(frame_count, 32);
     if let Some(out) = &recording {
-        std::fs::write(out.join("lifecycle.json"), serde_json::to_vec_pretty(&serde_json::json!({"kind":"gradient-public","browser":oracle["browser"],"cases":records})).unwrap()).unwrap();
+        std::fs::write(out.join("lifecycle.json"), serde_json::to_vec_pretty(&serde_json::json!({"kind":"gradient-public","geometryReference":"analytic","cases":records})).unwrap()).unwrap();
     }
 }

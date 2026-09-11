@@ -1,11 +1,35 @@
 {
   "updated": "2026-09-11",
   "focus": "P06 \u00b7 Linear gradients",
-  "status": "Publication qualification in progress",
-  "current": "The frozen full run passes 8,062 checks with 8,052 audited scene comparisons. Renderer migration has passed 3,300 comparisons with no changed images. All 18 realistic static views and 48 native-glyph lifecycle frames pass; 21 normal integration views now have exact visual-transfer receipts. Final numeric boundary fixes and main integration remain.",
-  "next": "Complete final numeric boundary validation, renderer migration, upstream integration and retained-frame performance measurements.",
+  "status": "P06 qualified; publication in progress",
+  "current": "The final integrated toolchain passes all 8,052 broad reviewed images, focused browser/native and original-clone checks, 23 JavaScript checks, package/types, and 144 retained-renderer timing configurations. P06 is qualified within the explicit native Metal/Chrome profile, including its documented extreme-value precision difference.",
+  "next": "Continue radial-gradient implementation and the remaining standalone compiler backlog.",
   "baseline": "Last completed full native regression: 7,960 checks passed; 7,950 image pairs have audited visual coverage. This frozen opacity baseline predates the unfinished public gradient integration.",
   "evidence": [
+    {
+      "label": "Final integrated renderer replay \u2022 live receipt",
+      "path": "output/playwright/html-to-riv/linear-gradient-main-renderer-migration-r1/receipt.json"
+    },
+    {
+      "label": "Final JavaScript/package/type validation",
+      "path": "output/playwright/html-to-riv/linear-gradient-main-publication-r2/receipt.json"
+    },
+    {
+      "label": "Final ordinary Atomics \u2022 54 audited views",
+      "path": "output/playwright/html-to-riv/linear-gradient-main-atomics-r1/ordinary-atomics-visual-coverage.json"
+    },
+    {
+      "label": "Final main integration \u2022 tests and builds",
+      "path": "output/playwright/html-to-riv/linear-gradient-main-integration-r1/checks.json"
+    },
+    {
+      "label": "Final realistic/border visual transfer \u2022 21/21",
+      "path": "output/playwright/html-to-riv/linear-gradient-main-normal-r1/visual-transfer-audit.json"
+    },
+    {
+      "label": "Final extreme gradients \u2022 32 exact visual transfers",
+      "path": "output/playwright/html-to-riv/linear-gradient-extreme-main-r1/receipt.json"
+    },
     {
       "label": "Full gradient regression \u00b7 8,062 checks / 8,052 audited pairs",
       "path": "output/playwright/html-to-riv/linear-gradient-full-native-r1-execution.json"

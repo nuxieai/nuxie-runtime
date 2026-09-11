@@ -28,6 +28,12 @@ the original bundle is unavailable; a successful geometry run alone provides no
 native visual qualification. The dated records below preserve both passing and
 failed experiments and do not override the current support contract.
 
+For the broader renderer unit suite, set `RIVE_RUNTIME_DIR` to the fixture
+checkout pinned by `.github/workflows/_trusted-macos.yml` and pass
+`-- --test-threads=1`: ownership-trace tests share process-level tracing state.
+An unconfigured parallel run is retained in the P06 integration evidence; its
+five failures pass in the configured full run (485 passed, six ignored).
+
 ## Gates
 
 1. **Compiler contract and binary integration:** `cargo test -p
@@ -5169,3 +5175,15 @@ All18 public composition scenes compile once and pass144 original/clone Chrome/n
 ### Public gradient focused validation complete; broad integration running — 2026-09-11
 
 Current compiler regression passes454 tests across80 suites, with no failures or ignored tests. All144 composition lifecycle frames now have audited exact-source/full-image review transfer from corrected static evidence; all4 stale/mutated evidence controls reject. Together with the initial128 public frames, focused public lifecycle coverage is complete. The normal browser regression now registers16 initial and18 accepted composition fixtures (102 additional comparisons); ten deliberately unsupported composition inputs remain rejection-only cases. Frozen tiled-toolchain full native regression is running against Chrome153.0.8010.12. P06 remains active pending broad regression, backend and performance qualification. Native Metal replay explicitly rejects MSAA mode, so shader compilation alone is not runtime MSAA evidence.
+
+### P06 final integrated qualification — 2026-09-11
+
+The final integrated toolchain completes 8,052 unchanged broad reviewed images,
+23 JS tests, package/types, focused real-native lifecycle/composition/resource
+checks and 144 retained-renderer timing configurations. Accepted scope and hash
+bindings are in [linear-gradient-qualification.json](validation/linear-gradient-qualification.json).
+Eight extreme-stop frames intentionally preserve a hard stop lost by Chrome;
+these are explicitly recorded divergences, not passing Chrome pixel comparisons.
+Performance includes completion wait/readback and excludes layout, paint
+recreation, resize and presentation throughput. Prior failed experiments remain
+retained and do not supersede the final scoped evidence.

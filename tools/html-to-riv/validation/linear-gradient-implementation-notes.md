@@ -1,13 +1,12 @@
 # P06 linear gradient implementation and qualification plan
 
-Status: public v26 candidate, undergoing final qualification before publication.
-Single linear-gradient backgrounds are implemented with retained resize semantics,
-checked metadata, exact premultiplied stop interpolation and tiled border paint.
-The frozen full run passes 8,062 checks with 8,052 audited image pairs; current
-renderer migration, final numeric boundaries and retained performance remain.
-See the P06 row in [BACKLOG.md](../BACKLOG.md) for current status. Radial gradients
-remain unsupported. The dated entries below preserve the implementation history;
-earlier rejection and pending statements describe their recorded stage.
+Status: qualified within the documented native Metal/Chrome profile. The final
+integrated renderer has 8,052 audited unchanged broad images, with separately
+verified focused lifecycle, composition and resource cases. All 144 retained
+renderer performance configurations pass their correctness/evidence checks.
+See linear-gradient-qualification.json and SUPPORT.md for exact limits, including
+the extreme-value Chrome precision difference. Dated entries below preserve
+prior failures and pending states; radial gradients remain unsupported.
 
 ## Semantics to preserve
 
@@ -341,3 +340,78 @@ Ordinary Atomics passes54/54 Chrome composition comparisons and18 deterministic 
 ### Atomic image-edge correction audited — 2026-09-11
 
 Correcting swapped image-AA inset axes fixes the empty opacity-group and direct fullcanvas-image reproducers without masking alpha with an opaque clear. Square/transposed/rotated controls isolate the cause; shear/rotation/affine comparisons retain the existing pixel gates. Corrected ordinary Atomics has54/54 composition comparisons,18 deterministic repeats and complete audited visual coverage (3 corrected images inspected again,51 exact transfers). Full renderer480 tests pass,6 ignored. Evidence: `output/playwright/html-to-riv/linear-gradient-atomics-image-edges-validation-r1.json` and `linear-gradient-image-edges-full-renderer-tests.log`. The new frozen renderer is `linear-gradient-image-edges-toolchain-r1`; the ongoing8062-check Chrome regression intentionally retains its original tiled toolchain. A separate exact-image migration will verify newer renderer changes against its retained streams after completion and visual audit.
+
+### P06 integrated main and numerical boundary verification — 2026-09-11
+
+Local checkpoint `3c2f3e6053` and merge `c3352243af` incorporate the seven newer
+origin/main commits, including storage texture width 256 and MSAA interior
+coverage. The integrated compiler suite passes 468 tests; render API/stream
+contracts pass 73; the configured renderer suite passes 485 with six ignored;
+runtime unit tests pass 120 with four ignored. Initial renderer failures from
+missing fixture configuration and overlapping ownership traces are retained;
+the full rerun uses pinned fixture revision 5892bb05 and one test thread.
+
+Finite stop overflow now resolves a bounded visible gradient in f64 while
+preserving interior hard stops. Thirty-two public original/clone frames and
+independently captured geometry pass; 24 native frames meet unchanged Chrome
+pixel gates. Eight pathological frames preserve the midpoint discontinuity that
+Chrome loses at ±3e38%; this intentional precision difference is explicit in
+SUPPORT.md. Twelve image pairs were inspected directly, and 20 repeat/clone
+pairs transferred by exact full PNG identity. Host/tile transform overflow now
+returns a checked frame error, with primary/canvas recovery tested on raster
+ordering and ordinary Atomics. The final frozen renderer reproduces both valid
+raw controls exactly and returns a clean error for the original panic input.
+
+Evidence: `output/playwright/html-to-riv/linear-gradient-main-integration-r1/`,
+`linear-gradient-main-toolchain-r1/manifest.json`,
+`linear-gradient-extreme-native-r2/receipt.json`, and
+`linear-gradient-host-transform-repro-r2/receipt.json` under the same output root.
+Final renderer migration, final focused visual transfers and retained-frame
+performance remain; no publication or completed-P06 claim is made here.
+
+### P06 final focused checks and many-owner resource workload — 2026-09-11
+
+The integrated toolchain passes 23 JavaScript tests (eight gradient tests include
+four extreme finite-stop requests at three widths), isolated package execution
+and strict TypeScript checks. The 21 normal realistic/border views, 32 extreme
+frames and 54 ordinary-Atomics composition views transfer their reviewed full
+images exactly; 18 atomic repeat frames are identical. The runtime's complete
+unit suite passes 120 tests with four ignored, and the vendored layout engine's
+116 library tests pass with its provider-owned browser fixtures.
+
+A separate public resource workload renders 64 distinct 256-stop gradients in a
+fully visible 8×8 flex-wrap arrangement. Final raster and ordinary Atomics both
+pass the existing Chrome geometry/pixel gates and produce identical native PNGs;
+all three complete 512×512 images were inspected. This qualifies the measured
+many-owner workload, not an inferred atlas flush count. The first fixture's
+column reset left only eight cells visible despite 64 emitted tables; that
+superseded result is retained and does not qualify resource coverage. The
+corrected harness asserts every cell's exact visible position.
+
+Run the explicit resource gate with
+`node tools/html-to-riv/validation/check-many-gradient-owners.mjs FROZEN_TOOLCHAIN FRESH_OUTPUT`.
+The toolchain directory must contain matching compiler, probe, renderer and their
+hash manifest. Evidence under `output/playwright/html-to-riv/`:
+`linear-gradient-main-publication-r2/receipt.json`,
+`linear-gradient-main-normal-r1/visual-transfer-audit.json`,
+`linear-gradient-extreme-main-r1/receipt.json`,
+`linear-gradient-main-atomics-r1/ordinary-atomics-visual-coverage.json`, and
+`linear-gradient-main-many-owners-r3/visual-inspection.json`.
+The final full-image replay and retained-performance measurement remain open.
+
+### P06 scoped qualification — 2026-09-11
+
+The final full renderer replay completed 8,052/8,052 exact reviewed images and
+passed its predecessor/source/artifact audits. Retained-paint performance ran
+three randomized rounds across 48 configurations, with 20 warmups and 100 measured
+frames per configuration. All 144 cases pass analytic colors, frame identity and
+receipt verification. Median paired CSS/ordinary ratios range from 0.995 to
+1.117; tiled/ordinary ratios range from 0.982 to 1.079. These completed-frame
+measurements include GPU wait/readback on an Apple M5 Max running on battery.
+They are not GPU-only or end-to-end compiled-scene/presentation timings; layout,
+paint recreation and resize are outside the timed scope. No tolerance or timing
+cutoff was widened to obtain qualification.
+
+The accepted single-gradient profile is qualified; excluded grammar, other
+backends, vector text limitations and the measured pathological Chrome precision
+difference remain explicit. Full evidence index: linear-gradient-qualification.json.

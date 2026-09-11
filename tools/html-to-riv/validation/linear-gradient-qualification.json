@@ -1,0 +1,88 @@
+{
+  "feature": "P06 linear gradients",
+  "status": "qualified-with-explicit-profile-limits",
+  "date": "2026-09-11",
+  "scope": {
+    "browser": "Chrome 153.0.8010.12",
+    "nativeBackends": [
+      "Metal raster ordering",
+      "Metal ordinary Atomics"
+    ],
+    "requirements": "version 26 / layout-css-linear-gradient-v1",
+    "expandedStops": [
+      2,
+      256
+    ]
+  },
+  "coverage": {
+    "finalBroadReviewedImages": 8052,
+    "finalNormalIntegrationViews": 21,
+    "finalExtremeFrames": 32,
+    "finalOrdinaryAtomicsViews": 54,
+    "ordinaryAtomicsRepeatFrames": 18,
+    "manyOwnerScene": {
+      "visibleGradientOwners": 64,
+      "stopsPerOwner": 256,
+      "backends": 2
+    },
+    "retainedPerformanceConfigurations": 144
+  },
+  "limits": [
+    "Single linear-gradient background only; hints, explicit interpolation spaces, repeating functions, multiple layers and authored background positioning/repetition controls remain excluded.",
+    "At extreme finite exterior positions, the bounded fallback preserves interior hard stops that Chrome may collapse; 8 observed frames are an explicit Chrome precision divergence.",
+    "Native-glyph text composition profile is qualified; vector text residuals remain.",
+    "MSAA and other native backends are not qualified by these Metal results.",
+    "Performance covers opaque retained renderer paints with GPU wait/readback on battery power; it excludes runtime layout, paint recreation, resize and presentation throughput. No universal performance cutoff.",
+    "Historical proof audits require the retained local evidence bundles, not merely this index."
+  ],
+  "evidence": [
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-toolchain-r1/manifest.json",
+      "sha256": "34635e879bb27b8e92ebab3a650573ca839dcb2c3d70ab7ccf9ab131be7b09a9"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-renderer-migration-r1/receipt.json",
+      "sha256": "91adb9c05908dce8209836480877d65fec9fb5b279dd7d67faf3e28882c31057"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-publication-r2/receipt.json",
+      "sha256": "848123c4310533b06eebed254790ce9f67bc10cf1b8dee48b1ade7655e96f395"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-normal-r1/visual-transfer-audit.json",
+      "sha256": "0da45aeff44bfc3cba3f47fcf78b85bb28df00f6421d994b8276bca93abde9fd"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-extreme-main-r1/receipt.json",
+      "sha256": "f6b10cd8e82656376d3a3aa1901477f47ca9f243bdbd6de84749d12f55d09bd5"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-atomics-r1/ordinary-atomics-visual-coverage.json",
+      "sha256": "215b0868192ccc2277b53c38cc5c2620ddd6fa41a4ebca1ead77dd80fc3b7fed"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-many-owners-r3/visual-inspection.json",
+      "sha256": "1c19c160d7f0811bd685093868b79008bd272a4e2786bcfa497517532b4464b1"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-retained-performance-r1/summary.json",
+      "sha256": "28eed921f561067dff8191760c9f49dafe724678b7536f00caeb2a9def2defa2"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-retained-performance-r1/receipt.json",
+      "sha256": "8a6ed6964ed395b1afcc5623a06d6dbb2fdaba4de6ca2bb4e35865a40b77cfa3"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-integration-r1/runtime-all.log",
+      "sha256": "a4b8fe21213d8bac9457a9c017ebd53b9df56b851c08dcc56151d5a33ebf4a63"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-integration-r1/taffy-library.log",
+      "sha256": "b586b86e1706970bd19d3a10304fd5415e545da00a6e10cddbf1da4cf7d596b6"
+    },
+    {
+      "path": "output/playwright/html-to-riv/linear-gradient-main-integration-r1/renderer-configured.log",
+      "sha256": "09e8cf4d8e80bf34cba44f3a3ed14cd903ef39e57b08fbd2c8b78b24b2fd2d68"
+    }
+  ]
+}

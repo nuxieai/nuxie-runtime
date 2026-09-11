@@ -176,3 +176,32 @@ test('realistic gradients preserve native/WASM artifacts with embedded Inter and
   assert.ok(result.runtimeRequirements.layout_linear_gradients.length>0);
  }
 });
+
+test('extreme finite percentage stops retain exact public transport across native and WASM', async () => {
+  const compiler = await createCompiler(wasm);
+  // Independently authored inputs shared in meaning with the runtime numeric
+  // regression. These transport checks do not assert browser/render pixels.
+  const cases = [
+    ['positive', 'red 0%, blue 3e38%', [red, blue], [0, 3e38]],
+    ['negative', 'red -3e38%, blue 100%', [red, blue], [-3e38, 100]],
+    ['symmetric-alpha', 'rgba(255,0,0,.25) -3e38%, rgba(0,0,255,.75) 3e38%', [0x40ff0000, 0xbf0000ff], [-3e38, 3e38]],
+    ['hard-interior', 'red -3e38%, red 50%, blue 50%, blue 3e38%', [red, red, blue, blue], [-3e38, 50, 50, 3e38]],
+  ];
+  for (const [name, stops, colors, positions] of cases) {
+    let baseline;
+    for (const width of [240, 390, 768]) {
+      const result = parity(compiler, {...request(`#gradient{width:100%;height:140px;background:linear-gradient(to right,${stops});}`), width}, `${name}@${width}`);
+      const gradient = paint(result);
+      assert.deepEqual(gradient.direction, {degrees:90});
+      assert.equal(gradient.stops.length, positions.length);
+      gradient.stops.forEach((entry, index) => {
+        assert.equal(entry.color, colors[index]);
+        assert.deepEqual(Object.keys(entry.position), ['percent']);
+        assert.ok(Number.isFinite(entry.position.percent));
+        assert.equal(Math.fround(entry.position.percent), Math.fround(positions[index]));
+      });
+      if (baseline) assert.deepEqual(gradient, baseline, 'stop transport is independent of the compile viewport');
+      baseline = gradient;
+    }
+  }
+});

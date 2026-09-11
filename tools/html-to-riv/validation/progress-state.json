@@ -1,0 +1,46 @@
+{
+  "updated": "2026-09-11",
+  "focus": "Immutable runtime rework",
+  "status": "Reverted on main; source audit complete",
+  "current": "Audited all 36 custom capabilities and all 118 changed paths outside the compiler module. Main exactly matches the pre-PR tree. The clean rework branch changes only tools/html-to-riv; an immutable-source guard passes with eight negative-control tests.",
+  "next": "Build bytes-only baseline validation and selectively restore compiler-owned code. Test ordinary Rive and file-level composition candidates before reinstating support.",
+  "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
+  "evidence": [
+    {
+      "label": "Revert and immutable audit receipt",
+      "path": "tools/html-to-riv/validation/immutable-rework-receipt.json"
+    },
+    {
+      "label": "36-capability compiler audit",
+      "path": "tools/html-to-riv/validation/immutable-compiler-audit.md"
+    },
+    {
+      "label": "Runtime and dependency audit",
+      "path": "tools/html-to-riv/validation/immutable-runtime-audit.md"
+    },
+    {
+      "label": "Renderer audit",
+      "path": "tools/html-to-riv/validation/immutable-renderer-audit.md"
+    }
+  ],
+  "activeWork": [
+    {
+      "name": "Runtime audit",
+      "work": "Map text/layout policies and dependency changes to existing-Rive alternatives and limitations."
+    },
+    {
+      "name": "Renderer audit",
+      "work": "Map native glyph, clipping, opacity and gradient additions to immutable backend capabilities."
+    },
+    {
+      "name": "Compiler audit",
+      "work": "Remove reliance on custom policy manifests and host installation; preserve pure authoring work."
+    }
+  ],
+  "publication": {
+    "status": "reverted",
+    "revertPr": "https://github.com/nuxieai/nuxie-runtime/pull/629",
+    "commit": "9738049372ffd45639de39c2217c1f548963340a",
+    "verification": "Full tracked tree equals pre-PR main."
+  }
+}

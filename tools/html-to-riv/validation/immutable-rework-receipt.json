@@ -1,0 +1,77 @@
+{
+  "status": "source-audit-complete; replacement-not-qualified",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "restoredMain": "9738049372ffd45639de39c2217c1f548963340a",
+  "tree": "25ccbb131d88dbd0fdde8f4c660919143b252edf",
+  "revertedPaths": 778,
+  "pathCoverage": {
+    "immutable-runtime-audit.md": {
+      "paths": 62,
+      "missing": [],
+      "sha256": "4872eab39026dc17dfe0fd18a4e8d7cd208c3e773f6c1c42fa4bbf28b4c7c0ad"
+    },
+    "immutable-renderer-audit.md": {
+      "paths": 44,
+      "missing": [],
+      "sha256": "e072308139e87a90a5fe43f895a0e4d666e61e05820cb474790afe2d7d9094b4"
+    },
+    "immutable-integration-audit.md": {
+      "paths": 12,
+      "missing": [],
+      "sha256": "e0d07c18fb5bb28b8315c5ef5e660b3b9d5cd41ddc0c955d8da061dbc0371ae9"
+    }
+  },
+  "customCapabilityCount": 36,
+  "customCapabilities": [
+    "layout-css-linear-gradient-v1",
+    "layout-css-group-opacity-v1",
+    "layout-css-corner-radii-v1",
+    "layout-css-border-sides-v1",
+    "layout-css-solid-borders-v1",
+    "layout-css-overflow-clip-margin-v1",
+    "layout-css-axis-overflow-v1",
+    "layout-css-stacking-v1",
+    "layout-css-absolute-position-v1",
+    "layout-css-positioned-paint-v1",
+    "layout-css-aspect-ratio-pair-v1",
+    "layout-css-aspect-ratio-v1",
+    "layout-css-content-box-v1",
+    "layout-css-indefinite-basis-v1",
+    "layout-css-intrinsic-sizing-v1",
+    "layout-css-partial-flex-factors-v1",
+    "layout-css-flex-factors-v1",
+    "layout-css-distributed-spacing-v1",
+    "layout-css-align-self-v1",
+    "layout-css-align-content-v1",
+    "layout-css-paint-order-v1",
+    "layout-css-pixel-bounds-v1",
+    "layout-css-percentage-spacing-v1",
+    "text-css-single-line-ellipsis-v1",
+    "text-solid-strikethroughs-v1",
+    "text-css-shaping-precision-v1",
+    "text-solid-underlines-v1",
+    "text-css-wrapped-tabs-v1",
+    "text-css-pre-wrap-v1",
+    "text-css-pre-line-v1",
+    "text-css-normal-wrap-v1",
+    "text-css-tabs-v1",
+    "text-css-nowrap-alignment-v1",
+    "text-cluster-spacing-v1",
+    "text-css-letter-spacing-v1",
+    "text-preserved-space-breaks-v1"
+  ],
+  "identityGate": {
+    "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+    "baselineTree": "25ccbb131d88dbd0fdde8f4c660919143b252edf",
+    "status": "pass",
+    "changesOutsideCompiler": {
+      "index": [],
+      "worktree": [],
+      "untracked": []
+    },
+    "scope": "Tracked source, index and nonignored additions; build resolution must be verified separately"
+  },
+  "negativeControlTests": 8,
+  "replacementNativeExperiments": 0,
+  "remaining": "Restore compiler-owned code selectively; test every ordinary-object and file-composition candidate on unchanged runtime. No runtime changes or implicit fallback profiles."
+}

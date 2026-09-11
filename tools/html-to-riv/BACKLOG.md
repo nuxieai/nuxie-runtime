@@ -1,0 +1,111 @@
+# Standalone compiler backlog — immutable runtime target
+
+The target is the unchanged repository tree at `6c7ac16617835b5f581784ff08a9e779bb52faf3`, restored on main by PR #629 (`9738049372ffd45639de39c2217c1f548963340a`). This supersedes the compiler-specific runtime profile from PR #628. Runtime, renderer, format/schema, dependency forks and host behavior are fixed inputs.
+
+Keep all 99 original items and priority order. Existing parsing and browser references can be reused after audit; runtime-dependent qualification cannot. A feature is supported only after ordinary emitted Rive bytes pass the unchanged importer/renderer, including same-scene resizing and full visual review. A file-level shim uses only existing Rive objects; no CSS policy installation, host callbacks, special renderer, new wire fields or runtime scripts. Unsupported semantics produce a diagnostic, with runtime proposals documented separately. Do not flatten responsive scenes to browser-baked rectangles or images as an implicit fallback.
+
+Statuses: `pending` = implementation/proof remains; `qualified` = immutable-target evidence complete; `unsupported` = evidenced current-runtime limitation. Wrapper candidates remain pending until tested. Do not equate pending proof with impossibility. Historical results are preserved in validation/history/BACKLOG-mutated-runtime.md.
+
+Excluded: CSS Grid, editor integration, scripts, interactions, bindings and animation.
+
+| ID | Feature | Status | Evidence / next action |
+| --- | --- | --- | --- |
+| A01 | Standard CSS named colors | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A02 | HSL/HSLA | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A03 | `inherit` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A04 | `initial` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A05 | `unset` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A06 | Solid-color `background` shorthand | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A07 | `font` shorthand | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A08 | Unitless line-height | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A09 | `em` lengths | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A10 | `rem` lengths | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A11 | Percentage min/max dimensions | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A12 | Letter spacing | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A13 | Word spacing | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A14 | Explicit `<br>` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A15 | `white-space: nowrap` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A16 | `white-space: pre` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A17 | `white-space: pre-wrap` | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A18 | `white-space: pre-line` | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A19 | Text transforms | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A20 | Underline | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A21 | Strikethrough | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A22 | Text clipping | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| A23 | Text ellipsis | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| S01 | Attribute selectors | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| S02 | Adjacent sibling selector | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S03 | General sibling selector | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S04 | `:first-child` / `:last-child` / `:only-child` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S05 | `:nth-child` / `:nth-last-child` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S06 | `:not()` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S07 | `:is()` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S08 | `:where()` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S09 | Custom properties | pending | Immutable-target audit and revalidation required; historical status: in progress. |
+| S10 | `var()` and fallbacks | pending | Immutable-target audit and revalidation required; historical status: in progress. |
+| L01 | Reverse flex directions | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| L02 | `order` | pending | Immutable-target audit and revalidation required; historical status: qualified (native profile). |
+| L03 | `align-self` | pending | Immutable-target audit and revalidation required; historical status: qualified (native profile). |
+| L04 | `align-content` | pending | Immutable-target audit and revalidation required; historical status: native qualified. |
+| L05 | `space-around` / `space-evenly` | pending | Immutable-target audit and revalidation required; historical status: native qualified. |
+| L06 | `wrap-reverse` | pending | Immutable-target audit and revalidation required; historical status: native qualified. |
+| L07 | Auto margins | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L08 | Independent grow/shrink | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L09 | Sub-unit flex factors | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L10 | Content-derived auto basis | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L11 | Percentage basis in indefinite containers | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L12 | Content-box sizing | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L13 | Aspect ratio | pending | Immutable-target audit and revalidation required; historical status: investigating. |
+| L13a | Numeric math in aspect ratios | pending | Immutable-target audit and revalidation required; historical status: active. |
+| L14 | Intrinsic image sizing | pending | Immutable-target audit and revalidation required; historical status: active. |
+| L15 | Percentage padding/margins | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| L16 | Negative margins | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| L17 | Relative positioning | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| L18 | Absolute positioning and insets | pending | Immutable-target audit and revalidation required; historical status: active. |
+| L19 | Stacking order / z-index | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| L20 | Overflow clipping | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| P01 | Uniform solid borders | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| P02 | Individual border sides | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| P03 | Per-corner circular radii | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| P04 | Elliptical radii | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
+| P05 | Group opacity | pending | Immutable-target audit and revalidation required; historical status: active. |
+| P06 | Linear gradients | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| P07 | Radial gradients | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| P08 | Outer box shadows | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| P09 | Inset box shadows | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| P10 | Background images | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| P11 | 2D transforms | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| P12 | Transform origin | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I01 | `object-fit: contain` | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I02 | `object-fit: cover` | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I03 | `object-position` | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I04 | JPEG assets | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I05 | WebP assets | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I06 | Image orientation | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I07 | Color-managed images | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I08 | SVG assets | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| I09 | Asset deduplication | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T01 | Mixed text and inline spans | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T02 | Per-run typography | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T03 | Bold/italic semantic tags | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T04 | Multiple font weights | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T05 | Italic fonts | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T06 | Font fallback | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T07 | Variable fonts | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T08 | Complex-script qualification | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| T09 | Bidirectional text | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| R01 | Viewport units | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| R02 | `calc()` | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| R03 | `min()` / `max()` / `clamp()` | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| R04 | Media queries | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| R05 | Container queries | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q01 | Precise source locations | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q02 | Actionable diagnostics | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q03 | Machine-readable capability manifest | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q04 | Determinism expansion | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q05 | Malformed-input fuzzing | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q06 | Resource-limit boundary coverage | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q07 | Performance benchmarks | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q08 | Package/version compatibility | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q09 | Realistic composition corpus | pending | Immutable-target audit and revalidation required; historical status: partial. |
+| Q10 | Deterministic interaction matrix | pending | Immutable-target audit and revalidation required; historical status: pending. |

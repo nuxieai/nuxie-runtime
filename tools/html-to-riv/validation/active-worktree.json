@@ -1,0 +1,9 @@
+{
+  "activeWorktree": "/Users/levi/.codex/worktrees/html-css-immutable",
+  "activeBranch": "levi/html-css-immutable-runtime",
+  "archiveWorktree": "/Users/levi/.codex/worktrees/7c27/nuxie-runtime",
+  "archivePurpose": "Historical coupled compiler and interrupted P07 source only; do not build or continue runtime/renderer changes here.",
+  "mainRevert": "9738049372ffd45639de39c2217c1f548963340a",
+  "targetBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "next": "Follow TARGET.md in clean activeWorktree; restore compiler-owned sources selectively and build bytes-only immutable baseline proof. All old native qualification is historical."
+}

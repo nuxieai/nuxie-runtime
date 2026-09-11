@@ -56,4 +56,14 @@ class FreezeTests(unittest.TestCase):
         self.native.write_text(text);self.receipt['toolHashes']={k:api.sha(self.native) for k in ('probe','renderer')};self.save()
         with self.assertRaisesRegex(ValueError,'source inventory/content changed'):self.freeze()
 
+    def test_clear_checks_cannot_be_failed_or_tampered(self):
+        import shutil
+        image=self.run/'case/frame-0.clear-cyan.png';image.write_bytes(b'clear evidence')
+        check=dict(name='cyan',path=str(image),sha256=api.sha(image),samePixels=False)
+        self.receipt['rows'][0]['clearChecks']=[check];self.save()
+        with self.assertRaisesRegex(ValueError,'canvas-clear'):self.freeze()
+        shutil.rmtree(self.root/'out');check['samePixels']=True;self.save()
+        image.write_bytes(b'tampered clear evidence')
+        with self.assertRaisesRegex(ValueError,'changed evidence'):self.freeze()
+
 if __name__=='__main__':unittest.main()

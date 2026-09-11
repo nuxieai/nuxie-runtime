@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-11",
-  "focus": "CSS-wide sizing and color semantics",
-  "status": "Sizing keyword checkpoint validated; backlog continues",
-  "current": "Width/height inherit, initial and unset now emit responsive ordinary Rive values. 17 new scenes pass all 136 geometry/pixel comparisons; 51 unique pairs reviewed and 85 exact repeat/clone transfers recorded. Public corpus now has 296 passing frames, with prior failures preserved. 23 Rust tests and 8 Node tests (108 corpus byte/map parity pairs) pass.",
-  "next": "Add solid-color background shorthand with correct cascade priority and explicit unsupported constituents, then continue typography/layout and remaining backlog proofs. Runtime remains immutable.",
+  "focus": "Solid backgrounds and self-contained page paint",
+  "status": "Solid-fill profile qualified; typography groundwork next",
+  "current": "Solid-color background shorthand is implemented. Named colors, HSL/HSLA and shorthand are qualified for the admitted solid-fill profile. Fixed white page paint is encoded in ordinary Rive. Fresh full corpus: 408 geometry/pixel comparisons and 816 canvas-clear controls pass; all frames visually covered. 28 Rust tests, 9 Node tests (150 corpus parity pairs), strict TypeScript and 6 evidence-tool tests pass.",
+  "next": "Establish ordinary embedded-font text using baseline import and rendering, then implement and validate font shorthand/typography. Preserve all existing layout/paint limitations and continue the full backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Current background and canvas-independence receipt",
+      "path": "tools/html-to-riv/validation/public-background-receipt.json"
+    },
+    {
+      "label": "Full Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-background-all-r1/gallery.html"
+    },
     {
       "label": "CSS-wide sizing/color evidence",
       "path": "tools/html-to-riv/validation/public-css-wide-receipt.json"

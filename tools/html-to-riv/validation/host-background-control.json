@@ -1,0 +1,41 @@
+{
+  "scope": "Negative control for missing fixed-white host paint. One directly inspected before/after control. Compare to the previously accepted native image under white clear; Chrome tolerance checks remain separate.",
+  "before": {
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/scene.riv",
+    "sceneSha256": "86d98efd94c683bfeef454c5681caa04d0e9113d088bf6da474f8af488b2e288",
+    "stream": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/probe/frame-0.stream",
+    "streamSha256": "6425a3dff488e33f6e124cc749da938d608646fe07599ad49f4727f5b52b7cc7",
+    "image": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/background-clear-before.png",
+    "imageSha256": "83f5bff81bfe31c5ae48867031be9501904021356678a1d5446054c89e50b9e5",
+    "differentPixelsFromWhiteClear": 34560
+  },
+  "after": {
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/host-background-proof/scene.riv",
+    "sceneSha256": "5bff17c96e112558da39da3389ebad31be24407787770580551c1cefe926b1c1",
+    "stream": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/host-background-proof/probe/frame-0.stream",
+    "streamSha256": "9ca92554e57233ccae47ea3cf4437f94d9aa0264c01fdf9ce8a1db1888d38a84",
+    "image": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/host-background-proof/after.png",
+    "imageSha256": "9ac2f05c5f457b26ff93af8966afc54e101b5d06f6878671e6c8ff9ee69a3be3",
+    "differentPixelsFromWhiteClear": 0
+  },
+  "reference": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/frame-0.native.png",
+    "sha256": "9ac2f05c5f457b26ff93af8966afc54e101b5d06f6878671e6c8ff9ee69a3be3"
+  },
+  "renderer": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay",
+    "sha256": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "arguments": [
+    "--backend",
+    "rust-metal",
+    "--mode",
+    "clockwise-atomic",
+    "--frame",
+    "0",
+    "--clear",
+    "0xff00ffff"
+  ],
+  "observedClearColor": "cyan",
+  "runtimeChanges": false
+}

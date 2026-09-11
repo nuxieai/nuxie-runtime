@@ -104,3 +104,10 @@ test('CSS-wide sizing and color corpus has exact CLI/WASM parity',async()=>{
  assert(fixtures.length>=10,'CSS-wide corpus must retain sizing and color cases');
  await assertCorpusParity(fixtures);
 });
+
+
+test('solid background shorthand has exact CLI/WASM corpus parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-background-cases.json',import.meta.url)));
+ assert(fixtures.length>=10,'background corpus must retain cascade, inheritance and literal controls');
+ await assertCorpusParity(fixtures);
+});

@@ -1,6 +1,6 @@
 # HTML/CSS to ordinary Rive
 
-An initial standalone compiler is available through Rust, CLI and WASM/JavaScript. It emits ordinary `.riv` bytes for the unchanged runtime pinned in [TARGET.md](TARGET.md). The currently admitted profile is deliberately small: nested box elements, column layout, width/height with inheritance and initial/unset sizing, selectors/cascade and solid colors. Native visual qualification remains provisional; this is not a qualified release or a general web-page importer.
+An initial standalone compiler is available through Rust, CLI and WASM/JavaScript. It emits ordinary `.riv` bytes for the unchanged runtime pinned in [TARGET.md](TARGET.md). The currently admitted profile is deliberately small: nested box elements, column layout, width/height with inheritance and initial/unset sizing, selectors/cascade, solid colors and solid-color background shorthand. Native visual qualification remains provisional; this is not a qualified release or a general web-page importer.
 
 PR #628 was reverted by [PR #629](https://github.com/nuxieai/nuxie-runtime/pull/629) because it depended on runtime and renderer extensions. This replacement has its own Cargo workspace and authoring dependencies. It requires no CSS runtime policies, custom renderer methods, requirements sidecar or editor integration. The historical implementation at `20248ee6835a7bb071dbf83a364606f5e58aeef9` is reference material; its native qualification does not transfer.
 
@@ -56,3 +56,5 @@ if (result.ok) {
 The language is `nuxie-html-immutable-v1`, and the private WASM bridge is ABI version2. Old language/ABI instances are incompatible. Output byte buffers remain valid across subsequent compile calls. Type declarations are in `js/index.d.mts`; the package is currently private, with no published npm artifact claimed.
 
 The explicit authoring reset in `src/reset.css` is exported to Rust as `BROWSER_RESET_CSS` and used by browser references. This is a column-box authoring profile, not emulation of browser default styles. Read [SUPPORT.md](SUPPORT.md) for admission and limitations, [VALIDATION.md](VALIDATION.md) for exact checks, and [BACKLOG.md](BACKLOG.md) for retained future work.
+
+The fixed white page background is encoded as ordinary Artboard paint. Rendered designs do not depend on the application clearing its canvas to white.

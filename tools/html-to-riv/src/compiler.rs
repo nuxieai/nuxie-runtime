@@ -44,7 +44,35 @@ fn computed_size(text: &str, inherited: Size, source: &str) -> Result<Size, Diag
     }
 }
 
+fn background_shorthand(value: &str, parent: BackgroundColor, source: &str) -> Result<BackgroundColor, Diagnostic> {
+    let value = css::ordinary_value(value).map_err(|_| unsupported(source,
+        "background supports one solid color, none, inherit, initial or unset; other image/layer/position/size/repeat/box/attachment values are not admitted"))?;
+    match value.trim().to_ascii_lowercase().as_str() {
+        "inherit" => Ok(parent),
+        "none" | "initial" | "unset" => Ok(BackgroundColor::Rgba(0)),
+        "currentcolor" => Ok(BackgroundColor::CurrentColor),
+        _ => color::parse(&value, source).map(BackgroundColor::Rgba).map_err(|_| unsupported(source,
+            "background supports one solid color, none, inherit, initial or unset; mixed values and background layers are not admitted")),
+    }
+}
+
+fn apply_background_shorthand(style: &mut Style, parent: &Style, value: &str, source: &str) -> Result<(), Diagnostic> {
+    // This is a shorthand operation, not a permanent background-color alias.
+    // When other background longhands are admitted, color/none reset image:none,
+    // position:0% 0%, size:auto auto, repeat:repeat, origin:padding-box,
+    // clip:border-box and attachment:scroll at this declaration's cascade priority.
+    // inherit copies every computed subproperty; initial/unset reset every one.
+    // background-blend-mode is NOT part of this shorthand. The current profile
+    // admits no other background constituents, so their initial state is invariant.
+    style.background = background_shorthand(value, parent.background, source)?;
+    Ok(())
+}
+
 fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
+    if d.name == "background" {
+        background_shorthand(&d.value, BackgroundColor::Rgba(0), &d.source)?;
+        return Ok(());
+    }
     let value = css::ordinary_value(&d.value)?.trim().to_ascii_lowercase();
     match d.name.as_str() {
         "width" | "height" => {
@@ -64,7 +92,10 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
 
 fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Result<Style, Diagnostic> {
     let mut declarations = css::cascade(rules, element)?;
-    for d in &mut declarations { d.value = css::ordinary_value(&d.value)?; validate(d)?; }
+    for d in &mut declarations {
+        validate(d)?;
+        d.value = css::ordinary_value(&d.value)?;
+    }
     let mut style = Style { foreground: parent.foreground, ..Style::default() };
     // Resolve currentColor against the final computed color, irrespective of
     // declaration order. A background currentColor stays a computed keyword
@@ -81,6 +112,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
         match d.name.as_str() {
             "width" => style.width = computed_size(&d.value, parent.width, &d.source)?,
             "height" => style.height = computed_size(&d.value, parent.height, &d.source)?,
+            "background" => apply_background_shorthand(&mut style, parent, &d.value, &d.source)?,
             "background-color" => {
                 style.background = match d.value.trim().to_ascii_lowercase().as_str() {
                     "currentcolor" => BackgroundColor::CurrentColor,
@@ -121,6 +153,16 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
     artboard.set("styleId", Value::Uint(1))?; records.push(artboard);
     let mut root_style = Record::new("LayoutComponentStyle");
     root_style.set("flexDirectionValue", Value::Uint(0))?;records.push(root_style);
+    // The authoring reset has an opaque white host. Encode it in the file;
+    // relying on the caller's canvas clear color would change the design.
+    let mut host_fill = Record::new("Fill");
+    host_fill.set("parentId", Value::Uint(0))?;
+    let host_fill_id = records.len() as u32 - 1;
+    records.push(host_fill);
+    let mut host_paint = Record::new("SolidColor");
+    host_paint.set("parentId", Value::Uint(host_fill_id))?;
+    host_paint.set("colorValue", Value::Color(0xffffffff))?;
+    records.push(host_paint);
     let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new() };
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),

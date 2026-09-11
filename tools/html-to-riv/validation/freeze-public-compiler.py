@@ -99,6 +99,10 @@ def freeze(native, wasm, out, receipts, module=MODULE):
                 require(row['requestSha256']==artifact['requestSha256'] and row['rivSha256']==artifact['rivSha256'] and row['sourceMapSha256']==artifact['mapSha256'],'row input hashes differ')
                 require(Path(row['prefix']).resolve()==(folder/f'frame-{frame}').resolve(),'unexpected row prefix')
                 for p,key in [(folder/'probe'/original['stream'],'streamSha256'),(folder/'probe'/original['geometry'],'geometrySha256'),(folder/f'frame-{frame}.chrome.png','chromeSha256'),(folder/f'frame-{frame}.native.png','nativeSha256')]:bind(p,row[key])
+                for clear in row.get('clearChecks', []):
+                    require(clear['samePixels'], 'failed canvas-clear independence check')
+                    require(Path(clear['path']).resolve()==(folder/f'frame-{frame}.clear-{clear["name"]}.png').resolve(),'unexpected clear-check path')
+                    bind(clear['path'],clear['sha256'])
             shutil.copy2(request,destination/'request.json')
             command=[str(out/'html-to-riv'),str(destination/'request.json'),str(destination/'scene.riv')]
             process=subprocess.run(command,capture_output=True,text=True)

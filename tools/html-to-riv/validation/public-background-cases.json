@@ -1,0 +1,117 @@
+[
+  {
+    "name": "background-then-color",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:red;background-color:blue;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "color-then-background",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background-color:blue;background:red;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "important-background-vs-color",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:red!important;background-color:blue;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "inline-important-background",
+    "html": "<div id=\"outer\"><div id=\"inner\" style=\"background:coral!important\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:blue!important;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "inline-important-longhand",
+    "html": "<div id=\"outer\"><div id=\"inner\" style=\"background-color:rebeccapurple!important\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:blue!important;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "background-specificity",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:rebeccapurple;}div{background:coral;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "background-inherit-currentcolor-chain",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#outer{color:red;background:currentColor;}#inner{color:blue;background:inherit;}#leaf{color:green;background:inherit;}",
+    "features": [
+      "A06",
+      "A03"
+    ]
+  },
+  {
+    "name": "background-initial",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:blue;background:initial;}#leaf{background:coral;}",
+    "features": [
+      "A06",
+      "A04"
+    ]
+  },
+  {
+    "name": "background-unset",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:blue;background:unset;}#leaf{background:coral;}",
+    "features": [
+      "A06",
+      "A05"
+    ]
+  },
+  {
+    "name": "background-currentcolor-final-color",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{color:red;background:currentColor;color:rebeccapurple;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "background-hsl-alpha",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:hsl(270 50% 40% / 50%);}#leaf{background:hsla(30,100%,50%,0.5);}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "background-transparent",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:transparent;}#leaf{background:aliceblue;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "background-none",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:blue;background:none;}#leaf{background:coral;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "background-named",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:90px;background-color:gold;}#inner{width:75%;height:60px;}#leaf{width:50%;height:30px;}#inner{background:rebeccapurple;}#leaf{background:aliceblue;}",
+    "features": [
+      "A06"
+    ]
+  }
+]

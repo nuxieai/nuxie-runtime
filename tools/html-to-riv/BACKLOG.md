@@ -10,12 +10,12 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 
 | ID | Feature | Status | Evidence / next action |
 | --- | --- | --- | --- |
-| A01 | Standard CSS named colors | partial | All 148 named colors now pass public HTML/CSS native pixels and original/clone resizing; CLI/WASM parity and visual review recorded. Qualification remains bounded to box fills; see validation/public-color-receipt.json. |
-| A02 | HSL/HSLA | partial | Public HSL/HSLA admission, 24 angle/alpha/clamping boundary swatches, CLI/WASM parity and immutable native visual comparisons pass. Broader contexts remain open; see validation/public-color-receipt.json. |
+| A01 | Standard CSS named colors | qualified (solid fills) | All 148 named colors now pass public HTML/CSS native pixels and original/clone resizing; CLI/WASM parity and visual review recorded. Qualified for admitted solid fills; all 148 colors rerendered with canvas independence in validation/public-background-receipt.json. Text and other paints require their own feature admission. |
+| A02 | HSL/HSLA | qualified (solid fills) | Public HSL/HSLA admission, 24 angle/alpha/clamping boundary swatches, CLI/WASM parity and immutable native visual comparisons pass. Qualified for admitted 8-bit solid fills; full rerun and clear controls in validation/public-background-receipt.json. Other paint/text contexts remain separately scoped. |
 | A03 | `inherit` | partial | Corrected inherited currentColor with preserved 8-frame failure and 24 passing/reviewed native regression frames. Width/height descriptor inheritance now passes the public CSS-wide corpus, including percent and auto-height chains. Broader properties remain pending. See validation/public-inheritance-receipt.json and validation/public-css-wide-receipt.json. |
 | A04 | `initial` | partial | Width/height reset to auto; foreground/background reset semantics pass public native comparisons and visual review. Inline display/row direction contexts remain rejected pending proof. See validation/public-css-wide-receipt.json. |
 | A05 | `unset` | partial | Inherited color vs initial dimensions/background distinguished, with cascade and native resize proof. Broader property contexts remain pending. See validation/public-css-wide-receipt.json. |
-| A06 | Solid-color `background` shorthand | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A06 | Solid-color `background` shorthand | qualified (solid fills) | Single color/currentColor/none/CSS-wide forms, ordering/important/inline precedence and inherited sentinel validated with 14 scenes. Other constituents rejected; see validation/public-background-receipt.json. |
 | A07 | `font` shorthand | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A08 | Unitless line-height | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A09 | `em` lengths | pending | Immutable-target audit and revalidation required; historical status: partial. |

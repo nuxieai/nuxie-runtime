@@ -36,11 +36,17 @@ try{const page=await browser.newPage({deviceScaleFactor:1,colorScheme:'light',lo
   for(const f of frames){assert.equal(f.instance,Math.floor(f.frame/4));assert.equal(f.step,f.frame%4);assert.deepEqual([f.width,f.height],sizes[f.step]);
    const prefix=path.join(dir,`frame-${f.frame}`);await page.setViewportSize({width:f.width,height:f.height});await page.setContent(html);
    const boxes=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const{x,y,width,height}=e.getBoundingClientRect();return[e.id,{x,y,width,height}]})));
-   const computedStyles=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const s=getComputedStyle(e);return[e.id,{width:s.width,height:s.height,color:s.color,backgroundColor:s.backgroundColor,display:s.display,flexDirection:s.flexDirection}]})));
+   const computedStyles=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const s=getComputedStyle(e);return[e.id,{width:s.width,height:s.height,color:s.color,backgroundColor:s.backgroundColor,display:s.display,flexDirection:s.flexDirection,alignSelf:s.alignSelf,order:s.order}]})));
    if(fixture.expectedPaint){
     for(const [id,color] of Object.entries(fixture.expectedPaint)){
      assert(computedStyles[id],`missing expected paint node ${id}`);
      assert.equal(computedStyles[id].backgroundColor,color,`${fixture.name}: independent expected paint for ${id}`);
+    }
+   }
+   if(fixture.expectedAlignment){
+    for(const [id,value] of Object.entries(fixture.expectedAlignment)){
+     assert(computedStyles[id],`missing expected alignment node ${id}`);
+     assert.equal(computedStyles[id].alignSelf,value,`${fixture.name}: independent expected alignment for ${id}`);
     }
    }
    const swatchObservations=[];

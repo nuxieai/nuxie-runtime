@@ -178,3 +178,9 @@ test("align-self edge contexts have exact CLI/WASM parity",async()=>{
  assert.equal(fixtures.length,12);
  await assertCorpusParity(fixtures);
 });
+
+test("safe and logical align-self have exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-align-safe-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,21);
+ await assertCorpusParity(fixtures);
+});

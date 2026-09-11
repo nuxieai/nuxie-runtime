@@ -30,28 +30,62 @@ fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Dir
     }
 }
 #[derive(Clone, Copy)]
-enum SelfAlignment { Auto, Stretch, Start, Center, End }
+enum AlignmentPosition { Auto, Normal, Stretch, FlexStart, Start, SelfStart, Center, FlexEnd, End, SelfEnd }
+#[derive(Clone, Copy)]
+enum OverflowAlignment { Default, Safe, Unsafe }
+#[derive(Clone, Copy)]
+struct SelfAlignment { position: AlignmentPosition, overflow: OverflowAlignment }
 impl SelfAlignment {
-    fn stretches(self) -> bool { matches!(self, Self::Auto | Self::Stretch) }
+    const AUTO: Self = Self { position: AlignmentPosition::Auto, overflow: OverflowAlignment::Default };
+    fn stretches(self) -> bool { matches!(self.position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch) }
+    fn is_center(self) -> bool { matches!(self.position, AlignmentPosition::Center) }
+    fn is_end(self) -> bool { matches!(self.position, AlignmentPosition::FlexEnd | AlignmentPosition::End | AlignmentPosition::SelfEnd) }
+    fn is_safe(self) -> bool { matches!(self.overflow, OverflowAlignment::Safe) }
     fn wrapper_alignment(self, parent: Direction) -> Option<u32> {
-        // The wrapper's main axis is the authored parent's cross axis.
-        // Its native flow is reversed: flex-start therefore anchors physical
-        // bottom/right, while center is independent of flow reversal.
-        match self {
-            Self::Center => Some(if parent.is_row() { 3 } else { 1 }),
-            Self::End => Some(0),
-            _ => None,
+        if !self.is_center() && !self.is_end() { return None; }
+        // Perpendicular native flow is reversed. Safe alignment uses auto
+        // margins for positive free space and physical-start justification
+        // when those margins collapse on overflow.
+        Some(if self.is_safe() { if parent.is_row() { 6 } else { 2 } }
+            else if self.is_center() { if parent.is_row() { 3 } else { 1 } }
+            else { 0 })
+    }
+    fn auto_margins(self, parent: Direction) -> [bool; 4] {
+        let mut margins = [false; 4]; // physical left, top, right, bottom
+        if self.is_safe() && (self.is_center() || self.is_end()) {
+            let start = if parent.is_row() { 1 } else { 0 };
+            margins[start] = true;
+            if self.is_center() { margins[start + 2] = true; }
         }
+        margins
     }
 }
 fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result<SelfAlignment, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
-        "auto" | "initial" | "unset" => Ok(SelfAlignment::Auto),
-        "stretch" => Ok(SelfAlignment::Stretch), "flex-start" => Ok(SelfAlignment::Start),
-        "center" => Ok(SelfAlignment::Center), "flex-end" => Ok(SelfAlignment::End),
-        "inherit" => Ok(parent),
-        _ => Err(unsupported(source, "align-self currently admits auto, stretch, flex-start, center, flex-end and CSS-wide inherit/initial/unset; other alignments need ordinary-file validation")),
+    let text = text.trim().to_ascii_lowercase();
+    let tokens: Vec<_> = text.split_ascii_whitespace().collect();
+    let (word, overflow) = match tokens.as_slice() {
+        ["inherit"] => return Ok(parent),
+        ["initial" | "unset"] => return Ok(SelfAlignment::AUTO),
+        [word] => (*word, OverflowAlignment::Default),
+        ["safe", word] => (*word, OverflowAlignment::Safe),
+        ["unsafe", word] => (*word, OverflowAlignment::Unsafe),
+        _ => return Err(unsupported(source, "align-self requires a supported keyword, optionally prefixed by safe or unsafe for positional alignment")),
+    };
+    let position = match word {
+        "auto" => AlignmentPosition::Auto, "normal" => AlignmentPosition::Normal,
+        "stretch" => AlignmentPosition::Stretch, "flex-start" => AlignmentPosition::FlexStart,
+        "start" => AlignmentPosition::Start, "self-start" => AlignmentPosition::SelfStart,
+        "center" => AlignmentPosition::Center, "flex-end" => AlignmentPosition::FlexEnd,
+        "end" => AlignmentPosition::End, "self-end" => AlignmentPosition::SelfEnd,
+        _ => return Err(unsupported(source, "This align-self value needs ordinary-file validation; baseline alignment is unresolved")),
+    };
+    if !matches!(overflow, OverflowAlignment::Default)
+        && matches!(position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch) {
+        return Err(unsupported(source, "safe and unsafe require positional alignment, not auto, normal or stretch"));
     }
+    // Preserve specified logical/self-relative position and overflow preference
+    // through inheritance. Their current lowering assumes horizontal LTR boxes.
+    Ok(SelfAlignment { position, overflow })
 }
 fn computed_order(text: &str, parent: i32, source: &str) -> Result<i32, Diagnostic> {
     // Inspect the authored integer lexeme: cssparser's integer field saturates
@@ -85,7 +119,7 @@ impl BackgroundColor {
 #[derive(Clone)]
 struct Style { self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { self_alignment: SelfAlignment::Auto, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -217,7 +251,7 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         }
         // Display remains flex; direction is independent of the column authoring reset.
         "display" if matches!(value.as_str(), "flex" | "inherit") => {}
-        "align-self" => { computed_alignment(&value, SelfAlignment::Auto, &d.source)?; }
+        "align-self" => { computed_alignment(&value, SelfAlignment::AUTO, &d.source)?; }
         "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
     }
@@ -350,7 +384,7 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
 struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String> }
 impl Emitter {
     fn layout_box(&mut self, name: &str, parent_id: u32, direction: Direction, alignment: u32,
-        parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool) -> Result<u32, Diagnostic> {
+        parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool, auto_margins: [bool; 4]) -> Result<u32, Diagnostic> {
         let object_id = self.records.len() as u32 - 1;
             let mut layout = Record::new("LayoutComponent");
             layout.set("name", Value::String(name.into()))?;layout.set("parentId", Value::Uint(parent_id))?;
@@ -383,6 +417,12 @@ impl Emitter {
                 };
                 layout_style.set(name, Value::Float(value))?;
                 layout_style.set(&format!("{name}UnitsValue"), Value::Uint(units))?;
+            }
+            for (name, automatic) in ["marginLeft", "marginTop", "marginRight", "marginBottom"].into_iter().zip(auto_margins) {
+                if automatic {
+                    layout_style.set(name, Value::Float(0.))?;
+                    layout_style.set(&format!("{name}UnitsValue"), Value::Uint(3))?;
+                }
             }
             self.records.push(layout);self.records.push(layout_style);
         Ok(object_id)
@@ -441,14 +481,14 @@ impl Emitter {
                 // fixed sizes, without percentage substitution or flex growth.
                 native_parent_direction = if parent_style.direction.is_row() { Direction::Column } else { Direction::Row };
                 authored_parent = self.layout_box("", parent_id, native_parent_direction, alignment,
-                    parent_style.direction, outer_sizes, outer_bounds, true)?;
+                    parent_style.direction, outer_sizes, outer_bounds, true, [false; 4])?;
                 sizes[main] = Size::Auto;
                 stretch = true;
                 bounds[main] = Size::Pixels(0.);
                 bounds[main + 2] = Size::Auto;
             }
             let object_id = self.layout_box(&id, authored_parent, style.direction, style.direction.alignment(),
-                native_parent_direction, sizes, bounds, stretch)?;
+                native_parent_direction, sizes, bounds, stretch, style.self_alignment.auto_margins(parent_style.direction))?;
             let background = style.background.used(style.foreground);
             if background >> 24 != 0 {
                 let fill_id = self.records.len() as u32 - 1;

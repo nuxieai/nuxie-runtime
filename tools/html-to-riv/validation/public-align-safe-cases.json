@@ -1,0 +1,370 @@
+[
+  {
+    "name": "align-safe-row-small",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row;background:navy}#a{align-self:safe center;width:20px;height:40px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;width:20px;height:40px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;width:20px;height:40px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;width:20px;height:40px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;width:20px;height:40px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;width:20px;height:40px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;width:20px;height:40px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "small"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-row-oversized",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row;background:navy}#a{align-self:safe center;width:20px;height:220px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;width:20px;height:220px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;width:20px;height:220px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;width:20px;height:220px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;width:20px;height:220px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;width:20px;height:220px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;width:20px;height:220px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "oversized"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-row-intrinsic",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row;background:navy}#a{align-self:safe center;width:20px;height:auto;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;width:20px;height:auto;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;width:20px;height:auto;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;width:20px;height:auto;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;width:20px;height:auto;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;width:20px;height:auto;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;width:20px;height:auto;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "intrinsic"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-row-reverse-small",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row-reverse;background:navy}#a{align-self:safe center;width:20px;height:40px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;width:20px;height:40px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;width:20px;height:40px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;width:20px;height:40px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;width:20px;height:40px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;width:20px;height:40px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;width:20px;height:40px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "small"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-row-reverse-oversized",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row-reverse;background:navy}#a{align-self:safe center;width:20px;height:220px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;width:20px;height:220px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;width:20px;height:220px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;width:20px;height:220px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;width:20px;height:220px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;width:20px;height:220px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;width:20px;height:220px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "oversized"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-row-reverse-intrinsic",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row-reverse;background:navy}#a{align-self:safe center;width:20px;height:auto;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;width:20px;height:auto;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;width:20px;height:auto;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;width:20px;height:auto;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;width:20px;height:auto;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;width:20px;height:auto;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;width:20px;height:auto;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "intrinsic"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-column-small",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column;background:navy}#a{align-self:safe center;height:20px;width:40px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;height:20px;width:40px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;height:20px;width:40px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;height:20px;width:40px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;height:20px;width:40px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;height:20px;width:40px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;height:20px;width:40px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "small"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-column-oversized",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column;background:navy}#a{align-self:safe center;height:20px;width:220px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;height:20px;width:220px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;height:20px;width:220px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;height:20px;width:220px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;height:20px;width:220px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;height:20px;width:220px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;height:20px;width:220px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "oversized"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-column-intrinsic",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column;background:navy}#a{align-self:safe center;height:20px;width:auto;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;height:20px;width:auto;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;height:20px;width:auto;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;height:20px;width:auto;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;height:20px;width:auto;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;height:20px;width:auto;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;height:20px;width:auto;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "intrinsic"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-column-reverse-small",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column-reverse;background:navy}#a{align-self:safe center;height:20px;width:40px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;height:20px;width:40px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;height:20px;width:40px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;height:20px;width:40px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;height:20px;width:40px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;height:20px;width:40px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;height:20px;width:40px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "small"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-column-reverse-oversized",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column-reverse;background:navy}#a{align-self:safe center;height:20px;width:220px;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;height:20px;width:220px;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;height:20px;width:220px;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;height:20px;width:220px;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;height:20px;width:220px;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;height:20px;width:220px;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;height:20px;width:220px;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "oversized"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-column-reverse-intrinsic",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"ag\"></div></div><div id=\"b\"><div id=\"bg\"></div></div><div id=\"c\"><div id=\"cg\"></div></div><div id=\"d\"><div id=\"dg\"></div></div><div id=\"e\"><div id=\"eg\"></div></div><div id=\"f\"><div id=\"fg\"></div></div><div id=\"g\"><div id=\"gg\"></div></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column-reverse;background:navy}#a{align-self:safe center;height:20px;width:auto;background:teal}#ag{width:12px;height:12px;background:coral}#b{align-self:safe flex-end;height:20px;width:auto;background:gold}#bg{width:12px;height:12px;background:coral}#c{align-self:safe start;height:20px;width:auto;background:purple}#cg{width:12px;height:12px;background:coral}#d{align-self:unsafe center;height:20px;width:auto;background:cyan}#dg{width:12px;height:12px;background:coral}#e{align-self:unsafe flex-end;height:20px;width:auto;background:lime}#eg{width:12px;height:12px;background:coral}#f{align-self:normal;height:20px;width:auto;background:pink}#fg{width:12px;height:12px;background:coral}#g{align-self:self-end;height:20px;width:auto;background:orange}#gg{width:12px;height:12px;background:coral}",
+    "features": [
+      "L03",
+      "safe/unsafe/logical comparison",
+      "intrinsic"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end",
+      "c": "safe start",
+      "d": "unsafe center",
+      "e": "unsafe flex-end",
+      "f": "normal",
+      "g": "self-end"
+    }
+  },
+  {
+    "name": "align-safe-positions-row",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div><div id=\"e\"></div><div id=\"f\"></div><div id=\"g\"></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row;background:navy}#a{align-self:safe start;width:20px;height:40px;background:teal}#b{align-self:safe end;width:20px;height:40px;background:gold}#c{align-self:safe self-start;width:20px;height:40px;background:purple}#d{align-self:safe self-end;width:20px;height:40px;background:cyan}#e{align-self:safe flex-start;width:20px;height:40px;background:lime}#f{align-self:safe flex-end;width:20px;height:40px;background:pink}#g{align-self:safe center;width:20px;height:40px;background:coral}",
+    "features": [
+      "L03",
+      "all positional keyword forms"
+    ],
+    "expectedAlignment": {
+      "a": "safe start",
+      "b": "safe end",
+      "c": "safe self-start",
+      "d": "safe self-end",
+      "e": "safe flex-start",
+      "f": "safe flex-end",
+      "g": "safe center"
+    }
+  },
+  {
+    "name": "align-unsafe-positions-row",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div><div id=\"e\"></div><div id=\"f\"></div><div id=\"g\"></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:row;background:navy}#a{align-self:unsafe start;width:20px;height:40px;background:teal}#b{align-self:unsafe end;width:20px;height:40px;background:gold}#c{align-self:unsafe self-start;width:20px;height:40px;background:purple}#d{align-self:unsafe self-end;width:20px;height:40px;background:cyan}#e{align-self:unsafe flex-start;width:20px;height:40px;background:lime}#f{align-self:unsafe flex-end;width:20px;height:40px;background:pink}#g{align-self:unsafe center;width:20px;height:40px;background:coral}",
+    "features": [
+      "L03",
+      "all positional keyword forms"
+    ],
+    "expectedAlignment": {
+      "a": "unsafe start",
+      "b": "unsafe end",
+      "c": "unsafe self-start",
+      "d": "unsafe self-end",
+      "e": "unsafe flex-start",
+      "f": "unsafe flex-end",
+      "g": "unsafe center"
+    }
+  },
+  {
+    "name": "align-safe-positions-column",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div><div id=\"e\"></div><div id=\"f\"></div><div id=\"g\"></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column;background:navy}#a{align-self:safe start;height:20px;width:40px;background:teal}#b{align-self:safe end;height:20px;width:40px;background:gold}#c{align-self:safe self-start;height:20px;width:40px;background:purple}#d{align-self:safe self-end;height:20px;width:40px;background:cyan}#e{align-self:safe flex-start;height:20px;width:40px;background:lime}#f{align-self:safe flex-end;height:20px;width:40px;background:pink}#g{align-self:safe center;height:20px;width:40px;background:coral}",
+    "features": [
+      "L03",
+      "all positional keyword forms"
+    ],
+    "expectedAlignment": {
+      "a": "safe start",
+      "b": "safe end",
+      "c": "safe self-start",
+      "d": "safe self-end",
+      "e": "safe flex-start",
+      "f": "safe flex-end",
+      "g": "safe center"
+    }
+  },
+  {
+    "name": "align-unsafe-positions-column",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div><div id=\"e\"></div><div id=\"f\"></div><div id=\"g\"></div></div>",
+    "css": "#root{width:180px;height:160px;flex-direction:column;background:navy}#a{align-self:unsafe start;height:20px;width:40px;background:teal}#b{align-self:unsafe end;height:20px;width:40px;background:gold}#c{align-self:unsafe self-start;height:20px;width:40px;background:purple}#d{align-self:unsafe self-end;height:20px;width:40px;background:cyan}#e{align-self:unsafe flex-start;height:20px;width:40px;background:lime}#f{align-self:unsafe flex-end;height:20px;width:40px;background:pink}#g{align-self:unsafe center;height:20px;width:40px;background:coral}",
+    "features": [
+      "L03",
+      "all positional keyword forms"
+    ],
+    "expectedAlignment": {
+      "a": "unsafe start",
+      "b": "unsafe end",
+      "c": "unsafe self-start",
+      "d": "unsafe self-end",
+      "e": "unsafe flex-start",
+      "f": "unsafe flex-end",
+      "g": "unsafe center"
+    }
+  },
+  {
+    "name": "align-safe-responsive-percent",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:75%;height:120px;flex-direction:column;background:navy}#a{align-self:safe center;width:120%;height:30px;background:coral}#b{align-self:safe end;width:50%;height:30px;background:gold}",
+    "features": [
+      "L03",
+      "safe percent overflow"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe end"
+    }
+  },
+  {
+    "name": "align-safe-minimum-overflow",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{align-self:safe center;width:60px;min-height:160px;background:teal}#g{width:30px;height:20px;background:coral}#b{align-self:safe flex-end;width:40px;min-height:160px;background:gold}",
+    "features": [
+      "L03",
+      "safe min bound overflow"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "b": "safe flex-end"
+    }
+  },
+  {
+    "name": "align-safe-nested-order",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:120px;flex-direction:row;background:navy}#a{align-self:safe center;order:1;width:80px;height:80px;flex-direction:column;background:teal}#g{align-self:safe self-end;width:120px;height:40px;background:coral}#b{align-self:safe end;order:2;width:60px;height:100px;background:rgb(255 215 0 / 50%)}",
+    "features": [
+      "L03",
+      "nested safe wrapper and order overlap"
+    ],
+    "expectedAlignment": {
+      "a": "safe center",
+      "g": "safe self-end",
+      "b": "safe end"
+    }
+  },
+  {
+    "name": "align-safe-inherit-vars",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{--pos:safe self-end;align-self:var(--pos);width:180px;height:100px;flex-direction:row;background:navy}#a{align-self:inherit;width:40px;height:140px;background:coral}#b{align-self:var(--missing,unsafe self-start);width:40px;height:40px;background:gold}",
+    "features": [
+      "L03",
+      "keyword identity inheritance and variables"
+    ],
+    "expectedAlignment": {
+      "root": "safe self-end",
+      "a": "safe self-end",
+      "b": "unsafe self-start"
+    }
+  },
+  {
+    "name": "align-normal-inheritance",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div></div>",
+    "css": "#root{align-self:normal;width:180px;height:100px;flex-direction:row;background:navy}#a{align-self:inherit;width:60px;background:teal}#g{width:30px;height:20px;background:coral}#b{align-self:self-start;width:40px;background:gold}",
+    "features": [
+      "L03",
+      "normal versus nonstretching intrinsic"
+    ],
+    "expectedAlignment": {
+      "root": "normal",
+      "a": "normal",
+      "b": "self-start"
+    }
+  }
+]

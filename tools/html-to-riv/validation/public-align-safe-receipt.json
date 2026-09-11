@@ -1,0 +1,49 @@
+{
+  "status": "qualified-safe-logical-align-self-profile; L03 partial",
+  "scope": "Horizontal LTR single-line boxes only. normal, start/end/self-start/self-end, and safe/unsafe positional alignments. Baseline remains unresolved and rejected. No public auto-margin admission implied.",
+  "run": {
+    "path": "output/public-align-safe-r1/receipt.json",
+    "sha256": "6c3a0eeac1f861f154bd51bf35130a76dce7a2869eab4c3614a4893ff56a9500"
+  },
+  "scenes": 21,
+  "geometryPassed": 168,
+  "pixelsPassed": 168,
+  "clearChecksPassed": 336,
+  "visual": {
+    "path": "output/public-align-safe-r1/visual-transfer.json",
+    "sha256": "922dc13fc63eff987c8cb277f2b4703493812d89169e8cd400ec0b9e4b4f360b"
+  },
+  "directVisualPairs": 29,
+  "exactTransferPairs": 139,
+  "checkpoint": {
+    "path": "output/public-align-safe-checkpoint-r1/manifest.json",
+    "sha256": "80d4d134c122edc1b5ac72ad1cb3b803c2987550cfc0e704b96bfbe1632e7ab0"
+  },
+  "publicTests": {
+    "rust": 79,
+    "node": 21,
+    "typescript": "pass"
+  },
+  "testLogs": [
+    {
+      "path": "output/align-safe-rust-tests-r1.log",
+      "sha256": "58ec7a27348bc221a93e42ccaac34a80f6b17431466d9b656466f4d1f42b83d9"
+    },
+    {
+      "path": "output/align-safe-transport-tests-r1.log",
+      "sha256": "768d25e6206b94d1c05212dfeef95d7268a9a8128a7f4237aa2d62e2befb4b0a"
+    }
+  ],
+  "priorOutputRegression": {
+    "fixtures": 232,
+    "sameRivAndSourceMaps": 232,
+    "path": "output/align-safe-byte-regression-r1/manifest.json",
+    "sha256": "71fb6138c9cb33a8e2fc6538e38af50dc7651869f91a1df3cb76164ea7c75803"
+  },
+  "immutableSourceGuard": "pass; no changes outside compiler module",
+  "limitations": [
+    "Logical directions qualified only within admitted horizontal LTR profile",
+    "Baseline alignment remains unresolved",
+    "Existing fractional min/max pixel failure is not resolved by this work"
+  ]
+}

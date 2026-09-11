@@ -131,3 +131,7 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## Align-self compositions
 
 `validation/public-align-self-cases.json` and `public-align-self-edge-cases.json` cover45 scenes/360 passing geometry and pixel frames, with720 clear checks. All frames have direct visual review or exact image-transfer proof. The failed parallel-axis wrapper remains preserved, alongside the passing perpendicular composition.76 Rust/20 Node tests pass;187 prior fixtures retain identical bytes/maps. L03 remains partial for unadmitted alignment forms. See `validation/align-self-review.md` and `validation/public-align-self-receipt.json`.
+
+## Safe and logical alignment
+
+`validation/public-align-safe-cases.json` adds21 scenes/168 passing geometry and pixel frames,336 clear checks, and independent Chrome computed alignment assertions.29 directly reviewed pairs plus139 exact image-transfer proofs cover every frame.79 Rust/21 Node tests, TypeScript and the immutable source guard pass;232 prior fixtures retain identical bytes/maps. See `validation/align-safe-review.md` and `validation/public-align-safe-receipt.json`. Baseline remains unresolved; these results do not qualify authored auto margins generally.

@@ -34,7 +34,7 @@ fn variables_cascade_and_font_relative_bounds_compose() {
 }
 #[test]
 fn unresolved_alignments_and_invalid_losers_still_reject() {
-    for value in ["baseline","first baseline","last baseline","normal","safe center","self-start","left","center end"] {
+    for value in ["baseline","first baseline","last baseline","safe stretch","unsafe normal","safe baseline","left","center end"] {
         for css in [format!("#never{{align-self:{value}}}"),format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}")] {
             assert!(compile(&input(&css)).is_err(),"{css}");
         }
@@ -44,4 +44,34 @@ fn unresolved_alignments_and_invalid_losers_still_reject() {
 fn percentage_height_guard_still_uses_authored_parent_context() {
     assert!(compile(&input("#a{align-self:center;height:50%}")).is_err());
     assert!(compile(&input("#p{height:100px}#a{align-self:center;height:50%}")).is_ok());
+}
+#[test]
+fn logical_aliases_and_unsafe_forms_lower_in_the_current_ltr_profile() {
+    for (actual, expected) in [("normal","stretch"),("start","flex-start"),("self-start","flex-start"),("end","flex-end"),("self-end","flex-end"),("unsafe center","center"),("unsafe flex-end","flex-end"),("unsafe end","flex-end"),("unsafe self-end","flex-end"),("safe start","flex-start"),("safe self-start","flex-start")] {
+        for direction in ["row","row-reverse","column","column-reverse"] {
+            assert_eq!(scene(&format!("#p{{flex-direction:{direction}}}#a{{align-self:{actual}}}")),
+                scene(&format!("#p{{flex-direction:{direction}}}#a{{align-self:{expected}}}")));
+        }
+    }
+}
+#[test]
+fn safe_preferences_survive_cascade_variables_and_inheritance() {
+    for value in ["safe center","safe end","safe flex-end","safe self-end"] {
+        assert_eq!(scene(&format!("#p{{--v:{value};align-self:var(--v)}}#a{{align-self:inherit!important;align-self:unsafe center}}")),
+            scene(&format!("#p,#a{{align-self:{value}}}")));
+        let actual=scene(&format!("#a{{align-self:{value}}}"));
+        assert_eq!(actual.source_map.iter().map(|n|(&n.id,&n.path)).collect::<Vec<_>>(),
+            scene("#a{align-self:center}").source_map.iter().map(|n|(&n.id,&n.path)).collect::<Vec<_>>());
+    }
+    assert_ne!(scene("#a{align-self:safe center}").riv,scene("#a{align-self:unsafe center}").riv);
+    assert_ne!(scene("#a{align-self:safe end}").riv,scene("#a{align-self:unsafe end}").riv);
+    assert_eq!(scene("#p{align-self:safe center}#a{align-self:unset}"),scene("#p{align-self:safe center}"));
+}
+#[test]
+fn malformed_overflow_alignment_is_not_silently_normalized() {
+    for value in ["safe","unsafe","center safe","safe unsafe center","safe center end","unsafe auto","safe normal","unsafe stretch","safe inherit","unsafe initial","safe unset","safe last baseline"] {
+        for css in [format!("#a{{align-self:{value}}}"),format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}")] {
+            assert!(compile(&input(&css)).is_err(),"{css}");
+        }
+    }
 }

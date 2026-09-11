@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Core align-self values validated using ordinary file wrappers",
-  "status": "L03 partial: baseline and additional alignment forms remain",
-  "current": "45 scenes pass 360 geometry/pixel frames and 720 clear checks with complete visual coverage. 76 Rust and20 Node tests pass;187 prior fixtures retain identical output. Failed parallel wrapper preserved; perpendicular wrapper needs no runtime changes.",
-  "next": "Continue L03 with normal/logical and safe alignment candidates, then synthesized box baseline experiments. Do not treat missing direct properties as proof of impossibility.",
+  "focus": "Baseline alignment composition",
+  "status": "Safe/logical alignment qualified within the admitted profile",
+  "current": "Safe/logical align-self passes168 geometry/pixel frames with complete visual review;232 previous fixtures retain identical bytes/maps. Baseline remains unresolved.",
+  "next": "Test ordinary empty-box baseline groups, then investigate broader baseline contexts.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Safe/logical alignment qualification and visual proof",
+      "path": "tools/html-to-riv/validation/public-align-safe-receipt.json"
+    },
     {
       "label": "Align-self composition and preserved failed candidate",
       "path": "tools/html-to-riv/validation/public-align-self-receipt.json"
@@ -135,7 +139,12 @@
       "path": "tools/html-to-riv/output/immutable-layout-native-r3/gallery.html"
     }
   ],
-  "activeWork": [],
+  "activeWork": [
+    {
+      "name": "Baseline composition",
+      "work": "Native/Chrome experiment for empty-box row baseline groups; no public baseline admission"
+    }
+  ],
   "publication": {
     "status": "reverted",
     "revertPr": "https://github.com/nuxieai/nuxie-runtime/pull/629",

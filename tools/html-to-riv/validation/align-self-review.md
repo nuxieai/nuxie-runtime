@@ -1,5 +1,7 @@
 # Align-self with ordinary Rive compositions
 
+Historical core checkpoint: the later [safe/logical review](align-safe-review.md) supersedes statements below that those additional forms are unadmitted. Baseline remains unresolved.
+
 The compiler admits auto, stretch, flex-start, center, flex-end and inherit/initial/unset in its single-line box profile. Initial/unset compute to auto; inheritance copies the parent's final computed align-self. The author's direction, dimensions and bounds remain the values inherited by descendants. Generated wrappers do not appear as authored source identities or alter DOM selectors.
 
 Auto/stretch use existing cross-axis Fill; flex-start uses cross-axis Hug for automatic dimensions. Center/end insert one transparent ordinary LayoutComponent with a perpendicular internal axis. The outer wrapper receives the authored item's original main dimension and main bounds. The authored inner box stretches across that constrained dimension. Its original cross dimension and bounds remain intact and are centered/end-aligned along the wrapper's internal main axis. This also permits negative overflow offsets for oversized items.

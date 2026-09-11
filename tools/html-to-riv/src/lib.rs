@@ -3,6 +3,7 @@
 mod color;
 mod css;
 mod compiler;
+mod variables;
 #[allow(dead_code)]
 mod wire;
 #[cfg(target_arch = "wasm32")]

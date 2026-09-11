@@ -1,5 +1,5 @@
 //! Ordinary layout/fill lowering. Admission grows only with baseline evidence.
-use crate::{color, css, wire::{self, Record, Value}, CompileInput, CompileOutput, Diagnostic, SourceNode};
+use crate::{color, css, variables, wire::{self, Record, Value}, CompileInput, CompileOutput, Diagnostic, SourceNode};
 use scraper::{ElementRef, Html};
 use std::collections::BTreeSet;
 
@@ -17,9 +17,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -117,6 +117,16 @@ fn apply_background_shorthand(style: &mut Style, parent: &Style, value: &str, so
 }
 
 fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
+    if d.name.starts_with("--") {
+        return variables::validate_value(&d.value, &d.source);
+    }
+    if variables::contains_var(&d.value) {
+        if !["width", "height", "min-width", "min-height", "max-width", "max-height",
+             "font-size", "background", "background-color", "color", "display", "flex-direction"].contains(&d.name.as_str()) {
+            return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
+        }
+        return variables::validate_value(&d.value, &d.source);
+    }
     if d.name == "background" {
         background_shorthand(&d.value, BackgroundColor::Rgba(0), &d.source)?;
         return Ok(());
@@ -149,11 +159,20 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
 
 fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Result<Style, Diagnostic> {
     let mut declarations = css::cascade(rules, element)?;
+    for d in &declarations { validate(d)?; }
+    let variable_values = variables::compute(&declarations, &parent.variables)?;
+    declarations.retain(|d| !d.name.starts_with("--"));
     for d in &mut declarations {
-        validate(d)?;
+        if variables::contains_var(&d.value) {
+            d.value = variables::substitute(&d.value, &variable_values, &d.source)?
+                .ok_or_else(|| unsupported(&d.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
+            // Substitution cannot bypass property admission, even for a declaration
+            // that loses the cascade. Keep the compiler's strict diagnostics.
+            validate(d)?;
+        }
         d.value = css::ordinary_value(&d.value)?;
     }
-    let mut style = Style { foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
+    let mut style = Style { variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
     // Font-size-relative units use the parent for font-size itself, but the final
     // computed element font size for other lengths, regardless of source order.
     for d in declarations.iter().filter(|d| d.name == "font-size") {

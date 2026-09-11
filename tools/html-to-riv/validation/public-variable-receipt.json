@@ -1,0 +1,40 @@
+{
+  "scope": "Partial S09/S10 custom token data and substitution into admitted declarations; disputed fallback cycles reject",
+  "cases": 17,
+  "frames": 136,
+  "geometryPass": 136,
+  "pixelPass": 136,
+  "clearPass": 272,
+  "tests": {
+    "rust": 55,
+    "node": 14
+  },
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-checkpoint-r1/manifest.json",
+    "sha256": "e9d645759510b22ab673a4e3f12fa11d66b0d8cd521fc0afbc9cb508753da901"
+  },
+  "run": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-r1/receipt.json",
+    "sha256": "31305fba6f938dcf096e43bf9e6bbbce9c40b9f06d2551fb2f220f6efd969439"
+  },
+  "visual": {
+    "directPairs": 19,
+    "transferredPairs": 117,
+    "bindings": {
+      "output/public-variable-r1/review-0.png": "27301f2e7107257d7d17c7c7cf802dcc2de684cb14407ad53081c2d65fe405b5",
+      "output/public-variable-r1/review-1.png": "540a1a916ab6080ad48466704d7f40f9b8bb2c3157d1b57f85e5ae7aee36960a",
+      "output/public-variable-r1/review-2.png": "4cb6257da5a0b1f4389a3b5953caf414171a411a281851684f304ca524305d13",
+      "output/public-variable-r1/review-3.png": "8fd78fe9c7642d8e30c5927f8c378062e30c1f6114a4f08321caa7a4ec9f44e8",
+      "output/public-variable-r1/review-4.png": "e82e730f1f400e709b553be88b2b0ee40a1340c97e4faa98507ba7bee5b1ff45",
+      "output/public-variable-r1/variables-percentage-width-resizes/review-responsive.png": "63529477b35f051b6b711a67cc7f5fdd1a625660cb13968d9f7f69cf8b11855e",
+      "output/public-variable-r1/visual-transfer.json": "80b4351a4b878ff64b413d3f7c3999999284cd9cec2ed03ce7ea605c1e4ab4e2"
+    }
+  },
+  "preservedFailure": "validation/variable-cycle-failure-receipt.json",
+  "limits": {
+    "dependencyDepth": 64,
+    "environmentEntries": 256,
+    "serializedValueBytes": 65536,
+    "environmentBytes": 1048576
+  }
+}

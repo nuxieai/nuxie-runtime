@@ -1,0 +1,34 @@
+[
+  {
+    "name": "variables-fallback-edges-form-cycle",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--good:navy}#root #a{--x:var(--good,var(--x));background:var(--x,teal)}#root #b{--x:var(--good,var(--y));--y:var(--x);background:var(--y,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "fallback edges form cycle"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-traversed-fallback-cycle",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{--x:var(--missing,var(--x));background:var(--x,teal)}#root #b{--x:var(--missing,var(--y));--y:var(--x);background:var(--y,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "cycle through traversed missing-variable fallbacks"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  }
+]

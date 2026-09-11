@@ -1,0 +1,275 @@
+[
+  {
+    "name": "variables-inherited-alias-frozen",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--tone:teal;--alias:var(--tone)}#root #a{--tone:coral;background:var(--alias)}#root #b{background:var(--tone)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a,#root #b{background:teal}",
+    "features": [
+      "S09",
+      "S10",
+      "inherited alias frozen"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "variables-forward-reference",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--a:var(--b);--b:var(--c);--c:teal}#root #a{background:var(--a)}#root #b{--c:coral;background:var(--b)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a,#root #b{background:teal}",
+    "features": [
+      "S09",
+      "S10",
+      "forward reference"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "variables-local-override",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--tone:teal}#root #a{background:var(--tone)}#root #b{--tone:coral;background:var(--tone)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "local override"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-case-sensitive-names",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--Tone:teal;--tone:coral}#root #a{background:var(--Tone)}#root #b{background:var(--tone)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "case sensitive names"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-missing-and-nested-fallback",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:var(--missing,teal)}#root #b{background:var(--missing,var(--also-missing,coral))}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "missing and nested fallback"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-existing-value-skips-fallback",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--tone:teal}#root #a{background:var(--tone,var(--absent))}#root #b{background:var(--missing,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "existing value skips fallback"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-self-and-mutual-cycle",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{--x:var(--x);background:var(--x,teal)}#root #b{--x:var(--y);--y:var(--x);background:var(--y,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "self and mutual cycle"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-whole-value-replacement",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--paint:rgb(0,128,128);--size:80px}#root #a{background:var(--paint);width:var(--size)}#root #b{--paint:coral;--size:144px;background:var(--paint);width:var(--size)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal;width:80px}#root #b{background:coral;width:144px}",
+    "features": [
+      "S09",
+      "S10",
+      "whole value replacement"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-rgb-channel-insertion",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--channels:0,128,128;--r:255;--g:127;--b:80}#root #a{background:rgb(var(--channels))}#root #b{background:rgb(var(--r),var(--g),var(--b))}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "rgb channel insertion"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-percentage-width-resizes",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:100%;height:112px;background:white}#root div{height:24px;background:silver}#root{--size:50%}#root #a{background:teal;width:var(--size)}#root #b{--size:75%;background:coral;width:var(--size)}",
+    "literalCss": "#root{width:100%;height:112px;background:white}#root div{height:24px;background:silver}#root #a{background:teal;width:50%}#root #b{background:coral;width:75%}",
+    "features": [
+      "S09",
+      "S10",
+      "percentage width resizes"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-em-resolves-at-consumer",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--size:4em;font-size:10px}#root #a{font-size:20px;width:var(--size);background:teal}#root #b{font-size:30px;width:var(--size);background:coral}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{font-size:10px}#root #a{font-size:20px;width:80px;background:teal}#root #b{font-size:30px;width:120px;background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "em resolves at consumer"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-font-context-from-variable",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--font:20px;--size:4em}#root #a{font-size:var(--font);width:var(--size);background:teal}#root #b{--font:30px;font-size:var(--font);width:var(--size);background:coral}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{font-size:20px;width:80px;background:teal}#root #b{font-size:30px;width:120px;background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "font context from variable"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-inline-important-cascade",
+    "html": "<div id=\"root\"><div id=\"a\" style=\"--tone:teal\"></div><div id=\"b\" style=\"--tone:coral!important\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root div{--tone:navy!important;background:var(--tone)}#root #b{--tone:teal!important}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:navy}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "inline important cascade"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-custom-css-wide-keywords",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--tone:teal}#root #a{--tone:inherit;background:var(--tone)}#root #b{--tone:unset;background:var(--tone)}#root #c{--tone:initial;background:var(--tone,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a,#root #b{background:teal}#root #c{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "custom css wide keywords"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(0, 128, 128)",
+      "c": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-unused-arbitrary-tokens",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--unused:arbitrary([tokens],\"a;b\") 1/2;--layout:grid;--color:teal}#root #a{background:var(--color)}#root #b{background:coral}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "unused arbitrary tokens"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-fallback-preserves-commas",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:var(--missing,rgb(0,128,128))}#root #b{--channels:255,127,80;background:rgb(var(--missing,var(--channels)))}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "fallback preserves commas"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "variables-empty-fallback-token-list",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{--empty:;background:var(--empty) teal}#root #b{background:var(--missing,) coral}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "empty fallback token list"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  }
+]

@@ -112,3 +112,5 @@ The expanded duplicate-fill/full-font matrix is preserved separately in `validat
 `public-minmax-cases.json` includes conflicting, inherited, font-relative and automatic constraints. Its complete corpus intentionally retains a fractional-edge failure and exits nonzero: see `validation/minmax-review.md`. Do not remove the failing case or widen the pixel gate to qualify A11.
 
 `public-selector-cases.json` adds independent expectedPaint values for every authored ID. The driver asserts those colors in Chrome before comparison. `public-selector-receipt.json` records192 passing frames,24 direct visual pairs and168 exact white-canvas transfers; this does not supersede earlier paint/text failures.
+
+`public-variable-cases.json` pairs each admitted variable scene with handwritten literalCss and expectedPaint controls. `public-variable-rejected-cycles.json` retains disputed cycle contexts as rejection regressions. The original mismatch is preserved in `variable-cycle-failure-receipt.json`; the passing136-frame corpus does not erase it. See `variables-review.md` for current restrictions and resource bounds.

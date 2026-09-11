@@ -129,3 +129,25 @@ test('selector and specificity corpus has exact CLI/WASM parity',async()=>{
  assert(fixtures.length>=16);
  await assertCorpusParity(fixtures);
 });
+
+test('custom property substitution has exact CLI/WASM corpus parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-variable-cases.json',import.meta.url)));
+ assert(fixtures.length>=12);
+ await assertCorpusParity(fixtures);
+});
+
+test('disputed fallback cycles reject identically without output',async()=>{
+ const compiler=await createCompiler(wasm);const dir=fs.mkdtempSync(path.join(os.tmpdir(),'variable-cycle-reject-'));
+ try{
+  const cases=JSON.parse(fs.readFileSync(new URL('../validation/public-variable-rejected-cycles.json',import.meta.url)));
+  for(const fixture of cases){
+   const input={html:fixture.html,css:fixture.css,width:240,height:160};
+   const prefix=path.join(dir,fixture.name);fs.writeFileSync(prefix+'.json',JSON.stringify(input));
+   const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...input});
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'});
+   assert.equal(cli.status,1);assert.equal(result.ok,false);
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

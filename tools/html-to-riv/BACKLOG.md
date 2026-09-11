@@ -41,8 +41,8 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | S06 | `:not()` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
 | S07 | `:is()` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
 | S08 | `:where()` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
-| S09 | Custom properties | pending | Immutable-target audit and revalidation required; historical status: in progress. |
-| S10 | `var()` and fallbacks | pending | Immutable-target audit and revalidation required; historical status: in progress. |
+| S09 | Custom properties | partial | Compiler-owned environments and inheritance pass136 public/native frames. Bounded token data, aliases and CSS-wide custom defaults admitted; registrations and disputed fallback cycles remain unresolved/rejected. See validation/variables-review.md. |
+| S10 | `var()` and fallbacks | partial | Nested/empty fallbacks, direct cycles and token boundaries validated. Chrome disagrees with fallback-cycle graph case: pre-diagnostic8-frame failure preserved; disputed graphs now explicitly reject. Browser invalid-computed recovery remains pending. See validation/public-variable-receipt.json. |
 | L01 | Reverse flex directions | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | L02 | `order` | pending | Immutable-target audit and revalidation required; historical status: qualified (native profile). |
 | L03 | `align-self` | pending | Immutable-target audit and revalidation required; historical status: qualified (native profile). |

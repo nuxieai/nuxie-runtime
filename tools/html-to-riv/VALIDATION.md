@@ -114,3 +114,5 @@ The expanded duplicate-fill/full-font matrix is preserved separately in `validat
 `public-selector-cases.json` adds independent expectedPaint values for every authored ID. The driver asserts those colors in Chrome before comparison. `public-selector-receipt.json` records192 passing frames,24 direct visual pairs and168 exact white-canvas transfers; this does not supersede earlier paint/text failures.
 
 `public-variable-cases.json` pairs each admitted variable scene with handwritten literalCss and expectedPaint controls. `public-variable-rejected-cycles.json` retains disputed cycle contexts as rejection regressions. The original mismatch is preserved in `variable-cycle-failure-receipt.json`; the passing136-frame corpus does not erase it. See `variables-review.md` for current restrictions and resource bounds.
+
+The temporary rejection corpus is historical. Current lazy cycle behavior is tested by `public-variable-cycle-cases.json` and `probe-variable-cycles.mjs`; see `variable-cycles-review.md`. Both formerly rejected cycle forms now have successful native evidence, while the original failure remains intact.

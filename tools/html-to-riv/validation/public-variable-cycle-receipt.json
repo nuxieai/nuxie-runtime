@@ -1,0 +1,38 @@
+{
+  "scope": "Lazy cycle resolution on pinnedChrome; supersedes temporary fallback-cycle rejection",
+  "cases": 16,
+  "frames": 128,
+  "geometryPass": 128,
+  "pixelPass": 128,
+  "clearPass": 256,
+  "tests": {
+    "rust": 56,
+    "node": 14
+  },
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-cycle-checkpoint-r1/manifest.json",
+    "sha256": "c5c55f9c385fae66a358606ad0a27e803af181ecc0d69c8af06b96f331f558e8"
+  },
+  "run": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-cycle-r1/receipt.json",
+    "sha256": "c52fed5050ab55c483132e1e7221ef80ceea7bd7adc74067d395c321a712732b"
+  },
+  "characterization": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-cycle-characterization-r2/receipt.json",
+    "sha256": "9f5aa3ceb3281f22a1ecc2cf11d691cbc63d60ffc5e058493e2fbc0c7ce8c298",
+    "graphs": 14,
+    "orderVariants": 4
+  },
+  "visual": {
+    "directPairs": 16,
+    "whiteCanvasTransfers": 112,
+    "files": {
+      "output/public-variable-cycle-r1/review-0.png": "5adc0e1096043859ca575308fe9acc7eb48c1c0482e2e4f745f2458f699e0c6a",
+      "output/public-variable-cycle-r1/review-1.png": "0e6ef03607cfe5abf02d001695cff9d0466c0edb5b886ee67326b1688321e7fa",
+      "output/public-variable-cycle-r1/review-2.png": "e95a2defd39e6b7157695019ad9349517cea54af5ab09f421d88ce0577433dab",
+      "output/public-variable-cycle-r1/review-3.png": "f24df1825b52aa1d0b059a79a90e8a3e7346c23d9e3593c91ac0376cf8b0d952",
+      "output/public-variable-cycle-r1/visual-transfer.json": "194ee27e136e39e372295072099a54907eedac81263981a3d2fb548a4b133aa2"
+    }
+  },
+  "historicalFailure": "validation/variable-cycle-failure-receipt.json"
+}

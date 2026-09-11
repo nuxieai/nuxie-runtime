@@ -1,0 +1,268 @@
+[
+  {
+    "name": "variables-fallback-edges-form-cycle",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root{--good:navy}#root #a{--x:var(--good,var(--x));background:var(--x,teal)}#root #b{--x:var(--good,var(--y));--y:var(--x);background:var(--y,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:navy}#root #b{background:navy}",
+    "features": [
+      "S09",
+      "S10",
+      "fallback edges form cycle"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(0, 0, 128)"
+    }
+  },
+  {
+    "name": "variables-traversed-fallback-cycle",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{--x:var(--missing,var(--x));background:var(--x,teal)}#root #b{--x:var(--missing,var(--y));--y:var(--x);background:var(--y,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:24px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "cycle through traversed missing-variable fallbacks"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-own-fallback-cannot-rescue",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--b,red);--b:var(--a,blue)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-own-fallback-cannot-rescue-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--b:var(--a,blue);--a:var(--b,red)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-dependent-recovers",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--b,red);--b:var(--a,blue);--c:var(--a,teal)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}#root #c{background:var(--c,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}#root #c{background:teal}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)",
+      "c": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "cycles-dependent-recovers-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--c:var(--a,teal);--b:var(--a,blue);--a:var(--b,red)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}#root #c{background:var(--c,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}#root #c{background:teal}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)",
+      "c": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "cycles-outside-self-recovers",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--b,teal);--b:var(--b)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-outside-self-recovers-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--b:var(--b);--a:var(--b,teal)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:teal}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 128, 128)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-valid-primary-breaks",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--b,red);--b:var(--c,var(--a));--c:navy}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}#root #c{background:var(--c,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:navy}#root #b{background:navy}#root #c{background:navy}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(0, 0, 128)",
+      "c": "rgb(0, 0, 128)"
+    }
+  },
+  {
+    "name": "cycles-valid-primary-breaks-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--c:navy;--b:var(--c,var(--a));--a:var(--b,red)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}#root #c{background:var(--c,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:navy}#root #b{background:navy}#root #c{background:navy}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(0, 0, 128)",
+      "c": "rgb(0, 0, 128)"
+    }
+  },
+  {
+    "name": "cycles-missing-primary-enters",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--b,red);--b:var(--c,var(--a))}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-missing-primary-enters-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--b:var(--c,var(--a));--a:var(--b,red)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-two-components-recover",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div><div id=\"e\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--b);--b:var(--a);--c:var(--d,var(--a));--d:var(--c);--e:var(--a,var(--c,teal))}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}#root #c{background:var(--c,coral)}#root #d{background:var(--d,coral)}#root #e{background:var(--e,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}#root #c{background:coral}#root #d{background:coral}#root #e{background:teal}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)",
+      "c": "rgb(255, 127, 80)",
+      "d": "rgb(255, 127, 80)",
+      "e": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "cycles-two-components-recover-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div><div id=\"e\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--e:var(--a,var(--c,teal));--d:var(--c);--c:var(--d,var(--a));--b:var(--a);--a:var(--b)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}#root #c{background:var(--c,coral)}#root #d{background:var(--d,coral)}#root #e{background:var(--e,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}#root #c{background:coral}#root #d{background:coral}#root #e{background:teal}",
+    "features": [
+      "S09",
+      "S10",
+      "lazy cycle resolution"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)",
+      "c": "rgb(255, 127, 80)",
+      "d": "rgb(255, 127, 80)",
+      "e": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "cycles-sibling-after-failure",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--a:var(--missing) var(--b);--b:var(--a,teal)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "cycle discovery continues after missing sibling"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "cycles-sibling-after-failure-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root{--b:var(--a,teal);--a:var(--missing) var(--b)}#root #a{background:var(--a,coral)}#root #b{background:var(--b,coral)}",
+    "literalCss": "#root{width:180px;height:112px;background:white}#root div{width:120px;height:16px;background:silver}#root #a{background:coral}#root #b{background:coral}",
+    "features": [
+      "S09",
+      "S10",
+      "cycle discovery continues after missing sibling"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 127, 80)"
+    }
+  }
+]

@@ -128,28 +128,6 @@ pub(crate) fn contains_var(value: &str) -> bool {
     }
     parse(value, "css").is_ok_and(|n| has(&n))
 }
-fn refs(
-    nodes: &[Node],
-    result: &mut BTreeSet<String>,
-    fallback_refs: &mut BTreeSet<String>,
-    in_fallback: bool,
-) {
-    for node in nodes {
-        match node {
-            Node::Var(name, fallback) => {
-                result.insert(name.clone());
-                if in_fallback {
-                    fallback_refs.insert(name.clone());
-                }
-                if let Some(f) = fallback {
-                    refs(f, result, fallback_refs, true);
-                }
-            }
-            Node::Group(_, body, _) => refs(body, result, fallback_refs, in_fallback),
-            _ => {}
-        }
-    }
-}
 fn keyword(value: &str) -> Option<String> {
     let mut input = ParserInput::new(value);
     let mut p = Parser::new(&mut input);
@@ -158,28 +136,6 @@ fn keyword(value: &str) -> Option<String> {
     Some(name)
 }
 
-fn reaches(origin: &str, target: &str, graph: &BTreeMap<String, BTreeSet<String>>) -> bool {
-    let mut pending = vec![origin];
-    let mut seen = BTreeSet::new();
-    while let Some(name) = pending.pop() {
-        if name == target {
-            return true;
-        }
-        if seen.insert(name) {
-            if let Some(edges) = graph.get(name) {
-                pending.extend(edges.iter().map(String::as_str));
-            }
-        }
-    }
-    false
-}
-fn cycle_members(graph: &BTreeMap<String, BTreeSet<String>>) -> BTreeSet<String> {
-    graph
-        .iter()
-        .filter(|(origin, edges)| edges.iter().any(|edge| reaches(edge, origin, graph)))
-        .map(|(origin, _)| origin.clone())
-        .collect()
-}
 fn append(output: &mut String, piece: &str, source: &str) -> Result<(), Diagnostic> {
     // Comments preserve CSS token boundaries without manufacturing a dimension,
     // hash or identifier at a substitution boundary (var(--n)px is not 2px).
@@ -195,9 +151,13 @@ fn append(output: &mut String, piece: &str, source: &str) -> Result<(), Diagnost
     output.push_str(piece);
     Ok(())
 }
+enum Lookup {
+    Value(Option<String>),
+    InCycle,
+}
 fn expand(
     nodes: &[Node],
-    lookup: &mut impl FnMut(&str) -> Result<Option<String>, Diagnostic>,
+    lookup: &mut impl FnMut(&str) -> Result<Lookup, Diagnostic>,
     source: &str,
     depth: usize,
 ) -> Result<Option<String>, Diagnostic> {
@@ -205,53 +165,71 @@ fn expand(
         return Err(limit(source));
     }
     let mut output = String::new();
+    let mut valid = true;
     for node in nodes {
         let piece = match node {
-            Node::Token(s) => s.clone(),
+            Node::Token(s) => Some(s.clone()),
             Node::Group(open, body, close) => {
-                let Some(body) = expand(body, lookup, source, depth + 1)? else {
-                    return Ok(None);
-                };
-                format!("{open}{body}{close}")
+                expand(body, lookup, source, depth + 1)?.map(|body| format!("{open}{body}{close}"))
             }
             Node::Var(name, fallback) => match lookup(name)? {
-                Some(value) => value,
-                None => match fallback {
-                    Some(body) => {
-                        let Some(value) = expand(body, lookup, source, depth + 1)? else {
-                            return Ok(None);
-                        };
-                        value
-                    }
-                    None => return Ok(None),
+                Lookup::Value(Some(value)) => Some(value),
+                Lookup::Value(None) => match fallback {
+                    Some(body) => expand(body, lookup, source, depth + 1)?,
+                    None => None,
                 },
+                // A fallback cannot rescue the declaration participating in
+                // the active cycle. An outside dependent can recover later.
+                Lookup::InCycle => None,
             },
         };
-        append(&mut output, &piece, source)?;
+        // Chromium resolves subsequent sibling functions even after failure,
+        // so overlapping cycles are discovered instead of depending on order.
+        if let Some(piece) = piece {
+            append(&mut output, &piece, source)?;
+        } else {
+            valid = false;
+        }
     }
-    Ok(Some(output))
+    Ok(valid.then_some(output))
 }
 fn resolve(
     name: &str,
     authored: &BTreeMap<String, Vec<Node>>,
     values: &mut Variables,
-    depth: usize,
+    stack: &mut Vec<String>,
+    cyclic: &mut BTreeSet<String>,
 ) -> Result<Option<String>, Diagnostic> {
+    if let Some(start) = stack.iter().position(|entry| entry == name) {
+        cyclic.extend(stack[start..].iter().cloned());
+        return Ok(None);
+    }
     if let Some(value) = values.get(name) {
         return Ok(value.clone());
     }
-    if depth >= MAX_DEPTH {
+    if stack.len() >= MAX_DEPTH {
         return Err(limit(name));
     }
     let Some(nodes) = authored.get(name) else {
         return Ok(None);
     };
+    stack.push(name.into());
+    let depth = stack.len() - 1;
     let value = expand(
         nodes,
-        &mut |dependency| resolve(dependency, authored, values, depth + 1),
+        &mut |dependency| {
+            let value = resolve(dependency, authored, values, stack, cyclic)?;
+            Ok(if cyclic.contains(name) {
+                Lookup::InCycle
+            } else {
+                Lookup::Value(value)
+            })
+        },
         name,
         depth,
     )?;
+    stack.pop();
+    let value = if cyclic.contains(name) { None } else { value };
     values.insert(name.into(), value.clone());
     check_environment(values, name)?;
     Ok(value)
@@ -290,10 +268,6 @@ pub(crate) fn compute(
             return Err(limit(&declaration.source));
         }
     }
-    let sources: BTreeMap<_, _> = selected
-        .iter()
-        .map(|(name, declaration)| (name.clone(), declaration.source.clone()))
-        .collect();
     let mut values = parent.clone();
     let mut authored = BTreeMap::new();
     for (name, declaration) in selected {
@@ -317,33 +291,11 @@ pub(crate) fn compute(
             }
         }
     }
-    let mut graph = BTreeMap::new();
-    let mut fallback_graph = BTreeMap::new();
-    for (name, nodes) in &authored {
-        let mut dependencies = BTreeSet::new();
-        let mut fallback_dependencies = BTreeSet::new();
-        refs(nodes, &mut dependencies, &mut fallback_dependencies, false);
-        graph.insert(name.clone(), dependencies);
-        fallback_graph.insert(name.clone(), fallback_dependencies);
-    }
-    // Chrome's observed treatment of unused fallback cycles differs from the
-    // all-reference dependency graph. Until qualified, reject every cycle
-    // containing a fallback reference instead of emitting mismatching values.
-    for (name, edges) in fallback_graph {
-        if edges.iter().any(|edge| reaches(edge, &name, &graph)) {
-            return Err(Diagnostic::new(
-                "unsupported-css-value",
-                &sources[&name],
-                "Custom property dependency cycles through var() fallbacks are not supported",
-            ));
-        }
-    }
-    let cyclic = cycle_members(&graph);
-    for name in cyclic {
-        values.insert(name, None);
-    }
+    // Match the pinned Chrome resolver: resolve only a fallback actually
+    // selected after an invalid primary, with a stack of active declarations.
+    let mut cyclic = BTreeSet::new();
     for name in authored.keys() {
-        resolve(name, &authored, &mut values, 0)?;
+        resolve(name, &authored, &mut values, &mut Vec::new(), &mut cyclic)?;
     }
     check_environment(&values, "css")?;
     Ok(values)
@@ -356,7 +308,7 @@ pub(crate) fn substitute(
     check_environment(vars, source)?;
     expand(
         &parse(value, source)?,
-        &mut |name| Ok(vars.get(name).cloned().unwrap_or(None)),
+        &mut |name| Ok(Lookup::Value(vars.get(name).cloned().unwrap_or(None))),
         source,
         0,
     )
@@ -407,23 +359,139 @@ mod tests {
         assert_eq!(ordinary("var(--missing,)", &vars), Some(String::new()));
     }
     #[test]
-    fn fallback_cycle_edges_are_explicitly_unqualified() {
-        for css in [
-            "--good: navy; --x: var(--good,var(--x))",
-            "--x: var(--missing,var(--x))",
-            "--good: navy; --a: var(--good,var(--b)); --b: var(--a)",
-            "--a: var(--b,var(--c)); --b: var(--a); --c: var(--a)",
-            "--a: f(var(--missing,var(--a)))",
-        ] {
-            let declarations = crate::css::declarations(css, "fallback-cycle").unwrap();
-            let error = compute(&declarations, &Variables::new()).unwrap_err();
-            assert_eq!(error.code, "unsupported-css-value", "{css}");
-            assert!(error.source.starts_with("fallback-cycle:"));
-            assert!(error.message.contains("cycles through var() fallbacks"));
+    fn lazy_fallback_cycles_match_pinned_chrome_independent_of_order() {
+        // Cases mirror the Chrome characterization corpus. Rename every node
+        // in reverse order as well as reversing authored declaration order to
+        // exercise both lookup/cache order and cascade/source order.
+        let cases: &[(&[(&str, &str)], &[(&str, Option<&str>)])] = &[
+            (
+                &[("a", "navy"), ("b", "var(--a,var(--b))")],
+                &[("a", Some("navy")), ("b", Some("navy"))],
+            ),
+            (
+                &[("a", "navy"), ("b", "var(--a,var(--c))"), ("c", "var(--b)")],
+                &[("b", Some("navy")), ("c", Some("navy"))],
+            ),
+            (&[("a", "var(--missing,var(--a))")], &[("a", None)]),
+            (
+                &[("a", "var(--missing,var(--b))"), ("b", "var(--a)")],
+                &[("a", None), ("b", None)],
+            ),
+            (
+                &[
+                    ("a", "var(--b,red)"),
+                    ("b", "var(--a,blue)"),
+                    ("c", "var(--a,teal)"),
+                ],
+                &[("a", None), ("b", None), ("c", Some("teal"))],
+            ),
+            (
+                &[("a", "var(--b,teal)"), ("b", "var(--b)")],
+                &[("a", Some("teal")), ("b", None)],
+            ),
+            (
+                &[("a", "var(--b,red)"), ("b", "var(--c)"), ("c", "var(--a)")],
+                &[("a", None), ("b", None), ("c", None)],
+            ),
+            (
+                &[
+                    ("a", "var(--b,red)"),
+                    ("b", "var(--c,var(--a))"),
+                    ("c", "navy"),
+                ],
+                &[("a", Some("navy")), ("b", Some("navy"))],
+            ),
+            (
+                &[("a", "var(--b,red)"), ("b", "var(--c,var(--a))")],
+                &[("a", None), ("b", None)],
+            ),
+            (
+                &[("a", "var(--b,var(--a))"), ("b", "var(--b)")],
+                &[("a", None), ("b", None)],
+            ),
+            (
+                &[("a", ""), ("b", "var(--a,var(--b))")],
+                &[("a", Some("")), ("b", Some(""))],
+            ),
+            (
+                &[("a", "navy"), ("b", "var(--a,var(--missing))")],
+                &[("b", Some("navy"))],
+            ),
+            (
+                &[
+                    ("a", "var(--b)"),
+                    ("b", "var(--a)"),
+                    ("c", "var(--d,var(--a))"),
+                    ("d", "var(--c)"),
+                    ("e", "var(--a,var(--c,teal))"),
+                ],
+                &[
+                    ("a", None),
+                    ("b", None),
+                    ("c", None),
+                    ("d", None),
+                    ("e", Some("teal")),
+                ],
+            ),
+            (
+                &[
+                    ("a", "var(--b) var(--c)"),
+                    ("b", "var(--a)"),
+                    ("c", "var(--b)"),
+                ],
+                &[("a", None), ("b", None), ("c", None)],
+            ),
+        ];
+        for (declarations, expected) in cases {
+            for rename in [false, true] {
+                let mapped = |name: &str| {
+                    if rename {
+                        format!("--{}", (b'z' - (name.as_bytes()[0] - b'a')) as char)
+                    } else {
+                        format!("--{name}")
+                    }
+                };
+                let rewrite = |value: &str| {
+                    let mut value = value.to_string();
+                    if rename {
+                        for name in ['a', 'b', 'c', 'd', 'e'] {
+                            value = value.replace(&format!("--{name}"), &mapped(&name.to_string()));
+                        }
+                    }
+                    value
+                };
+                for reverse in [false, true] {
+                    let mut declarations = declarations
+                        .iter()
+                        .map(|(name, value)| format!("{}:{}", mapped(name), rewrite(value)))
+                        .collect::<Vec<_>>();
+                    if reverse {
+                        declarations.reverse();
+                    }
+                    let vars = computed(&declarations.join(";"), &Variables::new());
+                    for (name, expected) in *expected {
+                        let actual = ordinary(&format!("var({})", mapped(name)), &vars);
+                        assert_eq!(
+                            actual.as_deref().map(str::trim),
+                            *expected,
+                            "{:?} rename={rename} reverse={reverse}, name={name}",
+                            declarations
+                        );
+                    }
+                }
+            }
         }
-        // A fallback edge between separate cycles is not itself a cycle edge.
-        let independent = computed("--a: var(--a,var(--b)); --b: var(--b)", &Variables::new());
-        assert!(independent.values().all(Option::is_none));
+    }
+    #[test]
+    fn sibling_cycle_discovery_continues_after_missing_variable() {
+        for css in [
+            "--a: var(--missing) var(--b); --b: var(--a,red)",
+            "--b: var(--a,red); --a: var(--missing) var(--b)",
+            "--z: var(--missing) f(var(--y)); --y: var(--z,red)",
+        ] {
+            let vars = computed(css, &Variables::new());
+            assert!(vars.values().all(Option::is_none), "{css}");
+        }
     }
     #[test]
     fn substitution_preserves_token_boundaries() {

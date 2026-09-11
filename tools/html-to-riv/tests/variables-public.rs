@@ -62,12 +62,11 @@ fn exponential_variable_expansion_has_a_bounded_failure() {
 }
 
 #[test]
-fn disputed_fallback_cycle_graphs_are_explicitly_rejected() {
-    let cases: Vec<Case> = serde_json::from_str(include_str!("../validation/public-variable-rejected-cycles.json")).unwrap();
-    assert_eq!(cases.len(), 2);
+fn lazy_fallback_cycles_match_literal_controls_in_both_declaration_orders() {
+    let cases: Vec<Case> = serde_json::from_str(include_str!("../validation/public-variable-cycle-cases.json")).unwrap();
+    assert_eq!(cases.len(), 16);
     for case in cases {
-        let input = CompileInput { html:case.html,css:case.css,width:240.,height:160. };
-        let errors = compile(&input).expect_err(&case.name);
-        assert!(errors.iter().any(|e| e.message.contains("fallback")), "{errors:?}");
+        let input = |css: &str| CompileInput { html:case.html.clone(),css:css.into(),width:240.,height:160. };
+        assert_eq!(compile(&input(&case.css)).unwrap(), compile(&input(&case.literal_css)).unwrap(), "{}",case.name);
     }
 }

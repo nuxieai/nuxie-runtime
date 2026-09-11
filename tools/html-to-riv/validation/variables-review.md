@@ -1,8 +1,12 @@
+# Current status
+
+Fallback-cycle rejection described in the historical checkpoint below is superseded by lazy resolution. Both formerly rejected forms now pass; see [current cycle evidence](variable-cycles-review.md). Missing/invalid ordinary values without usable fallbacks still diagnose.
+
 # Custom properties and var(): compiler-owned computation
 
 Custom properties are authoring token data. They are resolved before ordinary Rive objects are emitted; no variable environment, runtime setter or host CSS evaluator is required to render the output. Percentage results remain native percentage descriptors and font-relative lengths use the existing computed font context.
 
-The resolver follows the [CSS Variables specification](https://www.w3.org/TR/css-variables-1/) for case-sensitive names, resolution before inheritance, fallback references in dependency cycles, and the distinction between empty values and guaranteed-invalid values. An inherited computed alias is not re-evaluated against child overrides. Token boundaries must survive substitution so a number followed by an authored identifier cannot accidentally become a dimension. Expansion and dependency limits are explicit compiler resource boundaries.
+The initial checkpoint followed the older published [CSS Variables specification](https://www.w3.org/TR/css-variables-1/) for case-sensitive names, resolution before inheritance, fallback references in dependency cycles, and the distinction between empty values and guaranteed-invalid values. An inherited computed alias is not re-evaluated against child overrides. Token boundaries must survive substitution so a number followed by an authored identifier cannot accidentally become a dimension. Expansion and dependency limits are explicit compiler resource boundaries.
 
 This compiler remains stricter than browser recovery. Unsupported ordinary property names reject even when their values contain var(). A missing/cyclic value with no usable fallback or an unsupported value after substitution produces a diagnostic; it does not silently drop the declaration or roll back to an earlier cascade value. Revert/revert-layer, @property registration, scripting and runtime variable mutation are outside current admission. Custom token data may remain unused; preserving it does not admit rendering that token stream as a new property value.
 

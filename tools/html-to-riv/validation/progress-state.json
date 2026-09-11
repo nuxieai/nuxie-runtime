@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-11",
-  "focus": "Custom properties and var(): admitted cases validated",
-  "status": "136 frames pass; disputed cycles reject explicitly",
-  "current": "Compiler-owned variable resolution supports inherited aliases, forward references and nested fallbacks.17 scenes pass136 geometry/pixel frames plus272 clear controls;55 Rust and14 Node tests pass. Preserved an8-frame browser disagreement and added no-output diagnostics for fallback-cycle graphs.",
-  "next": "Continue resolving browser-specific variable cycle behavior and invalid-computed semantics; independently advance flex layout candidates.",
+  "focus": "Lazy variable cycles match pinned Chrome",
+  "status": "Temporary fallback-cycle restriction removed",
+  "current": "16 cycle scenes pass128 geometry/pixel frames and256 clear checks.56 Rust and14 Node tests pass. Browser characterization covers14 graphs across declaration/read orders. Original failure preserved; current output now matches Chrome.",
+  "next": "Continue invalid-at-computed-value behavior and independent flex-layout candidates; retain unresolved typography and fractional paint evidence.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Lazy cycle resolution and corrected specification basis",
+      "path": "tools/html-to-riv/validation/variable-cycles-review.md"
+    },
+    {
+      "label": "Cycle Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-variable-cycle-r1/gallery.html"
+    },
     {
       "label": "Variable support, restrictions and preserved mismatch",
       "path": "tools/html-to-riv/validation/variables-review.md"

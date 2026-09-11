@@ -20,7 +20,7 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | A08 | Unitless line-height | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A09 | `em` lengths | partial | Width/height and compiler-side font-size context pass64 public geometry/pixel frames, original/clone resize, CLI/WASM parity and visual review. Other property contexts remain pending. See validation/public-font-relative-receipt.json. |
 | A10 | `rem` lengths | partial | Width/height and font-size context validated against explicit16px root reset. Broader property contexts remain pending; see validation/public-font-relative-receipt.json. |
-| A11 | Percentage min/max dimensions | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A11 | Percentage min/max dimensions | partial | Ordinary numeric/auto bounds implemented;112/112 geometry,110/112 pixel frames pass. Fractional-edge failure retained without tolerance changes. Automatic minima preserve native Auto; indefinite height-parent context rejected pending proof. See validation/minmax-review.md and public-minmax-receipt.json. |
 | A12 | Letter spacing | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A13 | Word spacing | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A14 | Explicit `<br>` | pending | Immutable-target audit and revalidation required; historical status: qualified. |

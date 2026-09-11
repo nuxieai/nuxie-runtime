@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Font-relative dimensions implemented; text candidate rejected",
-  "status": "em/rem box context validated; typography unresolved",
-  "current": "Eight font-relative sizing scenes pass64 native/Chrome geometry and pixel frames plus128 clear controls. Derivative-font normal hinting fails all64 experimental text frames and changes cap/x-height; failures preserved. Runtime remains immutable.",
-  "next": "Investigate A11 percentage min/max dimensions against ordinary layout properties, while retaining unresolved typography work.",
+  "focus": "Min/max constraints: geometry validated, pixel limitation retained",
+  "status": "A11 partial; unchanged runtime",
+  "current": "14 min/max scenes pass all112 geometry frames and224 clear controls.110 pixel frames pass; fractional boundary case fails original and clone.42 Rust tests and11 Node tests pass; all14 review sheets inspected. An equivalent fixed-fractional control reproduces the exact failing images, isolating the issue from min/max lowering.",
+  "next": "Investigate ordinary-file fractional edge coverage; continue independent selector/layout work while preserving the rendering limitation and unresolved typography.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Fixed-fractional control reproduces failure",
+      "path": "tools/html-to-riv/validation/fractional-minmax-control-receipt.json"
+    },
+    {
+      "label": "Min/max support and preserved pixel failure",
+      "path": "tools/html-to-riv/validation/minmax-review.md"
+    },
+    {
+      "label": "Min/max Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-minmax-r2/gallery.html"
+    },
     {
       "label": "Font-relative box support evidence",
       "path": "tools/html-to-riv/validation/public-font-relative-receipt.json"

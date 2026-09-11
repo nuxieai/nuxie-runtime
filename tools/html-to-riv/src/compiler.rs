@@ -17,9 +17,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { width: Size, height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { width: Size::Auto, height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -63,6 +63,18 @@ fn computed_size(text: &str, inherited: Size, font_size: f32, source: &str) -> R
             SpecifiedSize::Em(v) => Size::Pixels(resolved_length(v, font_size, source)?),
             SpecifiedSize::Rem(v) => Size::Pixels(resolved_length(v, ROOT_FONT_SIZE, source)?),
         }),
+    }
+}
+
+// Auto represents an absent maximum or an automatic minimum, distinguished
+// when emitting ordinary units. The authoring reset minimum stays explicit zero.
+fn computed_bound(text: &str, inherited: Size, font_size: f32, minimum: bool, source: &str) -> Result<Size, Diagnostic> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "inherit" => Ok(inherited),
+        "none" | "initial" | "unset" if !minimum => Ok(Size::Auto),
+        "auto" | "initial" | "unset" if minimum => Ok(Size::Auto),
+        "auto" | "none" => Err(unsupported(source, "min-size:none and max-size:auto are invalid")),
+        _ => computed_size(text, inherited, font_size, source),
     }
 }
 
@@ -114,6 +126,9 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         "width" | "height" => {
             if !["inherit", "initial", "unset"].contains(&value.as_str()) { size(&value, &d.source)?; }
         }
+        "min-width" | "min-height" | "max-width" | "max-height" => {
+            computed_bound(&value, Size::Pixels(0.), 0., d.name.starts_with("min-"), &d.source)?;
+        }
         "font-size" => {
             if !["inherit", "initial", "unset"].contains(&value.as_str())
                 && matches!(size(&value, &d.source)?, SpecifiedSize::Auto) {
@@ -159,6 +174,10 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
         match d.name.as_str() {
             "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
             "height" => style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?,
+            "min-width" => style.min_width = computed_bound(&d.value, parent.min_width, style.font_size, true, &d.source)?,
+            "min-height" => style.min_height = computed_bound(&d.value, parent.min_height, style.font_size, true, &d.source)?,
+            "max-width" => style.max_width = computed_bound(&d.value, parent.max_width, style.font_size, false, &d.source)?,
+            "max-height" => style.max_height = computed_bound(&d.value, parent.max_height, style.font_size, false, &d.source)?,
             "background" => apply_background_shorthand(&mut style, parent, &d.value, &d.source)?,
             "background-color" => {
                 style.background = match d.value.trim().to_ascii_lowercase().as_str() {
@@ -240,8 +259,8 @@ impl Emitter {
             let id = element.attr("id").map(str::to_owned).unwrap_or_else(|| format!("node{path}"));
             if id.is_empty() || !self.ids.insert(id.clone()) { return Err(Diagnostic::new("duplicate-id", &path, "Empty or duplicate element identity")); }
             let style = computed(element, rules, parent_style)?;
-            if matches!(style.height, Size::Percent(_)) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
-                return Err(unsupported(&path, "Percentage height inside an auto-height parent needs an immutable-target encoding proof"));
+            if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
+                return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
             }
             let object_id = self.records.len() as u32 - 1;
             let mut layout = Record::new("LayoutComponent");
@@ -257,6 +276,18 @@ impl Emitter {
                 layout.set(axis, Value::Float(value))?;
                 layout_style.set(&format!("{axis}UnitsValue"), Value::Uint(units))?;
                 layout_style.set(if axis == "width" { "layoutWidthScaleType" } else { "layoutHeightScaleType" }, Value::Uint(scale))?;
+            }
+            for (name, bound) in [("minWidth", style.min_width), ("minHeight", style.min_height), ("maxWidth", style.max_width), ("maxHeight", style.max_height)] {
+                let (value, units) = match bound {
+                    // Omitted zero minima and absent maxima preserve the existing
+                    // zero-content-minimum profile's byte output.
+                    Size::Pixels(0.) if name.starts_with("min") => continue,
+                    Size::Pixels(v) => (v, 1), Size::Percent(v) => (v, 2),
+                    Size::Auto if name.starts_with("min") => (0., 3),
+                    Size::Auto => continue,
+                };
+                layout_style.set(name, Value::Float(value))?;
+                layout_style.set(&format!("{name}UnitsValue"), Value::Uint(units))?;
             }
             self.records.push(layout);self.records.push(layout_style);
             let background = style.background.used(style.foreground);

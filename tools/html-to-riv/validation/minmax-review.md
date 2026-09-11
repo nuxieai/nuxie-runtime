@@ -1,0 +1,21 @@
+# Ordinary min/max dimensions: geometry passes, fractional paint failure retained
+
+The public compiler emits existing LayoutComponentStyle minWidth/minHeight/maxWidth/maxHeight fields with point or percentage units. Font-relative bounds become computed point values; inherited percentages remain descriptors at the receiving containing block. Min auto/initial/unset emit explicit unit3 (Auto); max none/initial/unset omit the maximum. The reset remains explicit zero minimum. The runtime, renderer, schema and dependencies are unchanged.
+
+Automatic minimum is a native candidate rather than zero substitution: layout_style_applier.rs maps unit3 into Taffy automatic min_size; the vendored flexbox algorithm performs intrinsic measurement for an unresolved main-axis minimum. Initial/unset override the reset with automatic minima. See [CSS Sizing](https://www.w3.org/TR/css-sizing-3/#min-size-properties) and [Flexbox automatic minimum](https://www.w3.org/TR/css-flexbox-1/#min-size-auto). The current nonshrinking box profile is not evidence for future shrink/text/replaced-element behavior.
+
+The 14-case corpus covers fixed clamps, percentage threshold crossings, min greater than max, auto-width stretch, definite containing-block percentage heights, inherited bounds, em/rem bounds, auto-height content, absent and zero maxima, and four automatic-minimum combinations. Same-file original and clone are resized through240x160,390x200,768x120,240x160. Public Rust/CLI/WASM behavior is covered by42 Rust tests and11 Node tests, including exact-byte corpus parity.
+
+Results:112/112 geometry frames pass,110/112 pixel frames pass,224/224 canvas-clear controls pass. All14 full-frame review sheets were directly inspected (42 unique viewport pairs). Shapes and placements match visually at this scale; the failed frame has fractional boundary coverage differences. Read-only geometry remains essential for the automatic-minimum cases because the visible overflowing child covers some parent boundaries.
+
+The preserved failure is minmax-percent-height at768x120 in original and clone. Native parent width614.39996 versus Chrome614.390625; native child307.19998 by57.6 versus Chrome307.1875 by57.59375. Differences are below the existing0.1 geometry tolerance, but461 pixel differences yield mismatch ratio0.0050021701388888885, above the unchanged0.005 gate. Mean channel error is0.22366. This is a failed gate, not a rounded pass. The first10-case run independently retained the same two failures (78/80 pixel passes).
+
+A11 remains partial. These data do not establish general pixel equivalence for fractional constraints, nor prove that this is solely a rounding rather than paint-coverage difference. No snapping, tolerance change, browser-derived layout, or renderer modification is applied. A useful next experiment is a fractional fixed-dimension control with the same geometry, to isolate percentage lowering from baseline edge rendering.
+
+Percent height/min-height/max-height under an authored auto-height parent remains rejected pending an encoding proof, even when that parent has numeric bounds. Unsupported intrinsic size keywords/functions and invalid negative/nonfinite/oversized bounds receive diagnostics. No text, flex-shrink/wrapping, image or Grid qualification is implied.
+
+`public-minmax-receipt.json` binds run artifacts, preserved failures, and the compiler checkpoint. Old and current runs remain separate; do not substitute only passing cases for the full corpus.
+
+## Fixed-fractional control
+
+A separate authored fixture uses plain widths614.4px/307.2px and heights96px/57.6px, with no min/max declarations. At768x120 it reproduces both Chrome and native PNGs byte-for-byte from the failing percentage-bound frame. All8 original/clone observations fail the same pixel gate, while geometry and16 clear checks pass. The same visual review therefore transfers by exact image identity. This establishes that the mismatch also occurs in ordinary fixed fractional rectangles; it is not specific to min/max lowering. It does not distinguish layout quantization from raster coverage or demonstrate a working file composition. See `fractional-minmax-control-receipt.json`. The fixture is an experimental control, never a browser-baked production fallback.

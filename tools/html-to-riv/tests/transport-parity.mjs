@@ -117,3 +117,9 @@ test('font-relative box dimensions have exact CLI/WASM corpus parity',async()=>{
  assert.equal(fixtures.length,8);
  await assertCorpusParity(fixtures);
 });
+
+test('min/max dimension constraints have exact CLI/WASM corpus parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-minmax-cases.json',import.meta.url)));
+ assert(fixtures.length>=10);
+ await assertCorpusParity(fixtures);
+});

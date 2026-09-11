@@ -1,0 +1,128 @@
+[
+  {
+    "name": "minmax-fixed-clamp",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:20px;min-width:80px;height:80px;max-height:30px;background:coral}#b{width:200px;max-width:100px;height:10px;min-height:40px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-percent-crossing",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:100px;min-width:30%;max-width:60%;height:30px;background:coral}#b{width:200px;max-width:40%;height:30px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-conflicting-bounds",
+    "html": "<div id=\"a\"></div>",
+    "css": "#a{width:40px;min-width:60%;max-width:20%;height:20px;min-height:40%;max-height:10%;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-auto-stretch",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{max-width:70%;min-width:80px;height:100px;background:navy}#b{max-width:50%;height:30px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-percent-height",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{width:80%;height:80%;background:navy}#b{width:50%;height:100px;min-height:25%;max-height:60%;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-inherited-bounds",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{width:60%;height:100px;min-width:40%;max-width:90%;background:navy}#b{width:10px;min-width:inherit;max-width:inherit;height:30px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-font-relative",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{font-size:20px;width:10px;min-width:6em;height:100px;background:navy}#b{font-size:10px;width:300px;max-width:4rem;min-width:2em;height:50px;max-height:2em;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-content-height",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{width:140px;min-height:70px;max-height:90px;background:navy}#b{width:80px;height:40px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-max-none",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:90%;max-width:20px;max-width:none;height:30px;background:coral}#b{width:90%;max-width:20px;max-width:initial;height:30px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-zero-max",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:100px;max-width:0px;height:30px;background:red}#b{width:80px;height:30px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-auto-content",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:auto;min-height:auto;height:auto;background:teal}#c{width:100px;height:100px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "minmax-initial-preferred",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:initial;min-height:initial;height:20px;background:teal}#c{width:100px;height:100px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "minmax-unset-percent",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:unset;min-height:unset;height:50%;background:teal}#c{width:100px;height:100px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "minmax-auto-capped",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:auto;min-height:auto;height:auto;background:teal}#c{width:100px;height:100px;background:coral}#b{max-height:20px}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  }
+]

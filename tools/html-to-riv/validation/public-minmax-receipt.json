@@ -1,0 +1,137 @@
+{
+  "status": "verified-byte-identical-with-preserved-render-failures",
+  "scope": "Native exact request/Rive/map regeneration; WASM exact Rive bytes and source-map values; receipt/artifact/hash, inline geometry, image dimensions, clear pixel equality and repeat/clone pixel equality validation. No new rendering or visual-review claim.",
+  "sourceBinding": "Contemporaneous source snapshot only; not proof supplied binaries were built from it. Historical r1 compiler-snapshot native hash differs from r1 recorded compiler hash; retained as historical evidence only. Current compiler reproduces every r1/r2 output exactly.",
+  "checkpoint": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-minmax-checkpoint-r1/manifest.json",
+  "checkpointSha256": "d62ffcb7337ae6eb67d511089d405b9d0e70b65ebea6545ff84aebdd70035e13",
+  "runs": [
+    {
+      "run": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-minmax-r1",
+      "status": "failed-public-baseline",
+      "cases": 10,
+      "frames": 80,
+      "geometryPass": 80,
+      "pixelPass": 78,
+      "clearChecks": 160,
+      "failures": [
+        {
+          "name": "minmax-percent-height",
+          "frame": 2,
+          "instance": 0,
+          "step": 2,
+          "width": 768,
+          "height": 120,
+          "geometryFailures": [],
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "metrics": {
+            "mismatchedPixels": 461,
+            "mismatchRatio": 0.0050021701388888885,
+            "meanChannelError": 0.22366265190972223,
+            "regionMeanRgbError": {
+              "a": 0.46550925925925923,
+              "b": 1.0840610538886402
+            },
+            "interiorMeanRgbError": {
+              "a": 0.33507161729940205,
+              "b": 0.010491803278688525
+            },
+            "antialiasingExcluded": false
+          }
+        },
+        {
+          "name": "minmax-percent-height",
+          "frame": 6,
+          "instance": 1,
+          "step": 2,
+          "width": 768,
+          "height": 120,
+          "geometryFailures": [],
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "metrics": {
+            "mismatchedPixels": 461,
+            "mismatchRatio": 0.0050021701388888885,
+            "meanChannelError": 0.22366265190972223,
+            "regionMeanRgbError": {
+              "a": 0.46550925925925923,
+              "b": 1.0840610538886402
+            },
+            "interiorMeanRgbError": {
+              "a": 0.33507161729940205,
+              "b": 0.010491803278688525
+            },
+            "antialiasingExcluded": false
+          }
+        }
+      ]
+    },
+    {
+      "run": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-minmax-r2",
+      "status": "failed-public-baseline",
+      "cases": 14,
+      "frames": 112,
+      "geometryPass": 112,
+      "pixelPass": 110,
+      "clearChecks": 224,
+      "failures": [
+        {
+          "name": "minmax-percent-height",
+          "frame": 2,
+          "instance": 0,
+          "step": 2,
+          "width": 768,
+          "height": 120,
+          "geometryFailures": [],
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "metrics": {
+            "mismatchedPixels": 461,
+            "mismatchRatio": 0.0050021701388888885,
+            "meanChannelError": 0.22366265190972223,
+            "regionMeanRgbError": {
+              "a": 0.46550925925925923,
+              "b": 1.0840610538886402
+            },
+            "interiorMeanRgbError": {
+              "a": 0.33507161729940205,
+              "b": 0.010491803278688525
+            },
+            "antialiasingExcluded": false
+          }
+        },
+        {
+          "name": "minmax-percent-height",
+          "frame": 6,
+          "instance": 1,
+          "step": 2,
+          "width": 768,
+          "height": 120,
+          "geometryFailures": [],
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "metrics": {
+            "mismatchedPixels": 461,
+            "mismatchRatio": 0.0050021701388888885,
+            "meanChannelError": 0.22366265190972223,
+            "regionMeanRgbError": {
+              "a": 0.46550925925925923,
+              "b": 1.0840610538886402
+            },
+            "interiorMeanRgbError": {
+              "a": 0.33507161729940205,
+              "b": 0.010491803278688525
+            },
+            "antialiasingExcluded": false
+          }
+        }
+      ]
+    }
+  ],
+  "nativeRegeneratedArtifacts": 24,
+  "wasmVerifiedArtifacts": 24
+}

@@ -123,3 +123,9 @@ test('min/max dimension constraints have exact CLI/WASM corpus parity',async()=>
  assert(fixtures.length>=10);
  await assertCorpusParity(fixtures);
 });
+
+test('selector and specificity corpus has exact CLI/WASM parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-selector-cases.json',import.meta.url)));
+ assert(fixtures.length>=16);
+ await assertCorpusParity(fixtures);
+});

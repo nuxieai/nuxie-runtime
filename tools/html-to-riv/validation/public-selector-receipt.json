@@ -1,0 +1,41 @@
+{
+  "scope": "S02-S08 qualified for admitted static box DOM/selectors; S01 partial under current attribute admission",
+  "cases": 24,
+  "frames": 192,
+  "geometryPass": 192,
+  "pixelPass": 192,
+  "clearPass": 384,
+  "browser": "153.0.8010.12",
+  "expectedPaintAssertions": 1064,
+  "tests": {
+    "rust": 46,
+    "node": 12
+  },
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-selector-checkpoint-r1/manifest.json",
+    "sha256": "9ea3165b9668085a85b8a311d9b9c3aada2237de9b7c12102e7c70ec6103eb33"
+  },
+  "run": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-selector-r1/receipt.json",
+    "sha256": "c876d12b3619208ba94b740ed6025cc95fbce106f575f08b1ec61d014a88ce2a"
+  },
+  "visual": {
+    "directFullFramePairs": 24,
+    "exactWhiteCanvasTransfers": 168,
+    "bindings": {
+      "output/public-selector-r1/review-0.png": "eddb857290eea104062d925685f2a3fc86501a6d84b45c968869dc8e2f2bb6d4",
+      "output/public-selector-r1/review-1.png": "d63db020e0f32cf71e141eac2f2e5cff6e80dd90a8efed9ba9f5021adef58f80",
+      "output/public-selector-r1/review-2.png": "182e9935af4180c63c1d859f85c0d29e12f8e150827790bda39057dd642d2a0c",
+      "output/public-selector-r1/review-3.png": "d60d85df2e46bf6d011f6414ff470d209c049d54d4118570e725de65f0659858",
+      "output/public-selector-r1/review-4.png": "705fa98a98b9fcd444b82b28d2d6b27f7401658a1878725aa3c6a0671f351743",
+      "output/public-selector-r1/review-5.png": "ccd0acf6cb4733b278e1c518a52ffa16b00a12257a418f58161695e839c09046",
+      "output/public-selector-r1/visual-transfer.json": "0683d05235d20355165fc7727ff878122f8bd861299a7ba628cff924e18001c6"
+    }
+  },
+  "limits": [
+    "Only admitted static box HTML and id/class/style attributes",
+    "No attribute namespace or explicit s flag",
+    "No dynamic state/pseudo-elements; grammar and resource restrictions retained",
+    "No selector support claim admits unqualified layout/paint properties"
+  ]
+}

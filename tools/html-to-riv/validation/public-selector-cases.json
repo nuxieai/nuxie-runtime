@@ -1,0 +1,408 @@
+[
+  {
+    "name": "selector-attribute-existence",
+    "html": "<div id=\"root\"><div id=\"r1\"></div><div id=\"r2\" class=\"\"></div><div id=\"r3\" class=\"alpha\"></div><div id=\"r4\" class=\"beta\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class]{background:teal}",
+    "features": [
+      "S01",
+      "attribute existence includes empty values"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(0, 128, 128)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "selector-attribute-exact",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"alpha\"></div><div id=\"r2\" class=\"Alpha\"></div><div id=\"r3\" class=\"alpha beta\"></div><div id=\"r4\" class=\"alphabet\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class=\"alpha\"]{background:coral}",
+    "features": [
+      "S01",
+      "exact value is case sensitive by default"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-attribute-token",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"beta alpha\"></div><div id=\"r2\" class=\"alphabet\"></div><div id=\"r3\" class=\"alpha-beta\"></div><div id=\"r4\" class=\" alpha  beta \"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class~=\"alpha\"]{background:teal}",
+    "features": [
+      "S01",
+      "whitespace token boundary"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "selector-attribute-hyphen",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"en\"></div><div id=\"r2\" class=\"en-GB\"></div><div id=\"r3\" class=\"english\"></div><div id=\"r4\" class=\"en GB\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class|=\"en\"]{background:coral}",
+    "features": [
+      "S01",
+      "exact or hyphen prefix"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-attribute-prefix",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"pre-one\"></div><div id=\"r2\" class=\"one-pre\"></div><div id=\"r3\" class=\"prefix\"></div><div id=\"r4\" class=\"PRE-one\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class^=\"pre\"]{background:teal}",
+    "features": [
+      "S01",
+      "prefix and default case sensitivity"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-attribute-suffix",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"one-end\"></div><div id=\"r2\" class=\"end-one\"></div><div id=\"r3\" class=\"weekend\"></div><div id=\"r4\" class=\"one-END\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class$=\"end\"]{background:coral}",
+    "features": [
+      "S01",
+      "suffix and default case sensitivity"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-attribute-substring",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"one-mid-two\"></div><div id=\"r2\" class=\"mid\"></div><div id=\"r3\" class=\"middle\"></div><div id=\"r4\" class=\"missing\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class*=\"mid\"]{background:teal}",
+    "features": [
+      "S01",
+      "substring matches at any position"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(0, 128, 128)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-attribute-case-insensitive",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"Alpha\"></div><div id=\"r2\" class=\"alpha\"></div><div id=\"r3\" class=\"ALPHA\"></div><div id=\"r4\" class=\"alpha beta\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class=\"alpha\" i]{background:teal}#root [class=\"alpha\"]{background:coral}",
+    "features": [
+      "S01",
+      "explicit ASCII insensitive flag versus default sensitive matching"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-attribute-empty-needle",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"\"></div><div id=\"r2\"></div><div id=\"r3\" class=\"alpha\"></div><div id=\"r4\" class=\"beta\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root [class^=\"\"],#root [class$=\"\"],#root [class*=\"\"]{background:red}#root [class=\"\"]{background:teal}",
+    "features": [
+      "S01",
+      "empty substring operands do not match"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-adjacent-comments-nesting",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"start\"></div><!-- non-element -->\n<div id=\"r2\" class=\"target\"></div><div id=\"r3\" class=\"group\"><div id=\"r4\" class=\"target\"></div></div><div id=\"r5\" class=\"target\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root .start + .target{background:teal}#root .group{height:32px;width:180px;background:navy}",
+    "features": [
+      "S02",
+      "comments and whitespace do not interrupt adjacency",
+      "nested target is not a sibling"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(0, 128, 128)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(192, 192, 192)",
+      "r5": "rgb(192, 192, 192)"
+    }
+  },
+  {
+    "name": "selector-adjacent-chain",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"a\"></div><div id=\"r2\" class=\"b\"></div><div id=\"r3\" class=\"c\"></div><div id=\"r4\" class=\"b\"></div><div id=\"r5\" class=\"c\"></div><div id=\"r6\" class=\"d\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root .a + .b + .c{background:coral}#root .b + .c + .d{background:teal}",
+    "features": [
+      "S02",
+      "three-step sibling chains"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(192, 192, 192)",
+      "r5": "rgb(192, 192, 192)",
+      "r6": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "selector-general-sibling-scope",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"target\"></div><div id=\"r2\" class=\"start\"></div><!-- non-element --><div id=\"r3\" class=\"group\"><div id=\"r4\" class=\"target\"></div></div><div id=\"r5\" class=\"gap\"></div><div id=\"r6\" class=\"target\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root .start ~ .target{background:teal}#root .group{height:32px;width:180px;background:navy}",
+    "features": [
+      "S03",
+      "later sibling only",
+      "intervening and nested negative controls"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(192, 192, 192)",
+      "r5": "rgb(192, 192, 192)",
+      "r6": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "selector-first-last",
+    "html": "<div id=\"root\"><!-- before --><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"item\"></div><div id=\"r3\" class=\"item\"></div><div id=\"r4\" class=\"item\"></div><!-- after --></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :first-child{background:teal}#root > :last-child{background:coral}",
+    "features": [
+      "S04",
+      "comments do not count as children"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "selector-only-child",
+    "html": "<div id=\"root\"><div id=\"g1\"><!-- before --><div id=\"r1\"></div><!-- after --></div><div id=\"g2\"><div id=\"r2\"></div><div id=\"r3\"></div></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > div{height:48px;width:180px;background:navy}#root > div > :only-child{background:teal}#root > div > :first-child:not(:only-child){background:coral}",
+    "features": [
+      "S04",
+      "only child versus first of two",
+      "S06"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "g1": "rgb(0, 0, 128)",
+      "g2": "rgb(0, 0, 128)"
+    }
+  },
+  {
+    "name": "selector-nth-odd-even",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"item\"></div><div id=\"r3\" class=\"item\"></div><div id=\"r4\" class=\"item\"></div><div id=\"r5\" class=\"item\"></div><div id=\"r6\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :nth-child(odd){background:teal}#root > :nth-child(even){background:coral}",
+    "features": [
+      "S05",
+      "odd and even partition all siblings"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(255, 127, 80)",
+      "r5": "rgb(0, 128, 128)",
+      "r6": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "selector-nth-signed-formulas",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"item\"></div><div id=\"r3\" class=\"item\"></div><div id=\"r4\" class=\"item\"></div><div id=\"r5\" class=\"item\"></div><div id=\"r6\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :nth-child(-n + 3){background:teal}#root > :nth-child(2n + 1){background:coral}#root > :nth-child(0n + 6){background:navy}",
+    "features": [
+      "S05",
+      "negative positive and zero coefficients"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(0, 128, 128)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(192, 192, 192)",
+      "r5": "rgb(255, 127, 80)",
+      "r6": "rgb(0, 0, 128)"
+    }
+  },
+  {
+    "name": "selector-nth-last",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"item\"></div><div id=\"r3\" class=\"item\"></div><div id=\"r4\" class=\"item\"></div><div id=\"r5\" class=\"item\"></div><div id=\"r6\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :nth-last-child(-n + 2){background:teal}#root > :nth-last-child(2n + 1){background:coral}",
+    "features": [
+      "S05",
+      "reverse sibling indices and overlap cascade"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(255, 127, 80)",
+      "r5": "rgb(0, 128, 128)",
+      "r6": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "selector-nth-filter-list",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"keep\"></div><div id=\"r2\" class=\"skip\"></div><div id=\"r3\" class=\"other\"></div><div id=\"r4\" class=\"keep\"></div><div id=\"r5\" class=\"skip\"></div><div id=\"r6\" class=\"other\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :nth-child(2n of .keep, .other){background:teal}#root > :nth-last-child(1 of .keep, .other){background:coral}",
+    "features": [
+      "S05",
+      "filtered index uses selector list before counting"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(192, 192, 192)",
+      "r5": "rgb(192, 192, 192)",
+      "r6": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "selector-nth-filter-specificity",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"keep\"></div><div id=\"r2\" class=\"skip\"></div><div id=\"r3\" class=\"keep\"></div><div id=\"r4\" class=\"keep\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :nth-child(2 of .keep, #absent){background:teal}#root > .keep.keep{background:coral}",
+    "features": [
+      "S05",
+      "of-list maximum specificity even for unmatched branch"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "selector-not-list-and-complex",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"skip\"></div><div id=\"r3\" class=\"item\"></div><div id=\"r4\" class=\"other\"></div><div id=\"r5\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > div:not(.skip, .other){background:teal}#root > div:not(.skip + div, .other, .skip){background:coral}",
+    "features": [
+      "S06",
+      "selector list and complex selector negation"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(0, 128, 128)",
+      "r4": "rgb(192, 192, 192)",
+      "r5": "rgb(255, 127, 80)"
+    }
+  },
+  {
+    "name": "selector-is-list-specificity",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"other\"></div><div id=\"r3\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :is(.item, #absent){background:teal}#root > .item.item{background:coral}#root > :is(.other, .item + .other){background:navy}",
+    "features": [
+      "S07",
+      "maximum specificity includes nonmatching branch",
+      "complex selector alternatives"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(0, 0, 128)",
+      "r3": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "selector-where-zero-specificity",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"other\"></div><div id=\"r3\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > .item{background:teal}#root > div:where(.item, #r2){background:coral}",
+    "features": [
+      "S08",
+      "where contributes zero specificity including id branch"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "selector-inline-important-list",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\" style=\"background:teal\"></div><div id=\"r2\" class=\"item\" style=\"background:teal!important\"></div><div id=\"r3\" class=\"item\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :is(.item, #absent){background:coral!important}#root > .item,#root > #r3{background:navy!important}",
+    "features": [
+      "S07",
+      "inline important wins",
+      "matching selector-list branch specificity"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(0, 128, 128)",
+      "r3": "rgb(0, 0, 128)"
+    }
+  },
+  {
+    "name": "selector-nested-functional-composition",
+    "html": "<div id=\"root\"><div id=\"r1\" class=\"item\"></div><div id=\"r2\" class=\"skip\"></div><div id=\"r3\" class=\"other\"></div><div id=\"r4\" class=\"item\"></div><div id=\"r5\" class=\"skip\"></div></div>",
+    "css": "#root{width:180px;height:112px;background:white}#root div{width:160px;height:16px;background:silver}#root > :where(:is(.item, .other)):not(:first-child, .skip + .other){background:teal}#root > :is(.item, .other):nth-last-child(2){background:coral}",
+    "features": [
+      "S04",
+      "S05",
+      "S06",
+      "S07",
+      "S08",
+      "nested functional composition"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(255, 127, 80)",
+      "r5": "rgb(192, 192, 192)"
+    }
+  }
+]

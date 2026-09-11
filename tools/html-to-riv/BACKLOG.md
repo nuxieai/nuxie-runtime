@@ -33,14 +33,14 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | A21 | Strikethrough | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A22 | Text clipping | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A23 | Text ellipsis | pending | Immutable-target audit and revalidation required; historical status: partial. |
-| S01 | Attribute selectors | pending | Immutable-target audit and revalidation required; historical status: partial. |
-| S02 | Adjacent sibling selector | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| S03 | General sibling selector | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| S04 | `:first-child` / `:last-child` / `:only-child` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| S05 | `:nth-child` / `:nth-last-child` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| S06 | `:not()` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| S07 | `:is()` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| S08 | `:where()` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| S01 | Attribute selectors | partial | Operators and i/default case semantics pass public color/geometry/native corpus. Authored attrs remain id/class/style only; broader admission pending. See validation/public-selector-receipt.json. |
+| S02 | Adjacent sibling selector | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
+| S03 | General sibling selector | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
+| S04 | `:first-child` / `:last-child` / `:only-child` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
+| S05 | `:nth-child` / `:nth-last-child` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
+| S06 | `:not()` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
+| S07 | `:is()` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
+| S08 | `:where()` | qualified (static box DOM) | Public selector corpus passes192 geometry/pixel frames plus384 clear controls, expected-color assertions, CLI/WASM parity and visual review. Existing grammar/admission restrictions remain; see validation/selectors-review.md. |
 | S09 | Custom properties | pending | Immutable-target audit and revalidation required; historical status: in progress. |
 | S10 | `var()` and fallbacks | pending | Immutable-target audit and revalidation required; historical status: in progress. |
 | L01 | Reverse flex directions | pending | Immutable-target audit and revalidation required; historical status: qualified. |

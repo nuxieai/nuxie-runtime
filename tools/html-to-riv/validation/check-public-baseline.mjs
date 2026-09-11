@@ -37,6 +37,12 @@ try{const page=await browser.newPage({deviceScaleFactor:1,colorScheme:'light',lo
    const prefix=path.join(dir,`frame-${f.frame}`);await page.setViewportSize({width:f.width,height:f.height});await page.setContent(html);
    const boxes=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const{x,y,width,height}=e.getBoundingClientRect();return[e.id,{x,y,width,height}]})));
    const computedStyles=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const s=getComputedStyle(e);return[e.id,{width:s.width,height:s.height,color:s.color,backgroundColor:s.backgroundColor,display:s.display,flexDirection:s.flexDirection}]})));
+   if(fixture.expectedPaint){
+    for(const [id,color] of Object.entries(fixture.expectedPaint)){
+     assert(computedStyles[id],`missing expected paint node ${id}`);
+     assert.equal(computedStyles[id].backgroundColor,color,`${fixture.name}: independent expected paint for ${id}`);
+    }
+   }
    const swatchObservations=[];
    if(fixture.swatches){
     for(const[index,swatch]of fixture.swatches.entries()){

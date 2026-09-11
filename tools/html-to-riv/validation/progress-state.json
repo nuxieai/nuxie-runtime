@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Min/max constraints: geometry validated, pixel limitation retained",
-  "status": "A11 partial; unchanged runtime",
-  "current": "14 min/max scenes pass all112 geometry frames and224 clear controls.110 pixel frames pass; fractional boundary case fails original and clone.42 Rust tests and11 Node tests pass; all14 review sheets inspected. An equivalent fixed-fractional control reproduces the exact failing images, isolating the issue from min/max lowering.",
-  "next": "Investigate ordinary-file fractional edge coverage; continue independent selector/layout work while preserving the rendering limitation and unresolved typography.",
+  "focus": "Static selector qualification complete for S02-S08",
+  "status": "192 selector frames pass; runtime unchanged",
+  "current": "24 scenes validate intended target colors plus native geometry/pixels across original/clone resize. S02-S08 qualified within static box profile; S01 remains partial under attribute restrictions.46 Rust and12 Node tests pass. Existing fractional paint and text failures remain unresolved.",
+  "next": "Proceed to custom properties and var() computation while preserving strict unsupported-value diagnostics and bounded expansion.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Selector scope and visual review",
+      "path": "tools/html-to-riv/validation/selectors-review.md"
+    },
+    {
+      "label": "Selector Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-selector-r1/gallery.html"
+    },
+    {
+      "label": "Selector qualification receipt",
+      "path": "tools/html-to-riv/validation/public-selector-receipt.json"
+    },
     {
       "label": "Fixed-fractional control reproduces failure",
       "path": "tools/html-to-riv/validation/fractional-minmax-control-receipt.json"

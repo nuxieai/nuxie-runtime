@@ -110,3 +110,5 @@ The expanded duplicate-fill/full-font matrix is preserved separately in `validat
 `public-font-relative-cases.json` covers computation order, nested font contexts, inherited computed dimensions, root-relative lengths, CSS-wide font-size, percentage containers, zero/fractional sizes and cascade precedence. `public-font-relative-receipt.json` binds immutable import/render, canvas-clear controls, visual review and exact-byte checkpoint evidence. The separate `derivative-font-receipt.json` preserves a failed text candidate; it does not qualify typography.
 
 `public-minmax-cases.json` includes conflicting, inherited, font-relative and automatic constraints. Its complete corpus intentionally retains a fractional-edge failure and exits nonzero: see `validation/minmax-review.md`. Do not remove the failing case or widen the pixel gate to qualify A11.
+
+`public-selector-cases.json` adds independent expectedPaint values for every authored ID. The driver asserts those colors in Chrome before comparison. `public-selector-receipt.json` records192 passing frames,24 direct visual pairs and168 exact white-canvas transfers; this does not supersede earlier paint/text failures.

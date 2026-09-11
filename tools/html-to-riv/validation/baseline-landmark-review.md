@@ -1,5 +1,7 @@
 # Ordinary baseline landmark experiments
 
+Historical checkpoint: current first-baseline admission and remaining restrictions are documented in [first-baseline-review.md](first-baseline-review.md). This supersedes earlier blanket baseline-rejection statements below.
+
 Public baseline alignment remains rejected. These fixture-specific experiments establish ordinary-file primitives and preserve counterexamples; they do not add a general compiler lowering. The native importer receives only Rive bytes, while the diagnostic source map is used for read-only geometry joins. Chrome receives the original CSS baseline fixture.
 
 ## Landmark and anchor primitive

@@ -1,0 +1,61 @@
+{
+  "status": "implemented-first-baseline-profile; main corpus qualified; L03 remains partial",
+  "scope": "Horizontal LTR single-line row/reverse; evidenced fixed/percentage empty-box metrics and fixed normal-column descendant baselines. Known fractional pixel failure remains.",
+  "main": {
+    "receipt": {
+      "path": "output/public-first-baseline-r1/receipt.json",
+      "sha256": "5e6e3d26e6406556cf3356cc61551b30248a952287d3f32f91bbc15865e80869"
+    },
+    "scenes": 34,
+    "geometryPassed": 272,
+    "pixelsPassed": 272,
+    "clearChecksPassed": 544,
+    "visualProof": {
+      "path": "output/public-first-baseline-r1/visual-transfer.json",
+      "sha256": "115a4a5e4d3d88e087616fbba44158e1bd86907ac2d8f446c2617b32c918dde6"
+    },
+    "directVisualPairs": 84,
+    "exactTransferPairs": 188
+  },
+  "checkpoint": {
+    "path": "output/public-first-baseline-checkpoint-r1/manifest.json",
+    "sha256": "19e6d6172374060560c1e3411d32c502b3262d886741d3d05acb598a79406500"
+  },
+  "tests": {
+    "rust": 84,
+    "node": 23,
+    "typescript": "pass",
+    "rustLog": {
+      "path": "output/public-baseline-preparation-r1/rust-tests.log",
+      "sha256": "f2ff772667d1b00953c983579a9ed1f8aa356fa9612ab38788bb914c83a0a9cb"
+    },
+    "nodeLog": {
+      "path": "output/public-baseline-preparation-r1/transport-tests.log",
+      "sha256": "8a0ffc0d5dcf378a0966e39760297ad7169bccd63ed67cd124f01ccc6248dfe8"
+    }
+  },
+  "priorOutputRegression": {
+    "fixtures": 253,
+    "sameRivAndSourceMaps": 253,
+    "manifest": {
+      "path": "output/baseline-byte-regression-r1/manifest.json",
+      "sha256": "53e48a45def1b8e2a2c0f56d08de08bc37c29ccb1e98f04f32303e7517ed3a33"
+    }
+  },
+  "preservedFractionalFailure": {
+    "receipt": {
+      "path": "output/public-first-baseline-fractional-r1/receipt.json",
+      "sha256": "07d50edf9697646b9098b45387184ad38a4d3f0ecb5b892a762925c7bda721ff"
+    },
+    "geometryPassed": 8,
+    "pixelsPassed": 6,
+    "pixelsFailed": 2,
+    "priorImageIdentity": {
+      "path": "output/public-first-baseline-fractional-r1/prior-pixel-identity.json",
+      "sha256": "ea74dfe6061ce57174f9f2034e470bfcd49eec66cde45b6edcf9f8dba1f30eb8"
+    },
+    "scope": "All16 images identical to previous experimental fixture, with exact unconstrained control. No threshold changes."
+  },
+  "immutableSourceGuard": "pass; all tracked and untracked source changes confined to compiler module",
+  "resourceBound": "4 records per participating sibling group +2 per baseline participant; at most6 per authored element. Scalar sibling summaries; no retained sibling variable environments."
+}

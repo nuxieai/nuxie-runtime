@@ -1,5 +1,7 @@
 # Baseline measurement with ordinary layout objects
 
+Historical checkpoint: current first-baseline admission and remaining restrictions are documented in [first-baseline-review.md](first-baseline-review.md). This supersedes earlier blanket baseline-rejection statements below.
+
 These experiments address the two counterexamples in baseline-landmark-review.md: a changing tallest participant and missing intrinsic parent height. Public baseline support remains rejected pending a general compiler implementation and its qualification.
 
 ## Responsive maximum

@@ -34,7 +34,7 @@ fn variables_cascade_and_font_relative_bounds_compose() {
 }
 #[test]
 fn unresolved_alignments_and_invalid_losers_still_reject() {
-    for value in ["baseline","first baseline","last baseline","safe stretch","unsafe normal","safe baseline","left","center end"] {
+    for value in ["last baseline","safe stretch","unsafe normal","safe baseline","left","center end"] {
         for css in [format!("#never{{align-self:{value}}}"),format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}")] {
             assert!(compile(&input(&css)).is_err(),"{css}");
         }

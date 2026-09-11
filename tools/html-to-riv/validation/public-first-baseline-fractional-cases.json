@@ -1,0 +1,13 @@
+[
+  {
+    "name": "baseline-nested-row-reverse-fixed-fractional",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent",
+      "known fractional paint control"
+    ]
+  }
+]

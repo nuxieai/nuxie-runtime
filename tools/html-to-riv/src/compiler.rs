@@ -2,6 +2,8 @@
 use crate::{color, css, variables, wire::{self, Record, Value}, CompileInput, CompileOutput, Diagnostic, SourceNode};
 use scraper::{ElementRef, Html};
 use std::collections::BTreeSet;
+#[path = "baseline.rs"]
+mod baseline;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }
@@ -30,13 +32,14 @@ fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Dir
     }
 }
 #[derive(Clone, Copy)]
-enum AlignmentPosition { Auto, Normal, Stretch, FlexStart, Start, SelfStart, Center, FlexEnd, End, SelfEnd }
+enum AlignmentPosition { Auto, Normal, Stretch, FlexStart, Start, SelfStart, Center, FlexEnd, End, SelfEnd, Baseline, FirstBaseline }
 #[derive(Clone, Copy)]
 enum OverflowAlignment { Default, Safe, Unsafe }
 #[derive(Clone, Copy)]
 struct SelfAlignment { position: AlignmentPosition, overflow: OverflowAlignment }
 impl SelfAlignment {
     const AUTO: Self = Self { position: AlignmentPosition::Auto, overflow: OverflowAlignment::Default };
+    fn is_baseline(self) -> bool { matches!(self.position, AlignmentPosition::Baseline | AlignmentPosition::FirstBaseline) }
     fn stretches(self) -> bool { matches!(self.position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch) }
     fn is_center(self) -> bool { matches!(self.position, AlignmentPosition::Center) }
     fn is_end(self) -> bool { matches!(self.position, AlignmentPosition::FlexEnd | AlignmentPosition::End | AlignmentPosition::SelfEnd) }
@@ -66,12 +69,14 @@ fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result
     let (word, overflow) = match tokens.as_slice() {
         ["inherit"] => return Ok(parent),
         ["initial" | "unset"] => return Ok(SelfAlignment::AUTO),
+        ["first", "baseline"] => return Ok(SelfAlignment { position: AlignmentPosition::FirstBaseline, overflow: OverflowAlignment::Default }),
         [word] => (*word, OverflowAlignment::Default),
         ["safe", word] => (*word, OverflowAlignment::Safe),
         ["unsafe", word] => (*word, OverflowAlignment::Unsafe),
         _ => return Err(unsupported(source, "align-self requires a supported keyword, optionally prefixed by safe or unsafe for positional alignment")),
     };
     let position = match word {
+        "baseline" => AlignmentPosition::Baseline,
         "auto" => AlignmentPosition::Auto, "normal" => AlignmentPosition::Normal,
         "stretch" => AlignmentPosition::Stretch, "flex-start" => AlignmentPosition::FlexStart,
         "start" => AlignmentPosition::Start, "self-start" => AlignmentPosition::SelfStart,
@@ -80,7 +85,7 @@ fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result
         _ => return Err(unsupported(source, "This align-self value needs ordinary-file validation; baseline alignment is unresolved")),
     };
     if !matches!(overflow, OverflowAlignment::Default)
-        && matches!(position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch) {
+        && matches!(position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch | AlignmentPosition::Baseline | AlignmentPosition::FirstBaseline) {
         return Err(unsupported(source, "safe and unsafe require positional alignment, not auto, normal or stretch"));
     }
     // Preserve specified logical/self-relative position and overflow preference
@@ -427,7 +432,7 @@ impl Emitter {
             self.records.push(layout);self.records.push(layout_style);
         Ok(object_id)
     }
-    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize) -> Result<(), Diagnostic> {
+    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize) -> Result<Vec<baseline::Child>, Diagnostic> {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
         let mut elements = Vec::new();
         for node in parent.children() {
@@ -458,7 +463,8 @@ impl Emitter {
         // CSS order modifies layout/paint order, never DOM selector positions.
         ordered_elements.sort_by_key(|(index, _, _, _, order)| (*order, *index));
         if parent_style.direction.reverses_emission() { ordered_elements.reverse(); }
-        for (_, element, path, id, _) in ordered_elements {
+        let mut children = Vec::with_capacity(ordered_elements.len());
+        for (index, element, path, id, order) in ordered_elements {
             let style = computed(element, rules, parent_style)?;
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
                 return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
@@ -497,8 +503,14 @@ impl Emitter {
                 paint.set("colorValue", Value::Color(background))?;self.records.push(paint);
             }
             self.map.push(SourceNode { id, path: path.clone(), object_id });
-            self.children(element, object_id, &style, rules, &path, depth + 1)?;
+            let descendants = self.children(element, object_id, &style, rules, &path, depth + 1)?;
+            let metric = baseline::summarize(&style, &descendants);
+            if style.self_alignment.is_baseline() && metric.is_none() {
+                return Err(unsupported(&path, "First baseline requires an evidenced empty fixed-height or unbounded percentage-height expression, or a fixed column descendant baseline within its box"));
+            }
+            children.push(baseline::Child { object_id, index, order, metric, participates: style.self_alignment.is_baseline() });
         }
-        Ok(())
+        baseline::emit(self, parent_id, parent_style, &children, path)?;
+        Ok(children)
     }
 }

@@ -1,5 +1,7 @@
 # Empty-box baseline composition experiment
 
+Historical checkpoint: current first-baseline admission and remaining restrictions are documented in [first-baseline-review.md](first-baseline-review.md). This supersedes earlier blanket baseline-rejection statements below.
+
 An ordinary full-width intrinsic-height row group, aligned to the original parent's cross start, can align its empty children at their synthesized bottom baselines by end-aligning them. The group height becomes the tallest child height even when the original parent is taller. This uses existing layout objects and preserves original/clone resizing.
 
 Six exact fixture transformations pass48 geometry and pixel frames plus96 clear controls: row/row-reverse, fixed/automatic parent height, and responsive widths with order. All18 distinct viewport pairs were inspected visually;30 repeat/clone pairs have exact decoded RGBA identity proofs. No visible divergence was found. See empty-baseline-receipt.json and output/empty-baseline-experiment-r1/render/gallery.html.

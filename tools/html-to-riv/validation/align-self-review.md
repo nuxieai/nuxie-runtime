@@ -1,5 +1,7 @@
 # Align-self with ordinary Rive compositions
 
+Historical checkpoint: current first-baseline admission and remaining restrictions are documented in [first-baseline-review.md](first-baseline-review.md). This supersedes earlier blanket baseline-rejection statements below.
+
 Historical core checkpoint: the later [safe/logical review](align-safe-review.md) supersedes statements below that those additional forms are unadmitted. Baseline remains unresolved.
 
 The compiler admits auto, stretch, flex-start, center, flex-end and inherit/initial/unset in its single-line box profile. Initial/unset compute to auto; inheritance copies the parent's final computed align-self. The author's direction, dimensions and bounds remain the values inherited by descendants. Generated wrappers do not appear as authored source identities or alter DOM selectors.

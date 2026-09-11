@@ -1,0 +1,436 @@
+[
+  {
+    "name": "baseline-empty-row-fixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:auto;min-height:120px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:auto;max-height:40px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#b{align-self:center;height:80px}",
+    "features": [
+      "L03",
+      "mixed"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{order:2}#b{order:-1}#c{order:1}",
+    "features": [
+      "L03",
+      "ordered"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:0}#c{height:0}",
+    "features": [
+      "L03",
+      "zero"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-all-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a,#b,#c{height:0}",
+    "features": [
+      "L03",
+      "all-zero"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:20px;min-height:50px}#b{height:100px;max-height:60px}",
+    "features": [
+      "L03",
+      "bounds"
+    ]
+  },
+  {
+    "name": "baseline-responsive-row-switch",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:50%;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:50%}",
+    "features": [
+      "L03",
+      "same-file maximum crossing"
+    ],
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        390,
+        320
+      ],
+      [
+        768,
+        120
+      ],
+      [
+        240,
+        160
+      ]
+    ]
+  },
+  {
+    "name": "baseline-responsive-row-multiple-percent",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:50%;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:50%}#c{height:30%;min-height:40px}",
+    "features": [
+      "L03",
+      "same-file maximum crossing"
+    ],
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        390,
+        320
+      ],
+      [
+        768,
+        120
+      ],
+      [
+        240,
+        160
+      ]
+    ]
+  },
+  {
+    "name": "baseline-responsive-row-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:50%;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#p{--align:first baseline;--floor:60px}#a,#b,#c{align-self:var(--align)}#a{height:50%}#b{height:var(--floor)}",
+    "features": [
+      "L03",
+      "same-file maximum crossing"
+    ],
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        390,
+        320
+      ],
+      [
+        768,
+        120
+      ],
+      [
+        240,
+        160
+      ]
+    ]
+  },
+  {
+    "name": "baseline-nested-row-fixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-row-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-row-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-row-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;max-height:60px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-fixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:auto;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:auto;min-height:120px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:auto;max-height:40px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "empty synthesized baseline",
+      "parent extent"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#b{align-self:center;height:80px}",
+    "features": [
+      "L03",
+      "mixed"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{order:2}#b{order:-1}#c{order:1}",
+    "features": [
+      "L03",
+      "ordered"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:0}#c{height:0}",
+    "features": [
+      "L03",
+      "zero"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-all-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a,#b,#c{height:0}",
+    "features": [
+      "L03",
+      "all-zero"
+    ]
+  },
+  {
+    "name": "baseline-empty-row-reverse-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:first baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:20px;min-height:50px}#b{height:100px;max-height:60px}",
+    "features": [
+      "L03",
+      "bounds"
+    ]
+  },
+  {
+    "name": "baseline-responsive-row-reverse-switch",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:50%;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:50%}",
+    "features": [
+      "L03",
+      "same-file maximum crossing"
+    ],
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        390,
+        320
+      ],
+      [
+        768,
+        120
+      ],
+      [
+        240,
+        160
+      ]
+    ]
+  },
+  {
+    "name": "baseline-responsive-row-reverse-multiple-percent",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:50%;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#a{height:50%}#c{height:30%;min-height:40px}",
+    "features": [
+      "L03",
+      "same-file maximum crossing"
+    ],
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        390,
+        320
+      ],
+      [
+        768,
+        120
+      ],
+      [
+        240,
+        160
+      ]
+    ]
+  },
+  {
+    "name": "baseline-responsive-row-reverse-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#p{width:75%;height:50%;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#p{--align:first baseline;--floor:60px}#a,#b,#c{align-self:var(--align)}#a{height:50%}#b{height:var(--floor)}",
+    "features": [
+      "L03",
+      "same-file maximum crossing"
+    ],
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        390,
+        320
+      ],
+      [
+        768,
+        120
+      ],
+      [
+        240,
+        160
+      ]
+    ]
+  },
+  {
+    "name": "baseline-nested-row-reverse-fixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-row-reverse-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-row-reverse-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-row-reverse-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;max-height:60px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-following-sibling",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent",
+      "following sibling uses corrected parent extent"
+    ]
+  },
+  {
+    "name": "baseline-nested-translated-parent",
+    "html": "<div id=\"before\"></div><div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div></div><div id=\"c\"></div></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#leaf{width:10px;height:10px;background:purple}#c{width:50px;height:40px;background:teal}#before{width:80px;height:20px;background:green}#p{align-self:center}",
+    "features": [
+      "L03",
+      "nested baseline",
+      "intrinsic extent",
+      "ancestor translation and alignment wrapper"
+    ]
+  }
+]

@@ -1,5 +1,7 @@
 # Safe and logical item alignment
 
+Historical checkpoint: current first-baseline admission and remaining restrictions are documented in [first-baseline-review.md](first-baseline-review.md). This supersedes earlier blanket baseline-rejection statements below.
+
 The compiler now admits `normal`, `start`, `end`, `self-start`, `self-end`, and `safe`/`unsafe` prefixes on positional `align-self` values in the existing horizontal LTR single-line box profile. The computed keyword identity survives inheritance; logical values are not permanently rewritten as physical aliases. `normal` stretches in this profile. Baseline remains unresolved and rejected. Writing modes and direction changes outside this profile are not admitted.
 
 Safe center/end use the existing perpendicular layout wrapper. Ordinary auto margins absorb positive free space along the wrapper's main axis: both margins for center, physical-start margin for end. When the item overflows, these margins collapse to zero and physical-start justification supplies the safe fallback. Unsafe values retain ordinary center/end overflow. Start values use direct sizing. This adds no runtime code, wire fields or host behavior, and does not yet admit authored CSS auto margins generally. Wrapper overhead remains at most one LayoutComponent/style pair per centered/end-aligned item.

@@ -145,3 +145,7 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## Public first-baseline compiler
 
 `validation/public-first-baseline-cases.json` covers 34 scenes with 272 passing geometry/pixel frames and 544 clear checks. All frames have visual review or exact transfer proof. `public-first-baseline-fractional-cases.json` separately preserves the known two-frame pixel failure. 84 Rust/23 Node tests, TypeScript and the immutable guard pass; 253 previous fixtures retain identical bytes/maps. See `validation/first-baseline-review.md` and `public-first-baseline-receipt.json` for current admission; historical experiment sections above do not describe the current public API.
+
+## Intrinsic first-baseline checkpoint
+
+`validation/public-baseline-intrinsic-cases.json` adds 16 public scenes: 128 geometry/pixel passes and 256 clear checks. All 16 distinct pairs were inspected; 112 exact decoded crop/extension transfers cover remaining frames. The frozen compiler reproduces all scenes, and 288 prior requests retain identical bytes/maps. Current suites pass 87 Rust and 24 Node tests, with TypeScript and immutable-source checks. See `validation/baseline-intrinsic-review.md` and `validation/public-baseline-intrinsic-receipt.json`. Broader baseline topology and last baseline remain unresolved.

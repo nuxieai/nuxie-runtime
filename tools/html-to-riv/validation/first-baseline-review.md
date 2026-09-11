@@ -6,7 +6,7 @@ The public compiler now admits `align-self: baseline` and `first baseline` for e
 
 Empty boxes can use fixed heights with fixed min/max bounds, or percentage heights with a fixed minimum and no maximum. The ordinary helper evaluates the maximum percentage coefficient with the maximum fixed floor against the original parent. Mixed non-baseline siblings are excluded from that baseline maximum but retain their layout and alignment.
 
-A fixed-height normal-column box can propagate a proven fixed baseline from its first order-modified descendant. The baseline must be within the box; ascent and descent contribute to parent extent. Nested summaries recurse through these evidenced forms. Combining responsive ascent with nonzero nested descent remains rejected, as do automatic-height baseline participants, explicit auto minima, percentage min/max bounds, capped percentage heights, last baseline, column baseline containers and unresolved nested row/reversed-column topology. Existing percentage-height guards still apply. Baseline inheritance preserves the keyword but cannot bypass these context restrictions.
+A fixed-height normal-column box can propagate a proven fixed baseline from its first order-modified descendant. The baseline must be within the box; ascent and descent contribute to parent extent. Nested summaries recurse through these evidenced forms. Combining responsive ascent with nonzero nested descent remains rejected, as do unresolved automatic-height baseline participants, explicit auto minima, percentage min/max bounds, capped percentage heights, last baseline, column baseline containers and unresolved nested row/reversed-column topology. Existing percentage-height guards still apply. Baseline inheritance preserves the keyword but cannot bypass these context restrictions.
 
 ## Ordinary file composition
 
@@ -23,3 +23,5 @@ All 84 Rust tests and 23 Node tests pass, including public CLI/WASM output and r
 The separate fractional nested row-reverse fixture passes all eight geometry frames but fails two pixel frames around a small leaf edge. All Chrome and native images exactly match the earlier experiment and its unconstrained public-compiler control. This remains a pixel limitation, not a passing qualification or a reason to alter tolerances. See public-first-baseline-receipt.json for all bindings. The earlier baseline experiment reviews are historical; this document supersedes their blanket public-baseline rejection statements.
 
 Further work includes automatic/intrinsic participant metrics, more nested topologies, last-baseline groups and broader bounded responsive expressions. These remain unresolved rather than impossible. The full backlog and immutable-runtime contract are unchanged.
+
+The subsequent intrinsic extension admits empty auto boxes and bounded normal-column intrinsic metrics; see baseline-intrinsic-review.md for its separate scope and evidence. Counts above describe this earlier checkpoint.

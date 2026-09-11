@@ -1,0 +1,79 @@
+{
+  "status": "qualified-bounded-intrinsic-first-baseline",
+  "scope": "Empty automatic boxes and provable intrinsic normal columns in single-line horizontal LTR row/reverse baseline groups. Not complete L03.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "frames": 128,
+  "geometryPass": 128,
+  "pixelPass": 128,
+  "clearPass": 256,
+  "visual": {
+    "directPairs": 16,
+    "exactDecodedTransfers": 112,
+    "review": "Four contact sheets inspected; no divergence observed."
+  },
+  "tests": {
+    "rust": 87,
+    "node": 24,
+    "typescript": "pass",
+    "immutableSourceGuard": "pass"
+  },
+  "priorOutputRegression": 288,
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/receipt.json",
+      "sha256": "c20181b8f8afc3239a73415e21ac9dc816b0ab2cbd7d5393f74119021e884e0e"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/visual-direct.json",
+      "sha256": "b20162f28916c382db41783b435920bf3178b97d42be00040c84b0d173d3acdd"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/visual-transfer.json",
+      "sha256": "5e4ac7790eef882e667a2b6539b61df437e39b326bffb6cffa02b15db84daa43"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-checkpoint-r1/manifest.json",
+      "sha256": "4aa932b826eb77f3b084884fc743fab69d50263b886404f062a48783e79efd81"
+    },
+    {
+      "path": "tools/html-to-riv/output/baseline-intrinsic-byte-regression-r1/manifest.json",
+      "sha256": "aaca4c42a4bd4f773c7613575e47f3c8275a5c925f27cf80d6eb78535e4a1b57"
+    },
+    {
+      "path": "tools/html-to-riv/output/baseline-intrinsic-rust-r1/cargo-test.log",
+      "sha256": "d5a174b66460557b939e5ee082d100bd2843f9dc33af44484f2230aa299b6583"
+    },
+    {
+      "path": "tools/html-to-riv/output/baseline-intrinsic-preparation-r1/node-tests.log",
+      "sha256": "d2a7de02019b4d0640be8ac509cb7855c1189215febb2d66a744a7713ee4583d"
+    },
+    {
+      "path": "tools/html-to-riv/output/baseline-intrinsic-preparation-r1/native-build.log",
+      "sha256": "1094a36867300c1838cdc4ee40efe961d83bac574665f8ee57a40d5b1e88698c"
+    },
+    {
+      "path": "tools/html-to-riv/output/baseline-intrinsic-preparation-r1/wasm-build.log",
+      "sha256": "43dc07c8cf0f3ea859d89526187389f6c248018e1f491620e2ed573414ea8591"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-baseline-intrinsic-cases.json",
+      "sha256": "58852f6bb177f5ace15cdaac0ec7c1140b63c5d0d20412b5aeca2d0ff94bbe5a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/visual-0.png",
+      "sha256": "d99e0feff4da0c510ff0c757285d1b5f6c20fe5c46fa21dbd5617526f428aff0"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/visual-4.png",
+      "sha256": "a5977ea0881f5354482370f23470b15828b85fcc41f127ee09a0488a1cc06b89"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/visual-8.png",
+      "sha256": "86f1a86cbd9a118ade4f7a2dd15a05a0bf3af52ebf6d4367ba0a43546dd0af37"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-baseline-intrinsic-r1/visual-12.png",
+      "sha256": "077a967e6238aadbf1db1daea40cdd9ee94c407ff72aab024dfd9d0a31b4ea01"
+    }
+  ]
+}

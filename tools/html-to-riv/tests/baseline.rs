@@ -59,7 +59,7 @@ fn zero_and_fixed_bounds_produce_finite_anchors() {
 fn unresolved_expressions_and_excessive_helper_extent_reject() {
     for css in [
         "#a{height:20px;align-self:baseline}",
-        "#p{flex-direction:row}#a{height:auto;align-self:baseline}",
+        "#p{flex-direction:row}#a{height:auto;min-height:auto;align-self:baseline}",
         "#p{flex-direction:row;height:100px}#a{height:50%;max-height:60px;align-self:baseline}",
         "#p{flex-direction:row;height:100px}#a{height:50%;align-self:baseline}#b{height:60px;align-self:baseline}#leaf{height:10px}",
         "#p{flex-direction:row}#b{height:0;align-self:baseline}#leaf{height:10px}",
@@ -67,4 +67,56 @@ fn unresolved_expressions_and_excessive_helper_extent_reject() {
         "#p{flex-direction:row}#a{height:1000000px;align-self:baseline}#b{height:1000000px;align-self:baseline}#leaf{height:1px}",
     ] {let errors=compile(&input(css)).expect_err(css);assert_eq!(errors[0].code,"unsupported-target-semantics");}
     for value in ["last baseline","safe baseline","unsafe baseline","safe first baseline","first","first baseline extra"] {assert!(compile(&input(&format!("#never{{align-self:{value}}}"))).is_err());}
+}
+
+#[test]
+fn intrinsic_empty_and_column_metrics_use_fixed_used_heights() {
+    for (bounds, expected_extent, expected_ascent) in [
+        ("", 80., 40.),
+        ("min-height:90px", 110., 40.),
+        ("max-height:30px", 50., 40.),
+        ("min-height:90px;max-height:30px", 110., 40.),
+    ] {
+        let request = CompileInput {
+            html: "<div id=p><div id=a><div id=x></div><div id=y></div></div><div id=b></div></div>".into(),
+            css: format!("#p{{flex-direction:row}}#a{{align-self:baseline;{bounds}}}#x{{height:20px;order:-1}}#y{{height:40px}}#b{{height:40px;align-self:first baseline}}"),
+            width:240., height:160.,
+        };
+        let output = compile(&request).unwrap();
+        let records = decoded(&output);
+        let helper = records.iter().filter(|(kind,_)|kind=="LayoutComponent").last().unwrap();
+        assert_eq!(helper.1["height"],json!(expected_extent));
+        let target = records.iter().find(|(kind,_)|kind=="TransformConstraint").unwrap();
+        assert!((target.1["originY"].as_f64().unwrap()-expected_ascent/expected_extent).abs()<1e-6);
+    }
+    for (bounds, height) in [("",0.), ("min-height:30px",30.), ("min-height:30px;max-height:10px",30.)] {
+        let request = CompileInput { html:"<div id=p><div id=a></div></div>".into(), css:format!("#p{{flex-direction:row}}#a{{align-self:baseline;{bounds}}}"),width:240.,height:160. };
+        let records=decoded(&compile(&request).unwrap());
+        assert_eq!(records.iter().filter(|(kind,_)|kind=="LayoutComponent").last().unwrap().1["height"],json!(height));
+    }
+}
+#[test]
+fn unresolved_intrinsic_metrics_and_oversized_sums_reject() {
+    for extra in [
+        "#a{min-height:auto}",
+        "#a{min-height:10%}",
+        "#a{max-height:10%}",
+        "#a{max-height:10px}",
+        "#x{height:60%}",
+        "#x{height:600000px}#y{height:600000px}#a{max-height:100px}",
+        "#a{flex-direction:column-reverse}",
+    ] {
+        let request=CompileInput {html:"<div id=p><div id=a><div id=x></div><div id=y></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{align-self:baseline}}#x{{height:20px}}#y{{height:40px}}{extra}"),width:240.,height:160.};
+        assert!(compile(&request).is_err(),"{extra}");
+    }
+}
+
+#[test]
+fn intrinsic_column_baseline_uses_first_order_modified_descendant() {
+    let request=CompileInput {html:"<div id=p><div id=a><div id=x></div><div id=y></div></div><div id=b></div></div>".into(),css:"#p{flex-direction:row}#a,#b{align-self:baseline}#x{height:20px}#y{height:40px;order:-1}#b{height:40px}".into(),width:240.,height:160.};
+    let output=compile(&request).unwrap();let records=decoded(&output);
+    assert_eq!(records.iter().filter(|(kind,_)|kind=="LayoutComponent").last().unwrap().1["height"],json!(60.));
+    let anchor=records.iter().find(|(kind,values)|kind=="ComponentOrigin" && values["parentId"]==json!(output.source_map[1].object_id)).unwrap();
+    assert!((anchor.1["originY"].as_f64().unwrap()-40./60.).abs()<1e-6);
+    assert_eq!(output.source_map.iter().map(|node|node.id.as_str()).collect::<Vec<_>>(),["p","a","x","y","b"]);
 }

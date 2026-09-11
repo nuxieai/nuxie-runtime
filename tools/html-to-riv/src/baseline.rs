@@ -15,8 +15,8 @@ pub(super) struct Child {
     pub participates: bool,
 }
 
-fn fixed_height(style: &Style) -> Option<f32> {
-    let Size::Pixels(height) = style.height else { return None };
+fn bounded_height(style: &Style, intrinsic: Option<f32>) -> Option<f32> {
+    let height = match style.height { Size::Pixels(height) => height, Size::Auto => intrinsic?, _ => return None };
     let Size::Pixels(minimum) = style.min_height else { return None };
     let maximum = match style.max_height { Size::Auto => MAX_SIZE, Size::Pixels(v) => v, _ => return None };
     Some(height.min(maximum).max(minimum))
@@ -24,7 +24,7 @@ fn fixed_height(style: &Style) -> Option<f32> {
 
 pub(super) fn summarize(style: &Style, children: &[Child]) -> Option<Metric> {
     if children.is_empty() {
-        if let Some(height) = fixed_height(style) {
+        if let Some(height) = bounded_height(style, Some(0.)) {
             return Some(Metric { ascent: Ascent::Fixed(height), descent: 0., origin: if height == 0. { 0. } else { 1. } });
         }
         if let (Size::Percent(percent), Size::Pixels(floor), Size::Auto) = (style.height, style.min_height, style.max_height) {
@@ -33,10 +33,23 @@ pub(super) fn summarize(style: &Style, children: &[Child]) -> Option<Metric> {
         return None;
     }
     // In the admitted zero-padding/margin profile, the first order-modified
-    // child of a column begins at y=0. Its baseline propagates through a fixed
-    // box. Other topology and responsive nested anchors need separate proof.
+    // child of a column begins at y=0. Its baseline propagates through a box
+    // with fixed or provable intrinsic height. Other topology and responsive
+    // nested anchors need separate proof.
     if !matches!(style.direction, Direction::Column) { return None; }
-    let height = fixed_height(style)?;
+    let intrinsic = if matches!(style.height, Size::Auto) {
+        let mut sum = 0.0_f32;
+        for child in children {
+            let metric = child.metric?;
+            let Ascent::Fixed(ascent) = metric.ascent else { return None };
+            sum += ascent + metric.descent;
+            // Guard the intrinsic expression before clamping: it must remain
+            // finite and bounded even when an authored maximum is smaller.
+            if !sum.is_finite() || sum > MAX_SIZE { return None; }
+        }
+        Some(sum)
+    } else { None };
+    let height = bounded_height(style, intrinsic)?;
     let first = children.iter().min_by_key(|child| (child.order, child.index))?;
     let Ascent::Fixed(ascent) = first.metric?.ascent else { return None };
     if ascent > height { return None; }

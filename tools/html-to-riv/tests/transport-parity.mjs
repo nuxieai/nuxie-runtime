@@ -195,7 +195,7 @@ test("unresolved baseline contexts have CLI/WASM diagnostic parity",async()=>{
  const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'baseline-rejection-parity-'));
  const html='<div id="p"><div id="a"></div></div>';
  try{
-  for(const css of ['#a{height:20px;align-self:baseline}','#p{flex-direction:row}#a{align-self:baseline}','#p{flex-direction:row;height:100px}#a{height:50%;max-height:60px;align-self:baseline}','#a{align-self:last baseline}','#a{align-self:safe baseline}']){
+  for(const css of ['#a{height:20px;align-self:baseline}','#p{flex-direction:row}#a{height:auto;min-height:auto;align-self:baseline}','#p{flex-direction:row;height:100px}#a{height:50%;max-height:60px;align-self:baseline}','#a{align-self:last baseline}','#a{align-self:safe baseline}']){
    const request={html,css,width:240,height:160},inputFile=path.join(dir,'input.json'),outputFile=path.join(dir,'scene.riv');
    fs.writeFileSync(inputFile,JSON.stringify(request));
    const cli=spawnSync(binary,[inputFile,outputFile],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
@@ -203,4 +203,10 @@ test("unresolved baseline contexts have CLI/WASM diagnostic parity",async()=>{
   }
   assert.equal(compiler.compile(document).ok,true);
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test("intrinsic first-baseline metrics have exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-baseline-intrinsic-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,16);
+ await assertCorpusParity(fixtures);
 });

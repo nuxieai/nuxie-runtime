@@ -506,7 +506,7 @@ impl Emitter {
             let descendants = self.children(element, object_id, &style, rules, &path, depth + 1)?;
             let metric = baseline::summarize(&style, &descendants);
             if style.self_alignment.is_baseline() && metric.is_none() {
-                return Err(unsupported(&path, "First baseline requires an evidenced empty fixed-height or unbounded percentage-height expression, or a fixed column descendant baseline within its box"));
+                return Err(unsupported(&path, "First baseline requires a bounded fixed or intrinsic box metric, or an empty unbounded percentage-height expression; nested columns need fixed descendant metrics and a baseline within their used height"));
             }
             children.push(baseline::Child { object_id, index, order, metric, participates: style.self_alignment.is_baseline() });
         }

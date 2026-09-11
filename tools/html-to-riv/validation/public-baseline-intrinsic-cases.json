@@ -1,0 +1,162 @@
+[
+  {
+    "name": "baseline-intrinsic-row-empty-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:auto;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "empty-auto"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-empty-auto-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:auto;min-height:30px;max-height:50px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "empty-auto-min"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-column-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-column-auto-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;min-height:60px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto-min"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-column-auto-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;max-height:30px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto-max"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-column-auto-order",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto-order"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-column-zero-first",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}#leaf{height:auto}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-zero-first"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-deep-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"><div id=\"leaf\"></div><div id=\"tail\"></div></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "deep-auto"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-empty-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:auto;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "empty-auto"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-empty-auto-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:auto;min-height:30px;max-height:50px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "empty-auto-min"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-column-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-column-auto-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;min-height:60px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto-min"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-column-auto-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;max-height:30px;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto-max"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-column-auto-order",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-auto-order"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-column-zero-first",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}#leaf{height:auto}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "column-zero-first"
+    ]
+  },
+  {
+    "name": "baseline-intrinsic-row-reverse-deep-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"><div id=\"leaf\"></div><div id=\"tail\"></div></div></div><div id=\"c\"></div></div><div id=\"after\"></div>",
+    "css": "#p{width:240px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:auto;background:gold}#c{width:50px;height:40px;background:teal}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:30px;background:orange}#after{width:120px;height:20px;background:green}",
+    "features": [
+      "L03",
+      "intrinsic participant metrics",
+      "deep-auto"
+    ]
+  }
+]

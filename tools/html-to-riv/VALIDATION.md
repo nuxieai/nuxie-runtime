@@ -135,3 +135,7 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## Safe and logical alignment
 
 `validation/public-align-safe-cases.json` adds21 scenes/168 passing geometry and pixel frames,336 clear checks, and independent Chrome computed alignment assertions.29 directly reviewed pairs plus139 exact image-transfer proofs cover every frame.79 Rust/21 Node tests, TypeScript and the immutable source guard pass;232 prior fixtures retain identical bytes/maps. See `validation/align-safe-review.md` and `validation/public-align-safe-receipt.json`. Baseline remains unresolved; these results do not qualify authored auto margins generally.
+
+## Baseline composition experiments
+
+`validation/baseline-landmark-review.md` records ordinary landmark constraints, percentage containing-block preservation, nested baseline positioning, and counterexamples involving changing baseline providers and automatic parent extents. `validation/baseline-landmark-receipt.json` binds the exact-fixture experiment sources, binaries, native results, visual scopes and preserved failures. Raw harness public labels do not qualify baseline language support. Baseline stays rejected by the public compiler.

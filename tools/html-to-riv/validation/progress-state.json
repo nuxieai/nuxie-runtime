@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Baseline alignment composition",
-  "status": "Safe/logical alignment qualified within the admitted profile",
-  "current": "Safe/logical alignment committed and qualified in its profile. Empty-box baseline groups pass48 frames; boundary experiments preserve32 failures from nested/mixed/last-baseline contexts and one percentage-height rejection.",
-  "next": "Investigate ordinary baseline landmarks while preserving containing blocks, item order and parent extents; retain public baseline rejection until proof.",
+  "focus": "Responsive baseline measurement and parent extent",
+  "status": "Ordinary landmark primitive validated experimentally; general baseline unresolved",
+  "current": "Landmark constraints pass24 frames for fixed/mixed/percentage boxes. Nested anchor control passes, but provider switching and automatic parent extent expose10 failing frames. Last-baseline unsafe end control passes; safe overflow counterexamples preserved.",
+  "next": "Investigate ordinary measurement compositions for maximum baseline ascent/descent and intrinsic parent extent; public baseline remains rejected.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Baseline landmarks, nested sizing failures and last-baseline overflow",
+      "path": "tools/html-to-riv/validation/baseline-landmark-receipt.json"
+    },
     {
       "label": "Baseline boundary failures and next composition candidate",
       "path": "tools/html-to-riv/validation/baseline-boundaries-receipt.json"
@@ -149,8 +153,8 @@
   ],
   "activeWork": [
     {
-      "name": "Baseline composition",
-      "work": "Boundary experiment complete; landmark composition and nested baseline propagation remain to investigate"
+      "name": "Baseline measurement",
+      "work": "Landmark primitive proven in exact fixtures; responsive maximum selection and parent sizing unresolved"
     }
   ],
   "publication": {

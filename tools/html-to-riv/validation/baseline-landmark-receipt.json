@@ -1,0 +1,61 @@
+{
+  "status": "experimental-baseline-compositions-only; public baseline still rejected",
+  "landmark": {
+    "manifest": {
+      "path": "output/baseline-landmark-r1/experiment-manifest.json",
+      "sha256": "724a8d4cbecab12054c787d97bcd5e9983df084ea1607ed6bd6f8db5a8808347"
+    },
+    "reproduction": {
+      "path": "output/baseline-landmark-r1/reproduction.json",
+      "sha256": "8d3df3cde324a8d1e75627e438182dd5bc609d8b6dfc13240118d44caefcdd6c"
+    },
+    "visual": {
+      "path": "output/baseline-landmark-r1/visual-transfer.json",
+      "sha256": "437096f220ad1cf1f55a8e4b8d072bdc19d6ffd3ae157c2a68a8f4545e3ad782"
+    },
+    "geometryPassed": 24,
+    "pixelsPassed": 24,
+    "clearPassed": 48,
+    "directPairs": 9,
+    "exactRepeatClonePairs": 15
+  },
+  "landmarkBoundaries": {
+    "manifest": {
+      "path": "output/baseline-landmark-boundaries-r1/experiment-manifest.json",
+      "sha256": "4bc3cf2ea5b936876cebf69a991dc27ae43d15f595a792cb5f8e520f8f2be171"
+    },
+    "geometryPassed": 14,
+    "geometryFailed": 10,
+    "pixelsPassed": 14,
+    "pixelsFailed": 10,
+    "clearPassed": 48,
+    "visualScope": "Three frame1 pairs inspected directly; remaining frames automated only",
+    "sheet": {
+      "path": "output/baseline-landmark-boundaries-r1/render/visual-0.png",
+      "sha256": "c62ae438d732f3915e4c076a6571d438a8c2a79a485657a19365f5018212cf3d"
+    }
+  },
+  "lastBaselineOverflow": {
+    "manifest": {
+      "path": "output/last-baseline-overflow-r1/experiment-manifest.json",
+      "sha256": "abc57d6330d4e61ef6a162ffcd31f8fd4fa40efc73ea289099c1f9fa3c6b9cba"
+    },
+    "geometryPassed": 48,
+    "geometryFailed": 16,
+    "pixelsPassed": 48,
+    "pixelsFailed": 16,
+    "clearPassed": 128,
+    "visualScope": "Eight frame1 pairs inspected directly; remaining frames automated only",
+    "sheets": [
+      {
+        "path": "output/last-baseline-overflow-r1/render-r2/visual-0.png",
+        "sha256": "a3fc7e373c74a619aa1ce5cac56369bf35f93f61bf397e8011da08c816cfedfe"
+      },
+      {
+        "path": "output/last-baseline-overflow-r1/render-r2/visual-4.png",
+        "sha256": "92318b619408d6ff93eb4f65f162ef56915ab45f515ea38aa65aa236509aa1aa"
+      }
+    ]
+  },
+  "qualification": "Raw driver public labels describe harness execution only. Exact-fixture adapters and selected baseline providers are not public language admission."
+}

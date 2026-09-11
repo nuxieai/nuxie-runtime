@@ -1,6 +1,6 @@
 //! Compiler-private ordinary paint-group lowering, not CSS admission.
 //! The caller must prove line anchors remain distinguishable by the immutable
-//! DistanceConstraint, coordinate/mask bounds, independent slot geometry, and
+//! DistanceConstraint after a derived dead zone, coordinate/mask bounds, independent slot geometry, and
 //! the supplied logical packing order and within-item paint order.
 use crate::{Diagnostic, wire::{Record, Value}};
 use std::collections::{BTreeMap, BTreeSet};
@@ -23,7 +23,7 @@ pub(super) fn paint_records(counts: &[usize]) -> Option<usize> {
         clips = clips.checked_add(j.checked_mul(count)?.checked_mul(2)?)?;
     }
     let pairs = n.checked_mul(n.checked_sub(1)?)?.checked_div(2)?;
-    n.checked_mul(8)?.checked_sub(5)?.checked_add(pairs.checked_mul(7)?)?
+    n.checked_mul(8)?.checked_sub(5)?.checked_add(pairs.checked_mul(20)?)?
         .checked_add(replicas.checked_mul(3)?)?
         .checked_add(replicas.checked_sub(1)?.checked_mul(2)?)?.checked_add(clips)
 }
@@ -46,12 +46,18 @@ fn descendant(records: &[Record], mut id: u32, ancestor: u32, slots: &BTreeSet<u
 
 /// Parent layout configuration is owned by the caller. This changes original
 /// color values only after all handles and the full expansion have validated.
+/// `epsilon` must cover same-line arithmetic error while leaving every distinct
+/// line difference above the normalizer threshold. No empirical default is used;
+/// validating a finite number here is not a layout admission certificate.
 pub(super) fn paint_items(
     records: &mut Vec<Record>, items: &[Item], row: bool, reverse_main: bool,
-    reverse_cross: bool, line_fraction: f32,
+    reverse_cross: bool, line_fraction: f32, epsilon: f32,
 ) -> Result<(), Diagnostic> {
     if ![0., 0.5, 1.].contains(&line_fraction) {
         return Err(invalid("Line fraction must be start, center or end"));
+    }
+    if !epsilon.is_finite() || !(0. ..DISTANCE).contains(&epsilon) {
+        return Err(invalid("Line gate epsilon must be finite, nonnegative and below the reset distance"));
     }
     let added = paint_records(&items.iter().map(|item| item.paints.len()).collect::<Vec<_>>())
         .ok_or_else(|| invalid("Paint expansion record count overflow"))?;
@@ -89,7 +95,7 @@ pub(super) fn paint_items(
     for item in items { for paint in &item.paints {
         records[paint.color as usize + 1].set("colorValue", Value::Color(0))?;
     }}
-    let mut graph = Graph { records, row, sources: BTreeMap::new(), signals: BTreeMap::new() };
+    let mut graph = Graph { records, row, epsilon, sources: BTreeMap::new(), signals: BTreeMap::new() };
     let origin = graph.add("Node", 0)?;
     let mut anchors = Vec::with_capacity(items.len());
     let fraction = if reverse_cross { 1. - line_fraction } else { line_fraction };
@@ -111,7 +117,7 @@ pub(super) fn paint_items(
             let invert = graph.add("Node", 0)?;
             graph.set(invert, if row { "y" } else { "x" }, Value::Float(DISTANCE))?;
             let constraint = graph.translation(invert, signal, false)?;
-            graph.set(constraint, if row { "copyFactorY" } else { "copyFactor" }, Value::Float(if reverse_cross { 1. } else { -1. }))?;
+            graph.set(constraint, if row { "copyFactorY" } else { "copyFactor" }, Value::Float(-1.))?;
             graph.set(constraint, "offset", Value::Bool(true))?;
             Some(graph.mask(invert)?)
         };
@@ -149,7 +155,7 @@ pub(super) fn paint_items(
     Ok(())
 }
 struct Graph<'a> {
-    records: &'a mut Vec<Record>, row: bool,
+    records: &'a mut Vec<Record>, row: bool, epsilon: f32,
     sources: BTreeMap<u32, u32>, signals: BTreeMap<(u32,u32), u32>,
 }
 impl Graph<'_> {
@@ -177,11 +183,52 @@ impl Graph<'_> {
         };
         let difference = self.add("Node", source)?; self.translation(difference, b, false)?;
         let gate = self.add("Node", 0)?; self.translation(gate, difference, true)?;
-        let clamp = self.add("DistanceConstraint", gate)?;
-        self.set(clamp, "targetId", Value::Uint(origin))?;
-        self.set(clamp, "modeValue", Value::Uint(2))?;
-        self.set(clamp, "distance", Value::Float(DISTANCE))?;
+        let gate = self.snapped(gate, origin)?;
         self.signals.insert((a,b), gate); Ok(gate)
+    }
+    fn scalar_copy(&mut self, parent: u32, target: u32, factor: f32, local: bool, minimum: bool) -> Result<u32, Diagnostic> {
+        let id = self.add("TranslationConstraint", parent)?;
+        self.set(id, "targetId", Value::Uint(target))?;
+        self.set(id, "doesCopy", Value::Bool(!self.row))?;
+        self.set(id, "doesCopyY", Value::Bool(self.row))?;
+        self.set(id, if self.row { "copyFactorY" } else { "copyFactor" }, Value::Float(factor))?;
+        if local { self.set(id, "destSpaceValue", Value::Uint(1))?; }
+        if minimum {
+            self.set(id, if self.row { "minY" } else { "min" }, Value::Bool(true))?;
+            self.set(id, if self.row { "minValueY" } else { "minValue" }, Value::Float(0.))?;
+        }
+        Ok(id)
+    }
+    fn scale(&mut self, target: u32, factor: f32) -> Result<u32, Diagnostic> {
+        let node = self.add("Node", 0)?;
+        self.scalar_copy(node, target, factor, false, false)?;
+        Ok(node)
+    }
+    fn snapped(&mut self, difference: u32, origin: u32) -> Result<u32, Diagnostic> {
+        // abs(difference), then max(0, abs(difference) - epsilon).
+        let negative = self.scale(difference, -1.)?;
+        let absolute = self.add("Node", difference)?;
+        let constraint = self.scalar_copy(absolute, negative, 1., false, true)?;
+        self.set(constraint, "minMaxSpaceValue", Value::Uint(1))?;
+        let epsilon = self.add("Node", 0)?;
+        self.set(epsilon, if self.row { "y" } else { "x" }, Value::Float(-self.epsilon))?;
+        let shifted = self.add("Node", absolute)?;
+        self.scalar_copy(shifted, epsilon, 1., true, false)?;
+        let dead = self.add("Node", 0)?;
+        self.scalar_copy(dead, shifted, 1., false, true)?;
+        let normalized = self.scale(dead, 1.)?;
+        let constraint = self.add("DistanceConstraint", normalized)?;
+        self.set(constraint, "targetId", Value::Uint(origin))?;
+        self.set(constraint, "modeValue", Value::Uint(2))?;
+        self.set(constraint, "distance", Value::Float(DISTANCE))?;
+        // Normalization is approximate in f32. Double and clamp to obtain an
+        // exact sentinel when the caller's separation proof exceeds the native
+        // 0.001 early-return region. Zero stays exactly zero.
+        let gate = self.add("Node", 0)?;
+        let constraint = self.scalar_copy(gate, normalized, 2., false, false)?;
+        self.set(constraint, if self.row { "maxY" } else { "max" }, Value::Bool(true))?;
+        self.set(constraint, if self.row { "maxValueY" } else { "maxValue" }, Value::Float(DISTANCE))?;
+        Ok(gate)
     }
     fn mask(&mut self, parent: u32) -> Result<u32, Diagnostic> {
         let shape = self.add("Shape", parent)?;
@@ -225,20 +272,20 @@ mod tests {
         for counts in [vec![],vec![0],vec![0,0,0],vec![1],vec![2,2,2],vec![0,3,1,0,2],vec![1;8],vec![2;32]] {
             for (row,main,cross,fraction) in [(true,false,false,0.),(false,true,false,0.5),(true,true,true,1.)] {
                 let (mut records,items)=fixture(&counts);let start=records.len();
-                paint_items(&mut records,&items,row,main,cross,fraction).unwrap();
+                paint_items(&mut records,&items,row,main,cross,fraction,0.015625).unwrap();
                 assert_eq!(records.len()-start,paint_records(&counts).unwrap());
                 crate::wire::encode(&records).unwrap();
             }
         }
-        assert_eq!(paint_records(&[1,1,1]),Some(74));
-        assert_eq!(paint_records(&[2,2,2]),Some(110));
+        assert_eq!(paint_records(&[1,1,1]),Some(113));
+        assert_eq!(paint_records(&[2,2,2]),Some(149));
         assert_eq!(paint_records(&[usize::MAX]),None);
         assert_eq!(paint_records(&[0,usize::MAX]),None);
     }
     #[test]
     fn replicas_preserve_fill_properties_color_and_item_paint_order() {
         let (mut records,items)=fixture(&[2,1]);let start=records.len();
-        let originals=records.clone();paint_items(&mut records,&items,true,true,true,0.5).unwrap();
+        let originals=records.clone();paint_items(&mut records,&items,true,true,true,0.5,0.015625).unwrap();
         for item in &items { for paint in &item.paints {
             assert!(matches!(record(&records,paint.color).unwrap().get("colorValue"),Some(Value::Color(0))));
             let mut restored=records[paint.color as usize+1].clone();
@@ -268,18 +315,27 @@ mod tests {
                 _=>{let slot=items[1].slot;records[slot as usize+1].set("parentId",Value::Uint(items[0].slot)).unwrap();let paint=items[1].paints.remove(0);items[0].paints.push(paint);},
             }
             let before=crate::wire::encode(&records).unwrap();
-            assert!(paint_items(&mut records,&items,true,false,false,0.).is_err(),"case {case}");
+            assert!(paint_items(&mut records,&items,true,false,false,0.,0.015625).is_err(),"case {case}");
             assert_eq!(crate::wire::encode(&records).unwrap(),before);
+        }
+    }
+    #[test]
+    fn invalid_thresholds_reject_before_paint_mutation() {
+        for epsilon in [f32::NAN, f32::INFINITY, -1., DISTANCE, DISTANCE * 2.] {
+            let (mut records, items) = fixture(&[1, 1]);
+            let before = crate::wire::encode(&records).unwrap();
+            assert!(paint_items(&mut records, &items, true, false, false, 0., epsilon).is_err());
+            assert_eq!(crate::wire::encode(&records).unwrap(), before);
         }
     }
     #[test]
     fn invalid_fractions_and_empty_paint_plans_are_nonmutating() {
         for fraction in [f32::NAN,f32::INFINITY,-1.,0.25,2.] {
             let (mut records,items)=fixture(&[1]);let before=crate::wire::encode(&records).unwrap();
-            assert!(paint_items(&mut records,&items,true,false,false,fraction).is_err());
+            assert!(paint_items(&mut records,&items,true,false,false,fraction,0.015625).is_err());
             assert_eq!(crate::wire::encode(&records).unwrap(),before);
         }
         let (mut records,items)=fixture(&[0,0]);let before=crate::wire::encode(&records).unwrap();
-        paint_items(&mut records,&items,true,false,false,0.).unwrap();assert_eq!(crate::wire::encode(&records).unwrap(),before);
+        paint_items(&mut records,&items,true,false,false,0.,0.015625).unwrap();assert_eq!(crate::wire::encode(&records).unwrap(),before);
     }
 }

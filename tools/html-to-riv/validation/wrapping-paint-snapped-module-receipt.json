@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "status": "validated-private-snapped-paint-lowering",
+  "publicAdmission": false,
+  "exactExperimentalFileMatches": 48,
+  "exactRepeatedOutputs": 48,
+  "rustTestsPassed": 112,
+  "epsilon": 0.015625,
+  "epsilonIsAdmissionCertificate": false,
+  "paintRecordsForThreeTwoPaintItems": 149,
+  "sourceBindings": {
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345",
+    "tools/html-to-riv/src/wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "tools/html-to-riv/src/wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/harness": "93d943d02c07ac38062465c15c71b90cbd9480ad395f25a1fc1b4cc9e3b2586c",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/harness.rs": "a06b48f192eace53678c18ce3a48beb420bb9db518c743c38115c2bc61169a99"
+  },
+  "evidence": {
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/build-command.json": "9c31e39a37e1c7e4fb6687f3a93d72cfd4aecf210d10c85d55ac7f91c57c8e5b",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/reproductions.json": "d879b2b749f8e2f04d4e9bbd1a6ed7459a5faea9301d53b8e1bd7e4ae6ae07ad",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/tests.log": "56090a924db5e64ead10394669e592b6dc571d11090aa597d55df976f1c75c49",
+    "tools/html-to-riv/validation/wrapped-snapped-layout-receipt.json": "8c449e14cb417a35b343fb7cd627569da6c4512370fe0f8a304c447546403dc1",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/native-build.log": "47d1ebe904a90b00c5b9e4f31a52db52e92ee8caeaa47e1a29a4a65b6baf0c9d",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/wasm-build.log": "d231cac8df467ac049607ac33f664002936b46ff9f2d951d0afda85ee4664aa3",
+    "tools/html-to-riv/output/wrapping-paint-snapped-module-r1/transport.log": "471d061b5c46efe6c72961ba02582f61aaa906a57e40ed9797dc07c1a302563c"
+  },
+  "limitations": [
+    "No public wrapping admission",
+    "Explicit threshold requires layout-derived error and separation proofs",
+    "Sizing stage retains previous unsnapped normalizer",
+    "Existing transition failure remains preserved",
+    "Whole-scene coordinate and resource bounds remain unresolved"
+  ],
+  "nodeTestsPassed": 31,
+  "typeScriptCheck": "pass",
+  "nativeBuild": "pass",
+  "wasmBuild": "pass"
+}

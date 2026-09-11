@@ -31,7 +31,7 @@ Admission is strict: the complete stylesheet is validated, including unmatched o
 ## Intentional exclusions and unresolved work
 
 - Text rendering, font assets, images, SVG/media and all asset input are not admitted.
-- Borders, border-radius, padding, margin, gaps, flex wrapping/grow/shrink, align-content, aspect ratio and positioning are not in the public declaration whitelist yet. Flex directions and the item/main-axis alignment profiles listed above are admitted. Ordinary-file experiments do not expand public support.
+- Borders, border-radius, padding, nonzero/percentage margins, gaps, flex wrapping/grow/shrink, align-content, aspect ratio and positioning are not in the public declaration whitelist yet. Flex directions and the item/main-axis alignment profiles listed above are admitted. Ordinary-file experiments do not expand public support.
 - Gradients, background-image/repeat, group opacity, transforms, clipping/overflow, decoration and blending declarations are not admitted.
 - Custom registrations and variable mutation, calc(), relative units beyond the admitted em/rem contexts, at-rules/media queries and stylesheet nesting are not in the current public computed-style path. Parser-internal groundwork does not establish admission.
 - CSS Grid, scripts, interactions, bindings, animation and editor integration remain excluded. No implicit raster, fixed-layout or recompile-on-resize fallback is enabled.
@@ -64,3 +64,5 @@ Flex direction qualification:41feature scenes pass328geometry/pixel frames with 
 ## Staged wrapping implementation
 
 Wrapping remains outside public admission. Compiler-private sizing and paint primitives reproduce the validated combined files exactly; they are not callable CSS support. Coordinate and visibility-gate bounds, intrinsic sizing, default normal/stretch line distribution, nested paint scopes and scene-wide resource guards remain unresolved. The snapped visibility-gate experiment repairs demonstrated rounding, but requires a layout-derived epsilon and separation bounds. See validation/public-wrap-plan.md, validation/wrapping-paint-lowering-review.md and validation/wrapped-snapped-gate-review.md.
+
+The private paint module now reproduces all48 dynamic snapped-layout files exactly with an explicit experimental threshold. See validation/wrapping-paint-snapped-module-review.md. This supersedes the selected private paint construction, without expanding public admission.

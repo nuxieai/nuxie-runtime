@@ -1,0 +1,116 @@
+{
+  "status": "passed-experimental-snapped-wrapped-paint-selectors",
+  "publicAdmission": false,
+  "scope": "Only paint selector arithmetic changed; sizing stage retains old normalizer. Overrides raw public driver labels.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-layout-r1",
+  "epsilon": 0.015625,
+  "epsilonStatus": "Explicit experimental constant, not layout-derived proof",
+  "distance": 65536,
+  "counts": {
+    "cases": 48,
+    "frames": 384,
+    "geometryPass": 384,
+    "pixelPass": 384,
+    "clearPass": 768,
+    "exactReproductions": 48,
+    "priorFullRgbaPairs": 384,
+    "exactBinaryFrames": 384,
+    "dynamicCases": 48,
+    "cloneMatchedCases": 48,
+    "recordCounts": [
+      [
+        175,
+        324,
+        149
+      ]
+    ]
+  },
+  "toolHashes": {
+    "compiler": "1ac67831c10ce9b0e8407c1c3257646b6ed7dfd74cfde6fe5d4332a345b8efe4",
+    "probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-layout-r1/paint-src/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-layout-r1/paint-augment"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345"
+  },
+  "hashes": {
+    "review.md": "be86da20f62d5d1da05d7a2d9984a7c62b98f26326c3ea64a21c5bf00825e678",
+    "build-command.json": "275dc20a7bf9ba266ba94bf3e525db53a230ed10e4b88bd06f34aba93b7bc99a",
+    "paint-src/main.rs": "313483d064697a07c635dccc361230108357d352e2813d47ef31695b89ddde02",
+    "paint-src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "paint-augment": "5fc4e41b65dee659bc8873a9ced9631e96e271d2b6b6f3ef263c49b1ec4592fb",
+    "slot-src/main.rs": "65e052fdf0a11f00117305514ae7a0e35076d8173748f4efeca2b77986afa257",
+    "slot-src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "size-augment": "19801c0f1441c8e16811bedffa283fcc8aaf94fa38f09b6564924e3954fe7afe",
+    "adapter.py": "1ac67831c10ce9b0e8407c1c3257646b6ed7dfd74cfde6fe5d4332a345b8efe4",
+    "pairs.json": "7e0b457f9fed4f16036459e359377094b87e167654c9c35122fc5496f896e9e6",
+    "chrome-cases.json": "074e133f8d6a282c74edbb386793a00bd9218b508f1bb91a14934da9d4b0f45c",
+    "collect.py": "34d57ebbfda68edfddf24617b6ce2fbac71a87cddb7f9acbd3dca7dbf39706ff",
+    "render/receipt.json": "7e79e22f421fa77ff6c4bd79945fd37cf3ede317d85c03d9de9375fbd7adf3ff",
+    "counts.json": "1aa0ead6e0fddf615f3b0c79ad84bef833a49c99c69d3cbc3f21906d46576132",
+    "observed-signals.json": "177390ef3af5e3565e48299e7f047665dc8b16cd84e98d766ae8f98053c5305b",
+    "signal-flips.json": "b2ca4eb6bc556b785bf85ff27b4dd860e8dfdcf6ab056f31387cec8607c7d699",
+    "sizing-identity.json": "d1290a7b3f475e924c0bcd9e27765887864788a870b1837b32504cb9b55b64cf",
+    "prior-pixel-identity.json": "7ebac187100bbffadef8768f6604a522e540ed078ab5d6e4f8292f957844eb85",
+    "reproductions.json": "cd976d298a6c68b73bb6b98fca528341f713153cb2733b28d749e25fced48ef2",
+    "visual-review-transfer.json": "a184389f8248f6fa472b95dbb196112520125873b6208cdd4ebd3160094cb939",
+    "visual-0.png": "210d1bb7c958f5636b3b1ff1078a33def416757513065c9b34a8e2d5fd561ca4",
+    "visual-1.png": "ad96bce9d397661abd5f564357c364b426ef858dba48d3f643cb747f8b82be97"
+  },
+  "externalBindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-optimized-r1/experiment-manifest.json": "5a39703a509b89cbf528df26c9ba1ee5b3b136d72b40fb2618565c37dd325d5f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-optimized-r1/render/receipt.json": "03f13d5a0304c01439ba7e1ee4bf22c95609f00e0a3d530a5f7a885cc18df53e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-optimized-r1/visual-review-transfer.json": "8410774100db262212a923f5e02fd2585c6fbe9507390bf7b10e47daf41b36a9",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-combined-slots-receipt.json": "e7aa6faa033e4b7fe2adb85cb30a044e9761f25df530f06a4b4c1a900b1afeb5",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-snapped-gate-receipt.json": "b97b7bcbc6c819475659791edef75d7be8876d326bd080aa63fe05efec087742",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1/node-probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-snapped-gate-r1/node-probe.rs": "d1ddace846419faf1a01051ad2bc38f0d7699b7caf135bc56a41b86a28a58ffc",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72"
+  },
+  "visual": {
+    "scope": "Complete visual evidence transfer through independent full decodedRGBA equality; two additional direct views only.",
+    "currentPairsIdentical": 384,
+    "independentImageComparisons": 768,
+    "identitySha256": "7ebac187100bbffadef8768f6604a522e540ed078ab5d6e4f8292f957844eb85",
+    "optimizedTransferSha256": "8410774100db262212a923f5e02fd2585c6fbe9507390bf7b10e47daf41b36a9",
+    "originalBasisReceiptSha256": "e7aa6faa033e4b7fe2adb85cb30a044e9761f25df530f06a4b4c1a900b1afeb5",
+    "originalDirectPairs": 96,
+    "originalTransfers": 288,
+    "newDirectViews": [
+      {
+        "case": "combined-slot-row-wrap-reverse-flex-end-percentage-normal-main",
+        "frame": 1,
+        "sheet": "visual-0.png",
+        "sha256": "210d1bb7c958f5636b3b1ff1078a33def416757513065c9b34a8e2d5fd561ca4"
+      },
+      {
+        "case": "combined-slot-column-wrap-reverse-flex-end-percentage-normal-main",
+        "frame": 1,
+        "sheet": "visual-1.png",
+        "sha256": "ad96bce9d397661abd5f564357c364b426ef858dba48d3f643cb747f8b82be97"
+      }
+    ]
+  },
+  "sourceDiff": "--- prior paint-src/main.rs\n+++ snapped paint-src/main.rs\n@@ -6,7 +6,11 @@\n fn records(b:&[u8])->Vec<Record>{assert_eq!(&b[..7],b\"RIVE\\x07\\x03\\x00\");let mut i=7;let mut count=0;while vu(b,&mut i)!=0{count+=1}i+=((count+3)/4)*4;let mut out=vec![];while i<b.len(){let d=definition_by_type_key(vu(b,&mut i)as u16).unwrap();let mut r=Record::new(d.name);loop{let key=vu(b,&mut i)as u16;if key==0{break}let prop=d.property_by_key_in_hierarchy(key).unwrap();let v=match prop.runtime_type{FieldKind::Uint=>Value::Uint(vu(b,&mut i)),FieldKind::Double=>{let v=f32::from_le_bytes(b[i..i+4].try_into().unwrap());i+=4;Value::Float(v)},FieldKind::Color=>{let v=u32::from_le_bytes(b[i..i+4].try_into().unwrap());i+=4;Value::Color(v)},FieldKind::String|FieldKind::Bytes=>{let n=vu(b,&mut i)as usize;let bytes=b[i..i+n].to_vec();i+=n;if prop.runtime_type==FieldKind::String{Value::String(String::from_utf8(bytes).unwrap())}else{Value::Bytes(bytes)}},FieldKind::Bool=>{let v=b[i]!=0;i+=1;Value::Bool(v)},other=>panic!(\"unexpected field kind: {:?}\",other)};r.set(prop.name,v).unwrap()}out.push(r)}out}\n fn add(r:&mut Vec<Record>,kind:&'static str,parent:u32)->u32{let id=r.len()as u32-1;let mut v=Record::new(kind);v.set(\"parentId\",Value::Uint(parent)).unwrap();r.push(v);id}\n fn translation(r:&mut Vec<Record>,parent:u32,target:u32,local:bool,row:bool){let id=add(r,\"TranslationConstraint\",parent);let q=&mut r[id as usize+1];q.set(\"targetId\",Value::Uint(target)).unwrap();q.set(\"doesCopy\",Value::Bool(!row)).unwrap();q.set(\"doesCopyY\",Value::Bool(row)).unwrap();q.set(\"sourceSpaceValue\",Value::Uint(if local{1}else{0})).unwrap();}\n-fn signal(r:&mut Vec<Record>,a:u32,b:u32,origin:u32,row:bool,parents:&mut std::collections::BTreeMap<u32,u32>,signals:&mut std::collections::BTreeMap<(u32,u32),u32>)->u32{if let Some(id)=signals.get(&(a,b)){return *id;} let i=*parents.entry(a).or_insert_with(||{let i=add(r,\"Node\",0);translation(r,i,a,false,row);i});let j=add(r,\"Node\",i);translation(r,j,b,false,row);let gate=add(r,\"Node\",0);translation(r,gate,j,true,row);let d=add(r,\"DistanceConstraint\",gate);r[d as usize+1].set(\"targetId\",Value::Uint(origin)).unwrap();r[d as usize+1].set(\"modeValue\",Value::Uint(2)).unwrap();r[d as usize+1].set(\"distance\",Value::Float(65536.)).unwrap();signals.insert((a,b),gate);gate}\n+fn copy(r:&mut Vec<Record>,parent:u32,target:u32,f:f32,row:bool,local:bool,min:bool)->u32{let c=add(r,\"TranslationConstraint\",parent);let q=&mut r[c as usize+1];q.set(\"targetId\",Value::Uint(target)).unwrap();q.set(\"doesCopy\",Value::Bool(!row)).unwrap();q.set(\"doesCopyY\",Value::Bool(row)).unwrap();q.set(if row{\"copyFactorY\"}else{\"copyFactor\"},Value::Float(f)).unwrap();if local{q.set(\"destSpaceValue\",Value::Uint(1)).unwrap();}if min{q.set(if row{\"minY\"}else{\"min\"},Value::Bool(true)).unwrap();q.set(if row{\"minValueY\"}else{\"minValue\"},Value::Float(0.)).unwrap();}c}\n+fn scale(r:&mut Vec<Record>,a:u32,f:f32,row:bool)->u32{let n=add(r,\"Node\",0);copy(r,n,a,f,row,false,false);n}\n+fn sum(r:&mut Vec<Record>,a:u32,b:u32,row:bool)->u32{let n=add(r,\"Node\",a);copy(r,n,b,1.,row,true,false);n}\n+fn snapped(r:&mut Vec<Record>,difference:u32,origin:u32,row:bool)->u32{let neg=scale(r,difference,-1.,row);let absolute=add(r,\"Node\",difference);let c=copy(r,absolute,neg,1.,row,false,true);r[c as usize+1].set(\"minMaxSpaceValue\",Value::Uint(1)).unwrap();let epsilon=add(r,\"Node\",0);r[epsilon as usize+1].set(if row{\"y\"}else{\"x\"},Value::Float(-0.015625)).unwrap();let shifted=sum(r,absolute,epsilon,row);let dead=add(r,\"Node\",0);copy(r,dead,shifted,1.,row,false,true);let normalized=scale(r,dead,1.,row);let c=add(r,\"DistanceConstraint\",normalized);r[c as usize+1].set(\"targetId\",Value::Uint(origin)).unwrap();r[c as usize+1].set(\"modeValue\",Value::Uint(2)).unwrap();r[c as usize+1].set(\"distance\",Value::Float(65536.)).unwrap();let gate=add(r,\"Node\",0);let c=copy(r,gate,normalized,2.,row,false,false);r[c as usize+1].set(if row{\"maxY\"}else{\"max\"},Value::Bool(true)).unwrap();r[c as usize+1].set(if row{\"maxValueY\"}else{\"maxValue\"},Value::Float(65536.)).unwrap();eprintln!(\"snapped difference={} dead={} normalized={} gate={}\",difference,dead,normalized,gate);gate}\n+fn signal(r:&mut Vec<Record>,a:u32,b:u32,origin:u32,row:bool,parents:&mut std::collections::BTreeMap<u32,u32>,signals:&mut std::collections::BTreeMap<(u32,u32),u32>)->u32{if let Some(id)=signals.get(&(a,b)){return *id;} let i=*parents.entry(a).or_insert_with(||{let i=add(r,\"Node\",0);translation(r,i,a,false,row);i});let j=add(r,\"Node\",i);translation(r,j,b,false,row);let gate=add(r,\"Node\",0);translation(r,gate,j,true,row);let gate=snapped(r,gate,origin,row);signals.insert((a,b),gate);gate}\n fn mask(r:&mut Vec<Record>,gate:u32)->u32{let shape=add(r,\"Shape\",gate);let rect=add(r,\"Rectangle\",shape);for(name,v)in[(\"x\",16384.),(\"y\",16384.),(\"width\",32768.),(\"height\",32768.)]{r[rect as usize+1].set(name,Value::Float(v)).unwrap();}shape}\n fn clip(r:&mut Vec<Record>,fg:u32,shape:u32){let c=add(r,\"ClippingShape\",fg);r[c as usize+1].set(\"sourceId\",Value::Uint(shape)).unwrap();}\n-fn main(){let args:Vec<_>=std::env::args().collect();let raw=std::fs::read(&args[1]).unwrap();let mut r=records(&raw);assert_eq!(wire::encode(&r).unwrap(),raw);let ids:Vec<u32>=args[3].split(',').map(|x|x.parse().unwrap()).collect();let original_record_count=r.len();let colors:Vec<_>=ids[4..].iter().map(|leaf|r[*leaf as usize+4].clone()).collect();let reverse_wrap=&args[4]==\"wrap-reverse\";let direction:u32=args[5].parse().unwrap();let row=direction>=2;let reverse_main=direction==1||direction==3;let parent=ids[0];r[parent as usize+2].set(\"flexDirectionValue\",Value::Uint(direction)).unwrap();r[parent as usize+2].set(\"flexWrapValue\",Value::Uint(if reverse_wrap{2}else{1})).unwrap();r[parent as usize+2].set(\"layoutAlignmentType\",Value::Uint(args[7].parse().unwrap())).unwrap();if args[6]!=\"none\"{for spec in args[6].split(','){let a:Vec<_>=spec.split(':').collect();r[a[0].parse::<usize>().unwrap()+2].set(\"layoutAlignmentType\",Value::Uint(a[1].parse().unwrap())).unwrap();}}for leaf in &ids[4..]{r[*leaf as usize+4].set(\"colorValue\",Value::Color(0)).unwrap();}let origin=add(&mut r,\"Node\",0);let mut anchors=vec![];for id in &ids[1..4]{let node=add(&mut r,\"Node\",0);let c=add(&mut r,\"TransformConstraint\",node);r[c as usize+1].set(\"targetId\",Value::Uint(*id)).unwrap();r[c as usize+1].set(if row{\"originY\"}else{\"originX\"},Value::Float(args[8].parse().unwrap())).unwrap();anchors.push(node);}let mut groups=vec![0usize,1,2];let mut members=vec![0usize,1,2];if reverse_wrap{groups.reverse();}if reverse_main{members.reverse();}let mut paints=vec![];let mut parents=std::collections::BTreeMap::new();let mut signals=std::collections::BTreeMap::new();for i in groups{let leader=if i==0{None}else{let signal=signal(&mut r,anchors[i-1],anchors[i],origin,row,&mut parents,&mut signals);let invert=add(&mut r,\"Node\",0);r[invert as usize+1].set(if row{\"y\"}else{\"x\"},Value::Float(65536.)).unwrap();translation(&mut r,invert,signal,false,row);let c=r.last_mut().unwrap();c.set(if row{\"copyFactorY\"}else{\"copyFactor\"},Value::Float(if reverse_wrap{1.}else{-1.})).unwrap();c.set(\"offset\",Value::Bool(true)).unwrap();Some(mask(&mut r,invert))};for &j in &members{if j<i{continue;}let membership=if i==j{None}else{let gate=signal(&mut r,anchors[i],anchors[j],origin,row,&mut parents,&mut signals);Some(mask(&mut r,gate))};for offset in 0..2 { let index=j*2+offset;let fg=add(&mut r,\"ForegroundLayoutDrawable\",ids[index+4]);let fill=add(&mut r,\"Fill\",fg);let mut color=colors[index].clone();color.set(\"parentId\",Value::Uint(fill)).unwrap();r.push(color);if let Some(mask)=leader{clip(&mut r,fg,mask);}if let Some(mask)=membership{clip(&mut r,fg,mask);}paints.push(fg);}}}for pair in paints.windows(2){let rule=add(&mut r,\"DrawRules\",pair[0]);let target=add(&mut r,\"DrawTarget\",rule);r[rule as usize+1].set(\"drawTargetId\",Value::Uint(target)).unwrap();r[target as usize+1].set(\"drawableId\",Value::Uint(pair[1])).unwrap();r[target as usize+1].set(\"placementValue\",Value::Uint(1)).unwrap();}assert_eq!(r.len()-original_record_count,110);eprintln!(\"records raw={} output={} added={}\",original_record_count,r.len(),r.len()-original_record_count);std::fs::write(&args[2],wire::encode(&r).unwrap()).unwrap();}\n+fn main(){let args:Vec<_>=std::env::args().collect();let raw=std::fs::read(&args[1]).unwrap();let mut r=records(&raw);assert_eq!(wire::encode(&r).unwrap(),raw);let ids:Vec<u32>=args[3].split(',').map(|x|x.parse().unwrap()).collect();let original_record_count=r.len();let colors:Vec<_>=ids[4..].iter().map(|leaf|r[*leaf as usize+4].clone()).collect();let reverse_wrap=&args[4]==\"wrap-reverse\";let direction:u32=args[5].parse().unwrap();let row=direction>=2;let reverse_main=direction==1||direction==3;let parent=ids[0];r[parent as usize+2].set(\"flexDirectionValue\",Value::Uint(direction)).unwrap();r[parent as usize+2].set(\"flexWrapValue\",Value::Uint(if reverse_wrap{2}else{1})).unwrap();r[parent as usize+2].set(\"layoutAlignmentType\",Value::Uint(args[7].parse().unwrap())).unwrap();if args[6]!=\"none\"{for spec in args[6].split(','){let a:Vec<_>=spec.split(':').collect();r[a[0].parse::<usize>().unwrap()+2].set(\"layoutAlignmentType\",Value::Uint(a[1].parse().unwrap())).unwrap();}}for leaf in &ids[4..]{r[*leaf as usize+4].set(\"colorValue\",Value::Color(0)).unwrap();}let origin=add(&mut r,\"Node\",0);let mut anchors=vec![];for id in &ids[1..4]{let node=add(&mut r,\"Node\",0);let c=add(&mut r,\"TransformConstraint\",node);r[c as usize+1].set(\"targetId\",Value::Uint(*id)).unwrap();r[c as usize+1].set(if row{\"originY\"}else{\"originX\"},Value::Float(args[8].parse().unwrap())).unwrap();anchors.push(node);}let mut groups=vec![0usize,1,2];let mut members=vec![0usize,1,2];if reverse_wrap{groups.reverse();}if reverse_main{members.reverse();}let mut paints=vec![];let mut parents=std::collections::BTreeMap::new();let mut signals=std::collections::BTreeMap::new();for i in groups{let leader=if i==0{None}else{let signal=signal(&mut r,anchors[i-1],anchors[i],origin,row,&mut parents,&mut signals);let invert=add(&mut r,\"Node\",0);r[invert as usize+1].set(if row{\"y\"}else{\"x\"},Value::Float(65536.)).unwrap();translation(&mut r,invert,signal,false,row);let c=r.last_mut().unwrap();c.set(if row{\"copyFactorY\"}else{\"copyFactor\"},Value::Float(-1.)).unwrap();c.set(\"offset\",Value::Bool(true)).unwrap();Some(mask(&mut r,invert))};for &j in &members{if j<i{continue;}let membership=if i==j{None}else{let gate=signal(&mut r,anchors[i],anchors[j],origin,row,&mut parents,&mut signals);Some(mask(&mut r,gate))};for offset in 0..2 { let index=j*2+offset;let fg=add(&mut r,\"ForegroundLayoutDrawable\",ids[index+4]);let fill=add(&mut r,\"Fill\",fg);let mut color=colors[index].clone();color.set(\"parentId\",Value::Uint(fill)).unwrap();r.push(color);if let Some(mask)=leader{clip(&mut r,fg,mask);}if let Some(mask)=membership{clip(&mut r,fg,mask);}paints.push(fg);}}}for pair in paints.windows(2){let rule=add(&mut r,\"DrawRules\",pair[0]);let target=add(&mut r,\"DrawTarget\",rule);r[rule as usize+1].set(\"drawTargetId\",Value::Uint(target)).unwrap();r[target as usize+1].set(\"drawableId\",Value::Uint(pair[1])).unwrap();r[target as usize+1].set(\"placementValue\",Value::Uint(1)).unwrap();}assert_eq!(r.len()-original_record_count,149);eprintln!(\"records raw={} output={} added={}\",original_record_count,r.len(),r.len()-original_record_count);std::fs::write(&args[2],wire::encode(&r).unwrap()).unwrap();}\n",
+  "preservedFailure": "Earlier standalone epsilon+0.0005 transition yields nonbinary gate. Retained receipt is hash-bound; this fixed48-scene corpus has no failures.",
+  "observer": "Same read-only all-WorldTransformComponent observer as primitive experiment, with source/binary and exact two-substitution immutable-dependency receipt hash-bound."
+}

@@ -2,10 +2,14 @@
   "updated": "2026-09-11",
   "focus": "Automatic margins and guarded wrapping integration",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
-  "current": "Public auto margins pass688geometry/680pixel comparisons;8fractional descendant failures retained.111Rust/31Node tests pass and482prior outputs are unchanged. Private wrapping sizing and paint primitives reproduce the proven files; snapped gating fixes bounded rounding cases.",
+  "current": "Automatic margins retain8pixel failures. Private snapped paint lowering now reproduces48dynamic experiment files exactly, twice;112Rust tests pass. Public wrapping remains unadmitted pending coordinate/separation and sizing proofs.",
   "next": "Investigate remaining fractional margin pixel limits; derive layout-coordinate certificates and integrate snapped gating before public wrapping. Continue independent grow/shrink and remaining backlog work.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Current private snapped paint implementation",
+      "path": "tools/html-to-riv/validation/wrapping-paint-snapped-module-receipt.json"
+    },
     {
       "label": "Public auto margins, retained pixel failures and regression",
       "path": "tools/html-to-riv/validation/public-auto-margins-final-receipt.json"

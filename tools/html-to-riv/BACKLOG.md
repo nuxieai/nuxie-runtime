@@ -18,8 +18,8 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | A06 | Solid-color `background` shorthand | qualified (solid fills) | Single color/currentColor/none/CSS-wide forms, ordering/important/inline precedence and inherited sentinel validated with 14 scenes. Other constituents rejected; see validation/public-background-receipt.json. |
 | A07 | `font` shorthand | investigating | Ordinary embedded-font import/clone works. Initial 24 pixel comparisons fail; expanded paint/font experiments pass 48/88, with small-size failures preserved. Duplicate Fill is a bounded candidate; line metrics and general typography remain unresolved. Public font/text admission and shorthand remain pending. See validation/ordinary-text-review.md. |
 | A08 | Unitless line-height | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| A09 | `em` lengths | pending | Immutable-target audit and revalidation required; historical status: partial. |
-| A10 | `rem` lengths | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A09 | `em` lengths | partial | Width/height and compiler-side font-size context pass64 public geometry/pixel frames, original/clone resize, CLI/WASM parity and visual review. Other property contexts remain pending. See validation/public-font-relative-receipt.json. |
+| A10 | `rem` lengths | partial | Width/height and font-size context validated against explicit16px root reset. Broader property contexts remain pending; see validation/public-font-relative-receipt.json. |
 | A11 | Percentage min/max dimensions | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A12 | Letter spacing | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A13 | Word spacing | pending | Immutable-target audit and revalidation required; historical status: partial. |

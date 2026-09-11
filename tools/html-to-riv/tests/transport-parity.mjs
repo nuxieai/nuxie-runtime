@@ -111,3 +111,9 @@ test('solid background shorthand has exact CLI/WASM corpus parity',async()=>{
  assert(fixtures.length>=10,'background corpus must retain cascade, inheritance and literal controls');
  await assertCorpusParity(fixtures);
 });
+
+test('font-relative box dimensions have exact CLI/WASM corpus parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-font-relative-cases.json',import.meta.url)));
+ assert.equal(fixtures.length,8);
+ await assertCorpusParity(fixtures);
+});

@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Ordinary embedded text: fidelity investigation",
-  "status": "Font provisioning proved; text remains unqualified",
-  "current": "Ordinary embedded text survives import and original/clone resize. Expanded paint/font experiments pass 48 of 88 additional frames, but small-size fidelity fails. All 11 new review sheets inspected; text remains unadmitted. Existing solid-fill qualifications are unchanged.",
-  "next": "Test compiler-owned derivative font outlines with identity and shaping controls. Continue independent backlog work while typography remains unresolved.",
+  "focus": "Font-relative dimensions implemented; text candidate rejected",
+  "status": "em/rem box context validated; typography unresolved",
+  "current": "Eight font-relative sizing scenes pass64 native/Chrome geometry and pixel frames plus128 clear controls. Derivative-font normal hinting fails all64 experimental text frames and changes cap/x-height; failures preserved. Runtime remains immutable.",
+  "next": "Investigate A11 percentage min/max dimensions against ordinary layout properties, while retaining unresolved typography work.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Font-relative box support evidence",
+      "path": "tools/html-to-riv/validation/public-font-relative-receipt.json"
+    },
+    {
+      "label": "Font-relative Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-font-relative-r1/gallery.html"
+    },
+    {
+      "label": "Failed derivative-font candidate",
+      "path": "tools/html-to-riv/validation/derivative-font-receipt.json"
+    },
     {
       "label": "Expanded text checkpoint: 48/88 passes, failures preserved",
       "path": "tools/html-to-riv/validation/ordinary-text-matrix-receipt.json"

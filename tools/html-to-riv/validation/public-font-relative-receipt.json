@@ -1,0 +1,61 @@
+{
+  "scope": "em/rem width and height with compiler-owned computed font-size context; no glyph admission",
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-checkpoint-r1/manifest.json",
+    "sha256": "b343872edd45c4e2a2d5574ac77e09b7c1b4657fe9d80947f050b18f9ea9c52c"
+  },
+  "run": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/receipt.json",
+    "sha256": "5661009df9fe2772a6eadb9158ed29482e8e955247ec0f262a6e3e203f4df82f"
+  },
+  "frames": 64,
+  "geometryPass": 64,
+  "pixelPass": 64,
+  "clearPass": 128,
+  "visualReview": {
+    "directPairs": 24,
+    "sheets": [
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-computed-order/review.png",
+        "sha256": "e6f5ce2440f3af11aef1f9989721d49b0c215823fa2317000e40dc1d496e5019"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-css-wide-font/review.png",
+        "sha256": "7925320ede9a8866565f6c0210e2cbd95d854d9da284e6ffe94623d526673fbf"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-font-cascade/review.png",
+        "sha256": "ed081781c76253f78344c06726f518fe93c4418ab3ed6e6d3b2961b930740223"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-inherited-dimension/review.png",
+        "sha256": "53ec404395d45cd51af8f5548fa2fe1a944655f5e3e7e1dfa5c9cf0a7d4d18d2"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-nested-fonts/review.png",
+        "sha256": "e750d535e32dc642c7c19baae4ab1faad1ce48510f8faeb0fed8a1a0630d03dd"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-percent-parent/review.png",
+        "sha256": "958b237e8a0570361da4ab75600732af839fa1f8160e570c0200120bf1dfe7bc"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/em-zero-fraction/review.png",
+        "sha256": "5c325c88b482d527bf79fbb2878c48732611f2dc9fe66ad37cef496006696f31"
+      },
+      {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-font-relative-r1/rem-root-context/review.png",
+        "sha256": "4e72ac672fe8ae552e855423e9c49a28f5f2dcd23ede5e4fd7f0f7b7f994f280"
+      }
+    ]
+  },
+  "tests": {
+    "rust": 35,
+    "node": 10
+  },
+  "limitations": [
+    "Fixed root font-size16px; authored html/body rules remain rejected",
+    "Font-size keywords other than inherit/initial/unset remain rejected",
+    "No font assets, glyphs, font shorthand, line-height, or unadmitted length properties"
+  ]
+}

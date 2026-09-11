@@ -6,6 +6,10 @@ use std::collections::BTreeSet;
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }
 #[derive(Clone, Copy)]
+enum SpecifiedSize { Auto, Pixels(f32), Percent(f32), Em(f32), Rem(f32) }
+const ROOT_FONT_SIZE: f32 = 16.;
+const MAX_SIZE: f32 = 1_000_000.;
+#[derive(Clone, Copy)]
 enum BackgroundColor { Rgba(u32), CurrentColor }
 impl BackgroundColor {
     fn used(self, foreground: u32) -> u32 {
@@ -13,34 +17,66 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { width: Size, height: Size, foreground: u32, background: BackgroundColor }
+struct Style { width: Size, height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { width: Size::Auto, height: Size::Auto, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { width: Size::Auto, height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
     Diagnostic::new("unsupported-target-semantics", source, message)
 }
 
-fn size(text: &str, source: &str) -> Result<Size, Diagnostic> {
+fn size(text: &str, source: &str) -> Result<SpecifiedSize, Diagnostic> {
     let text = text.trim().to_ascii_lowercase();
-    if text == "auto" { return Ok(Size::Auto); }
-    let (number, percent) = if let Some(v) = text.strip_suffix('%') { (v, true) }
-        else if let Some(v) = text.strip_suffix("px") { (v, false) }
-        else if text == "0" { ("0", false) }
-        else { return Err(unsupported(source, "This target currently admits auto, finite nonnegative px and percentage sizes")); };
-    let value = number.parse::<f32>().ok().filter(|v| v.is_finite() && *v >= 0. && *v <= 1_000_000.)
+    if text == "auto" { return Ok(SpecifiedSize::Auto); }
+    let (number, unit): (&str, fn(f32) -> SpecifiedSize) =
+        if let Some(v) = text.strip_suffix("rem") { (v, SpecifiedSize::Rem) }
+        else if let Some(v) = text.strip_suffix("em") { (v, SpecifiedSize::Em) }
+        else if let Some(v) = text.strip_suffix('%') { (v, SpecifiedSize::Percent) }
+        else if let Some(v) = text.strip_suffix("px") { (v, SpecifiedSize::Pixels) }
+        else if text == "0" { ("0", SpecifiedSize::Pixels) }
+        else { return Err(unsupported(source, "This target currently admits auto, finite nonnegative px, em, rem and percentage sizes")); };
+    let value = number.parse::<f32>().ok().filter(|v| v.is_finite() && *v >= 0. && *v <= MAX_SIZE)
         .ok_or_else(|| unsupported(source, "Size must be finite and between 0 and 1000000"))?;
-    Ok(if percent { Size::Percent(value) } else { Size::Pixels(value) })
+    Ok(unit(value))
+}
+
+fn resolved_length(value: f32, basis: f32, source: &str) -> Result<f32, Diagnostic> {
+    let result = value * basis;
+    if !result.is_finite() || !(0. ..=MAX_SIZE).contains(&result) {
+        return Err(unsupported(source, "Computed font-relative size must be finite and between 0 and 1000000"));
+    }
+    Ok(result)
 }
 
 // Inheritance copies computed descriptors, not dimensions resolved at the
-// parent's containing block. Percentages remain responsive at the receiving box.
-fn computed_size(text: &str, inherited: Size, source: &str) -> Result<Size, Diagnostic> {
+// parent's containing block. Percentages remain responsive at the receiving box;
+// font-relative lengths have already become absolute at the parent.
+fn computed_size(text: &str, inherited: Size, font_size: f32, source: &str) -> Result<Size, Diagnostic> {
     match text.trim().to_ascii_lowercase().as_str() {
         "inherit" => Ok(inherited),
         "initial" | "unset" => Ok(Size::Auto),
-        _ => size(text, source),
+        _ => Ok(match size(text, source)? {
+            SpecifiedSize::Auto => Size::Auto,
+            SpecifiedSize::Pixels(v) => Size::Pixels(v),
+            SpecifiedSize::Percent(v) => Size::Percent(v),
+            SpecifiedSize::Em(v) => Size::Pixels(resolved_length(v, font_size, source)?),
+            SpecifiedSize::Rem(v) => Size::Pixels(resolved_length(v, ROOT_FONT_SIZE, source)?),
+        }),
+    }
+}
+
+fn computed_font_size(text: &str, parent: f32, source: &str) -> Result<f32, Diagnostic> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "inherit" | "unset" => Ok(parent),
+        "initial" => Ok(ROOT_FONT_SIZE),
+        _ => match size(text, source)? {
+            SpecifiedSize::Pixels(v) => Ok(v),
+            SpecifiedSize::Em(v) => resolved_length(v, parent, source),
+            SpecifiedSize::Rem(v) => resolved_length(v, ROOT_FONT_SIZE, source),
+            SpecifiedSize::Percent(v) => resolved_length(v / 100., parent, source),
+            SpecifiedSize::Auto => Err(unsupported(source, "font-size:auto is invalid; use a nonnegative px, em, rem or percentage size")),
+        },
     }
 }
 
@@ -78,6 +114,12 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         "width" | "height" => {
             if !["inherit", "initial", "unset"].contains(&value.as_str()) { size(&value, &d.source)?; }
         }
+        "font-size" => {
+            if !["inherit", "initial", "unset"].contains(&value.as_str())
+                && matches!(size(&value, &d.source)?, SpecifiedSize::Auto) {
+                return Err(unsupported(&d.source, "font-size:auto is invalid; use a nonnegative px, em, rem or percentage size"));
+            }
+        }
         "background-color" | "color" => {
             if !["currentcolor", "inherit", "initial", "unset"].contains(&value.as_str()) { color::parse(&value, &d.source)?; }
         }
@@ -96,7 +138,12 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
         validate(d)?;
         d.value = css::ordinary_value(&d.value)?;
     }
-    let mut style = Style { foreground: parent.foreground, ..Style::default() };
+    let mut style = Style { foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
+    // Font-size-relative units use the parent for font-size itself, but the final
+    // computed element font size for other lengths, regardless of source order.
+    for d in declarations.iter().filter(|d| d.name == "font-size") {
+        style.font_size = computed_font_size(&d.value, parent.font_size, &d.source)?;
+    }
     // Resolve currentColor against the final computed color, irrespective of
     // declaration order. A background currentColor stays a computed keyword
     // through inheritance and resolves against the receiving element at emission.
@@ -110,8 +157,8 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
     }
     for d in &declarations {
         match d.name.as_str() {
-            "width" => style.width = computed_size(&d.value, parent.width, &d.source)?,
-            "height" => style.height = computed_size(&d.value, parent.height, &d.source)?,
+            "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
+            "height" => style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?,
             "background" => apply_background_shorthand(&mut style, parent, &d.value, &d.source)?,
             "background-color" => {
                 style.background = match d.value.trim().to_ascii_lowercase().as_str() {

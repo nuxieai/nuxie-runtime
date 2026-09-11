@@ -1,0 +1,82 @@
+[
+  {
+    "name": "em-computed-order",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:3em;height:2em;font-size:20px;background:coral}#b{font-size:20px;width:3em;height:2em;background:teal}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "em-nested-fonts",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{font-size:20px;width:8em;height:7em;background:navy}#b{font-size:1.5em;width:4em;height:3em;background:teal}#c{font-size:50%;width:3em;height:2em;background:coral}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "em-inherited-dimension",
+    "html": "<div id=\"a\"><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#a{font-size:20px;width:3em;height:6em;background:navy}#b{font-size:10px;width:inherit;height:2em;background:coral}#c{font-size:10px;width:3em;height:2em;background:teal}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "rem-root-context",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{font-size:32px;width:8rem;height:6rem;background:navy}#b{font-size:0.5rem;width:4rem;height:2rem;background:coral}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "em-css-wide-font",
+    "html": "<div id=\"a\"><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#a{font-size:20px;width:8em;height:6em;background:navy}#b{font-size:inherit;width:3em;height:1em;background:coral}#c{font-size:initial;width:3em;height:1em;background:teal}#d{font-size:unset;width:3em;height:1em;background:gold}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "em-percent-parent",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{font-size:24px;width:75%;height:100%;background:navy}#b{font-size:50%;width:10em;height:3em;background:coral}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "em-zero-fraction",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div>",
+    "css": "#a{font-size:12.5px;width:5em;height:2em;background:coral}#b{font-size:0px;width:10em;height:10em;background:red}#c{width:4rem;height:2rem;background:teal}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  },
+  {
+    "name": "em-font-cascade",
+    "html": "<div id=\"a\" style=\"font-size:10px;width:4em\"></div>",
+    "css": "div{font-size:18px!important}#a{font-size:24px;width:8em;height:3em;background:coral}",
+    "features": [
+      "A09",
+      "A10",
+      "computed font context without text"
+    ]
+  }
+]

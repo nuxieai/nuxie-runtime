@@ -1,0 +1,30 @@
+{
+  "scope": "Failed bounded derivative-font candidate, not general impossibility",
+  "matrix": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/ordinary-font-derivative-matrix-r1/receipt.json",
+    "sha256": "c48a2b9f64afefba4afca03508b51c27fd6b38b853a34ac4c7549b73a6c65053"
+  },
+  "fonts": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/ordinary-font-derivative-r1/fonts/manifest.json",
+    "sha256": "67de6fa3187ebbc0741c2a43bcc5c711ae157d54b9ce704a06ae799dcca9a6ca"
+  },
+  "frames": 64,
+  "pixelPass": 0,
+  "directVisualPairs": 8,
+  "observations": [
+    "Identity and unhinted controls match original for Agjp AV fi",
+    "Hinted normal16 increases local interior error to11.418 singleFill and13.830 doubleFill",
+    "GlyphIDs/advances/xpos and linebounds unchanged; native capHeight/xHeight changed",
+    "No wrap or broader font qualification; no12/24 expansion"
+  ],
+  "reviewSheets": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/ordinary-font-derivative-matrix-r1/review-0.png",
+      "sha256": "a3e95c1aff4172d384e8543295cfc3c87be3e0648b529a1b0f2e7e1e7dd0de7a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/ordinary-font-derivative-matrix-r1/review-1.png",
+      "sha256": "97c390741d6ae4b1f21c2bb5462c4f7268451668aa3ae75fb1b59f858ef134a8"
+    }
+  ]
+}

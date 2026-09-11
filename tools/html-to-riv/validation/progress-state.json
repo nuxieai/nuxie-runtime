@@ -2,10 +2,18 @@
   "updated": "2026-09-11",
   "focus": "Combined wrapped painting and geometry-driven ordering",
   "status": "Nested paint composition passes bounded profiles; mixed reversal and general sizing unresolved",
-  "current": "Combined 72-scene matrix: 576 geometry, 268 pixel passes. Subtree paint chains work for ordinary+wrap and reverse+wrap-reverse. Cross-sizing failures preserved. A geometry-driven visibility gate passes with 20px line separation and fails tiny/zero controls.",
-  "next": "Test actual three-item mixed-reversal line-group selection, then address wrapper percentage containing blocks, auto-cross stretch and composition resource bounds.",
+  "current": "Geometry-selected line groups pass32/32opaque/translucent geometry/pixel frames for both mixed-reversal row modes, with132extra records. Nested subtree chains pass their bounded profiles. Cross-sizing and tiny/zero separation failures remain preserved.",
+  "next": "Extend geometry-selected groups to columns, unequal line sizes and independent alignment; fix wrapper percentages and auto-cross stretch, then establish resource ceilings.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Translucent line-group exclusivity evidence",
+      "path": "tools/html-to-riv/validation/mixed-wrap-groups-alpha-receipt.json"
+    },
+    {
+      "label": "Geometry-selected mixed-reversal line groups",
+      "path": "tools/html-to-riv/validation/mixed-wrap-groups-receipt.json"
+    },
     {
       "label": "Geometry-driven visibility gate",
       "path": "tools/html-to-riv/validation/mixed-wrap-gate-receipt.json"
@@ -209,8 +217,8 @@
   ],
   "activeWork": [
     {
-      "name": "Mixed-reversal line-group composition",
-      "work": "Positive-separation visibility primitive proven; actual three-item group-selection experiment in progress."
+      "name": "Auto-cross stretch composition",
+      "work": "Testing direct native cross-Fill participants beside wrapped positional siblings to address the preserved stretch failure."
     }
   ],
   "publication": {

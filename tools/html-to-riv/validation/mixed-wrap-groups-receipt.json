@@ -1,0 +1,139 @@
+{
+  "status": "bounded-mixed-wrap-line-group-composition-proven",
+  "publicAdmission": false,
+  "scope": "Exactly three unequal-width items with equal25px cross extent and opaque overflowing leaves; row-reverse+wrap and row+wrap-reverse. No general sizing/nesting/alpha qualification.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "counts": {
+    "scenes": 2,
+    "frames": 16,
+    "geometryPass": 16,
+    "pixelPass": 16,
+    "clearPass": 32
+  },
+  "visualReview": {
+    "directPairs": 6,
+    "exactTransfers": 10,
+    "fullFrameCoverage": true
+  },
+  "exactReproductions": 2,
+  "hashes": {
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/src/main.rs": "664c85527fdb64cd8e8387ac1e6692d1d8987612c1062863844191591d32b116",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/augment": "d629182e9a82d5cdc658f044d6a0f25252d060248559e2816e6671c215aa2409",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/adapter.py": "6eb7b24eec52eb876925d55c9ce28fe3e6b904f5feb46606a8d78420366665dd",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/build-command.json": "b909dde4313d9df68f42041bf5b36ff182f9f0cdbe17de775e04651b6cbf2968",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/build-source-bindings.json": "4e5cc8c5113b7c05b6a645047a8ba3a57377f1deabe12af49e9ee546bd716c31",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/pairs.json": "8cf5dccf01f10b874f247f87826f65f5b37730f1843df52c45ed35d1c3b95d07",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/chrome-cases.json": "8cf5dccf01f10b874f247f87826f65f5b37730f1843df52c45ed35d1c3b95d07",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/render/receipt.json": "62ea461614d3d522eecb9916f2c0d395e7b6ec031ec06ef8e5c800f5e9829132",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/visual-0.png": "68bdb81b707086d247825f7ff994c6de6e82c999024b652358701d7e10e03e0d",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/visual-1.png": "c74fff73156217267f3a5570ec70773bf79d4e12fb2061b4ab6ff004bf521263",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/visual-transfer.json": "d17ca982aed15744bf9b12b58194b3dcac331e44b13e120ba806e6aca8e7fe52",
+    "tools/html-to-riv/output/mixed-wrap-groups-r1/reproductions.json": "385ee1307d65593d1ae6637a3e4cd70b7ecbe74c1ff902348d0d265fdf391b8f",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/original-r1-record-count.txt": "adbd8d2f30612aabdbdfb59f155c0b392b15f9b57373040aed02ef4092c35fda",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/count.rs": "43e8724b263c0723222521ec62ef3d09d4a89f60af58a481bd8da251947d30c1",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/count": "ca3dbb686e112a65d08753e1550370cab36da3ee9dfbe5da40764b9a13f20299"
+  },
+  "baseCompiler": {
+    "path": "tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv",
+    "sha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b"
+  },
+  "toolHashes": {
+    "compiler": "6eb7b24eec52eb876925d55c9ce28fe3e6b904f5feb46606a8d78420366665dd",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "composition": {
+    "paintedCopies": 9,
+    "potentialLineGroups": 3,
+    "addedOrdinaryRecords": 132,
+    "resourceQualification": false,
+    "recordCountProof": {
+      "raw": 27,
+      "output": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/original-r1-record-count.txt",
+      "added": 132,
+      "kind": "Independent ordinary-wire parser over frozen r1 RIV files"
+    }
+  },
+  "limitations": [
+    "DistanceConstraint0.001 cutoff;25px line separation only",
+    "Column axes and independent item alignment untested",
+    "Opaque paints do not prove exactly-once alpha compositing",
+    "No arbitrary painted subtrees or clips",
+    "Quadratic copies need resource limits",
+    "No public Rust/CLI/WASM/JS admission"
+  ],
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/experiment-manifest.json",
+      "sha256": "6ce8d94762bedbb24047c676bbacc342bd5715bdaa5f57799b7c7e8eccc0a777"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/src/main.rs",
+      "sha256": "664c85527fdb64cd8e8387ac1e6692d1d8987612c1062863844191591d32b116"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/src/wire.rs",
+      "sha256": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/augment",
+      "sha256": "d629182e9a82d5cdc658f044d6a0f25252d060248559e2816e6671c215aa2409"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/adapter.py",
+      "sha256": "6eb7b24eec52eb876925d55c9ce28fe3e6b904f5feb46606a8d78420366665dd"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/build-command.json",
+      "sha256": "b909dde4313d9df68f42041bf5b36ff182f9f0cdbe17de775e04651b6cbf2968"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/build-source-bindings.json",
+      "sha256": "4e5cc8c5113b7c05b6a645047a8ba3a57377f1deabe12af49e9ee546bd716c31"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/pairs.json",
+      "sha256": "8cf5dccf01f10b874f247f87826f65f5b37730f1843df52c45ed35d1c3b95d07"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/chrome-cases.json",
+      "sha256": "8cf5dccf01f10b874f247f87826f65f5b37730f1843df52c45ed35d1c3b95d07"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/render/receipt.json",
+      "sha256": "62ea461614d3d522eecb9916f2c0d395e7b6ec031ec06ef8e5c800f5e9829132"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/visual-0.png",
+      "sha256": "68bdb81b707086d247825f7ff994c6de6e82c999024b652358701d7e10e03e0d"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/visual-1.png",
+      "sha256": "c74fff73156217267f3a5570ec70773bf79d4e12fb2061b4ab6ff004bf521263"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/visual-transfer.json",
+      "sha256": "d17ca982aed15744bf9b12b58194b3dcac331e44b13e120ba806e6aca8e7fe52"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-r1/reproductions.json",
+      "sha256": "385ee1307d65593d1ae6637a3e4cd70b7ecbe74c1ff902348d0d265fdf391b8f"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/original-r1-record-count.txt",
+      "sha256": "adbd8d2f30612aabdbdfb59f155c0b392b15f9b57373040aed02ef4092c35fda"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/count.rs",
+      "sha256": "43e8724b263c0723222521ec62ef3d09d4a89f60af58a481bd8da251947d30c1"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/count",
+      "sha256": "ca3dbb686e112a65d08753e1550370cab36da3ee9dfbe5da40764b9a13f20299"
+    }
+  ]
+}

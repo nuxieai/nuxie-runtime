@@ -1,0 +1,127 @@
+{
+  "status": "bounded-mixed-wrap-translucent-composition-proven",
+  "publicAdmission": false,
+  "scope": "Same2mixed-row profiles and3fixed-positive25px-cross-size items as prior group experiment; translucent overlapping leaves now exercise unwanted duplicate paint contribution.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "counts": {
+    "scenes": 2,
+    "frames": 16,
+    "geometryPass": 16,
+    "pixelPass": 16,
+    "clearPass": 32
+  },
+  "visualReview": {
+    "directPairs": 6,
+    "exactTransfers": 10,
+    "fullFrameCoverage": true
+  },
+  "exactReproductions": 2,
+  "hashes": {
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/main.rs": "88100d7efe4cb33c855b1ca629de918a9f74841b97208bd209a2ebdc58b09dfd",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/count.rs": "43e8724b263c0723222521ec62ef3d09d4a89f60af58a481bd8da251947d30c1",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/count": "ca3dbb686e112a65d08753e1550370cab36da3ee9dfbe5da40764b9a13f20299",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/augment": "f2406304797c3c5b9e2205409a6b63db6a97c1a746553f71922840b04c4e0f12",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/adapter.py": "6eb7b24eec52eb876925d55c9ce28fe3e6b904f5feb46606a8d78420366665dd",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/build-command.json": "04965415a53d241e2177a5b58056212ccdc5b9825b2afdff3b1799396e77bf05",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/build-source-bindings.json": "be971c103509d2a2cb50a6d425eaf2db24af290f4350c7769c845b3a3c65ec23",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/pairs.json": "9c13b4ed042d38b49126ea044978b754f1d66f067dfa20011bba29c7620b2fd5",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/chrome-cases.json": "9c13b4ed042d38b49126ea044978b754f1d66f067dfa20011bba29c7620b2fd5",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/render/receipt.json": "1bcc43e847f3a7716bdc1b72fa552ccd043fcedf6e0402e918570c4ce56fb562",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/visual-0.png": "d909c65424463fb6c3d3dd110437946e4e4213701d748425fdbf00e293cc996a",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/visual-1.png": "426aeec702f3a36cf788431e4e6c9ace58072258c125bfe08886de85e2914b69",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/visual-transfer.json": "eb1c77d6413042607f5a60642636154ca88fb5d0ed1476ad509f71bf89678622",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/reproductions.json": "1461223a6e3ab1098336c6f494044e6294186e4e54cf50745d5193309413d476",
+    "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/original-r1-record-count.txt": "adbd8d2f30612aabdbdfb59f155c0b392b15f9b57373040aed02ef4092c35fda"
+  },
+  "baseCompiler": {
+    "path": "tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv",
+    "sha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b"
+  },
+  "toolHashes": {
+    "compiler": "6eb7b24eec52eb876925d55c9ce28fe3e6b904f5feb46606a8d78420366665dd",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "recordCounts": {
+    "raw": 27,
+    "output": 159,
+    "added": 132,
+    "assertedDuringReproduction": true
+  },
+  "paintPreservation": "Original SolidColor records cloned before original color set transparent; only parentId changed on each duplicate. Alpha values128/255,96/255,160/255 preserved.",
+  "qualificationLimit": "Pixel agreement supports correct visible alpha composition at tested states; no general Boolean exclusivity proof or public layout qualification.",
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/experiment-manifest.json",
+      "sha256": "31c64e999379eeff892593b781f2b81dcc1a3deea40344185d5930386eb4388e"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/main.rs",
+      "sha256": "88100d7efe4cb33c855b1ca629de918a9f74841b97208bd209a2ebdc58b09dfd"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/wire.rs",
+      "sha256": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/src/count.rs",
+      "sha256": "43e8724b263c0723222521ec62ef3d09d4a89f60af58a481bd8da251947d30c1"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/count",
+      "sha256": "ca3dbb686e112a65d08753e1550370cab36da3ee9dfbe5da40764b9a13f20299"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/augment",
+      "sha256": "f2406304797c3c5b9e2205409a6b63db6a97c1a746553f71922840b04c4e0f12"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/adapter.py",
+      "sha256": "6eb7b24eec52eb876925d55c9ce28fe3e6b904f5feb46606a8d78420366665dd"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/build-command.json",
+      "sha256": "04965415a53d241e2177a5b58056212ccdc5b9825b2afdff3b1799396e77bf05"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/build-source-bindings.json",
+      "sha256": "be971c103509d2a2cb50a6d425eaf2db24af290f4350c7769c845b3a3c65ec23"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/pairs.json",
+      "sha256": "9c13b4ed042d38b49126ea044978b754f1d66f067dfa20011bba29c7620b2fd5"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/chrome-cases.json",
+      "sha256": "9c13b4ed042d38b49126ea044978b754f1d66f067dfa20011bba29c7620b2fd5"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/render/receipt.json",
+      "sha256": "1bcc43e847f3a7716bdc1b72fa552ccd043fcedf6e0402e918570c4ce56fb562"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/visual-0.png",
+      "sha256": "d909c65424463fb6c3d3dd110437946e4e4213701d748425fdbf00e293cc996a"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/visual-1.png",
+      "sha256": "426aeec702f3a36cf788431e4e6c9ace58072258c125bfe08886de85e2914b69"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/visual-transfer.json",
+      "sha256": "eb1c77d6413042607f5a60642636154ca88fb5d0ed1476ad509f71bf89678622"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/reproductions.json",
+      "sha256": "1461223a6e3ab1098336c6f494044e6294186e4e54cf50745d5193309413d476"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-groups-alpha-r1/original-r1-record-count.txt",
+      "sha256": "adbd8d2f30612aabdbdfb59f155c0b392b15f9b57373040aed02ef4092c35fda"
+    }
+  ]
+}

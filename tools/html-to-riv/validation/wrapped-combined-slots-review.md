@@ -1,0 +1,27 @@
+# Experimental combined percentage slots and line-group painting
+
+The combined adapter passes its complete bounded matrix: 48 scenes, 384/384 geometry checks, 384/384 pixel checks, and 768/768 clear-color checks. All 48 generated RIV files reproduced byte-identically with equal parsed geometry maps. Direct inspection covered all 96 distinct Chrome/native image pairs on 24 sheets, with no visible divergence; the remaining 288 frames have verified full decoded-RGBA identity to reviewed pairs, separately for each renderer. This is adapter evidence, not public compiler support. The reused driver's `passed-public-baseline` label is overridden by the experimental receipt.
+
+## Composition exercised
+
+The matrix combines row/column axes, normal/reversed main direction, ordinary/reversed wrapping, positional align-content start/center/end, and two cross-size profiles. Item a uses either cross-size 50% or cross-size 35px constrained by min 50% and max 75%; items b and c use fixed 50px and 30px cross sizes. Their main sizes are 60/60/40. Item alignments are center/end/start. A navy parent has width and height 50%; an ordinary green footer follows it.
+
+Negative order on b and tied positive order on a/c establish stable order b,a,c before native direction and wrapping. All three item backgrounds are translucent. Each has a translucent descendant with main size 90px and cross size 150%, exposing both overlap and percentage-descendant behavior. Row viewports are 400×80→200×240→120×400→400×80; column viewports transpose these dimensions. These states exercise one, two and three lines, percentage size changes, both original and cloned artboards, and return resize without recompilation.
+
+The adapter first compiles transparent sizing slots through the frozen compiler. The size augmenter restores the requested native direction/wrap/alignment and adds ordinary constraint graphs that derive each line's maximum cross size, then translate visible items independently. Percentage and min/max sizing stay on the native slots. The paint augmenter captures slot anchors at the common alignment fraction, rather than comparing differently aligned visible items, and selects candidate line groups through the existing ordinary geometry-driven clipping primitive. It duplicates each item's background and descendant foreground paint together, preserving original SolidColor values, and orders these via ordinary DrawRules. Main reversal and wrap reversal affect group/member ordering independently. It appends 195 paint-stage records; that count excludes sizing-stage records and the transparent slots.
+
+This combines sizing, positional line alignment, independent item alignment, stable order, nested translucent paint, and wrapping in one file. The runtime performs responsive layout and constraints after import. No host conditions, scripts, bindings, grids, raster fallback, or runtime changes select a viewport layout.
+
+## Evidence and reproduction
+
+Artifacts are under `tools/html-to-riv/output/wrapped-combined-slots-r1/`. `pairs.json` preserves both authored and transformed HTML/CSS. `adapter.py`, `slot-src/`, `paint-src/`, and `build-commands.json` bind both actual augmenter builds, their source and linked Rust libraries. `render/receipt.json` records pinned Chrome 153.0.8010.12 against immutable Rust Metal RasterOrdering, plus driver, reset, fixture and tool hashes. `evidence-commands.json` preserves the driver and collection commands.
+
+The existing `output/wrapped-percent-slots-r1/collect-evidence.py` was run with this output directory. It reproduced every file through the complete adapter, checked exact RIV bytes and equal parsed maps, then partitioned all frames by whole-image RGBA identity. `reproductions.json`, `matrix.json` and `counts.json` preserve these results. All sheets `visual-0.png` through `visual-92.png` at increments of four were directly inspected. `visual-direct.json` records their 96 pairs; `visual-transfer.json` and independently checked `visual-transfer-verified.json` account for all remaining 288 frames exactly once. There are no automated-only frames in this corpus.
+
+`freeze-evidence.py` verifies original build and driver hashes and the complete transfer partition. `experiment-manifest.json` binds the artifact set, frozen base compiler and collection script; the adjacent tracked receipt binds that manifest and key evidence. No public compiler/runtime files were edited during this evidence task.
+
+## Limits retained
+
+This matrix is finite experimental evidence, not general qualification of percentage wrapping, arbitrary order, or all CSS paint semantics. It targets the pinned Chrome fragment painting behavior. Earlier fractional center/bounds failures in the separate percentage-slot corpus remain preserved; the tested integer-friendly viewport sequence here does not erase them. General aspect-ratio, intrinsic sizing, baseline alignment, stretch/content distribution, gap, transformed/negative coordinate systems, clipping ancestry, group opacity and arbitrary descendant trees are not covered.
+
+The DistanceConstraint gate retains its known tiny/zero separation limitation, and its 65536 normalization distance and 32768 mask extent require explicit coordinate bounds. Quadratic foreground duplication and additional sizing graphs require resource guards before admission. Three items with one descendant each do not establish those general bounds or universal visibility exclusivity. Public support requires a defined guarded domain and dedicated compiler integration tests.

@@ -1,11 +1,31 @@
 {
   "updated": "2026-09-11",
-  "focus": "Percentage-preserving wrapped sizing and composition cost",
-  "status": "Bounded axes and percentage compositions proven; public lowering still pending",
-  "current": "Paint groups pass128/128frames across axes/directions/wrap with unequal sizes. Percentage slots pass384geometry/376pixel frames; eight fractional failures preserved and reproduced without final translations. Basic paint groups add16N\u00b2\u221212records with measured high import/clone costs.",
-  "next": "Combine percentage-preserving slots with paint groups; optimize expansion and establish resource guards for public lowering. Continue intrinsic sizing and normal/stretch line-distribution work.",
+  "focus": "Public wrapping lowering and conservative admission",
+  "status": "Combined wrapping proven in bounded experiments; sizing primitive staged in compiler",
+  "current": "Combined percentage slots and nested paint pass384/384geometry and pixels with full visual coverage. Optimized paint groups reduce cost; the compiler-private variable-count sizing graph reproduces48experimental outputs exactly. Public wrapping admission remains pending.",
+  "next": "Resolve visibility-gate exactness and coordinate bounds, integrate optimized paint lowering with scene-wide cost accounting, then qualify guarded public wrapping through original HTML/CSS. Continue intrinsic and normal/stretch line distribution work.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Combined optimized sizing and paint",
+      "path": "tools/html-to-riv/validation/wrapped-combined-optimized-receipt.json"
+    },
+    {
+      "label": "Coordinate and floating-point admission audit",
+      "path": "tools/html-to-riv/validation/wrapped-coordinate-admission.md"
+    },
+    {
+      "label": "Combined percentage sizing and nested paint",
+      "path": "tools/html-to-riv/validation/wrapped-combined-slots-receipt.json"
+    },
+    {
+      "label": "Optimized paint groups and measured resource cost",
+      "path": "tools/html-to-riv/validation/mixed-wrap-optimized-receipt.json"
+    },
+    {
+      "label": "Compiler-private wrapping sizing graph",
+      "path": "tools/html-to-riv/validation/wrapping-module-receipt.json"
+    },
     {
       "label": "Measured paint-group resource costs",
       "path": "tools/html-to-riv/validation/mixed-wrap-resource-receipt.json"
@@ -233,8 +253,8 @@
   ],
   "activeWork": [
     {
-      "name": "Public wrapping lowering preparation",
-      "work": "Axes, percentage slots and cost are evidenced separately; their combined implementation, resource charging and diagnostics remain pending."
+      "name": "Public wrapping implementation",
+      "work": "Sizing graph is staged with exact-output evidence; optimized paint composition and coordinate admission guards are next."
     }
   ],
   "publication": {

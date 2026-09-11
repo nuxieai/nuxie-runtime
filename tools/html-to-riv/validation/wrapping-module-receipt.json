@@ -1,0 +1,378 @@
+{
+  "scope": "Compiler-private wrapping sizing primitive; no public wrapping syntax admission. Exact bytes transfer three-item sizing proof; variable-count unit tests do not establish native geometry for other counts.",
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/augment"
+  ],
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14) (Homebrew)\nbinary: rustc\ncommit-hash: 8bab26f4f68e0e26f0bb7960be334d5b520ea452\ncommit-date: 2026-07-14\nhost: aarch64-apple-darwin\nrelease: 1.97.1\nLLVM version: 22.1.8\n",
+  "bindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/main.rs": "d009876238b148855d7937cbcfb1b71971aaa040c6bf55494d1f1bcfe6248067",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/augment": "913c266135b39158b67647adeec3ade601fe6e4143c99665972fcfeeb869f10d",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/compiler.rs": "903b5b4b048b247b4c6de88f864f11ba55d5b825ad3082c78554b78ab3f59705",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/rust-tests.log": "f7b638dff3e28f138b4657ac401414ac42f9952b99a8cc84516681681a987c8d",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/transport-tests.log": "fe016c5f062a8a4ada1ecde1bc8978c0533f55b21baa347dad0131871094a9e0",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/native-build.log": "47d1ebe904a90b00c5b9e4f31a52db52e92ee8caeaa47e1a29a4a65b6baf0c9d",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/wasm-build.log": "b81e4bf9434dea0727c6205cf6545a849fb6386b6430f79162d30f3713216a1a"
+  },
+  "rows": [
+    {
+      "case": "combined-slot-row-wrap-flex-start-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-start-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-start-percentage-normal-main.riv",
+      "sha256": "2df44c2008cd9e3ee8a36a132cb1e26b1552fe9c25f8d857a54f21d653b827b6",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-start-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-start-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-start-percentage-reverse-main.riv",
+      "sha256": "8c37a8c1997eca16a1cdc84d981ca09662f0251a0c9c252692bb8cc284679958",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-start-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-start-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-start-bounds-normal-main.riv",
+      "sha256": "f7d9e6aef920f6d9f9535c5e77ce57640d6ed7f7858653843a15eb54455509d2",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-start-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-start-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-start-bounds-reverse-main.riv",
+      "sha256": "91c9c817a0ea6878fbda7b7257b4e419031bcb37512d1a54f68d4f991b7dcdf8",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-center-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-center-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-center-percentage-normal-main.riv",
+      "sha256": "c82bcea81d620e242190738838f26d122bcbab7d5ee92951bf2d391d92d76249",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-center-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-center-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-center-percentage-reverse-main.riv",
+      "sha256": "0a7a49ddbd377a0dd63c934764b2a48c8bc7f6e5b026ac03b9b5d9c7003ce543",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-center-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-center-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-center-bounds-normal-main.riv",
+      "sha256": "8e51fdba958189586feb5d1e69b42be1888b129715c83c196c4363ac05af99ab",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-center-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-center-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-center-bounds-reverse-main.riv",
+      "sha256": "70c50012e3a18cb08ebc7d601dcc72faa4812bd08fc3125272a8e9ae6890d441",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-end-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-end-percentage-normal-main.riv",
+      "sha256": "3f1ee5b52bcab0c61bd44601693966b997a4a17f7a85a9c4b4265ef290725d8d",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-end-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-end-percentage-reverse-main.riv",
+      "sha256": "9f9b612f12591df3c47ed450627b26e62f3b05f24aa55e747e71b128eb64d040",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-end-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-end-bounds-normal-main.riv",
+      "sha256": "19c1776e8e668c6027a71d5ac85f234ff1c954a20cec2162bc8f14b3dffea9ac",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-flex-end-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-flex-end-bounds-reverse-main.riv",
+      "sha256": "1a983434cc00f575639e5c2514916a305ae6863f6db6856f534f2f8e03e59829",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-start-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-start-percentage-normal-main.riv",
+      "sha256": "8c8e13a104fcc43a30c11837a3567b5b60b530c130ca300bf97e6aaaa08d96a6",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-start-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-start-percentage-reverse-main.riv",
+      "sha256": "f34fe1d54db3c669a4a8fb2caca4b53cc4ec4829d07a2b4db428305ae145f6f0",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-start-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-start-bounds-normal-main.riv",
+      "sha256": "21efbb091eb368682d97c7b979d992fddf5097bcce93f1750445acf46cad2060",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-start-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-start-bounds-reverse-main.riv",
+      "sha256": "da5016ac90486eb952fdf02627612e87dd3e11c8fa63d921df072c324fe8016e",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-center-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-center-percentage-normal-main.riv",
+      "sha256": "f380e25b33c4fd25ee7cf7695d5560b51cbdc7db3b9bdc4945094b396104dcc1",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-center-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-center-percentage-reverse-main.riv",
+      "sha256": "152873443dea2b0c409f3103ffa2f1c488c1846aeb7c163412805be134903cac",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-center-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-center-bounds-normal-main.riv",
+      "sha256": "31b5bdb78327100b1f13b5eccf10a6d0d36c5c86e2d01f7970003848d0e465fe",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-center-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-center-bounds-reverse-main.riv",
+      "sha256": "59a84f7502ff9c13e2a9efbd9f2e51804a0761e5fb5c946484a2b154572c7a5b",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-end-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-end-percentage-normal-main.riv",
+      "sha256": "af82ec3fe288b884a1963d092fb8f1ffa083382569e13cae95c5708a23c6e05b",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-end-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-end-percentage-reverse-main.riv",
+      "sha256": "3e35adb78d0bf335a2b696886c8aa50639f1a5b8d42217263980f2a5f7668857",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-end-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-end-bounds-normal-main.riv",
+      "sha256": "7befb3c8a20ff5aa1fd433d02075f8c9cca986fa4b3253650c3d90f30b49407a",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-row-wrap-reverse-flex-end-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-row-wrap-reverse-flex-end-bounds-reverse-main.riv",
+      "sha256": "f0ebb5f9a7f32e456cef68c1fcc0eca1331354e844eb4db59f587f28f06af864",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-start-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-start-percentage-normal-main.riv",
+      "sha256": "05c7cf9743f76c7f662cfac03e14d6092d33005b31f549ebf6d0e20b640ac546",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-start-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-start-percentage-reverse-main.riv",
+      "sha256": "6cd1a7382bbe034ff114bb67606b9d2a180decfb4fca91e42b5e0931143f443f",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-start-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-start-bounds-normal-main.riv",
+      "sha256": "8cfbd9dcc785d685469c6ac690698126cc9c3085cdcb4d999a47c5e2448a7aa5",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-start-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-start-bounds-reverse-main.riv",
+      "sha256": "fc52c71cbb205d1562b31bf6dc8a863296470ee33625d75362c5355166827929",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-center-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-center-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-center-percentage-normal-main.riv",
+      "sha256": "b26ac38cd001f087e6fc3e515e1f3a5b96fefd35b1d0f741eff2b13bca10a17a",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-center-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-center-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-center-percentage-reverse-main.riv",
+      "sha256": "31552feba4431885a8af4caac8c8cc8108ceb28876866c621468fcdd73f0ad56",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-center-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-center-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-center-bounds-normal-main.riv",
+      "sha256": "d46cfa2bc355d0061b7cc843abd217f4fd8bf4794a107baf313620fdc5d2d81d",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-center-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-center-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-center-bounds-reverse-main.riv",
+      "sha256": "9fe90858652dc34b96b100f3efe7e3a67e41b28a73bc45db8434fa20d4781e22",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-end-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-end-percentage-normal-main.riv",
+      "sha256": "ee83bb0c840737ca0c2d85215f5253ace7e4ee13b2a04a4ceb06426428d70415",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-end-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-end-percentage-reverse-main.riv",
+      "sha256": "7b7906226f4a7ed59f74b023c489dfa7ef57c154a379377b05ef9c9c601f5b48",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-end-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-end-bounds-normal-main.riv",
+      "sha256": "55c4a900c5f7e3b77584b1ae0eedd0968bf8e1aaebd9d3f44bab374fc79abb61",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-flex-end-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-flex-end-bounds-reverse-main.riv",
+      "sha256": "0ced83b3470621d292f149c98eaa2f599e28fe0d22c73432a37ad2a188e4c21a",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-start-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-start-percentage-normal-main.riv",
+      "sha256": "17da770e2f032809147ba5009f67d84981c5943f2717d853bf52ef6137c1fac4",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-start-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-start-percentage-reverse-main.riv",
+      "sha256": "aefbf0c36631395cc1afaca61ff6babf928747564b14399dcb143cdd56421630",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-start-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-start-bounds-normal-main.riv",
+      "sha256": "ecbb4d07379bd21103d350cc4fd993fe26c4e9641e96a71941c606b54984f778",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-start-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-start-bounds-reverse-main.riv",
+      "sha256": "07aaf71d62a43a1f2378eab3879c8b0c1ee6fa9464404a54797d235d83b09f1f",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-center-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-center-percentage-normal-main.riv",
+      "sha256": "f97d217ca6728ce6efbf3797edafd57abc6d2615f9b4fe6835b1fa15e9b56279",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-center-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-center-percentage-reverse-main.riv",
+      "sha256": "bf3589f7e48816d7b95cb27062b0866b934a5f0ef8b03d8a59840086f572310c",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-center-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-center-bounds-normal-main.riv",
+      "sha256": "b2ff5281aca3810dbd6430995727702efa6f99f891f7a95994fa8250bd4d48e5",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-center-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-center-bounds-reverse-main.riv",
+      "sha256": "9ed844564347e74518766a672faf04062294648fb77c6b738bd7b18e59252961",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-percentage-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-end-percentage-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-end-percentage-normal-main.riv",
+      "sha256": "d628d9d21093412377845f848af84a699b5b60eebbda83a3f5acf41225b11ff3",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-percentage-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-end-percentage-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-end-percentage-reverse-main.riv",
+      "sha256": "a2f28bcbf3321307e26967b59ffd1c6d6d2da58f98b57a26dc68d22f61344ec6",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-bounds-normal-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-end-bounds-normal-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-end-bounds-normal-main.riv",
+      "sha256": "6c0ceaeb15eb8d56f1cbcd0d1146dda1425a1650a6146ac4ce24566cdbcad59e",
+      "exact": true
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-bounds-reverse-main",
+      "original": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-combined-slots-r1/render/combined-slot-column-wrap-reverse-flex-end-bounds-reverse-main/scene.sized.riv",
+      "result": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapping-module-r1/combined-slot-column-wrap-reverse-flex-end-bounds-reverse-main.riv",
+      "sha256": "d67226e0c0530753081f6eb0833b5224dc201341ee44a68d10340a221b998962",
+      "exact": true
+    }
+  ],
+  "validation": {
+    "rustTests": 100,
+    "nodeTests": 28,
+    "typescript": "pass",
+    "nativeBuild": "pass",
+    "wasmBuild": "pass",
+    "sourceGuard": "pass"
+  }
+}

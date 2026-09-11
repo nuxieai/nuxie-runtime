@@ -1,0 +1,28 @@
+{
+  "status": "passed-experimental-combined-slots",
+  "publicAdmission": false,
+  "immutableBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "counts": {
+    "cases": 48,
+    "frames": 384,
+    "geometryPass": 384,
+    "pixelPass": 384,
+    "clearPass": 768,
+    "exactReproductions": 48,
+    "directPairsPrepared": 96,
+    "exactTransfers": 288
+  },
+  "directPairsReviewed": 96,
+  "exactVisualTransfers": 288,
+  "automatedOnlyFrames": 0,
+  "hashes": {
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/experiment-manifest.json": "6530df765b37f5b814f48bd94c1d646639e15092ec9e9851851236a3e7b9c6ce",
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/render/receipt.json": "5a8605d0477457247f0447fd351727914b4f46dc0a0588097876cd7ce86ab4c0",
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/build-commands.json": "977acd8a70ae686f9765c670e36892cbf52c57f83d0b5d61e95a262af46e466c",
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/counts.json": "31e330e1466a1bfea6edf0d0449d2237b66e8fb85b629683ed172d30bff42362",
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/reproductions.json": "4ff3921c58a59964c57fa06fdd98de5553561be42d2f2c3942563189d42f9a40",
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/visual-direct.json": "b4f5202e8409d11fc7b63bbcf3fc840bbfd4406b75c55b7ea4d0fe027f08859b",
+    "tools/html-to-riv/output/wrapped-combined-slots-r1/visual-transfer-verified.json": "d0c72783f121376cac773b680ddbb9c84786d49e8e15a9729182bf5c2707429c",
+    "tools/html-to-riv/validation/wrapped-combined-slots-review.md": "691136ead8e2b38cb138515576c1a89ae79fa21331afc6b2f25bc6b76f4682e9"
+  }
+}

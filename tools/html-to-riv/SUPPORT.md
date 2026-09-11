@@ -59,3 +59,7 @@ Min/max validation retains a fractional-boundary failure:110/112 pixel frames pa
 Known fractional-rendering limitation: an equivalent fixed-pixel rectangle control reproduces the min/max pixel failure exactly. Fractional edges therefore lack blanket pixel qualification even without constraints. See `validation/fractional-minmax-control-receipt.json`.
 
 Flex direction qualification:41feature scenes pass328geometry/pixel frames with complete visual coverage. The full87scene run retains the two existing fractional-edge failures (694/696pixels pass). No blanket pixel or normative CSS painting equivalence is claimed. See `validation/flex-direction-review.md` and `validation/public-flex-final-receipt.json`.
+
+## Staged wrapping implementation
+
+Wrapping remains outside public admission. A compiler-private sizing primitive and successful combined sizing/paint experiments are now available; they are not callable CSS support. Coordinate and visibility-gate bounds, intrinsic sizing, default normal/stretch line distribution, nested paint scopes and scene-wide resource guards remain unresolved. See validation/public-wrap-plan.md and validation/wrapping-module-review.md.

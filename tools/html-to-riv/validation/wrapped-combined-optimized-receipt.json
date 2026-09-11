@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "status": "passed-experimental-combined-optimized-slots",
+  "publicAdmission": false,
+  "immutableBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "counts": {
+    "cases": 48,
+    "frames": 384,
+    "geometryPass": 384,
+    "pixelPass": 384,
+    "clearPass": 768,
+    "exactReproductions": 48,
+    "priorFullRgbaPairs": 384,
+    "recordCounts": [
+      [
+        43,
+        175,
+        285
+      ]
+    ]
+  },
+  "recordComparison": {
+    "rawIncludingSlots": 43,
+    "sizingAdded": 132,
+    "priorPaintAdded": 195,
+    "optimizedPaintAdded": 110,
+    "priorFinal": 370,
+    "optimizedFinal": 285
+  },
+  "twoPaintUniformItemFormula": "(21*N*N + 15*N - 14)/2, N >= 1; only N=3 combined prototype executed",
+  "sizingIdentityPreserved": true,
+  "originalAndCloneFrames": 384,
+  "visualTransfer": {
+    "basisReceipt": "validation/wrapped-combined-slots-receipt.json",
+    "basisReceiptSha256": "e7aa6faa033e4b7fe2adb85cb30a044e9761f25df530f06a4b4c1a900b1afeb5",
+    "priorDirectPairs": 96,
+    "priorExactTransfers": 288,
+    "optimizedFullRgbaPairsIdentical": 384,
+    "newDirectViews": 0,
+    "scope": "Full decoded Chrome/native identity transfers the prior reviewed images; no fresh direct views claimed."
+  },
+  "hashes": {
+    "output/wrapped-combined-optimized-r1/experiment-manifest.json": "5a39703a509b89cbf528df26c9ba1ee5b3b136d72b40fb2618565c37dd325d5f",
+    "output/wrapped-combined-optimized-r1/render/receipt.json": "03f13d5a0304c01439ba7e1ee4bf22c95609f00e0a3d530a5f7a885cc18df53e",
+    "output/wrapped-combined-optimized-r1/paint-src/main.rs": "f0f2f7d3876306d28fb1b2bc72075fe4dff5025f8d7fb982454cb40f96f545b2",
+    "output/wrapped-combined-optimized-r1/size-augment": "19801c0f1441c8e16811bedffa283fcc8aaf94fa38f09b6564924e3954fe7afe",
+    "output/wrapped-combined-optimized-r1/sizing-identity.json": "c39111d14e1762ee594157fa9fe5e7a6aac2b1977bb0a475337b020c76a377b2",
+    "output/wrapped-combined-optimized-r1/counts.json": "cde9fe2bc09d8e409864d4de10382713ac86b6c6afff874ba66ab48755708772",
+    "output/wrapped-combined-optimized-r1/prior-pixel-identity.json": "76b1a99db292fca8dc8dd920f67750f0fd8924c101dcf2a30df5fde8c8aaa600",
+    "output/wrapped-combined-optimized-r1/reproductions.json": "cee22d00d8ce178e5643b381c893652b315ff041be349c3e0c914a1d8097f9a4",
+    "output/wrapped-combined-optimized-r1/visual-review-transfer.json": "8410774100db262212a923f5e02fd2585c6fbe9507390bf7b10e47daf41b36a9",
+    "validation/wrapped-combined-slots-receipt.json": "e7aa6faa033e4b7fe2adb85cb30a044e9761f25df530f06a4b4c1a900b1afeb5"
+  },
+  "limits": [
+    "Same finite three-item B/A/C corpus as prior combined slots; no general public wrap qualification.",
+    "Known tiny/zero line-separation and mask coordinate bounds are unchanged.",
+    "Quadratic paint graph remains; sizing plus paint costs need explicit whole-scene budgets.",
+    "No new direct views; every optimized Chrome/native image is exactly decoded-identical to prior reviewed corpus."
+  ]
+}

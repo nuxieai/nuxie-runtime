@@ -6,6 +6,11 @@ use std::collections::BTreeSet;
 mod baseline;
 #[path = "spacing.rs"]
 mod spacing;
+// Staged lowering, exercised against frozen ordinary-file experiments before
+// public wrapping admission and its contextual guards are installed.
+#[allow(dead_code)]
+#[path = "wrapping.rs"]
+mod wrapping;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }

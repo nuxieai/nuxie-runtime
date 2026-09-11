@@ -1,0 +1,183 @@
+{
+  "schema": 1,
+  "status": "experimental optimized paint-group qualification and bounded resource evidence",
+  "runtimeBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "constructionChanges": [
+    "Remove impossible candidate members j<i in logical packing order",
+    "Reuse the same ordered adjacent difference signal for leader and membership checks",
+    "Share each source-anchor copy Node across difference signals"
+  ],
+  "recordFormula": {
+    "scope": "N >= 1, axes-aware anchors, one painted descendant per item",
+    "previousAxes": "16*N*N + 2*N - 12",
+    "optimized": "7*N*N + 6*N - 7",
+    "candidatePaintReplicas": "N*(N+1)/2"
+  },
+  "correctness": {
+    "n3": {
+      "cases": 16,
+      "geometryPass": 128,
+      "pixelPass": 128,
+      "clearPass": 256,
+      "exactImagePairsToPriorAxes": 128,
+      "exactReproductions": 16
+    },
+    "n8": {
+      "cases": 8,
+      "geometryPass": 64,
+      "pixelPass": 64,
+      "clearPass": 128,
+      "directVisualPairs": 24,
+      "fullRgbaTransfers": 40,
+      "exactReproductions": 8
+    }
+  },
+  "benchmark": {
+    "sizes": [
+      8,
+      16,
+      32
+    ],
+    "flows": 2,
+    "trialsPerOldAndNewScene": 3,
+    "stockOptimizedFrames": 48,
+    "timedFrames": 288,
+    "optimizedGeometryIdenticalToPrevious": true,
+    "timedStreamAndGeometryIdenticalToCorrespondingStock": true,
+    "summary": [
+      {
+        "n": 8,
+        "wrap": "wrap",
+        "kind": "old",
+        "importMedianMs": 8.912917,
+        "cloneMedianMs": 6.777082999999999,
+        "resizeMedianMs": 1.3912084999999998,
+        "recordDrawMedianMs": 1.3152914999999998,
+        "peakRssMiB": 25.03125
+      },
+      {
+        "n": 8,
+        "wrap": "wrap",
+        "kind": "optimized",
+        "importMedianMs": 3.907792,
+        "cloneMedianMs": 2.872167,
+        "resizeMedianMs": 0.7612085,
+        "recordDrawMedianMs": 0.7262705,
+        "peakRssMiB": 21.84375
+      },
+      {
+        "n": 8,
+        "wrap": "wrap-reverse",
+        "kind": "old",
+        "importMedianMs": 8.570667,
+        "cloneMedianMs": 6.787958000000001,
+        "resizeMedianMs": 1.3770419999999999,
+        "recordDrawMedianMs": 1.345875,
+        "peakRssMiB": 25.09375
+      },
+      {
+        "n": 8,
+        "wrap": "wrap-reverse",
+        "kind": "optimized",
+        "importMedianMs": 3.871584,
+        "cloneMedianMs": 2.806625,
+        "resizeMedianMs": 0.7502705,
+        "recordDrawMedianMs": 0.732771,
+        "peakRssMiB": 22.015625
+      },
+      {
+        "n": 16,
+        "wrap": "wrap",
+        "kind": "old",
+        "importMedianMs": 66.347166,
+        "cloneMedianMs": 60.756499999999996,
+        "resizeMedianMs": 5.20925,
+        "recordDrawMedianMs": 5.4842295,
+        "peakRssMiB": 44.875
+      },
+      {
+        "n": 16,
+        "wrap": "wrap",
+        "kind": "optimized",
+        "importMedianMs": 21.641959,
+        "cloneMedianMs": 18.969709,
+        "resizeMedianMs": 2.5195625,
+        "recordDrawMedianMs": 2.8620205,
+        "peakRssMiB": 33.125
+      },
+      {
+        "n": 16,
+        "wrap": "wrap-reverse",
+        "kind": "old",
+        "importMedianMs": 67.22200000000001,
+        "cloneMedianMs": 61.094125,
+        "resizeMedianMs": 5.202813000000001,
+        "recordDrawMedianMs": 5.50175,
+        "peakRssMiB": 46.03125
+      },
+      {
+        "n": 16,
+        "wrap": "wrap-reverse",
+        "kind": "optimized",
+        "importMedianMs": 21.460542,
+        "cloneMedianMs": 18.611625,
+        "resizeMedianMs": 2.4804165,
+        "recordDrawMedianMs": 2.9005834999999998,
+        "peakRssMiB": 32.890625
+      },
+      {
+        "n": 32,
+        "wrap": "wrap",
+        "kind": "old",
+        "importMedianMs": 811.713333,
+        "cloneMedianMs": 789.59875,
+        "resizeMedianMs": 20.675688,
+        "recordDrawMedianMs": 22.2986875,
+        "peakRssMiB": 118.40625
+      },
+      {
+        "n": 32,
+        "wrap": "wrap",
+        "kind": "optimized",
+        "importMedianMs": 208.382667,
+        "cloneMedianMs": 198.45670800000002,
+        "resizeMedianMs": 9.401667,
+        "recordDrawMedianMs": 11.4598745,
+        "peakRssMiB": 68.046875
+      },
+      {
+        "n": 32,
+        "wrap": "wrap-reverse",
+        "kind": "old",
+        "importMedianMs": 813.371542,
+        "cloneMedianMs": 795.907292,
+        "resizeMedianMs": 20.5907915,
+        "recordDrawMedianMs": 22.2787085,
+        "peakRssMiB": 118.109375
+      },
+      {
+        "n": 32,
+        "wrap": "wrap-reverse",
+        "kind": "optimized",
+        "importMedianMs": 207.524333,
+        "cloneMedianMs": 200.733792,
+        "resizeMedianMs": 9.57975,
+        "recordDrawMedianMs": 11.435479,
+        "peakRssMiB": 67.25
+      }
+    ],
+    "scope": "Import/clone/update/recording cost only, no N16/N32 Chrome or raster claims"
+  },
+  "artifacts": {
+    "output/mixed-wrap-optimized-r1/experiment-manifest.json": "fb104a09f1b04dc1d911dcf5cc0511af766d1b76b4b76dcd7ddfc9916472d19a",
+    "output/mixed-wrap-optimized-n8-r1/experiment-manifest.json": "4f752a3a001d45ec094628d98e8e45f6fbf05c63a8c3255619e0732d7e86894a",
+    "output/mixed-wrap-optimized-resource-r1/experiment-manifest.json": "ec36add786b5b55702eb6bc3f4600c1793346c96dcae02268a3599730d124f18"
+  },
+  "limitations": [
+    "Still quadratic; no public resource limit chosen or installed.",
+    "One painted descendant per item, direct index order supplied by fixture adapters; no arbitrary nested paint-tree or reordered-DOM proof.",
+    "N3 covers unequal cross metrics and positional wrappers; N8 covers equal cross metrics and alpha overlaps.",
+    "No performance guarantee for release/mobile or concurrent workloads; timed probe and immutable debug build inherited from prior resource audit.",
+    "Raw driver receipts call adapters public; this manifest explicitly overrides that classification."
+  ]
+}

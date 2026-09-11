@@ -1,0 +1,37 @@
+{
+  "status": "preserved-experimental-composition-boundaries; no public baseline admission",
+  "experiment": {
+    "path": "output/empty-baseline-boundaries-r1/experiment-manifest.json",
+    "sha256": "9d02edd702f3f101acfe2ac5c9da0d03466b58bdeca72115ca487edfc3d3c33b"
+  },
+  "findings": {
+    "path": "output/empty-baseline-boundaries-r1/FINDINGS.md",
+    "sha256": "8fc40aa23081ff330f97de0bd76aea337364b0c1deef75ed4c7845d3ed1516e4"
+  },
+  "rawReceipt": {
+    "path": "output/empty-baseline-boundaries-r1/render/receipt.json",
+    "sha256": "0719d0bafa1e8004dadc901585b01491ea36cbed9751b45cbb22e691f6ef2bdd"
+  },
+  "geometryPassed": 24,
+  "geometryFailed": 32,
+  "pixelsPassed": 24,
+  "pixelsFailed": 32,
+  "clearChecksPassed": 112,
+  "compileRejectedCases": [
+    "baseline-percentage-height"
+  ],
+  "visualReview": {
+    "scope": "Seven frame1 Chrome/native pairs inspected directly, including all four failing cases. Other frames have automated results only; no full visual qualification claimed.",
+    "sheets": [
+      {
+        "path": "output/empty-baseline-boundaries-r1/render/visual-0.png",
+        "sha256": "fe11f833bc730a624c97a81d156cfbacf2950768b8eabff3eca47a24d9559602"
+      },
+      {
+        "path": "output/empty-baseline-boundaries-r1/render/visual-4.png",
+        "sha256": "67711544412e8960213afc1fff4e2501756944ba508b3f992e345a7bc2b80116"
+      }
+    ]
+  },
+  "next": "Test an ordinary landmark/constraint composition preserving authored layout slots and percentage containing blocks; also investigate nested baseline propagation. These are unresolved candidates, not runtime limitations."
+}

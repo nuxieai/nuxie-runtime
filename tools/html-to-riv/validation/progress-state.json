@@ -2,10 +2,14 @@
   "updated": "2026-09-11",
   "focus": "Baseline alignment composition",
   "status": "Safe/logical alignment qualified within the admitted profile",
-  "current": "Safe/logical align-self is committed with168 passing geometry/pixel frames and full visual coverage. Six experimental empty-box baseline compositions pass48 frames with visual review; broader contexts remain unresolved.",
-  "next": "Preserve boundary experiments for percentage heights, nested baselines and mixed participants before selecting public baseline lowering.",
+  "current": "Safe/logical alignment committed and qualified in its profile. Empty-box baseline groups pass48 frames; boundary experiments preserve32 failures from nested/mixed/last-baseline contexts and one percentage-height rejection.",
+  "next": "Investigate ordinary baseline landmarks while preserving containing blocks, item order and parent extents; retain public baseline rejection until proof.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Baseline boundary failures and next composition candidate",
+      "path": "tools/html-to-riv/validation/baseline-boundaries-receipt.json"
+    },
     {
       "label": "Experimental empty-box baseline composition and visual evidence",
       "path": "tools/html-to-riv/validation/empty-baseline-receipt.json"
@@ -146,7 +150,7 @@
   "activeWork": [
     {
       "name": "Baseline composition",
-      "work": "Native/Chrome experiment for empty-box row baseline groups; no public baseline admission"
+      "work": "Boundary experiment complete; landmark composition and nested baseline propagation remain to investigate"
     }
   ],
   "publication": {

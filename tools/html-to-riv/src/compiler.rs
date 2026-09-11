@@ -4,6 +4,8 @@ use scraper::{ElementRef, Html};
 use std::collections::BTreeSet;
 #[path = "baseline.rs"]
 mod baseline;
+#[path = "spacing.rs"]
+mod spacing;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }
@@ -124,9 +126,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -229,7 +231,7 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction", "order", "align-self"].contains(&d.name.as_str()) {
+             "font-size", "background", "background-color", "color", "display", "flex-direction", "order", "align-self", "justify-content"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -258,6 +260,7 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         }
         // Display remains flex; direction is independent of the column authoring reset.
         "display" if matches!(value.as_str(), "flex" | "inherit") => {}
+        "justify-content" => { spacing::computed(&value, spacing::Spacing::Normal, &d.source)?; }
         "align-self" => { computed_alignment(&value, SelfAlignment::AUTO, &d.source)?; }
         "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
@@ -314,6 +317,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
     }
     for d in &declarations {
         match d.name.as_str() {
+            "justify-content" => style.spacing = spacing::computed(&d.value, parent.spacing, &d.source)?,
             "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
@@ -465,7 +469,9 @@ impl Emitter {
         // CSS order modifies layout/paint order, never DOM selector positions.
         ordered_elements.sort_by_key(|(index, _, _, _, order)| (*order, *index));
         if parent_style.direction.reverses_emission() { ordered_elements.reverse(); }
-        let mut children = Vec::with_capacity(ordered_elements.len());
+        let count = ordered_elements.len();
+        let mut children = Vec::with_capacity(count);
+        if count != 0 { spacing::emit(self, parent_id, parent_style, true)?; }
         for (index, element, path, id, order) in ordered_elements {
             let style = computed(element, rules, parent_style)?;
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
@@ -495,7 +501,7 @@ impl Emitter {
                 bounds[main] = Size::Pixels(0.);
                 bounds[main + 2] = Size::Auto;
             }
-            let object_id = self.layout_box(&id, authored_parent, style.direction, style.direction.alignment(),
+            let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
                 native_parent_direction, sizes, bounds, stretch, style.self_alignment.auto_margins(parent_style.direction))?;
             let background = style.background.used(style.foreground);
             if background >> 24 != 0 {
@@ -511,12 +517,13 @@ impl Emitter {
             let last_metric = baseline::summarize_last(&style, &descendants, used_height);
             let last = style.self_alignment.is_last_baseline();
             if last && last_metric.is_none() {
-                return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics and non-column nested topology require further ordinary-file validation"));
+                return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics, distributed columns and non-column nested topology require further ordinary-file validation"));
             }
             if style.self_alignment.is_baseline() && !last && metric.is_none() {
-                return Err(unsupported(&path, "First baseline requires a bounded fixed or intrinsic box metric, or an empty unbounded percentage-height expression; nested columns need fixed descendant metrics and a baseline within their used height"));
+                return Err(unsupported(&path, "First baseline requires a bounded fixed or intrinsic box metric, or an empty unbounded percentage-height expression; nested columns need packed, undistributed children with fixed descendant metrics and a baseline within their used height"));
             }
             children.push(baseline::Child { object_id, index, order, metric, last_metric, used_height, last, participates: style.self_alignment.is_baseline() });
+            spacing::emit(self, parent_id, parent_style, children.len() == count)?;
         }
         baseline::emit(self, parent_id, parent_style, &children, path)?;
         Ok(children)

@@ -1,0 +1,277 @@
+{
+  "status": "qualified-single-line-main-axis-profile",
+  "fullNativeCorpusPassed": true,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "scenes": 112,
+  "frames": 896,
+  "geometryPass": 896,
+  "pixelPass": 896,
+  "clearPass": 1792,
+  "visual": {
+    "directPairs": 172,
+    "exactDecodedTransfers": 724,
+    "reviewers": [
+      {
+        "agent": "intrinsic_review",
+        "directIndices": [
+          0,
+          55
+        ]
+      },
+      {
+        "agent": "spacing_impl",
+        "directIndices": [
+          56,
+          111
+        ]
+      },
+      {
+        "agent": "line_alignment_audit",
+        "directIndices": [
+          112,
+          171
+        ]
+      }
+    ],
+    "rootAdditionalSpotCheck": [
+      168,
+      169,
+      170,
+      171
+    ],
+    "result": "No visible divergence found"
+  },
+  "tests": {
+    "rust": 98,
+    "node": 28,
+    "typescript": "pass",
+    "immutableSourceGuard": "pass"
+  },
+  "priorByteIdenticalScenes": 370,
+  "recordBound": "32768 extra spacer records at8192 authored element limit",
+  "limitations": [
+    "single-line flex only",
+    "other justify-content values remain diagnostic",
+    "distributed nonempty-column baseline metrics remain unresolved",
+    "prior unrelated fractional pixel failures retained"
+  ],
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/validation/public-spacing-cases.json",
+      "sha256": "25e7389c8a45121c6ecfa34057a9d5a96fd8d183fe05ac1836f2ce64eb519a2a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/receipt.json",
+      "sha256": "f58633b342bf693a6afeaf67882990b909b0dd9b3ed1523b5f69cecdc80bfdeb"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-direct.json",
+      "sha256": "f74f2e60968f42f7ab13d5490e89a7427946fd54038fcb72dfd6bf1d52b20600"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-transfer.json",
+      "sha256": "cfd15dbc88a79ca4627ff11814876bb6593a22ace912a8b846885a1751fa6c50"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-checkpoint-r1/manifest.json",
+      "sha256": "37e4c78de5e36684a2f798b66965002f9ee43863b0e222930eb63d5684df5ce9"
+    },
+    {
+      "path": "tools/html-to-riv/output/spacing-byte-regression-r1/manifest.json",
+      "sha256": "71dcf9c211922bdb56037b2a53ee3caa344306afe5f463dfbae9f39cc6f3fd6f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-preparation-r1/rust-tests.log",
+      "sha256": "f9c4ffc1208ab84a3109dc1caa0c3edf3c5921fb10a5877d2ddf94d236136e6f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-preparation-r1/native-build.log",
+      "sha256": "58e5e15d15c3ba8048bc39ea6db8604bdc63608dc14cc22bd8ac79043a4b736c"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-preparation-r1/wasm-build.log",
+      "sha256": "1d928d288a965c52199f29771b46cfa355ea8953be759d8c3a5a33eeab41f8fb"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-preparation-r1/node-tests.log",
+      "sha256": "2696b75c7877c39ea08bf19a96624cbcae7c90cbe388840b517342e8af93a2f4"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-preparation-r1/visual.py",
+      "sha256": "589c63ddcc83163b1ed96bb352f2749f89111feb6b0ab531d5d71e261ccc72ca"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-0.png",
+      "sha256": "17ed415f287b85df27a99706e2a45f82f05249db0f434abb8aa6e12c9ddfdb74"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-100.png",
+      "sha256": "fd0fc016f7b3744cf2cd1849500c4efd276e1a964541459d32e08ee29087cf8d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-104.png",
+      "sha256": "8db3415ea76bb18264e9aeedb158a55cea42760ca05d6bdb283e86db60365d26"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-108.png",
+      "sha256": "0d8e1bb36e53415b57f5dd4a34cb4c1f811f010bb976a63f86f84253b9ab1003"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-112.png",
+      "sha256": "4564791aae7c3a03e6fa6154a789475ea92aaad5dcf1bd5283ffdef92061068d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-116.png",
+      "sha256": "d603617284e9052536801cf6bd6db6f8b6639320f463d1b821514051e228a1b9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-12.png",
+      "sha256": "66214b6b8ceb6d956069d76d2f487200079d29259b955350a873d0d5cb11bbb8"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-120.png",
+      "sha256": "f1f9356d1b44bfa0ac1cb9981607c14ce8b486b29764c78e8a7a5e450c203e63"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-124.png",
+      "sha256": "4c36aaf063e0bb2106bc06bb681b31eeff95f3af834e22454c190fb7061ac6a1"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-128.png",
+      "sha256": "4a2dc814017fa39230b4e9b8571a1b4b3da5530e8cd2505dc73672708e7b9f46"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-132.png",
+      "sha256": "bc2cead7638a86a93dca80518771c775570f11d0200057fb75475647e0f00d3b"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-136.png",
+      "sha256": "86064956467f4015e8166beebdc96cc0256caffa8bc6dead7782460ba2459745"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-140.png",
+      "sha256": "b4cd3ee98c1d369f2e262c98a8f9a28a36e44d850773accb0a4ef0702e926863"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-144.png",
+      "sha256": "6abb6d0485c678dbae4874dc6c08c83e36da85af72869d599ee9a4152ff4aff9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-148.png",
+      "sha256": "c8e3d27688fa1d99db6497e4f5d9b76e9b78ee419ef49d317cdcc06706cb9edf"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-152.png",
+      "sha256": "0402444438d7262d99dd8c6c9bb4cb21eed8060a97ca4fa2409ca3ac29d921aa"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-156.png",
+      "sha256": "97380d47f8ce2b45de509eaec1eea73c5456d7eef356dc0bb1b98c8cfb6e2771"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-16.png",
+      "sha256": "c10316f9c27fb61d1b3a8b993d09a8148d2332a67a9bb498be99839ea924d883"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-160.png",
+      "sha256": "af53108d9e7d15cc413bf20c97dd81b9e61a4e50e96c02c0ce97e1d2fa70ceca"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-164.png",
+      "sha256": "872747863dfc09fb7a4c84b4ecfa14df449b5b9b604ceeb867e0c13e6d74f1d6"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-168.png",
+      "sha256": "c0117c7a5235ac2a3686bcafa6aad0a8f44e024e0317c37ae38cdcfe310433e9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-20.png",
+      "sha256": "75060c85571601393b061fb07d0186a65f8173e203aa2e22b22c31f5d727972d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-24.png",
+      "sha256": "8991b24f3607fea2a5b7f1f6c15bc26da15212e29e0e80b5a9090fea1459ab19"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-28.png",
+      "sha256": "0a214683e7367f1cda237f888b91e41690149e64ebdeceb1f0d7e75c6b799c6d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-32.png",
+      "sha256": "f7841f97a7b3c4f9fac9ffbec2a558caa94cf94bc891850f01b8e806d414921a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-36.png",
+      "sha256": "736660be40a1e730317419d77e49f2ee84f92b9716a66d11cbc2f524ddc2e44e"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-4.png",
+      "sha256": "0dec41363538461c100657a4962331f7a3fe5af62b68f7f76cfe70659f2da0ae"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-40.png",
+      "sha256": "737e326b6c76aa5d4178521559dd39ff45bd3b5914cfa008678ae6fd0f349162"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-44.png",
+      "sha256": "68a55c88ab9e0dd48c42295c2844101c5dc5eb5e334196576bc2d0d888a0592a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-48.png",
+      "sha256": "a0b6175f9076f708f97c9fc6690cc6a33badc0016c9387da0120686497ebb628"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-52.png",
+      "sha256": "13d2e87c36f1f6b9ddbc75721ebd2e5279352c099e3d889eb4aa8defb1823cb1"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-56.png",
+      "sha256": "32f87049d98e32ef0a297773d49d7521d98a11a471733617538ca42397fa6ddf"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-60.png",
+      "sha256": "5c7030a5608ed337ae3a5d66583b6782de28c8b413fe6ebddae76ad41d986960"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-64.png",
+      "sha256": "6f2daa946d97ea7006b94715594242c6fe6dbecf60c44bb8b2a1f12505c64f28"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-68.png",
+      "sha256": "23f9484126e3cb26b65a18ee401dd4ff843a2bad94b2dc5162ec4828163dcd85"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-72.png",
+      "sha256": "8e5c470f5d19bca0b1e74dbd4a855aef36fd598b555e36de4d5f60b7a49a0098"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-76.png",
+      "sha256": "e2f7bf301dbedb554f8e50f3c74a367a108f9f531eb5bb011185043006405b05"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-8.png",
+      "sha256": "467eac15b9ea3b5c0b7dfe22a36944135b4b2031131f85d31607c0b484d7e603"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-80.png",
+      "sha256": "3c1f8ad8757b1c8e9d8d4ae3f08a137e9c6e6a4f2d2821265fd168a94edf6ab9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-84.png",
+      "sha256": "b3c8c70343d3375cac937fc8feecbab1b5ad69867d978253a10a0705849fdb31"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-88.png",
+      "sha256": "7cbc8a4fa93899bdbe5022884c672214919b1acfac3ffeb591db6c78e78cdcbf"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-92.png",
+      "sha256": "1b3f8e7a284134843f9bec8be0d725a9c3c00178a798cd2687654256029282d1"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-spacing-r1/visual-96.png",
+      "sha256": "e7b1c1ebe77146520bf8df863a616b48fb11e944cdb5acaae3a829ba759396fc"
+    }
+  ]
+}

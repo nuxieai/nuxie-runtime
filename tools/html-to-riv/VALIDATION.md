@@ -153,3 +153,7 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## Public last-baseline checkpoint
 
 See `validation/last-baseline-review.md` and `validation/public-last-baseline-receipt.json`: 62 main scenes plus four nested-constraint scenes, 528/528 geometry and 526/528 pixel passes, 1056 clear controls. Two fractional leaf failures remain in the failed main receipt. All 74 distinct pairs reviewed; 454 exact decoded transfers cover the rest. 92 Rust/26 Node tests pass; 304 prior outputs remain identical. The frozen compiler is bound to the passing nested receipt and reproduces every main file separately without relabeling its failed receipt.
+
+## Public around/evenly spacing checkpoint
+
+`validation/public-spacing-cases.json` contains112 scenes across all directions, intrinsic/percentage sizing, bounds, ordering, inheritance, baseline groups and empty/zero cases. All896 geometry/pixel frames and1792 clear checks pass. Frozen compiler reproduces112 exact outputs;370 prior requests remain byte/map identical. Tests:98 Rust,28 Node, strict TypeScript and immutable source guard. Direct visual coverage and724 exact transfers are recorded in `validation/public-spacing-receipt.json`.

@@ -1,0 +1,3034 @@
+[
+  {
+    "name": "spacing-public-row-space-around-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:auto;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:auto;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:auto;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:auto;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:auto;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:auto;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:auto;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-positive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-single",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:auto;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "public justify-content"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;--spacing:space-around;justify-content:var(--spacing);background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{width:80%;min-width:160px;max-width:300px}#a{min-width:40px}#b{max-width:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{width:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-last-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:last baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "last baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;--spacing:space-evenly;justify-content:var(--spacing);background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{width:80%;min-width:160px;max-width:300px}#a{min-width:40px}#b{max-width:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{width:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-last-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:last baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "last baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;--spacing:space-around;justify-content:var(--spacing);background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{width:80%;min-width:160px;max-width:300px}#a{min-width:40px}#b{max-width:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{width:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-last-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:last baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "last baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;--spacing:space-evenly;justify-content:var(--spacing);background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{width:80%;min-width:160px;max-width:300px}#a{min-width:40px}#b{max-width:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{width:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-last-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{align-self:last baseline}",
+    "features": [
+      "L05",
+      "spacing with baseline group",
+      "last baseline"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;--spacing:space-around;justify-content:var(--spacing);background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{height:80%;min-height:160px;max-height:300px}#a{min-height:40px}#b{max-height:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{height:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;--spacing:space-evenly;justify-content:var(--spacing);background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{height:80%;min-height:160px;max-height:300px}#a{min-height:40px}#b{max-height:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{height:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;--spacing:space-around;justify-content:var(--spacing);background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{height:80%;min-height:160px;max-height:300px}#a{min-height:40px}#b{max-height:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{height:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-ordered-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;--spacing:space-evenly;justify-content:var(--spacing);background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{order:2}#c{order:-1}#p>:nth-child(2){background:purple}",
+    "features": [
+      "L05",
+      "ordered-variables"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}",
+    "features": [
+      "L05",
+      "nested"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-bounds",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#p{height:80%;min-height:160px;max-height:300px}#a{min-height:40px}#b{max-height:30px}",
+    "features": [
+      "L05",
+      "bounds"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-empty",
+    "html": "<div id=\"p\"></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L05",
+      "empty"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a,#b,#c{height:0}",
+    "features": [
+      "L05",
+      "zero"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-inherited",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"inner\"></div><div id=\"inner2\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:240px;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#inner{width:10px;height:10px;background:purple}#b{align-self:center}#a{align-self:flex-end}#b{justify-content:inherit}#inner2{width:10px;height:10px;background:lime}",
+    "features": [
+      "L05",
+      "inherited nested spacing"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:70%;min-width:90px;max-width:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-around-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:70%;min-width:90px;max-width:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-space-evenly-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:70%;min-width:90px;max-width:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-around-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:70%;min-width:90px;max-width:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-row-reverse-space-evenly-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:80%;height:100px;flex-direction:row-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:gold}#c{width:50px;height:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{width:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:70%;min-height:90px;max-height:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-around-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:70%;min-height:90px;max-height:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-space-evenly-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:70%;min-height:90px;max-height:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-around-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-around;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-percentage-child",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:70%;min-height:90px;max-height:280px}",
+    "features": [
+      "L05",
+      "percentage-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  },
+  {
+    "name": "spacing-public-column-reverse-space-evenly-intrinsic-child",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"content\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{height:80%;width:100px;flex-direction:column-reverse;align-self:flex-start;justify-content:space-evenly;background:navy}#a{height:30px;width:30px;background:coral}#b{height:40px;width:40px;background:gold}#c{height:50px;width:50px;background:teal}#footer{width:120px;height:10px;background:green}#a{height:auto}#content{width:10px;height:10px;background:purple}",
+    "features": [
+      "L05",
+      "intrinsic-child"
+    ],
+    "viewports": [
+      [
+        240,
+        320
+      ],
+      [
+        390,
+        400
+      ],
+      [
+        768,
+        200
+      ],
+      [
+        240,
+        320
+      ]
+    ]
+  }
+]

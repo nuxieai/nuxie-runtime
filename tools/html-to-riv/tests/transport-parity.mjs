@@ -224,3 +224,25 @@ test("nested first/last baseline constraints have exact CLI/WASM parity",async()
  assert.equal(fixtures.length,4);
  await assertCorpusParity(fixtures);
 });
+
+
+test("public around/evenly spacing has exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-spacing-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,112);
+ await assertCorpusParity(fixtures);
+});
+
+
+test("unresolved spacing contexts have CLI/WASM diagnostic parity",async()=>{
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'spacing-rejection-parity-'));
+ const html='<div id="p"><div id="a"><div id="leaf"></div></div></div>';
+ try{
+  for(const css of ['#never{justify-content:space-between}', '#never{justify-content:safe space-around}', '#p{flex-direction:row}#a{height:60px;align-self:baseline;justify-content:space-evenly}#leaf{height:10px}', '#p{flex-direction:row}#a{height:60px;align-self:last baseline;justify-content:space-around}#leaf{height:10px}']){
+   const request={html,css,width:240,height:160},inputFile=path.join(dir,'input.json'),outputFile=path.join(dir,'scene.riv');
+   fs.writeFileSync(inputFile,JSON.stringify(request));
+   const cli=spawnSync(binary,[inputFile,outputFile],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.notEqual(cli.status,0);assert.equal(result.ok,false);assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(outputFile));
+  }
+  assert.equal(compiler.compile(document).ok,true);
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

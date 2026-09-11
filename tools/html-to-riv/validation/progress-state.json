@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-11",
-  "focus": "Main-axis spacing and flex line separation",
-  "status": "Around/evenly spacer composition proven; wrapping remains unresolved",
-  "current": "40 spacer experiments pass320 geometry/pixel frames and640 clear checks, with full viewport visual review. Reverse-overflow failures preserved. Two draw-order arrangements fail to change wrapped painting; public compiler remains at last-baseline checkpoint.",
-  "next": "Implement compiler-derived around/evenly spacing with ordering/baseline context guards and public validation; continue investigating wrapped paint ordering.",
+  "focus": "Public main-axis spacing and wrapped paint ordering",
+  "status": "Around/evenly spacing passes public native validation",
+  "current": "112 public spacing scenes pass896 geometry/pixel frames and1792 clear controls.98 Rust/28 Node tests pass;370 prior outputs unchanged. Foreground draw ordering also passes one bounded changing-line-partition experiment.",
+  "next": "Extend foreground draw-order composition across reverse flow, nested paint and clipping before public wrap/line alignment admission; continue remaining backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public around/evenly spacing qualification",
+      "path": "tools/html-to-riv/validation/public-spacing-receipt.json"
+    },
+    {
+      "label": "Foreground visible draw-order proof",
+      "path": "tools/html-to-riv/validation/foreground-order-receipt.json"
+    },
     {
       "label": "Spacing composition and failed draw-order candidates",
       "path": "tools/html-to-riv/validation/flex-spacing-experiment-receipt.json"
@@ -177,12 +185,8 @@
   ],
   "activeWork": [
     {
-      "name": "Public spacing lowering",
-      "work": "Derive ordinary flexible spacer placement from authored children and validate broader contexts."
-    },
-    {
-      "name": "Wrapped paint order",
-      "work": "DrawRules chains tested so far do not reorder layout painting; other compositions remain unresolved."
+      "name": "Wrapping and independent line alignment",
+      "work": "Foreground drawables separate visible paint from layout in one proven case; broader reverse/nested/clip/line contexts remain unresolved."
     }
   ],
   "publication": {

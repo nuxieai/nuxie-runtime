@@ -41,3 +41,7 @@ No L04/L06 status should change to qualified based on this report. Native wrap a
 ## Subsequent DrawRules experiment
 
 Two tested arrangements target layout siblings or colored descendants. Each imports/clones and passes24/24 geometry checks, but0/24 pixel checks. Before/after chains remain exact native-pixel matches to the corresponding control, so these arrangements do not change layout painting. Three frame0 pairs were directly reviewed; six files reproduce exactly. The initial align-content:normal reference mismatch is separately preserved. This does not rule out other ordinary draw-order compositions. See output/flex-draw-order-r1/FINDINGS.md and validation/flex-spacing-experiment-receipt.json.
+
+## Visible draw-order correction
+
+The initial rules did not reach runtime-created background proxies. A source-backed correction reparents leaf Fill objects to ordinary ForegroundLayoutDrawable objects and attaches after-chain DrawRules to those authored visible objects. The bounded row/wrap candidate passes8/8 geometry and pixels plus16 clear controls across changing line partitions on the original and clone. Three distinct viewport pairs were directly reviewed and five exact transfers cover repeats. Control and before-chain failures remain preserved. General nested background order, clipping, reverse flow and per-line baselines remain unresolved. See foreground-order-receipt.json and output/flex-foreground-order-r1/FINDINGS.md.

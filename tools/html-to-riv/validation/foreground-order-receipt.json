@@ -1,0 +1,25 @@
+{
+  "status": "bounded-visible-draw-order-composition-proven",
+  "publicAdmission": false,
+  "candidateFrames": 8,
+  "candidateGeometryPass": 8,
+  "candidatePixelPass": 8,
+  "candidateClearPass": 16,
+  "directPairs": 3,
+  "exactTransfers": 5,
+  "controls": "No-rule and before-chain pixel failures retained",
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/flex-draw-order-r1/diagnosis.md",
+      "sha256": "5435c8bd8e7d2206c063ba70e744c78e63fc7b7190288213d6f482a4c5611682"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-order-r1/FINDINGS.md",
+      "sha256": "ce9d8d74c636283c0f7be70fa69caeb78b41e60c1d6398715e7009c8bd12d9ee"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-order-r1/experiment-manifest.json",
+      "sha256": "26b771d0dca5f6d79ae62e0725a4d40a8b8edc67c83008958d59192a482c602a"
+    }
+  ]
+}

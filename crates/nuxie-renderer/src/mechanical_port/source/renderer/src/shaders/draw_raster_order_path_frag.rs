@@ -34,7 +34,6 @@ PLS_BLOCK_END
 PLS_MAIN(@drawFragmentMain)
 {
     VARYING_UNPACK(v_paint, float4);
-    VARYING_UNPACK(v_cssGradientTile, float4);
 #ifdef @ENABLE_MODULATED_IMAGE
     VARYING_UNPACK(v_image, float3);
 #endif
@@ -180,7 +179,7 @@ PLS_MAIN(@drawFragmentMain)
         }
 #endif // ENABLE_CLIP_RECT
 
-        half4 color = find_paint_color(v_paint, v_cssGradientTile,
+        half4 color = find_paint_color(v_paint,
 #ifdef @ENABLE_MODULATED_IMAGE
                                        v_image,
 #endif

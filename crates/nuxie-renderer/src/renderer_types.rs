@@ -65,9 +65,6 @@ pub enum RenderMode {
     /// raster-ordering renderer. WGPU does not expose this interlock.
     RasterOrdering,
     Msaa,
-    /// Atomic coverage accumulation preserving each path's authored fill rule.
-    Atomics,
-    /// Explicitly override path fill rules with clockwise coverage semantics.
     ClockwiseAtomic,
 }
 

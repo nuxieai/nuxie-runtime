@@ -49,7 +49,6 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 #endif
 #else
     VARYING_UNPACK(v_paint, float4);
-    VARYING_UNPACK(v_cssGradientTile, float4);
 #ifdef @ENABLE_MODULATED_IMAGE
     VARYING_UNPACK(v_image, float3);
 #endif
@@ -80,7 +79,7 @@ FRAG_DATA_MAIN(half4, @drawFragmentMain)
 #else
         1.;
 #endif
-    half4 color = find_paint_color(v_paint, v_cssGradientTile,
+    half4 color = find_paint_color(v_paint,
 #ifdef @ENABLE_MODULATED_IMAGE
                                    v_image,
 #endif

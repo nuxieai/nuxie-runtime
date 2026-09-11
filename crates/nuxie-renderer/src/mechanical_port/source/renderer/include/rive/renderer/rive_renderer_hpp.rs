@@ -254,7 +254,6 @@ impl ClipElement {
 }
 
 pub struct RiveRenderer {
-    pub(crate) checked_draw_error: Option<&'static str>,
     pub m_renderStateStack: ManuallyDrop<Vec<RenderState>>,
     pub m_clipStack: ManuallyDrop<Vec<ClipElement>>,
     pub m_context: *mut RenderContext,
@@ -279,7 +278,6 @@ impl RiveRenderer {
     /// the entire lifetime of the returned renderer.
     pub unsafe fn new(context: *mut RenderContext) -> Self {
         Self {
-            checked_draw_error: None,
             m_renderStateStack: ManuallyDrop::new(vec![RenderState::default()]),
             m_clipStack: ManuallyDrop::new(Vec::new()),
             m_context: context,

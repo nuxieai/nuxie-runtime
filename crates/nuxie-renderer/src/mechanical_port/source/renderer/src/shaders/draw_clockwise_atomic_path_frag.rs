@@ -218,7 +218,6 @@ INLINE void apply_fill_coverage(INOUT(float) paintAlpha,
 CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
 {
     VARYING_UNPACK(v_paint, float4);
-    VARYING_UNPACK(v_cssGradientTile, float4);
 #ifdef @ENABLE_MODULATED_IMAGE
     VARYING_UNPACK(v_image, float3);
 #endif
@@ -240,7 +239,7 @@ CLOCKWISE_ATOMIC_PLS_MAIN(@drawFragmentMain)
     VARYING_UNPACK(v_coveragePlacement, uint2);
     VARYING_UNPACK(v_coverageCoord, float2);
 
-    half4 paintColor = find_paint_color(v_paint, v_cssGradientTile,
+    half4 paintColor = find_paint_color(v_paint,
 #ifdef @ENABLE_MODULATED_IMAGE
                                         v_image,
 #endif

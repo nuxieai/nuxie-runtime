@@ -158,17 +158,6 @@ pub trait CoreStyle {
         Style::<Self::CustomIdent>::DEFAULT.aspect_ratio
     }
 
-    /// Reference box for the preferred ratio, independent of authored sizes.
-    fn aspect_ratio_box_sizing(&self) -> BoxSizing { self.box_sizing() }
-    /// Optional arithmetic saturation for dimensions derived from a ratio.
-    fn css_percentage_spacing(&self) -> bool { false }
-    /// Resolve relative insets against the final containing content size.
-    fn css_relative_position(&self) -> bool { false }
-    /// Padding-box size and origin relative to the immediate layout parent.
-    fn css_absolute_containing_block(&self) -> Option<(Size<f32>, Point<f32>)> { None }
-    fn aspect_ratio_size_limit(&self) -> Option<f32> { None }
-    fn aspect_ratio_pair(&self) -> Option<[u32; 2]> { None }
-
     // Spacing Properties
     /// How large should the margin be on each side?
     #[inline(always)]
@@ -492,24 +481,6 @@ pub struct Style<S: CheapCloneStr = DefaultCheapStr> {
     ///
     /// The ratio is calculated as width divided by height.
     pub aspect_ratio: Option<f32>,
-    /// None follows box_sizing; CSS auto + ratio can select ContentBox.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub aspect_ratio_box_sizing: Option<BoxSizing>,
-    /// CSS fixed-point limit; None preserves the ordinary runtime behavior.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub aspect_ratio_size_limit: Option<f32>,
-    /// Opt-in CSS percentage edge precision and intrinsic measurement.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub css_percentage_spacing: bool,
-    /// CSS relative offsets; false preserves legacy Yoga inset resolution.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub css_relative_position: bool,
-    /// Separate CSS containing block; None preserves ordinary parent-based layout.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub css_absolute_containing_block: Option<(Size<f32>, Point<f32>)>,
-    /// Exact computed CSS ratio; absent for ordinary Rive layouts.
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub aspect_ratio_pair: Option<[u32; 2]>,
 
     // Spacing Properties
     /// How large should the margin be on each side?
@@ -547,14 +518,6 @@ pub struct Style<S: CheapCloneStr = DefaultCheapStr> {
     #[cfg(any(feature = "flexbox", feature = "grid"))]
     #[cfg_attr(feature = "serde", serde(default = "style_helpers::zero"))]
     pub gap: Size<LengthPercentage>,
-    /// Opt-in CSS gap precision; ordinary Rive/Yoga layouts retain float gaps.
-    #[cfg(feature = "flexbox")]
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub quantize_gap: bool,
-    /// Opt-in CSS column intrinsic sizing, independent of gap precision.
-    #[cfg(feature = "flexbox")]
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub css_intrinsic_sizing: bool,
 
     // Block container properties
     /// How items elements should aligned in the inline axis
@@ -645,18 +608,8 @@ impl<S: CheapCloneStr> Style<S> {
         min_size: Size::auto(),
         max_size: Size::auto(),
         aspect_ratio: None,
-        aspect_ratio_box_sizing: None,
-        aspect_ratio_size_limit: None,
-        css_percentage_spacing: false,
-        css_relative_position: false,
-        css_absolute_containing_block: None,
-        aspect_ratio_pair: None,
         #[cfg(any(feature = "flexbox", feature = "grid"))]
         gap: Size::zero(),
-        #[cfg(feature = "flexbox")]
-        quantize_gap: false,
-        #[cfg(feature = "flexbox")]
-        css_intrinsic_sizing: false,
         // Alignment
         #[cfg(any(feature = "flexbox", feature = "grid"))]
         align_items: None,
@@ -773,14 +726,6 @@ impl<S: CheapCloneStr> CoreStyle for Style<S> {
     fn aspect_ratio(&self) -> Option<f32> {
         self.aspect_ratio
     }
-    fn aspect_ratio_box_sizing(&self) -> BoxSizing {
-        self.aspect_ratio_box_sizing.unwrap_or(self.box_sizing)
-    }
-    fn css_percentage_spacing(&self) -> bool { self.css_percentage_spacing }
-    fn css_relative_position(&self) -> bool { self.css_relative_position }
-    fn css_absolute_containing_block(&self) -> Option<(Size<f32>, Point<f32>)> { self.css_absolute_containing_block }
-    fn aspect_ratio_size_limit(&self) -> Option<f32> { self.aspect_ratio_size_limit }
-    fn aspect_ratio_pair(&self) -> Option<[u32; 2]> { self.aspect_ratio_pair }
     #[inline(always)]
     fn margin(&self) -> Rect<LengthPercentageAuto> {
         self.margin
@@ -850,14 +795,6 @@ impl<T: CoreStyle> CoreStyle for &'_ T {
     fn aspect_ratio(&self) -> Option<f32> {
         (*self).aspect_ratio()
     }
-    fn aspect_ratio_box_sizing(&self) -> BoxSizing {
-        (*self).aspect_ratio_box_sizing()
-    }
-    fn css_percentage_spacing(&self) -> bool { (*self).css_percentage_spacing() }
-    fn css_relative_position(&self) -> bool { (*self).css_relative_position() }
-    fn css_absolute_containing_block(&self) -> Option<(Size<f32>, Point<f32>)> { (*self).css_absolute_containing_block() }
-    fn aspect_ratio_size_limit(&self) -> Option<f32> { (*self).aspect_ratio_size_limit() }
-    fn aspect_ratio_pair(&self) -> Option<[u32; 2]> { (*self).aspect_ratio_pair() }
     #[inline(always)]
     fn margin(&self) -> Rect<LengthPercentageAuto> {
         (*self).margin()
@@ -940,8 +877,6 @@ impl<T: BlockItemStyle> BlockItemStyle for &'_ T {
 
 #[cfg(feature = "flexbox")]
 impl<S: CheapCloneStr> FlexboxContainerStyle for Style<S> {
-    fn css_intrinsic_sizing(&self) -> bool { self.css_intrinsic_sizing }
-    fn quantize_gap(&self) -> bool { self.quantize_gap }
     #[inline(always)]
     fn flex_direction(&self) -> FlexDirection {
         self.flex_direction
@@ -970,8 +905,6 @@ impl<S: CheapCloneStr> FlexboxContainerStyle for Style<S> {
 
 #[cfg(feature = "flexbox")]
 impl<T: FlexboxContainerStyle> FlexboxContainerStyle for &'_ T {
-    fn css_intrinsic_sizing(&self) -> bool { (*self).css_intrinsic_sizing() }
-    fn quantize_gap(&self) -> bool { (*self).quantize_gap() }
     #[inline(always)]
     fn flex_direction(&self) -> FlexDirection {
         (*self).flex_direction()
@@ -1305,10 +1238,6 @@ mod tests {
             padding: Rect::zero(),
             border: Rect::zero(),
             gap: Size::zero(),
-            #[cfg(feature = "flexbox")]
-            quantize_gap: false,
-            #[cfg(feature = "flexbox")]
-            css_intrinsic_sizing: false,
             #[cfg(feature = "block_layout")]
             text_align: Default::default(),
             #[cfg(feature = "flexbox")]
@@ -1321,12 +1250,6 @@ mod tests {
             min_size: Size::auto(),
             max_size: Size::auto(),
             aspect_ratio: Default::default(),
-            aspect_ratio_box_sizing: Default::default(),
-            aspect_ratio_size_limit: Default::default(),
-            css_percentage_spacing: false,
-        css_relative_position: false,
-        css_absolute_containing_block: None,
-            aspect_ratio_pair: Default::default(),
             #[cfg(feature = "grid")]
             grid_template_rows: Default::default(),
             #[cfg(feature = "grid")]
@@ -1423,12 +1346,12 @@ mod tests {
         assert_type_size::<GridTemplateComponent<String>>(56);
         assert_type_size::<GridPlacement<String>>(32);
         assert_type_size::<Line<GridPlacement<String>>>(64);
-        assert_type_size::<Style<String>>(592);
+        assert_type_size::<Style<String>>(544);
 
         // String-type dependent (Arc<str>)
         assert_type_size::<GridTemplateComponent<Arc<str>>>(56);
         assert_type_size::<GridPlacement<Arc<str>>>(24);
         assert_type_size::<Line<GridPlacement<Arc<str>>>>(48);
-        assert_type_size::<Style<Arc<str>>>(560);
+        assert_type_size::<Style<Arc<str>>>(512);
     }
 }

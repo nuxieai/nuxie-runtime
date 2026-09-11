@@ -1573,21 +1573,6 @@ impl RendererContract for RiveRenderer {
         {
             return;
         }
-        // Checked CSS gradients can become unrepresentable after a host
-        // transform even when authored tile coefficients were valid. Reject
-        // before allocating/enqueuing a draw; frame owners propagate this error.
-        if !q.getGradient().is_null() {
-            let gradient = unsafe { &*q.getGradient() };
-            if let Some(tile) = gradient.tile() {
-                let context = unsafe { &*self.m_context };
-                let mut aux: gpu::PaintAuxData = unsafe { core::mem::zeroed() };
-                if !aux.set_css_gradient_tile(self.current_state().matrix, gradient.m_coeffs, tile,
-                    context.platformFeatures().framebufferBottomUp, frame.renderTargetHeight) {
-                    self.checked_draw_error.get_or_insert("CSS gradient host transform is not representable");
-                    return;
-                }
-            }
-        }
         let image_matrix = (!q.getImageTexture().is_null()).then(|| {
             mul(self.current_state().matrix, *q.getImageTransform())
         });
@@ -1713,9 +1698,7 @@ impl RendererContract for RiveRenderer {
             }
             let p = unsafe { &*self.m_unitRectPath.as_ref().unwrap().get() };
             let mut paint = RiveRenderPaint::new();
-            // drawPath applies the current host modulation to this paint.
-            // Baking it into the image alpha here would apply it twice.
-            paint.image(texture, opacity.max(0.0));
+            paint.image(texture, final_opacity);
             paint.blendMode(blend);
             paint.imageSampler(sampler);
             unsafe {

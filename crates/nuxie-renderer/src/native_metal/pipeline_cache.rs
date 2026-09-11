@@ -358,15 +358,15 @@ pub(crate) fn pipeline_key(
 pub(crate) struct RasterPreloadSpec {
     pub(crate) job: PipelineJob,
     pub(crate) key: PipelineKey,
-    pub(crate) vertex_namespace: &'static str,
-    pub(crate) fragment_namespace: &'static str,
+    pub(crate) vertex_function: &'static str,
+    pub(crate) fragment_function: &'static str,
 }
 
 /// The exact seven constructor-time raster ubershaders and their metallib
-/// namespaces. Entry-point suffixes come from the generated shader exports.
+/// names. The short `HC`/`JB` exports are pinned by `DrawShaderLibrary`.
 pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineCacheError> {
     let make =
-        |draw_type, shader_features, shader_misc_flags, vertex_namespace, fragment_namespace| {
+        |draw_type, shader_features, shader_misc_flags, vertex_function, fragment_function| {
             let job = PipelineJob {
                 draw_type,
                 shader_features,
@@ -377,8 +377,8 @@ pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineC
             Ok(RasterPreloadSpec {
                 job,
                 key: job.key()?,
-                vertex_namespace,
-                fragment_namespace,
+                vertex_function,
+                fragment_function,
             })
         };
 
@@ -387,50 +387,50 @@ pub(crate) fn raster_preload_specs() -> Result<[RasterPreloadSpec; 7], PipelineC
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000100",
-            "p11111111100",
+            "p11110000100::HC",
+            "p11111111100::JB",
         )?,
         make(
             DrawType::MidpointFanPatches,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000100",
-            "c11111111100",
+            "p11110000100::HC",
+            "c11111111100::JB",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             0,
-            "p11110000110",
-            "p11111111110",
+            "p11110000110::HC",
+            "p11111111110::JB",
         )?,
         make(
             DrawType::InteriorTriangulation,
             ALL_SHADER_FEATURES,
             CLOCKWISE_FILL,
-            "p11110000110",
-            "c11111111110",
+            "p11110000110::HC",
+            "c11111111110::JB",
         )?,
         make(
             DrawType::AtlasBlit,
             shader_features_mask_for(DrawType::AtlasBlit, InterlockMode::RasterOrdering)?,
             0,
-            "p11100000111",
-            "p11100011111",
+            "p11100000111::HC",
+            "p11100011111::JB",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             0,
-            "m11100000000",
-            "m11100011000",
+            "m11100000000::HC",
+            "m11100011000::JB",
         )?,
         make(
             DrawType::ImageMesh,
             shader_features_mask_for(DrawType::ImageMesh, InterlockMode::RasterOrdering)?,
             CLOCKWISE_FILL,
-            "m11100000000",
-            "m11100011000",
+            "m11100000000::HC",
+            "m11100011000::JB",
         )?,
     ])
 }
@@ -717,9 +717,6 @@ mod metal_backend {
     use objc2_foundation::NSString;
     use objc2_metal::{MTLDevice, MTLLibrary};
 
-    use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as shader_exports;
-    // This standalone compiler uses the fixed background_shader_sources
-    // fixtures in shader_compile_plan.rs, unlike the generated preload library.
     const SPECIALIZED_VERTEX_MAIN: &str = "HC";
     const SPECIALIZED_FRAGMENT_MAIN: &str = "JB";
 
@@ -820,8 +817,8 @@ mod metal_backend {
             DrawPipeline::new(
                 &self.device,
                 Some(precompiled_library.library()),
-                &NSString::from_str(&format!("{}::{}", spec.vertex_namespace, shader_exports::GLSL_drawVertexMain)),
-                &NSString::from_str(&format!("{}::{}", spec.fragment_namespace, shader_exports::GLSL_drawFragmentMain)),
+                &NSString::from_str(spec.vertex_function),
+                &NSString::from_str(spec.fragment_function),
                 spec.job.draw_type,
                 metal_interlock_mode(spec.job.interlock_mode)?,
                 spec.job.shader_misc_flags,
@@ -1196,16 +1193,16 @@ mod tests {
             state
                 .preloads
                 .iter()
-                .map(|spec| (spec.vertex_namespace, spec.fragment_namespace))
+                .map(|spec| (spec.vertex_function, spec.fragment_function))
                 .collect::<Vec<_>>(),
             vec![
-                ("p11110000100", "p11111111100"),
-                ("p11110000100", "c11111111100"),
-                ("p11110000110", "p11111111110"),
-                ("p11110000110", "c11111111110"),
-                ("p11100000111", "p11100011111"),
-                ("m11100000000", "m11100011000"),
-                ("m11100000000", "m11100011000"),
+                ("p11110000100::HC", "p11111111100::JB"),
+                ("p11110000100::HC", "c11111111100::JB"),
+                ("p11110000110::HC", "p11111111110::JB"),
+                ("p11110000110::HC", "c11111111110::JB"),
+                ("p11100000111::HC", "p11100011111::JB"),
+                ("m11100000000::HC", "m11100011000::JB"),
+                ("m11100000000::HC", "m11100011000::JB"),
             ]
         );
         assert!(state.scheduled.is_empty());

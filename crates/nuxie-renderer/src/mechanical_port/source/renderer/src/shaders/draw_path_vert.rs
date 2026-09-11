@@ -65,7 +65,6 @@ ATTR_BLOCK_END
 
 VARYING_BLOCK_BEGIN
 NO_PERSPECTIVE VARYING(0, float4, v_paint);
-FLAT VARYING(10, float4, v_cssGradientTile);
 
 #ifdef @FEATHER_ATLAS_BLIT
 NO_PERSPECTIVE VARYING(1, float2, v_atlasCoord);
@@ -124,8 +123,6 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif
 
     VARYING_INIT(v_paint, float4);
-    VARYING_INIT(v_cssGradientTile, float4);
-    v_cssGradientTile = float4(.0);
 #if defined(@ENABLE_MODULATED_IMAGE)
     VARYING_INIT(v_image, float3);
 #endif
@@ -339,9 +336,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
             if (paintType == LINEAR_GRADIENT_PAINT_TYPE)
             {
                 // The paint is a linear gradient.
-                v_cssGradientTile = STORAGE_BUFFER_LOAD4(@paintAuxBuffer,
-                    pathID * PAINT_AUX_ENTRY_ELEMENT_COUNT + 6u);
-                v_paint.g = v_cssGradientTile.w > .0 ? paintCoord.y : .0;
+                v_paint.g = .0;
                 v_paint.r = paintCoord.x;
             }
             else
@@ -411,7 +406,6 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
     }
 
     VARYING_PACK(v_paint);
-    VARYING_PACK(v_cssGradientTile);
 #if defined(@ENABLE_MODULATED_IMAGE)
     VARYING_PACK(v_image);
 #endif
@@ -455,7 +449,6 @@ FRAG_STORAGE_BUFFER_BLOCK_END
 // Add a function here for fragments to unpack the paint since we're the ones
 // who packed it in the vertex shader.
 INLINE half4 find_paint_color(float4 paint,
-                              float4 cssGradientTile,
 #ifdef @ENABLE_MODULATED_IMAGE
                               float3 image,
 #endif
@@ -476,11 +469,6 @@ INLINE half4 find_paint_color(float4 paint,
     {
         float t =
             paint.b > .0 ? /*linear*/ paint.r : /*radial*/ length(paint.rg);
-        if (cssGradientTile.w > .0)
-        {
-            float2 uv = paint.rg - floor(paint.rg);
-            t = dot(uv, cssGradientTile.xy) + cssGradientTile.z;
-        }
         t = clamp(t, .0, 1.);
         float span = abs(paint.b);
         float x = span > 1.
@@ -488,45 +476,12 @@ INLINE half4 find_paint_color(float4 paint,
                             (.5 / GRAD_TEXTURE_WIDTH)
                       : /*two texels*/ (1. / GRAD_TEXTURE_WIDTH) * t + span;
         float row = -paint.a;
-        bool premultipliedGradient = row > 1.;
-        if (premultipliedGradient) row -= 1.;
         // Our gradient texture is not mipmapped. Issue a texture-sample that
         // explicitly does not find derivatives for LOD computation.
         color =
             TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x, row), .0);
-        if (premultipliedGradient)
-        {
-            uint count = css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler,
-                float2(.5 / GRAD_TEXTURE_WIDTH, row), .0));
-            float positionRow = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler,
-                float2(1.5 / GRAD_TEXTURE_WIDTH, row), .0)));
-            uint low = 0u;
-            uint high = count;
-            // Upper bound selects the last coincident stop at an exact edge.
-            for (uint iteration = 0u; iteration < 10u && low < high; ++iteration)
-            {
-                uint mid = (low + high) / 2u;
-                float stop = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler,
-                    float2((float(mid) + 2.5) / GRAD_TEXTURE_WIDTH, positionRow), .0)));
-                if (stop <= t) low = mid + 1u;
-                else high = mid;
-            }
-            uint before = low == 0u ? 0u : low - 1u;
-            uint after = min(low, count - 1u);
-            float x0 = (float(before) + 2.5) / GRAD_TEXTURE_WIDTH;
-            float x1 = (float(after) + 2.5) / GRAD_TEXTURE_WIDTH;
-            float stop0 = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x0, positionRow), .0)));
-            float stop1 = uintBitsToFloat(css_gradient_word(TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x1, positionRow), .0)));
-            half4 c0 = TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x0, row), .0);
-            half4 c1 = TEXTURE_SAMPLE_LOD(@gradTexture, gradSampler, float2(x1, row), .0);
-            c0.rgb *= c0.a;
-            c1.rgb *= c1.a;
-            float weight = stop1 > stop0 ? clamp((t - stop0) / (stop1 - stop0), .0, 1.) : .0;
-            color = mix(c0, c1, cast_float_to_half(weight));
-            color = make_half4(unmultiply_rgb(color), color.a);
-        }
         color.a *= coverage;
-        // Ordinary Rive gradients are unmultiplied so we don't lose color data while
+        // Gradients are always unmultiplied so we don't lose color data while
         // doing the hardware filter.
         if (GENERATE_UNMULTIPLIED_PAINT_COLORS)
         {

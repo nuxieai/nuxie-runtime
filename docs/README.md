@@ -15,8 +15,6 @@ history, not maintained as another implementation authority.
 - [Parity workflow](PARITY_WORKFLOW.md): shared review and validation principles.
 - [Upstream sync](upstream-sync-map.md): reference-pin updates and triage; dated
   sync reports remain in `sync/`.
-- [RML research](rml-research.md): upstream authoring/export format, runtime
-  consumption, and the boundary of the available compiler evidence.
 - [Metal porting guide](METAL_PORTING.md): native ownership and platform rules.
 - [Metal validation contract](METAL_RENDERER_VALIDATION.md): oracle hierarchy and
   retained manual platform and source-oracle validation commands.
@@ -25,8 +23,6 @@ history, not maintained as another implementation authority.
 
 ## Product and adaptation contracts
 
-- [HTML/CSS to Rive compiler](../tools/html-to-riv/README.md): standalone authoring
-  module, supported language and browser/native validation gates.
 - [Runtime boundary](pure-runtime-boundary.md)
 - [Player scheduling](player-scheduling-contract.md)
 - [Project-data seam](project-data-runtime-seam.md)

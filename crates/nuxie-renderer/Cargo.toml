@@ -7,8 +7,6 @@ publish = false
 
 [features]
 default = []
-# Optional host font rasterization. Does not change any exact-source backend.
-native-glyphs-experimental = []
 # Stable product roots for the three exact-source renderer ports. Their
 # internal campaign feature names remain aliases for source-shaped cfg owners;
 # none of these roots selects another renderer or an automatic fallback.

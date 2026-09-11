@@ -388,29 +388,35 @@ mod tests {
         let library = DrawShaderLibrary::load(&device).expect("load embedded draw metallib");
         let mut names = library.function_names();
         names.sort();
-        use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
-        let mut expected = vec![exports::GLSL_atlasVertexMain.to_owned(), exports::GLSL_atlasFillFragmentMain.to_owned(), exports::GLSL_atlasStrokeFragmentMain.to_owned()];
-        for (namespace, vertex) in [
-            ("c11111111100", false), ("c11111111110", false),
-            ("m11100000000", true), ("m11100011000", false),
-            ("p11100000111", true), ("p11100011111", false),
-            ("p11110000100", true), ("p11110000110", true),
-            ("p11111111100", false), ("p11111111110", false),
-        ] {
-            expected.push(format!("{namespace}::{}", if vertex { exports::GLSL_drawVertexMain } else { exports::GLSL_drawFragmentMain }));
-        }
-        expected.sort();
-        assert_eq!(names, expected);
+        assert_eq!(
+            names,
+            [
+                // Current render_atlas.glsl.exports.h: atlasVertexMain,
+                // atlasFillFragmentMain, atlasStrokeFragmentMain.
+                "TF",
+                "WE",
+                "XE",
+                "c11111111100::JB",
+                "c11111111110::JB",
+                "m11100000000::HC",
+                "m11100011000::JB",
+                "p11100000111::HC",
+                "p11100011111::JB",
+                "p11110000100::HC",
+                "p11110000110::HC",
+                "p11111111100::JB",
+                "p11111111110::JB",
+            ]
+        );
     }
 
     #[test]
     fn compiled_library_resolves_representative_functions() {
         let device = MTLCreateSystemDefaultDevice().expect("create system Metal device");
         let library = DrawShaderLibrary::load(&device).expect("load embedded draw metallib");
-        use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
-        for name in [exports::GLSL_atlasVertexMain.to_owned(), format!("p11110000100::{}", exports::GLSL_drawVertexMain), format!("p11111111100::{}", exports::GLSL_drawFragmentMain)] {
+        for name in ["TF", "p11110000100::HC", "p11111111100::JB"] {
             library
-                .function(&name)
+                .function(name)
                 .unwrap_or_else(|error| panic!("{error}"));
         }
         assert_eq!(

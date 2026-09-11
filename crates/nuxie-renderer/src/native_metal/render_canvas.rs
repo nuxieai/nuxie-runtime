@@ -307,20 +307,9 @@ impl RenderCanvasContract for NativeMetalRenderCanvas {
         Rc::from(NativeMetalRenderCanvas::render_image(self))
     }
 
-    fn begin_frame(&mut self, clear_color: ColorInt) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
-        self.begin_frame_with_dither(clear_color, true)
-    }
-
-    fn begin_compositing_frame(&mut self, clear_color: ColorInt) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
-        self.begin_frame_with_dither(clear_color, false)
-    }
-}
-
-impl NativeMetalRenderCanvas {
-    fn begin_frame_with_dither(
+    fn begin_frame(
         &mut self,
         clear_color: ColorInt,
-        dither: bool,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
         let (width, height) = (self.width(), self.height());
         let (source, execution_guard) = match &self.inner {
@@ -350,9 +339,6 @@ impl NativeMetalRenderCanvas {
                 clearColor: clear_color,
                 ..FrameDescriptor::default()
             };
-            if !dither {
-                descriptor.ditherMode = crate::mechanical_port::source::renderer::include::rive::renderer::render_context_hpp::DitherMode::none;
-            }
             #[cfg(test)]
             if mechanical.uses_deterministic_validation_thresholds() {
                 descriptor.triangulationThresholds.frameBudgetMs = f32::INFINITY;
@@ -382,10 +368,6 @@ impl RenderCanvasFrame for NativeMetalRenderCanvasFrame {
 
     fn finish(self: Box<Self>) -> Result<(), RenderCanvasError> {
         let mut mechanical = self.execution_guard.borrow_mut();
-        if let Some(error) = self.renderer.checked_draw_error() {
-            mechanical.abandon_frame();
-            return Err(RenderCanvasError::new(error));
-        }
         // SAFETY: the canvas frame retains this nonnull exact source owner and
         // is the sole owner allowed to finish its begun frame.
         mechanical
@@ -409,18 +391,6 @@ impl Renderer for NativeMetalRenderCanvasFrame {
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint) {
         self.renderer.draw_path(path, paint);
-    }
-
-    fn clip_out_rect(&mut self, rect: nuxie_render_api::Aabb) -> bool {
-        self.renderer.clip_out_rect(rect)
-    }
-
-    fn clip_axis(&mut self, horizontal: bool, min: f32, max: f32) -> bool {
-        self.renderer.clip_axis(horizontal, min, max)
-    }
-
-    fn clip_axis_transformed(&mut self, horizontal: bool, min: f32, max: f32, local: nuxie_render_api::Mat2D) -> bool {
-        self.renderer.clip_axis_transformed(horizontal, min, max, local)
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {

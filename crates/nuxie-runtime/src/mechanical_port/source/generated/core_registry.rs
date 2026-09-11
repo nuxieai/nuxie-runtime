@@ -6504,7 +6504,10 @@ impl crate::mechanical_port::source::core::CoreObject
         crate::mechanical_port::source::generated::text::text_base::TextBase::is_type_of(type_key)
     }
     fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.clone_core()))
+        {
+            let mut callbacks = Self::default();
+            Some(Box::new(self.base.clone_into(&mut callbacks)))
+        }
     }
     fn deserialize(
         &mut self,

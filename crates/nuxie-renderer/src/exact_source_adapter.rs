@@ -51,10 +51,6 @@ pub(crate) struct ExactSourceRendererAdapter {
 }
 
 impl ExactSourceRendererAdapter {
-    pub(crate) fn checked_draw_error(&self) -> Option<&'static str> {
-        self.renderer.checked_draw_error
-    }
-
     /// # Safety
     /// The context must outlive this adapter and remain in one begun frame
     /// until the adapter is dropped or its owning frame is finished.
@@ -99,21 +95,6 @@ impl Renderer for ExactSourceRendererAdapter {
                 paint as *const _ as *mut _,
             );
         }
-    }
-
-    #[cfg(feature = "renderer-metal")]
-    fn clip_out_rect(&mut self, rect: nuxie_render_api::Aabb) -> bool {
-        crate::hard_clip::apply(&mut self.renderer, rect)
-    }
-
-    #[cfg(feature = "renderer-metal")]
-    fn clip_axis(&mut self, horizontal: bool, min: f32, max: f32) -> bool {
-        crate::axis_clip::apply(&mut self.renderer, horizontal, min, max)
-    }
-
-    #[cfg(feature = "renderer-metal")]
-    fn clip_axis_transformed(&mut self, horizontal: bool, min: f32, max: f32, local: nuxie_render_api::Mat2D) -> bool {
-        crate::axis_clip::apply_transformed(&mut self.renderer, horizontal, min, max, local)
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {

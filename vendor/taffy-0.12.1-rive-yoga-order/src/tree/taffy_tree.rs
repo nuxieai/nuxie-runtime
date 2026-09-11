@@ -271,7 +271,6 @@ where
     pub(crate) taffy: &'t mut TaffyTree<NodeContext>,
     /// The context provided for passing to measure functions if layout is run over this struct
     pub(crate) measure_function: MeasureFunction,
-    pub(crate) baseline_function: Option<fn(NodeId, Option<&mut NodeContext>, &Style) -> Option<f32>>,
 }
 
 impl<NodeContext, MeasureFunction> TaffyView<'_, NodeContext, MeasureFunction>
@@ -308,7 +307,7 @@ where
             debug_log_node!(inputs);
 
             // Dispatch to a layout algorithm based on the node's display style and whether the node has children or not.
-            let mut output = match (display_mode, has_children) {
+            match (display_mode, has_children) {
                 (Display::None, _) => compute_hidden_layout(tree, node_id),
                 #[cfg(feature = "block_layout")]
                 (Display::Block, true) => compute_block_layout(tree, node_id, inputs, block_ctx),
@@ -326,17 +325,7 @@ where
                     };
                     compute_leaf_layout(inputs, style, |_, _| 0.0, measure_function)
                 }
-            };
-            if display_mode != Display::None {
-                if let Some(baseline_function) = tree.baseline_function {
-                    let key = node_id.into();
-                    let context = tree.taffy.node_context_data.get_mut(key);
-                    if let Some(baseline) = baseline_function(node_id, context, &tree.taffy.nodes[key].style) {
-                        output.first_baselines.y = Some(baseline);
-                    }
-                }
             }
-            output
         })
     }
 }
@@ -923,23 +912,8 @@ impl<NodeContext> TaffyTree<NodeContext> {
         MeasureFunction:
             FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
     {
-        self.compute_layout_with_measure_and_baseline(node_id, available_space, measure_function, None)
-    }
-
-    /// Optional baseline channel for hosts whose measured text has an alphabetic
-    /// baseline. Callback results are cached with the layout; hosts must dirty
-    /// nodes when their baseline data or callback policy changes.
-    pub fn compute_layout_with_measure_and_baseline<MeasureFunction>(
-        &mut self,
-        node_id: NodeId,
-        available_space: Size<AvailableSpace>,
-        measure_function: MeasureFunction,
-        baseline_function: Option<fn(NodeId, Option<&mut NodeContext>, &Style) -> Option<f32>>,
-    ) -> Result<(), TaffyError>
-    where MeasureFunction: FnMut(Size<Option<f32>>, Size<AvailableSpace>, NodeId, Option<&mut NodeContext>, &Style) -> Size<f32>,
-    {
         let use_rounding = self.config.use_rounding;
-        let mut taffy_view = TaffyView { taffy: self, measure_function, baseline_function };
+        let mut taffy_view = TaffyView { taffy: self, measure_function };
         compute_root_layout(&mut taffy_view, node_id, available_space);
         if use_rounding {
             round_layout(&mut taffy_view, node_id);
@@ -961,7 +935,7 @@ impl<NodeContext> TaffyTree<NodeContext> {
     /// Returns an instance of LayoutTree representing the TaffyTree
     #[cfg(test)]
     pub(crate) fn as_layout_tree(&mut self) -> impl LayoutPartialTree + CacheTree + '_ {
-        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO, baseline_function: None }
+        TaffyView { taffy: self, measure_function: |_, _, _, _, _| Size::ZERO }
     }
 }
 

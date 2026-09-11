@@ -1,19 +1,31 @@
 # Language contract: nuxie-html-v1
 
-**Linear gradients: public emission candidate, not yet qualified.** The current
-working tree accepts one `linear-gradient()` through `background` or
-`background-image`, with default/cardinal/corner/angle directions, existing
-named/hex/RGB/HSL colors and currentColor, omitted stops, signed px/em/rem/%
-positions and double-position stops (2–256 expanded stops). Stops remain
-responsive in version26 `layout-css-linear-gradient-v1` requirements; hosts must
-validate and install them alongside the Rive bytes. Relative font lengths are
-computed before emission; percentages and corner directions remain live.
+**Linear gradients are qualified within the native Metal profile.** One
+`linear-gradient()` is accepted through `background` or `background-image`,
+with default/cardinal/corner/angle directions, named/hex/RGB/HSL colors and
+currentColor, omitted stops, signed px/em/rem/% positions and double-position
+stops (2–256 expanded stops). Version 26 `layout-css-linear-gradient-v1`
+requirements retain responsive geometry; hosts must validate and install them
+alongside the Rive bytes. Relative font lengths are computed before emission;
+percentages and corner directions remain live. Default repetition beneath
+transparent borders uses two-dimensional tile wrapping.
+
+Finite stop percentages whose extended endpoints exceed f32 range use a bounded
+f64 fallback. Internal hard stops remain intact. At pathological values such as
+±3e38%, Chrome 153 can lose an internal discontinuity; this compiler preserves
+it, so those cases are intentionally not pixel-equivalent. Unrepresentable raw
+host transforms return a checked frame error.
+
 Hints, explicit interpolation spaces, repeating-gradient syntax, multiple
-background layers and background position/size/repeat controls are intentionally
-unsupported pending later work. Default repetition beneath transparent borders
-is implemented with two-dimensional tile wrapping. Public native/WASM parity
-and 272 original/clone resize frames pass, with audited visual coverage. Broad
-regression, backend and performance qualification remain incomplete. See `validation/linear-gradient-implementation-notes.md`.
+background layers and authored background position/size/repeat controls remain
+excluded. Qualification covers Chrome 153.0.8010.12, native Metal raster ordering
+and ordinary Atomics, including native-glyph text compositions. It does not
+qualify vector-text residuals, MSAA or other native backends. The final broad
+replay covers 8,052 reviewed images; focused lifecycle, realistic composition,
+64-owner resource and retained-renderer timing evidence is indexed in
+[the P06 qualification receipt](validation/linear-gradient-qualification.json).
+Timing includes GPU wait/readback and excludes runtime layout, paint recreation,
+resize and presentation throughput.
 
 **Group opacity is implemented; full qualification is pending.** `opacity` accepts
 one finite number or percentage, clamps to [0,1], and supports the existing
@@ -144,8 +156,8 @@ auto width/height/basis, row direction, nowrap, zero grow, shrink 1, zero spacin
 and radius, transparent background, no maximum dimensions, normal flex alignment
 (stretch/start), normal weight/line-height, and start text alignment (left in this profile).
 The reference environment's medium font size is 16px. `flex:initial` resets all
-three longhands to `0 1 auto`; the existing equal-factor restriction still
-applies after the cascade, so overriding a factor may be necessary.
+three longhands to `0 1 auto`; independent finite grow/shrink factors follow
+the current flex contract below.
 
 `unset` inherits `color`, `font`, `font-family`, `font-size`, `font-weight`, `line-height`
 and `text-align`. Other supported properties use their CSS initial behavior.
@@ -215,19 +227,20 @@ system colors, HWB, wide-gamut
 colors and nested calculations remain intentionally unsupported. Variable substitution
 is being integrated as documented under S09/S10 below.
 
-## Solid background shorthand
+## Background shorthand
 
-`background` accepts one supported color value, `currentColor`, or `none`.
-`background:none`, `initial` and `unset` clear the color to transparent.
-`background:inherit` copies the parent's background, retaining currentColor
-semantics. Shorthand and `background-color` declarations share the same cascade;
-source order, specificity, inline styles and important flags determine the result.
+`background` accepts one supported color/currentColor, `none`, or one supported
+`linear-gradient()`. It resets both color and image: a color clears the image;
+a gradient resets the color to transparent; `none`, `initial` and `unset` clear
+both. `inherit` copies the parent's computed background fields. Separate
+`background-color` and `background-image` declarations change only their field,
+so a color can be painted beneath a translucent gradient using the longhands.
+Source order, specificity, inline styles and important flags follow the cascade.
 
-This is the solid-color subset: image layers, comma-separated layers, position,
-size, repeat, attachment and box keywords are rejected, including combinations
-of these with a color. Background image/position/size state does not yet exist
-in the compiler. When those features are added, their shorthand reset semantics
-must be implemented together, not treated as an alias for color alone.
+Combined color/image shorthand values, URL images, multiple image layers,
+position, size, repeat, attachment and box keywords remain rejected. The default
+CSS image repetition underneath borders is part of the implemented gradient
+paint behavior; authored repetition controls are not supported.
 
 ## Named and HSL colors
 

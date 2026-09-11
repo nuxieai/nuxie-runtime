@@ -2243,7 +2243,7 @@ const _: [(); OuterCubicPatchSegmentSpan as usize] =
     [(); crate::gpu::OUTER_CUBIC_PATCH_SEGMENT_SPAN];
 
 // Exact source-owned value from renderer/src/shaders/constants.glsl, which
-// gpu.cpp includes directly and the generated shaders pair with shift 7/mask 0x7f.
+// gpu.cpp includes directly and the generated shaders pair with shift 8/mask 0xff.
 const STORAGE_TEXTURE_WIDTH: u32 = 256;
 const GAUSSIAN_INTEGRAL_TEXTURE_STDDEVS: f32 = 4.0;
 const GLSL_ENABLE_CLIPPING: &[u8] = b"ENABLE_CLIPPING\0";

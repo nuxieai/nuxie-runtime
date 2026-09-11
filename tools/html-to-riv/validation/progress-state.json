@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Last-baseline ordinary-file composition",
-  "status": "Last-baseline composition proven in experimental fixtures",
-  "current": "30 last-baseline experiments pass 240 geometry/pixel frames and 480 clear controls with visual coverage and exact reproduction. Public last-baseline syntax remains diagnostic; existing intrinsic first-baseline checkpoint remains unchanged.",
-  "next": "Implement compiler-derived first/last summaries and separate group measurements, then qualify public last-baseline input against Chrome and the immutable renderer.",
+  "focus": "Public last-baseline compiler",
+  "status": "Last-baseline profile implemented; fractional pixel limitation preserved",
+  "current": "66 public scenes: 528/528 geometry and 526/528 pixel frames pass, with 1056 clear controls and visual review. 92 Rust/26 Node tests pass; 304 prior outputs unchanged. Two fractional leaf failures remain in the failed receipt.",
+  "next": "Investigate broader baseline metrics and remaining layout backlog, preserving fractional pixel evidence and immutable-runtime boundaries.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public last-baseline implementation and preserved pixel failures",
+      "path": "tools/html-to-riv/validation/public-last-baseline-receipt.json"
+    },
     {
       "label": "Last-baseline ordinary-file composition experiment",
       "path": "tools/html-to-riv/validation/last-baseline-experiment-receipt.json"
@@ -169,8 +173,8 @@
   ],
   "activeWork": [
     {
-      "name": "Public last-baseline lowering",
-      "work": "Ordinary parent-bottom landmark plus descent offset works in 30 exact fixtures; derive metrics and validate public transport and broader compositions."
+      "name": "Remaining baseline/layout contexts",
+      "work": "Responsive participant metrics, out-of-box baselines and broader final-descendant topology remain unresolved. Continue the99-item backlog."
     }
   ],
   "publication": {

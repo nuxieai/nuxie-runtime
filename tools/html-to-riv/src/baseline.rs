@@ -1,4 +1,4 @@
-//! First-baseline measurement and ordinary-file constraints. Keep only scalar
+//! First/last-baseline measurement and ordinary-file constraints. Keep only scalar
 //! summaries; retaining sibling Styles would duplicate large variable maps.
 use super::{Diagnostic, Direction, Emitter, Size, Style, MAX_SIZE, unsupported};
 use crate::wire::{Record, Value};
@@ -12,7 +12,10 @@ pub(super) struct Child {
     pub index: usize,
     pub order: i32,
     pub metric: Option<Metric>,
+    pub last_metric: Option<Metric>,
+    pub used_height: Option<f32>,
     pub participates: bool,
+    pub last: bool,
 }
 
 fn bounded_height(style: &Style, intrinsic: Option<f32>) -> Option<f32> {
@@ -57,17 +60,64 @@ pub(super) fn summarize(style: &Style, children: &[Child]) -> Option<Metric> {
         origin: if height == 0. { 0. } else { ascent / height } })
 }
 
+// Sort references only: no Style or variable environment is retained. Summing
+// in physical column order matches layout's sequence of floating additions.
+fn ordered(children: &[Child]) -> Vec<&Child> {
+    let mut ordered: Vec<_> = children.iter().collect();
+    ordered.sort_by_key(|child| (child.order, child.index));
+    ordered
+}
+
+// Height is independent of whether a descendant has a usable baseline. A
+// fixed preceding sibling can contribute its height even when its own
+// baseline topology remains unresolved.
+pub(super) fn used_height(style: &Style, children: &[Child]) -> Option<f32> {
+    let intrinsic = if children.is_empty() { Some(0.) }
+    else if matches!(style.direction, Direction::Column) {
+        ordered(children).into_iter().try_fold(0.0_f32, |sum, child| {
+            let sum = sum + child.used_height?;
+            (sum.is_finite() && sum <= MAX_SIZE).then_some(sum)
+        })
+    } else { None };
+    bounded_height(style, intrinsic)
+}
+
+pub(super) fn summarize_last(style: &Style, children: &[Child], height: Option<f32>) -> Option<Metric> {
+    let height = height?;
+    let ascent = if children.is_empty() { height } else {
+        if !matches!(style.direction, Direction::Column) { return None; }
+        let last = children.iter().max_by_key(|child| (child.order, child.index))?;
+        let Ascent::Fixed(last_ascent) = last.last_metric?.ascent else { return None };
+        let preceding = ordered(children).into_iter().filter(|child| child.index != last.index).try_fold(0.0_f32, |sum, child| {
+            let sum = sum + child.used_height?;
+            (sum.is_finite() && sum <= MAX_SIZE).then_some(sum)
+        })?;
+        preceding + last_ascent
+    };
+    if !ascent.is_finite() || ascent > MAX_SIZE || ascent > height { return None; }
+    Some(Metric { ascent: Ascent::Fixed(ascent), descent: height - ascent,
+        origin: if height == 0. { 0. } else { ascent / height } })
+}
+
 pub(super) fn emit(emitter: &mut Emitter, parent_id: u32, parent: &Style, children: &[Child], source: &str) -> Result<(), Diagnostic> {
     if !children.iter().any(|child| child.participates) { return Ok(()); }
     if !parent.direction.is_row() {
-        return Err(unsupported(source, "First baseline in column containers requires further ordinary-file validation; current lowering admits row and row-reverse"));
+        return Err(unsupported(source, "Baseline alignment in column containers requires further ordinary-file validation; current lowering admits row and row-reverse"));
     }
+    emit_group(emitter, parent_id, parent, children, source, false)?;
+    emit_group(emitter, parent_id, parent, children, source, true)
+}
+
+fn emit_group(emitter: &mut Emitter, parent_id: u32, parent: &Style, children: &[Child], source: &str, last: bool) -> Result<(), Diagnostic> {
+    let participants = || children.iter().filter(|child| child.participates && child.last == last);
+    if participants().next().is_none() { return Ok(()); }
+    let metric_of = |child: &Child| if last { child.last_metric } else { child.metric };
     let mut percent = 0.0_f32;
     let mut floor = 0.0_f32;
     let mut descent = 0.0_f32;
     let mut responsive = false;
-    for child in children.iter().filter(|child| child.participates) {
-        let metric = child.metric.ok_or_else(|| unsupported(source, "Unresolved first-baseline metric"))?;
+    for child in participants() {
+        let metric = metric_of(child).ok_or_else(|| unsupported(source, "Unresolved baseline metric"))?;
         match metric.ascent {
             Ascent::Fixed(value) => floor = floor.max(value),
             Ascent::PercentFloor { percent: value, floor: minimum } => {
@@ -93,13 +143,25 @@ pub(super) fn emit(emitter: &mut Emitter, parent_id: u32, parent: &Style, childr
     // heights keep the original parent as their containing block.
     let helper = emitter.layout_box("", parent_id, Direction::Column, 0, parent.direction,
         [Size::Pixels(0.), height], [Size::Pixels(0.), minimum, Size::Auto, Size::Auto], false, [false; 4])?;
-    let landmark = emitter.records.len() as u32 - 1;
+    let mut landmark = emitter.records.len() as u32 - 1;
     let mut node = Record::new("Node"); node.set("parentId", Value::Uint(0))?; emitter.records.push(node);
     let mut target = Record::new("TransformConstraint");
-    target.set("parentId", Value::Uint(landmark))?; target.set("targetId", Value::Uint(helper))?;
-    target.set("originY", Value::Float(origin))?; emitter.records.push(target);
-    for child in children.iter().filter(|child| child.participates) {
-        let metric = child.metric.expect("participant checked above");
+    target.set("parentId", Value::Uint(landmark))?; target.set("targetId", Value::Uint(if last { parent_id } else { helper }))?;
+    target.set("originY", Value::Float(if last { 1. } else { origin }))?; emitter.records.push(target);
+    if last {
+        // The parent-bottom landmark minus the group's descent preserves
+        // unsafe end overflow, including a group taller than a fixed parent.
+        let bottom = landmark;
+        landmark = emitter.records.len() as u32 - 1;
+        let mut node = Record::new("Node"); node.set("parentId", Value::Uint(0))?;
+        node.set("y", Value::Float(-descent))?; emitter.records.push(node);
+        let mut offset = Record::new("TranslationConstraint");
+        offset.set("parentId", Value::Uint(landmark))?; offset.set("targetId", Value::Uint(bottom))?;
+        offset.set("doesCopy", Value::Bool(false))?; offset.set("doesCopyY", Value::Bool(true))?;
+        offset.set("offset", Value::Bool(true))?; emitter.records.push(offset);
+    }
+    for child in participants() {
+        let metric = metric_of(child).expect("participant checked above");
         let mut anchor = Record::new("ComponentOrigin");
         anchor.set("parentId", Value::Uint(child.object_id))?;
         anchor.set("originX", Value::Float(0.))?; anchor.set("originY", Value::Float(metric.origin))?;

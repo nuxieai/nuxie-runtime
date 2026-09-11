@@ -13,3 +13,5 @@ The 16-scene public corpus covers both row directions, empty auto boxes, fixed m
 All 16 frame-1 Chrome/native pairs were directly inspected on four contact sheets; no divergence was observed. Exact decoded RGBA crop/white-extension checks independently cover Chrome and native for the other 112 frames. The frozen compiler regenerates all 16 files and source maps exactly. All 288 prior unique corpus requests retain identical bytes and parsed maps; this is output regression evidence, not a fresh rendering claim for those scenes.
 
 The locked Rust suite passes 87 tests; Node passes 24 tests including intrinsic CLI/WASM parity and rejected-context parity. TypeScript and the immutable source guard pass. A separate read-only review found no actionable correctness defects. See public-baseline-intrinsic-receipt.json for evidence bindings.
+
+Last-baseline admission was added in the subsequent checkpoint; see last-baseline-review.md. Restrictions above describe the intrinsic first-baseline checkpoint.

@@ -32,14 +32,15 @@ fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Dir
     }
 }
 #[derive(Clone, Copy)]
-enum AlignmentPosition { Auto, Normal, Stretch, FlexStart, Start, SelfStart, Center, FlexEnd, End, SelfEnd, Baseline, FirstBaseline }
+enum AlignmentPosition { Auto, Normal, Stretch, FlexStart, Start, SelfStart, Center, FlexEnd, End, SelfEnd, Baseline, FirstBaseline, LastBaseline }
 #[derive(Clone, Copy)]
 enum OverflowAlignment { Default, Safe, Unsafe }
 #[derive(Clone, Copy)]
 struct SelfAlignment { position: AlignmentPosition, overflow: OverflowAlignment }
 impl SelfAlignment {
     const AUTO: Self = Self { position: AlignmentPosition::Auto, overflow: OverflowAlignment::Default };
-    fn is_baseline(self) -> bool { matches!(self.position, AlignmentPosition::Baseline | AlignmentPosition::FirstBaseline) }
+    fn is_baseline(self) -> bool { matches!(self.position, AlignmentPosition::Baseline | AlignmentPosition::FirstBaseline | AlignmentPosition::LastBaseline) }
+    fn is_last_baseline(self) -> bool { matches!(self.position, AlignmentPosition::LastBaseline) }
     fn stretches(self) -> bool { matches!(self.position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch) }
     fn is_center(self) -> bool { matches!(self.position, AlignmentPosition::Center) }
     fn is_end(self) -> bool { matches!(self.position, AlignmentPosition::FlexEnd | AlignmentPosition::End | AlignmentPosition::SelfEnd) }
@@ -69,6 +70,7 @@ fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result
     let (word, overflow) = match tokens.as_slice() {
         ["inherit"] => return Ok(parent),
         ["initial" | "unset"] => return Ok(SelfAlignment::AUTO),
+        ["last", "baseline"] => return Ok(SelfAlignment { position: AlignmentPosition::LastBaseline, overflow: OverflowAlignment::Default }),
         ["first", "baseline"] => return Ok(SelfAlignment { position: AlignmentPosition::FirstBaseline, overflow: OverflowAlignment::Default }),
         [word] => (*word, OverflowAlignment::Default),
         ["safe", word] => (*word, OverflowAlignment::Safe),
@@ -85,7 +87,7 @@ fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result
         _ => return Err(unsupported(source, "This align-self value needs ordinary-file validation; baseline alignment is unresolved")),
     };
     if !matches!(overflow, OverflowAlignment::Default)
-        && matches!(position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch | AlignmentPosition::Baseline | AlignmentPosition::FirstBaseline) {
+        && matches!(position, AlignmentPosition::Auto | AlignmentPosition::Normal | AlignmentPosition::Stretch | AlignmentPosition::Baseline | AlignmentPosition::FirstBaseline | AlignmentPosition::LastBaseline) {
         return Err(unsupported(source, "safe and unsafe require positional alignment, not auto, normal or stretch"));
     }
     // Preserve specified logical/self-relative position and overflow preference
@@ -505,10 +507,16 @@ impl Emitter {
             self.map.push(SourceNode { id, path: path.clone(), object_id });
             let descendants = self.children(element, object_id, &style, rules, &path, depth + 1)?;
             let metric = baseline::summarize(&style, &descendants);
-            if style.self_alignment.is_baseline() && metric.is_none() {
+            let used_height = baseline::used_height(&style, &descendants);
+            let last_metric = baseline::summarize_last(&style, &descendants, used_height);
+            let last = style.self_alignment.is_last_baseline();
+            if last && last_metric.is_none() {
+                return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics and non-column nested topology require further ordinary-file validation"));
+            }
+            if style.self_alignment.is_baseline() && !last && metric.is_none() {
                 return Err(unsupported(&path, "First baseline requires a bounded fixed or intrinsic box metric, or an empty unbounded percentage-height expression; nested columns need fixed descendant metrics and a baseline within their used height"));
             }
-            children.push(baseline::Child { object_id, index, order, metric, participates: style.self_alignment.is_baseline() });
+            children.push(baseline::Child { object_id, index, order, metric, last_metric, used_height, last, participates: style.self_alignment.is_baseline() });
         }
         baseline::emit(self, parent_id, parent_style, &children, path)?;
         Ok(children)

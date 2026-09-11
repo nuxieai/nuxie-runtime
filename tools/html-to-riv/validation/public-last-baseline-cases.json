@@ -1,0 +1,930 @@
+[
+  {
+    "name": "last-public-row-fixed-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-fixed-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-fixed-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-fixed-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-fixed-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-fixed-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-overflow-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:30px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-overflow-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-overflow-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:30px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-overflow-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-overflow-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:30px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-overflow-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-auto-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-auto-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-auto-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-auto-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-auto-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-auto-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-max-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;max-height:30px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-max-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-max-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;max-height:30px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-max-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-max-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;max-height:30px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-max-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-min-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-min-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-min-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-min-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-min-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-min-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-fixed-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-fixed-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-fixed-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-fixed-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-fixed-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-fixed-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-overflow-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:30px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-overflow-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-overflow-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:30px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-overflow-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-overflow-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:30px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-overflow-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-auto-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-auto-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-auto-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-auto-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-auto-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-auto-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-max-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;max-height:30px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-max-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-max-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;max-height:30px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-max-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-max-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;max-height:30px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-max-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-min-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-min-empty"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-min-nested",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-min-nested"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-min-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:auto;min-height:120px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{order:2}#tail{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "last-public-row-reverse-min-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "intrinsic"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-intrinsic-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto;min-height:50px}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "intrinsic-min"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-intrinsic-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto;max-height:30px}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "intrinsic-max"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-bounds-conflict",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto;min-height:50px;max-height:30px}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "bounds-conflict"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-mixed-first",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a{align-self:first baseline}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-first"
+    ],
+    "expectedAlignment": {
+      "a": "baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-mixed-first-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{height:auto}#a{align-self:first baseline}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-first-auto"
+    ],
+    "expectedAlignment": {
+      "a": "baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-mixed-center",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a{align-self:center}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-center"
+    ],
+    "expectedAlignment": {
+      "a": "center",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-mixed-order",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{height:auto}#a{align-self:baseline;order:2}#c{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-order"
+    ],
+    "expectedAlignment": {
+      "a": "baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a,#b,#c,#leaf,#tail{height:0}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "zero"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-empty-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a{height:auto}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "empty-auto"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-deep",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"><div id=\"deep\"></div></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#tail{height:30px}#deep{width:10px;height:5px;background:red}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "deep"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-deep-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"><div id=\"deep\"></div></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#tail{height:30px;order:-1}#deep{width:10px;height:5px;background:red}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "deep-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{--last:last baseline}#a,#b,#c{align-self:var(--last)}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "variables"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-responsive-parent",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{width:75%;height:50%}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "responsive-parent"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-offset-parent",
+    "html": "<div id=\"before\"></div><div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#before{width:10px;height:25px}#p{align-self:center}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "offset-parent"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "intrinsic"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-intrinsic-min",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto;min-height:50px}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "intrinsic-min"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-intrinsic-max",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto;max-height:30px}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "intrinsic-max"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-bounds-conflict",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#b{height:auto;min-height:50px;max-height:30px}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "bounds-conflict"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-mixed-first",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a{align-self:first baseline}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-first"
+    ],
+    "expectedAlignment": {
+      "a": "baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-mixed-first-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{height:auto}#a{align-self:first baseline}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-first-auto"
+    ],
+    "expectedAlignment": {
+      "a": "baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-mixed-center",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a{align-self:center}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-center"
+    ],
+    "expectedAlignment": {
+      "a": "center",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-mixed-order",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{height:auto}#a{align-self:baseline;order:2}#c{order:-1}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "mixed-order"
+    ],
+    "expectedAlignment": {
+      "a": "baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-zero",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a,#b,#c,#leaf,#tail{height:0}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "zero"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-empty-auto",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#a{height:auto}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "empty-auto"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-deep",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"><div id=\"deep\"></div></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#tail{height:30px}#deep{width:10px;height:5px;background:red}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "deep"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-deep-ordered",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"><div id=\"deep\"></div></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#tail{height:30px;order:-1}#deep{width:10px;height:5px;background:red}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "deep-ordered"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-variables",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{--last:last baseline}#a,#b,#c{align-self:var(--last)}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "variables"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-responsive-parent",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#p{width:75%;height:50%}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "responsive-parent"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-offset-parent",
+    "html": "<div id=\"before\"></div><div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#before{width:10px;height:25px}#p{align-self:center}",
+    "features": [
+      "L03",
+      "public last baseline",
+      "offset-parent"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-preceding-row",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"><div id=\"rowchild\"></div></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{flex-direction:row;height:20px;width:30px}#rowchild{height:10px;width:10px;background:red}",
+    "features": [
+      "L03",
+      "last baseline with preceding fixed row subtree"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-preceding-row",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"><div id=\"rowchild\"></div></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{flex-direction:row;height:20px;width:30px}#rowchild{height:10px;width:10px;background:red}",
+    "features": [
+      "L03",
+      "last baseline with preceding fixed row subtree"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  }
+]

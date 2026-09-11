@@ -1,0 +1,66 @@
+[
+  {
+    "name": "last-public-row-preceding-row-nested-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"><div id=\"rowchild\"></div><div id=\"rowchild2\"></div></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{flex-direction:row;height:20px;width:30px}#rowchild{height:10px;width:10px;background:red}#leaf{height:30px;width:30px}#rowchild,#rowchild2{align-self:baseline}#rowchild2{width:10px;height:20px;background:lime}",
+    "features": [
+      "L03",
+      "nested constraint dependencies",
+      "row",
+      "baseline"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-preceding-row-nested-last-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"><div id=\"rowchild\"></div><div id=\"rowchild2\"></div></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{flex-direction:row;height:20px;width:30px}#rowchild{height:10px;width:10px;background:red}#leaf{height:30px;width:30px}#rowchild,#rowchild2{align-self:last baseline}#rowchild2{width:10px;height:20px;background:lime}",
+    "features": [
+      "L03",
+      "nested constraint dependencies",
+      "row",
+      "last baseline"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-preceding-row-nested-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"><div id=\"rowchild\"></div><div id=\"rowchild2\"></div></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{flex-direction:row;height:20px;width:30px}#rowchild{height:10px;width:10px;background:red}#leaf{height:30px;width:30px}#rowchild,#rowchild2{align-self:baseline}#rowchild2{width:10px;height:20px;background:lime}",
+    "features": [
+      "L03",
+      "nested constraint dependencies",
+      "row-reverse",
+      "baseline"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  },
+  {
+    "name": "last-public-row-reverse-preceding-row-nested-last-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"><div id=\"leaf\"><div id=\"rowchild\"></div><div id=\"rowchild2\"></div></div><div id=\"tail\"></div></div><div id=\"c\"></div></div><div id=\"footer\"></div>",
+    "css": "#p{width:240px;height:100px;flex-direction:row-reverse;background:navy}#a,#b,#c{align-self:last baseline}#a{width:30px;height:20px;background:coral}#b{width:40px;height:60px;background:gold}#c{width:50px;height:40px;background:teal}#footer{width:120px;height:10px;background:green}#leaf{width:10px;height:10px;background:purple}#tail{width:20px;height:20px;background:orange}#leaf{flex-direction:row;height:20px;width:30px}#rowchild{height:10px;width:10px;background:red}#leaf{height:30px;width:30px}#rowchild,#rowchild2{align-self:last baseline}#rowchild2{width:10px;height:20px;background:lime}",
+    "features": [
+      "L03",
+      "nested constraint dependencies",
+      "row-reverse",
+      "last baseline"
+    ],
+    "expectedAlignment": {
+      "a": "last baseline",
+      "b": "last baseline",
+      "c": "last baseline"
+    }
+  }
+]

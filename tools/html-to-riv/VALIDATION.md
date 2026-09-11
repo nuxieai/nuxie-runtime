@@ -149,3 +149,7 @@ See `validation/flex-direction-review.md` for ordinary-file lowering, preserved 
 ## Intrinsic first-baseline checkpoint
 
 `validation/public-baseline-intrinsic-cases.json` adds 16 public scenes: 128 geometry/pixel passes and 256 clear checks. All 16 distinct pairs were inspected; 112 exact decoded crop/extension transfers cover remaining frames. The frozen compiler reproduces all scenes, and 288 prior requests retain identical bytes/maps. Current suites pass 87 Rust and 24 Node tests, with TypeScript and immutable-source checks. See `validation/baseline-intrinsic-review.md` and `validation/public-baseline-intrinsic-receipt.json`. Broader baseline topology and last baseline remain unresolved.
+
+## Public last-baseline checkpoint
+
+See `validation/last-baseline-review.md` and `validation/public-last-baseline-receipt.json`: 62 main scenes plus four nested-constraint scenes, 528/528 geometry and 526/528 pixel passes, 1056 clear controls. Two fractional leaf failures remain in the failed main receipt. All 74 distinct pairs reviewed; 454 exact decoded transfers cover the rest. 92 Rust/26 Node tests pass; 304 prior outputs remain identical. The frozen compiler is bound to the passing nested receipt and reproduces every main file separately without relabeling its failed receipt.

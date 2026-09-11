@@ -25,3 +25,5 @@ Automatic participant height produces zero descent when all children are empty f
 ## Next implementation step
 
 Replace fixture-selected constants with compiler-derived first/last summaries, preserve existing first-baseline bytes where no last-baseline group exists, and measure the two groups independently. Add public grammar/diagnostic tests, CLI/WASM parity, resource bounds and native coverage of mixed groups, nested ordering, automatic heights and offset parents. Keep unproven responsive and out-of-box metrics diagnostic until separately evidenced. This experiment proves a viable ordinary-record mechanism; it does not implement the language feature.
+
+Historical note: the subsequent compiler-derived implementation and its precise limits are documented in last-baseline-review.md. The experimental results above remain exact-fixture evidence, not the public implementation receipt.

@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-11",
-  "focus": "Lazy variable cycles match pinned Chrome",
-  "status": "Temporary fallback-cycle restriction removed",
-  "current": "16 cycle scenes pass128 geometry/pixel frames and256 clear checks.56 Rust and14 Node tests pass. Browser characterization covers14 graphs across declaration/read orders. Original failure preserved; current output now matches Chrome.",
-  "next": "Continue invalid-at-computed-value behavior and independent flex-layout candidates; retain unresolved typography and fractional paint evidence.",
+  "focus": "Flex directions qualified on immutable runtime",
+  "status": "Single-line Chrome profile passes; fractional failure remains separate",
+  "current": "41feature scenes pass328geometry/pixel frames with complete visual coverage. Full87scene run passes696geometry/694pixels/1392clear checks; only the known2fractional failures remain.63Rust and17Node tests pass.",
+  "next": "Implement L02 order with compiler-owned stable sorting, retaining originalDOM selectors/identities and testing directional overlap/resize combinations.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Final flex checkpoint and preserved regression failure",
+      "path": "tools/html-to-riv/validation/public-flex-final-receipt.json"
+    },
+    {
+      "label": "Flex direction failures and composition candidate",
+      "path": "tools/html-to-riv/validation/flex-direction-review.md"
+    },
     {
       "label": "Lazy cycle resolution and corrected specification basis",
       "path": "tools/html-to-riv/validation/variable-cycles-review.md"

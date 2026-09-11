@@ -141,3 +141,22 @@ test('lazy variable cycles have exact CLI/WASM parity',async()=>{
  assert.equal(fixtures.length,16);
  await assertCorpusParity(fixtures);
 });
+
+
+test('flex directions and automatic sizing have exact CLI/WASM parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-flex-paint-order-cases.json',import.meta.url)));
+ assert.equal(fixtures.length,23);
+ await assertCorpusParity(fixtures);
+});
+
+test("ordinary sibling paint ordering has exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-flex-paint-regression-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,52);
+ await assertCorpusParity(fixtures);
+});
+
+test("intrinsic flex percentage and minimum contexts have exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-flex-intrinsic-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,12);
+ await assertCorpusParity(fixtures);
+});

@@ -6,6 +6,30 @@ use std::collections::BTreeSet;
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }
 #[derive(Clone, Copy)]
+enum Direction { Column, ColumnReverse, Row, RowReverse }
+impl Direction {
+    // Baseline Rive paints siblings in reverse file order. Pinned Chrome
+    // paints ordinary flex fragments in their visual line order, including
+    // reversal for reverse directions. Reverse ordinary-direction siblings
+    // and compensate layout with reversed flow/end alignment; reverse CSS
+    // directions already have the required paint order. Keep these target
+    // mappings separate from computed CSS inheritance and axis semantics.
+    fn wire(self) -> u32 { if self.is_row() { 3 } else { 1 } }
+    fn reverses_emission(self) -> bool { matches!(self, Self::Column | Self::Row) }
+    fn alignment(self) -> u32 {
+        if !self.reverses_emission() { 0 } else if self.is_row() { 2 } else { 6 }
+    }
+    fn is_row(self) -> bool { matches!(self, Self::Row | Self::RowReverse) }
+}
+fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Direction, Diagnostic> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "column" => Ok(Direction::Column), "column-reverse" => Ok(Direction::ColumnReverse),
+        "row" | "initial" | "unset" => Ok(Direction::Row), "row-reverse" => Ok(Direction::RowReverse),
+        "inherit" => Ok(parent),
+        _ => Err(unsupported(source, "flex-direction admits column, column-reverse, row, row-reverse, inherit, initial and unset")),
+    }
+}
+#[derive(Clone, Copy)]
 enum SpecifiedSize { Auto, Pixels(f32), Percent(f32), Em(f32), Rem(f32) }
 const ROOT_FONT_SIZE: f32 = 16.;
 const MAX_SIZE: f32 = 1_000_000.;
@@ -17,9 +41,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -148,10 +172,9 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         "background-color" | "color" => {
             if !["currentcolor", "inherit", "initial", "unset"].contains(&value.as_str()) { color::parse(&value, &d.source)?; }
         }
-        // All admitted elements and the explicit host compute to flex/column.
-        // CSS initial/unset would mean inline/row, not the authoring reset.
+        // Display remains flex; direction is independent of the column authoring reset.
         "display" if matches!(value.as_str(), "flex" | "inherit") => {}
-        "flex-direction" if matches!(value.as_str(), "column" | "inherit") => {}
+        "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
     }
     Ok(())
@@ -191,6 +214,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
     }
     for d in &declarations {
         match d.name.as_str() {
+            "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
             "height" => style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?,
             "min-width" => style.min_width = computed_bound(&d.value, parent.min_width, style.font_size, true, &d.source)?,
@@ -237,7 +261,8 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
     artboard.set("width", Value::Float(input.width))?; artboard.set("height", Value::Float(input.height))?;
     artboard.set("styleId", Value::Uint(1))?; records.push(artboard);
     let mut root_style = Record::new("LayoutComponentStyle");
-    root_style.set("flexDirectionValue", Value::Uint(0))?;records.push(root_style);
+    root_style.set("flexDirectionValue", Value::Uint(Direction::Column.wire()))?;
+    root_style.set("layoutAlignmentType", Value::Uint(Direction::Column.alignment()))?;records.push(root_style);
     // The authoring reset has an opaque white host. Encode it in the file;
     // relying on the caller's canvas clear color would change the design.
     let mut host_fill = Record::new("Fill");
@@ -253,6 +278,10 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
     output.children(body, 0, &host_style, &rules, "", 0)?;
+    // File object order serves native drawing; public identities stay in DOM
+    // preorder, with numeric path components (so /2 precedes /10).
+    output.map.sort_by_cached_key(|node| node.path.split('/').skip(1)
+        .map(|part| part.parse::<usize>().expect("generated numeric DOM path")).collect::<Vec<_>>());
     if output.map.is_empty() { return Err(Diagnostic::new("empty-document", "html", "At least one box element is required")); }
     Ok(CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map })
 }
@@ -261,13 +290,18 @@ struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<Strin
 impl Emitter {
     fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize) -> Result<(), Diagnostic> {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
-        let mut index = 0;
+        let mut elements = Vec::new();
         for node in parent.children() {
             if node.value().as_text().is_some_and(|t| !t.trim().is_empty()) {
                 return Err(unsupported(path, "Text rendering is not yet requalified on the immutable runtime"));
             }
             let Some(element) = ElementRef::wrap(node) else { continue; };
-            let path = format!("{path}/{index}");index += 1;
+            elements.push(element);
+        }
+        let mut indexed_elements: Vec<_> = elements.into_iter().enumerate().collect();
+        if parent_style.direction.reverses_emission() { indexed_elements.reverse(); }
+        for (index, element) in indexed_elements {
+            let path = format!("{path}/{index}");
             if !["div", "section", "article", "main", "header", "footer", "aside", "nav"].contains(&element.value().name()) {
                 return Err(unsupported(&path, format!("Element {} is not admitted", element.value().name())));
             }
@@ -286,11 +320,17 @@ impl Emitter {
             layout.set("name", Value::String(id.clone()))?;layout.set("parentId", Value::Uint(parent_id))?;
             layout.set("styleId", Value::Uint(object_id + 1))?;
             let mut layout_style = Record::new("LayoutComponentStyle");
-            layout_style.set("flexDirectionValue", Value::Uint(0))?;
+            layout_style.set("flexDirectionValue", Value::Uint(style.direction.wire()))?;
+            layout_style.set("layoutAlignmentType", Value::Uint(style.direction.alignment()))?;
             for (axis, size) in [("width", style.width), ("height", style.height)] {
                 let (value, units, scale) = match size {
                     Size::Pixels(v) => (v, 1, 0), Size::Percent(v) => (v, 2, 0),
-                    Size::Auto if axis == "width" => (100., 2, 0), Size::Auto => (0., 3, 2),
+                    // Baseline LayoutParticipant maps Fill on the cross axis to
+                    // auto + align-self:stretch. Hug on the main axis gives
+                    // auto + flex:0 0 auto. Using 100% here incorrectly resolves
+                    // indefinite containing blocks and bypasses intrinsic sizing.
+                    Size::Auto if (axis == "width") != parent_style.direction.is_row() => (0., 3, 1),
+                    Size::Auto => (0., 3, 2),
                 };
                 layout.set(axis, Value::Float(value))?;
                 layout_style.set(&format!("{axis}UnitsValue"), Value::Uint(units))?;

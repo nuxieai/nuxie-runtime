@@ -1,0 +1,23 @@
+{
+  "status": "bounded-flex-paint-corpus-passed",
+  "scope": "Single-line flex:0 0 auto solid box profile; not full L01 or arbitrary layout qualification. Further regression and intrinsic contexts pending.",
+  "run": "output/public-flex-paint-order-r1/receipt.json",
+  "runSha256": "e2f68319faaad986406f53278cecbd638029f77e29ad00ee9b9708565f659a4f",
+  "checkpoint": "output/public-flex-paint-checkpoint-r1/manifest.json",
+  "frames": 184,
+  "geometryPassed": 184,
+  "pixelsPassed": 184,
+  "clearChecksPassed": 368,
+  "publicTests": {
+    "rust": 62,
+    "node": 16
+  },
+  "visualReview": {
+    "directPairs": 30,
+    "reviewed": "All23frame1 pairs, six additionalframe2 pairs and percentagecaseframe0 pair. Other154 pairs use exactdecoded whitecanvas crop/extension proof for bothChrome/native.",
+    "transferProof": "output/public-flex-paint-order-r1/visual-transfer-complete.json",
+    "transferSha256": "cccbf12ed4156cb609249b9b7f98579139e357f3fc49df8c39e2749d1f8af449"
+  },
+  "preservedFailure": "output/public-flex-direction-r1/receipt.json",
+  "compilerOnly": true
+}

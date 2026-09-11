@@ -116,3 +116,8 @@ The expanded duplicate-fill/full-font matrix is preserved separately in `validat
 `public-variable-cases.json` pairs each admitted variable scene with handwritten literalCss and expectedPaint controls. `public-variable-rejected-cycles.json` retains disputed cycle contexts as rejection regressions. The original mismatch is preserved in `variable-cycle-failure-receipt.json`; the passing136-frame corpus does not erase it. See `variables-review.md` for current restrictions and resource bounds.
 
 The temporary rejection corpus is historical. Current lazy cycle behavior is tested by `public-variable-cycle-cases.json` and `probe-variable-cycles.mjs`; see `variable-cycles-review.md`. Both formerly rejected cycle forms now have successful native evidence, while the original failure remains intact.
+
+
+## Flex direction and paint-order investigation
+
+See `validation/flex-direction-review.md` for ordinary-file lowering, preserved failures and the explicit pinned-Chrome painting decision. The reproducible corpora are `public-flex-paint-order-cases.json` (23cases), `public-flex-paint-regression-cases.json` (52cases) and `public-flex-intrinsic-cases.json` (12cases), all in validation/. Transport tests cover all87 fixtures. Render each through check-public-baseline.mjs with the immutable probe/renderer; every scene must retain original and clone resize frames. Initial passing subsets do not supersede stronger failing combinations. Never drop the known fractional-edge case or relax its pixel threshold.

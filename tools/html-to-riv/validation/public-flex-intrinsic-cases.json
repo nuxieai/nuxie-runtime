@@ -1,0 +1,110 @@
+[
+  {
+    "name": "intrinsic-percent-row-auto",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:row;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-row-minimum",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:row;min-width:100px;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-row-maximum",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:row;max-width:60px;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-row-definite",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:row;width:25%;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-column-auto",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:column;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-column-minimum",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:column;min-width:100px;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-column-maximum",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:column;max-width:60px;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-percent-column-definite",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"><div id=\"g\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:180px;height:100px;background:navy}#a{flex-direction:column;width:25%;background:teal}#b{width:50%;min-width:40px;height:20px;background:gold}#g{width:80px;height:10px;background:coral}#c{width:30px;height:40px;background:purple}",
+    "features": [
+      "L01",
+      "intrinsic percentage width"
+    ]
+  },
+  {
+    "name": "intrinsic-minimum-auto",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:100px;height:100px;background:navy}#a{min-width:auto;background:teal}#b{width:120px;height:30px;background:coral}#c{width:40px;height:60px;background:gold}",
+    "features": [
+      "L01",
+      "intrinsic minimum"
+    ]
+  },
+  {
+    "name": "intrinsic-minimum-zero",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:100px;height:100px;background:navy}#a{min-width:0;background:teal}#b{width:120px;height:30px;background:coral}#c{width:40px;height:60px;background:gold}",
+    "features": [
+      "L01",
+      "intrinsic minimum"
+    ]
+  },
+  {
+    "name": "intrinsic-minimum-bounded",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:100px;height:100px;background:navy}#a{min-width:auto;max-width:80px;background:teal}#b{width:120px;height:30px;background:coral}#c{width:40px;height:60px;background:gold}",
+    "features": [
+      "L01",
+      "intrinsic minimum"
+    ]
+  },
+  {
+    "name": "intrinsic-minimum-conflict",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{flex-direction:row;width:100px;height:100px;background:navy}#a{min-width:120px;max-width:80px;background:teal}#b{width:120px;height:30px;background:coral}#c{width:40px;height:60px;background:gold}",
+    "features": [
+      "L01",
+      "intrinsic minimum"
+    ]
+  }
+]

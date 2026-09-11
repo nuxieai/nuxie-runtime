@@ -1,0 +1,463 @@
+[
+  {
+    "name": "named-rebeccapurple",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:rebeccapurple;}",
+    "features": [
+      "A01"
+    ]
+  },
+  {
+    "name": "named-aliceblue",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:aliceblue;}",
+    "features": [
+      "A01"
+    ]
+  },
+  {
+    "name": "named-darkslategrey",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:darkslategrey;}",
+    "features": [
+      "A01"
+    ]
+  },
+  {
+    "name": "named-transparent",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:transparent;}",
+    "features": [
+      "A06"
+    ]
+  },
+  {
+    "name": "hsl-modern",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(200 100% 40%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsl-legacy",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(120,100%,25%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsla-alpha",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsla(270,50%,40%,0.5);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsl-slash-alpha",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(30 100% 50% / 25%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "hsl-wrapped-hue",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(480 100% 25%);}",
+    "features": [
+      "A02"
+    ]
+  },
+  {
+    "name": "currentcolor-inherited",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{color:coral;background-color:currentColor;}#inner{width:50%;height:50%;background-color:currentColor;}",
+    "features": [
+      "A01",
+      "A03"
+    ]
+  },
+  {
+    "name": "cascade-specificity",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}div{background-color:blue;}#outer{background-color:rebeccapurple;}div{background-color:coral;}",
+    "features": [
+      "A01",
+      "cascade"
+    ]
+  },
+  {
+    "name": "cascade-source-order",
+    "html": "<div id=\"outer\"></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:red;}#outer{background-color:hsl(240 100% 50%);}",
+    "features": [
+      "A02",
+      "cascade"
+    ]
+  },
+  {
+    "name": "nested-percentage",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:coral;}#inner{width:50%;height:50%;background-color:rebeccapurple;}#leaf{width:50%;height:50%;background-color:aliceblue;}",
+    "features": [
+      "percentage-sizing"
+    ]
+  },
+  {
+    "name": "fractional-child",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:hsl(120 100% 25%);}#inner{width:80.5px;height:50%;background-color:rebeccapurple;}",
+    "features": [
+      "fractional-sizing"
+    ]
+  },
+  {
+    "name": "nested-alpha",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100%;}#outer{background-color:coral;}#inner{width:50%;height:50%;background-color:hsla(270,50%,40%,0.5);}",
+    "features": [
+      "A02",
+      "percentage-sizing"
+    ]
+  },
+  {
+    "name": "inherit-pixel-dimensions",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:96px;height:40px;background-color:coral;}#inner{width:inherit;height:inherit;background-color:rebeccapurple;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Child inherits computed pixel width96 and height40."
+  },
+  {
+    "name": "inherit-percentage-width-chain",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:50%;height:80px;background-color:coral;}#inner{width:inherit;height:60px;background-color:rebeccapurple;}#leaf{width:inherit;height:40px;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Inherited computed50% resolves separately at each containing block:50%,25%,12.5% of viewport width."
+  },
+  {
+    "name": "inherit-percentage-height-chain",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:50%;background-color:coral;}#inner{width:75%;height:inherit;background-color:rebeccapurple;}#leaf{width:50%;height:inherit;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Definite height chain:50% viewport, then25%, then12.5%; all fits shortest120px viewport."
+  },
+  {
+    "name": "width-initial-stretch",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:75%;height:60px;background-color:coral;}#inner{width:40px;width:initial;height:30px;background-color:rebeccapurple;}",
+    "features": [
+      "A04"
+    ],
+    "coverageNote": "Noninherited width keyword computesauto; child stretches to containing block width."
+  },
+  {
+    "name": "height-initial-content",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100px;background-color:aliceblue;}#inner{width:75%;height:70px;height:initial;background-color:coral;}#leaf{width:50%;height:20px;background-color:rebeccapurple;}#sibling{width:60%;height:30px;background-color:gold;}",
+    "features": [
+      "A04"
+    ],
+    "coverageNote": "Innerautoheight is20px from descendant; following30px sibling makes placement observable."
+  },
+  {
+    "name": "width-unset-stretch",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:75%;height:60px;background-color:coral;}#inner{width:40px;width:unset;height:30px;background-color:rebeccapurple;}",
+    "features": [
+      "A05"
+    ],
+    "coverageNote": "Noninherited width keyword computesauto; child stretches to containing block width."
+  },
+  {
+    "name": "height-unset-content",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100px;background-color:aliceblue;}#inner{width:75%;height:70px;height:unset;background-color:coral;}#leaf{width:50%;height:20px;background-color:rebeccapurple;}#sibling{width:60%;height:30px;background-color:gold;}",
+    "features": [
+      "A05"
+    ],
+    "coverageNote": "Innerautoheight is20px from descendant; following30px sibling makes placement observable."
+  },
+  {
+    "name": "inherit-auto-height",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:auto;background-color:aliceblue;}#inner{width:75%;height:inherit;background-color:coral;}#leaf{width:50%;height:20px;background-color:rebeccapurple;}#sibling{width:60%;height:30px;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Inheritedautoheight remainsauto, not parentused50px; inner20px and sibling30px remain visible."
+  },
+  {
+    "name": "inherit-auto-width",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:auto;height:80px;background-color:coral;}#inner{width:inherit;height:50px;background-color:rebeccapurple;}#leaf{width:50%;height:20px;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Inheritedautowidth remainsauto; outer andinnerstretch, leafhalfwidth."
+  },
+  {
+    "name": "inherit-top-level-host-size",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:inherit;height:inherit;background-color:coral;}#inner{width:50%;height:50%;background-color:rebeccapurple;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Top-levelinherits host100% dimensions; confirmsimplicitrootcontract againstbrowserbody100%."
+  },
+  {
+    "name": "inline-keyword-precedence",
+    "html": "<div id=\"outer\"><div id=\"inner\" style=\"width:inherit;height:initial;background-color:currentColor\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:90px;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:40px;height:30px;}#leaf{width:50%;height:20px;background-color:gold;}",
+    "features": [
+      "A03",
+      "A04"
+    ],
+    "coverageNote": "Inlineinheritwidth overridesrule40px; initialheight derives20px fromvisiblechild."
+  },
+  {
+    "name": "important-keyword-precedence",
+    "html": "<div id=\"outer\"><div id=\"inner\" style=\"width:40px;height:30px;background-color:coral\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:90px;height:70px;color:rebeccapurple;background-color:aliceblue;}#inner{width:inherit!important;height:initial!important;background-color:currentColor!important;}#leaf{width:50%;height:20px;background-color:gold;}",
+    "features": [
+      "A03",
+      "A04"
+    ],
+    "coverageNote": "Importantkeywords overrideordinaryinline declarations; innerwidth90height20 givesvisiblecontrol."
+  },
+  {
+    "name": "color-inherit-currentcolor",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:75%;height:30px;color:inherit;background-color:currentColor;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Color inherit/unset keeps purple; initial restoresblack. Background currentColor makescomputedcolorvisible."
+  },
+  {
+    "name": "color-unset-currentcolor",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:75%;height:30px;color:unset;background-color:currentColor;}",
+    "features": [
+      "A05"
+    ],
+    "coverageNote": "Color inherit/unset keeps purple; initial restoresblack. Background currentColor makescomputedcolorvisible."
+  },
+  {
+    "name": "color-initial-currentcolor",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:75%;height:30px;color:initial;background-color:currentColor;}",
+    "features": [
+      "A04"
+    ],
+    "coverageNote": "Color inherit/unset keeps purple; initial restoresblack. Background currentColor makescomputedcolorvisible."
+  },
+  {
+    "name": "background-initial-breaks-inheritance",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:80px;color:rebeccapurple;background-color:currentColor;}#inner{width:75%;height:60px;color:gold;background-color:inherit;background-color:initial;}#leaf{width:50%;height:30px;background-color:inherit;}",
+    "features": [
+      "A03",
+      "A04"
+    ],
+    "coverageNote": "Backgroundkeyword restorestransparent; leafinherits transparent, not currentColor from outer; purpleparentremainsvisible."
+  },
+  {
+    "name": "background-unset-breaks-inheritance",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:80px;color:rebeccapurple;background-color:currentColor;}#inner{width:75%;height:60px;color:gold;background-color:inherit;background-color:unset;}#leaf{width:50%;height:30px;background-color:inherit;}",
+    "features": [
+      "A03",
+      "A05"
+    ],
+    "coverageNote": "Backgroundkeyword restorestransparent; leafinherits transparent, not currentColor from outer; purpleparentremainsvisible."
+  },
+  {
+    "name": "minmax-fixed-clamp",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:20px;min-width:80px;height:80px;max-height:30px;background:coral}#b{width:200px;max-width:100px;height:10px;min-height:40px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-percent-crossing",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:100px;min-width:30%;max-width:60%;height:30px;background:coral}#b{width:200px;max-width:40%;height:30px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-conflicting-bounds",
+    "html": "<div id=\"a\"></div>",
+    "css": "#a{width:40px;min-width:60%;max-width:20%;height:20px;min-height:40%;max-height:10%;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-auto-stretch",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{max-width:70%;min-width:80px;height:100px;background:navy}#b{max-width:50%;height:30px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-percent-height",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{width:80%;height:80%;background:navy}#b{width:50%;height:100px;min-height:25%;max-height:60%;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-inherited-bounds",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{width:60%;height:100px;min-width:40%;max-width:90%;background:navy}#b{width:10px;min-width:inherit;max-width:inherit;height:30px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-font-relative",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{font-size:20px;width:10px;min-width:6em;height:100px;background:navy}#b{font-size:10px;width:300px;max-width:4rem;min-width:2em;height:50px;max-height:2em;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-content-height",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div>",
+    "css": "#a{width:140px;min-height:70px;max-height:90px;background:navy}#b{width:80px;height:40px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-max-none",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:90%;max-width:20px;max-width:none;height:30px;background:coral}#b{width:90%;max-width:20px;max-width:initial;height:30px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-zero-max",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div>",
+    "css": "#a{width:100px;max-width:0px;height:30px;background:red}#b{width:80px;height:30px;background:teal}",
+    "features": [
+      "A11",
+      "ordinary percentage min/max"
+    ]
+  },
+  {
+    "name": "minmax-auto-content",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:auto;min-height:auto;height:auto;background:teal}#c{width:100px;height:100px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "minmax-initial-preferred",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:initial;min-height:initial;height:20px;background:teal}#c{width:100px;height:100px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "minmax-unset-percent",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:unset;min-height:unset;height:50%;background:teal}#c{width:100px;height:100px;background:coral}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "minmax-auto-capped",
+    "html": "<div id=\"a\"><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#a{width:60px;height:60px;background:navy}#b{min-width:auto;min-height:auto;height:auto;background:teal}#c{width:100px;height:100px;background:coral}#b{max-height:20px}",
+    "features": [
+      "A11",
+      "ordinary automatic minimum"
+    ]
+  },
+  {
+    "name": "paint-overlap-row",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:row;background:navy}#a{width:80px;height:100px;flex-direction:row;background:teal}#b{width:120px;height:60px;background:coral}#c{width:60px;height:100px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary DOM paint ordering"
+    ]
+  },
+  {
+    "name": "paint-overlap-row-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:row-reverse;background:navy}#a{width:80px;height:100px;flex-direction:row-reverse;background:teal}#b{width:120px;height:60px;background:coral}#c{width:60px;height:100px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary DOM paint ordering"
+    ]
+  },
+  {
+    "name": "paint-overlap-column",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:column;background:navy}#a{height:80px;width:100px;flex-direction:column;background:teal}#b{height:120px;width:60px;background:coral}#c{height:60px;width:100px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary DOM paint ordering"
+    ]
+  },
+  {
+    "name": "paint-overlap-column-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:column-reverse;background:navy}#a{height:80px;width:100px;flex-direction:column-reverse;background:teal}#b{height:120px;width:60px;background:coral}#c{height:60px;width:100px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary DOM paint ordering"
+    ]
+  },
+  {
+    "name": "paint-host-overlap",
+    "html": "<div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div>",
+    "css": "#a{width:100px;height:40px;background:teal}#b{width:100px;height:80px;background:coral}#c{width:100px;height:40px;background:gold}",
+    "features": [
+      "L01",
+      "host paint ordering"
+    ]
+  },
+  {
+    "name": "paint-transparent-nested-overlap",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"t\"><div id=\"b\"></div></div></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:80px}#t{width:80px}#b{width:120px;height:60px;background:coral}#c{width:60px;background:rgb(255 215 0 / 50%)}",
+    "features": [
+      "L01",
+      "transparent subtree and alpha paint ordering"
+    ]
+  }
+]

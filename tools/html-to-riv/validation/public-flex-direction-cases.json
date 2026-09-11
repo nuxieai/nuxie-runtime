@@ -1,0 +1,128 @@
+[
+  {
+    "name": "direction-row",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:20px;background:coral}#b{width:40px;height:30px;background:teal}#c{width:50px;height:40px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "direction-row-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row-reverse;background:navy}#a{width:30px;height:20px;background:coral}#b{width:40px;height:30px;background:teal}#c{width:50px;height:40px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "direction-column",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:column;background:navy}#a{width:30px;height:20px;background:coral}#b{width:40px;height:30px;background:teal}#c{width:50px;height:40px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "direction-column-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:column-reverse;background:navy}#a{width:30px;height:20px;background:coral}#b{width:40px;height:30px;background:teal}#c{width:50px;height:40px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "row-intrinsic-width",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"><div id=\"c\"></div></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{height:30px;background:red}#b{height:60px;background:teal}#c{width:80px;height:20px;background:coral}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "row-auto-height-stretch",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;background:coral}#b{width:40px;height:30px;background:teal}#c{width:50px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "row-auto-container-height",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;flex-direction:row;background:navy}#a{width:30px;background:coral}#b{width:40px;height:60px;background:teal}#c{width:50px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "column-reverse-auto-width",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:column-reverse;background:navy}#a{height:20px;background:coral}#b{height:30px;background:teal}#c{height:40px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "nested-mixed-directions",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"d\"><div id=\"e\"></div><div id=\"f\"></div></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{flex-direction:column;background:teal}#b{width:50px;height:20px;background:coral}#c{width:30px;height:30px;background:gold}#d{flex-direction:row;background:purple}#e{width:30px;height:20px;background:cyan}#f{width:40px;height:40px;background:lime}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "row-auto-minmax",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{min-width:40px;max-width:80px;background:teal}#b{width:120px;height:30px;background:coral}#c{min-width:30px;height:60px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "row-reverse-percentage-resize",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:75%;height:100px;flex-direction:row-reverse;background:navy}#a{width:25%;height:30px;background:coral}#b{width:30%;height:40px;background:teal}#c{width:20%;height:50px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "direction-initial-unset",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div><div id=\"c\"></div></div><div id=\"d\"><div id=\"e\"></div><div id=\"f\"></div></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:column-reverse;background:navy}#a{flex-direction:initial;height:30px;background:teal}#d{flex-direction:unset;height:40px;background:gold}#b,#e{width:30px;height:20px;background:coral}#c,#f{width:40px;height:20px;background:purple}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "direction-inherited-variable",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"b\"></div><div id=\"c\"></div></div></div>",
+    "css": "#root{--dir:row-reverse;flex-direction:var(--dir);width:180px;height:100px;background:navy}#a{flex-direction:inherit;width:120px;background:teal}#b{width:30px;height:20px;background:coral}#c{width:40px;height:30px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  },
+  {
+    "name": "reverse-overflow-fixed",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:100px;height:70px;flex-direction:row-reverse;background:navy}#a{width:50px;height:20px;background:coral}#b{width:60px;height:30px;background:teal}#c{width:70px;height:40px;background:gold}",
+    "features": [
+      "L01",
+      "ordinary flex direction and auto sizing"
+    ]
+  }
+]

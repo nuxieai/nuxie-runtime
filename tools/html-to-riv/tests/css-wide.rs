@@ -116,9 +116,6 @@ fn malformed_keywords_and_unqualified_display_values_remain_rejected() {
         ("display", "initial"),
         ("display", "unset"),
         ("display", "inline"),
-        ("flex-direction", "initial"),
-        ("flex-direction", "unset"),
-        ("flex-direction", "row"),
         ("display", "inherit flex"),
         ("flex-direction", "inherit column"),
     ] {

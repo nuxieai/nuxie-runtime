@@ -1,0 +1,42 @@
+{
+  "status": "qualified-flex-profile-with-preserved-regression-failure",
+  "scope": "L01 single-line flex:0 0 auto box profile against pinnedChrome153.0.8010.12; no generalCSS painting equivalence, arbitrary layout or full release claim.",
+  "run": "output/public-flex-final-r1/receipt.json",
+  "runSha256": "a1d41f4c6d37aed6679557032536d2773a0f3babef31b70a83b9d7188d993949",
+  "checkpoint": "output/public-flex-final-checkpoint-r1/manifest.json",
+  "checkpointSha256": "d7dc673d45d118d4734a9a296629a8b3d3666d152045757ae23415993cdce232",
+  "scenes": 87,
+  "frames": 696,
+  "geometryPassed": 696,
+  "pixelsPassed": 694,
+  "clearChecksPassed": 1392,
+  "featureScenes": 41,
+  "featureFramesPassed": 328,
+  "publicTests": {
+    "rust": 63,
+    "node": 17,
+    "typescript": "pass"
+  },
+  "visualCoverage": "output/public-flex-final-r1/final-visual-coverage.json",
+  "visualCoverageSha256": "78bd9f8ffd96b541d529caf9a01cdd26072d9bcf15eb64adec4563d8dc5d291f",
+  "visualScope": "All41feature scenes:20pairs directly reviewed in finalrun,308pairs via exactrepeat/priorreview transfers.46older regression scenes compared numerically and against previous images; no new broad visualqualification claim for them.",
+  "remainingFailures": [
+    {
+      "name": "minmax-percent-height",
+      "frame": 2,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "name": "minmax-percent-height",
+      "frame": 6,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    }
+  ],
+  "sourceBoundary": "Immutable source guard passes; no changes outside compiler module."
+}

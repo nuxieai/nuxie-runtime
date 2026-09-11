@@ -121,3 +121,8 @@ The temporary rejection corpus is historical. Current lazy cycle behavior is tes
 ## Flex direction and paint-order investigation
 
 See `validation/flex-direction-review.md` for ordinary-file lowering, preserved failures and the explicit pinned-Chrome painting decision. The reproducible corpora are `public-flex-paint-order-cases.json` (23cases), `public-flex-paint-regression-cases.json` (52cases) and `public-flex-intrinsic-cases.json` (12cases), all in validation/. Transport tests cover all87 fixtures. Render each through check-public-baseline.mjs with the immutable probe/renderer; every scene must retain original and clone resize frames. Initial passing subsets do not supersede stronger failing combinations. Never drop the known fractional-edge case or relax its pixel threshold.
+
+
+## CSS order
+
+`validation/public-order-cases.json` covers 19 cases and 152 original/clone resize frames. Geometry, pixels and 304 clear controls pass, with 24 directly reviewed viewport pairs and 128 exact image transfers. All 168 distinct prior fixtures produce identical Rive/source-map bytes against the previous frozen compiler. See `validation/order-review.md` and `validation/public-order-receipt.json`; those checks do not change historical fractional-paint limitations.

@@ -29,6 +29,24 @@ fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Dir
         _ => Err(unsupported(source, "flex-direction admits column, column-reverse, row, row-reverse, inherit, initial and unset")),
     }
 }
+fn computed_order(text: &str, parent: i32, source: &str) -> Result<i32, Diagnostic> {
+    // Inspect the authored integer lexeme: cssparser's integer field saturates
+    // out-of-range values, and ordinary number serialization can lose precision.
+    let mut input = cssparser::ParserInput::new(text);
+    let mut parser = cssparser::Parser::new(&mut input);
+    parser.skip_whitespace();
+    let start = parser.position();
+    let token = parser.next().map_err(|_| unsupported(source, "order requires one signed 32-bit integer or CSS-wide keyword"))?.clone();
+    let value = match token {
+        cssparser::Token::Ident(keyword) if keyword.eq_ignore_ascii_case("inherit") => parent,
+        cssparser::Token::Ident(keyword) if keyword.eq_ignore_ascii_case("initial") || keyword.eq_ignore_ascii_case("unset") => 0,
+        cssparser::Token::Number { int_value: Some(_), .. } => parser.slice_from(start).parse::<i32>()
+            .map_err(|_| unsupported(source, "order integer must be between -2147483648 and 2147483647"))?,
+        _ => return Err(unsupported(source, "order requires one signed 32-bit integer or CSS-wide keyword")),
+    };
+    parser.expect_exhausted().map_err(|_| unsupported(source, "order requires exactly one integer or keyword"))?;
+    Ok(value)
+}
 #[derive(Clone, Copy)]
 enum SpecifiedSize { Auto, Pixels(f32), Percent(f32), Em(f32), Rem(f32) }
 const ROOT_FONT_SIZE: f32 = 16.;
@@ -41,9 +59,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -146,11 +164,12 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction"].contains(&d.name.as_str()) {
+             "font-size", "background", "background-color", "color", "display", "flex-direction", "order"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
     }
+    if d.name == "order" { computed_order(&d.value, 0, &d.source)?; return Ok(()); }
     if d.name == "background" {
         background_shorthand(&d.value, BackgroundColor::Rgba(0), &d.source)?;
         return Ok(());
@@ -180,6 +199,21 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
     Ok(())
 }
 
+// Sorting needs only one scalar per sibling. Do not retain full Styles here:
+// each contains an inherited custom-property environment of up to 1 MiB.
+// Full computation below still validates every declaration, including losers.
+fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Result<i32, Diagnostic> {
+    let declarations = css::cascade(rules, element)?;
+    let Some(declaration) = declarations.iter().rev().find(|d| d.name == "order") else { return Ok(0); };
+    if !variables::contains_var(&declaration.value) {
+        return computed_order(&declaration.value, parent.order, &declaration.source);
+    }
+    let environment = variables::compute(&declarations, &parent.variables)?;
+    let value = variables::substitute(&declaration.value, &environment, &declaration.source)?
+        .ok_or_else(|| unsupported(&declaration.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
+    computed_order(&value, parent.order, &declaration.source)
+}
+
 fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Result<Style, Diagnostic> {
     let mut declarations = css::cascade(rules, element)?;
     for d in &declarations { validate(d)?; }
@@ -193,7 +227,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
             // that loses the cascade. Keep the compiler's strict diagnostics.
             validate(d)?;
         }
-        d.value = css::ordinary_value(&d.value)?;
+        if d.name != "order" { d.value = css::ordinary_value(&d.value)?; }
     }
     let mut style = Style { variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
     // Font-size-relative units use the parent for font-size itself, but the final
@@ -214,6 +248,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
     }
     for d in &declarations {
         match d.name.as_str() {
+            "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
             "height" => style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?,
@@ -298,9 +333,11 @@ impl Emitter {
             let Some(element) = ElementRef::wrap(node) else { continue; };
             elements.push(element);
         }
-        let mut indexed_elements: Vec<_> = elements.into_iter().enumerate().collect();
-        if parent_style.direction.reverses_emission() { indexed_elements.reverse(); }
-        for (index, element) in indexed_elements {
+        if self.ids.len().saturating_add(elements.len()) > 8192 {
+            return Err(Diagnostic::new("object-limit", path, "Document exceeds 8192 authored elements"));
+        }
+        let mut ordered_elements = Vec::with_capacity(elements.len());
+        for (index, element) in elements.into_iter().enumerate() {
             let path = format!("{path}/{index}");
             if !["div", "section", "article", "main", "header", "footer", "aside", "nav"].contains(&element.value().name()) {
                 return Err(unsupported(&path, format!("Element {} is not admitted", element.value().name())));
@@ -311,6 +348,13 @@ impl Emitter {
             if self.map.len() >= 8192 { return Err(Diagnostic::new("object-limit", &path, "Document exceeds 8192 authored elements")); }
             let id = element.attr("id").map(str::to_owned).unwrap_or_else(|| format!("node{path}"));
             if id.is_empty() || !self.ids.insert(id.clone()) { return Err(Diagnostic::new("duplicate-id", &path, "Empty or duplicate element identity")); }
+            let order = ordering_key(element, rules, parent_style)?;
+            ordered_elements.push((index, element, path, id, order));
+        }
+        // CSS order modifies layout/paint order, never DOM selector positions.
+        ordered_elements.sort_by_key(|(index, _, _, _, order)| (*order, *index));
+        if parent_style.direction.reverses_emission() { ordered_elements.reverse(); }
+        for (_, element, path, id, _) in ordered_elements {
             let style = computed(element, rules, parent_style)?;
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
                 return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));

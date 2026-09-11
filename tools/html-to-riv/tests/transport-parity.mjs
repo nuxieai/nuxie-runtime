@@ -160,3 +160,9 @@ test("intrinsic flex percentage and minimum contexts have exact CLI/WASM parity"
  assert.equal(fixtures.length,12);
  await assertCorpusParity(fixtures);
 });
+
+test("CSS order has exact CLI/WASM parity",async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL("../validation/public-order-cases.json",import.meta.url)));
+ assert.equal(fixtures.length,19);
+ await assertCorpusParity(fixtures);
+});

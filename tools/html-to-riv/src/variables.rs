@@ -43,6 +43,7 @@ fn parse_inner(
     }
     let mut nodes = Vec::new();
     while !p.is_exhausted() {
+        let token_start = p.position();
         let token = p
             .next_including_whitespace_and_comments()
             .map_err(|_| syntax(source, "Invalid value token"))?
@@ -108,6 +109,10 @@ fn parse_inner(
         } else {
             nodes.push(Node::Token(match token {
                 Token::Comment(_) | Token::WhiteSpace(_) => " ".into(),
+                // Keep numeric spelling: cssparser serializes its saturated integer
+                // field and rounded float, which can change order values or turn
+                // an invalid integer lexeme (1.0/1e2) into an admitted integer.
+                Token::Number { .. } => p.slice_from(token_start).to_owned(),
                 _ => token.to_css_string(),
             }));
         }

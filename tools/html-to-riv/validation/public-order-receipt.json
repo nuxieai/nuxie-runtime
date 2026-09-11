@@ -1,0 +1,57 @@
+{
+  "status": "qualified-order-single-line-profile",
+  "scope": "L02 signed i32 order in the admitted single-line flex box profile against pinned Chrome 153.0.8010.12. No arbitrary CSS/layout or complete release claim.",
+  "scenes": 19,
+  "frames": 152,
+  "geometryPassed": 152,
+  "pixelsPassed": 152,
+  "clearChecksPassed": 304,
+  "run": "output/public-order-r1/receipt.json",
+  "runSha256": "64e66cfe0b2211854cfc0a2870e971ff48c1662f3dd5879f77732cb0c781f418",
+  "checkpoint": "output/public-order-checkpoint-r2/manifest.json",
+  "checkpointSha256": "2348985224287ba6daec3489c1858cccc55208d77cdc2b37f5c117bef1af42b3",
+  "visualReview": {
+    "directPairs": 24,
+    "exactTransferPairs": 128,
+    "proof": "output/public-order-r1/visual-transfer.json",
+    "proofSha256": "29a7b78a67395330dfd1bdf2a45e0a187a38eb91c4a79839712ead3995f045f3"
+  },
+  "publicTests": {
+    "rust": 70,
+    "node": 18,
+    "typescript": "pass"
+  },
+  "unchangedOutputRegression": {
+    "fixtures": 168,
+    "sameRivAndSourceMaps": 168,
+    "manifest": "output/order-byte-regression-r2/manifest.json",
+    "manifestSha256": "1129de63b4bef416eeecb51051f155e16b24347b84315f6edf791ad2b2ffe79f",
+    "scope": "Exact differential output against previous frozen compiler. Does not qualify unresolved historical rendering behavior."
+  },
+  "immutableSourceGuard": "pass; no source changes outside compiler module",
+  "resourceCheck": {
+    "scope": "Single-process peak RSS measurements on one machine, same 1024-child input with a 48000-character inherited custom value. Final sorting retains integer keys, not full sibling styles.",
+    "previousCompilerPeakBytes": 6438912,
+    "firstCandidatePeakBytes": 57475072,
+    "finalInheritedPeakBytes": 6471680,
+    "finalVariableOrderPeakBytes": 6520832,
+    "sameRivAndSourceMapAsPrevious": true,
+    "files": {
+      "output/order-memory-r1/candidate.log": "c45146dd96e6b34e9e348cc3cbea13287c2056fdf9e02de3c0cd41910d975540",
+      "output/order-memory-r1/candidate.map.json": "dd84ad3a17ae283146bf27b26ee8e030e53f870ab3de08c000024f45f8462d42",
+      "output/order-memory-r1/candidate.riv": "6aeb87c043559945108d14b144f2be5d89ac422a2aff5feabe3e6e2acb9a211f",
+      "output/order-memory-r1/previous.log": "dd2f8a3866861ac31f0b6bee56c03bc667c8d58855fe8b42f6c42d22fd34b14e",
+      "output/order-memory-r1/previous.map.json": "dd84ad3a17ae283146bf27b26ee8e030e53f870ab3de08c000024f45f8462d42",
+      "output/order-memory-r1/previous.riv": "6aeb87c043559945108d14b144f2be5d89ac422a2aff5feabe3e6e2acb9a211f",
+      "output/order-memory-r1/request.json": "69a76bec0cc586b982d98355a5172c3d696cc33fa443dbb367500c2e5f2c89c5",
+      "output/order-memory-r2/inherited.json": "69a76bec0cc586b982d98355a5172c3d696cc33fa443dbb367500c2e5f2c89c5",
+      "output/order-memory-r2/inherited.log": "2e2d8344f6daff7786fc9cf9a18122fd50bf19cbe8d1a6ec0cb1346fb2d234c3",
+      "output/order-memory-r2/inherited.map.json": "dd84ad3a17ae283146bf27b26ee8e030e53f870ab3de08c000024f45f8462d42",
+      "output/order-memory-r2/inherited.riv": "6aeb87c043559945108d14b144f2be5d89ac422a2aff5feabe3e6e2acb9a211f",
+      "output/order-memory-r2/variable-order.json": "bbf101af19640ae16efe885a835bd53892a65fe21001715937f7b0a698c3b3bf",
+      "output/order-memory-r2/variable-order.log": "fb7ad8d9a2bec7bdee4120daf5ee72be836e4fbba532dc4c7a57c02cf273a120",
+      "output/order-memory-r2/variable-order.map.json": "dd84ad3a17ae283146bf27b26ee8e030e53f870ab3de08c000024f45f8462d42",
+      "output/order-memory-r2/variable-order.riv": "6aeb87c043559945108d14b144f2be5d89ac422a2aff5feabe3e6e2acb9a211f"
+    }
+  }
+}

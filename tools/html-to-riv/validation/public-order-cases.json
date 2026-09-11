@@ -1,0 +1,173 @@
+[
+  {
+    "name": "order-row",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:140px;flex-direction:row;background:navy}#a{order:-1;width:30px;height:20px;background:coral}#b{order:2;width:40px;height:30px;background:teal}#c{width:50px;height:40px;background:gold}#d{order:-1;width:20px;height:50px;background:purple}",
+    "features": [
+      "L02",
+      "stable ties and negative order"
+    ]
+  },
+  {
+    "name": "order-overlap-row",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:row;background:navy}#a{order:1;width:60px;height:100px;flex-direction:row;background:teal}#g{width:100px;height:40px;background:coral}#b{order:2;width:50px;height:80px;background:rgb(255 215 0 / 50%)}#c{order:-1;width:30px;height:60px;background:purple}",
+    "features": [
+      "L02",
+      "directional reordered overlap and alpha paint"
+    ]
+  },
+  {
+    "name": "order-row-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:140px;flex-direction:row-reverse;background:navy}#a{order:-1;width:30px;height:20px;background:coral}#b{order:2;width:40px;height:30px;background:teal}#c{width:50px;height:40px;background:gold}#d{order:-1;width:20px;height:50px;background:purple}",
+    "features": [
+      "L02",
+      "stable ties and negative order"
+    ]
+  },
+  {
+    "name": "order-overlap-row-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:row-reverse;background:navy}#a{order:1;width:60px;height:100px;flex-direction:row-reverse;background:teal}#g{width:100px;height:40px;background:coral}#b{order:2;width:50px;height:80px;background:rgb(255 215 0 / 50%)}#c{order:-1;width:30px;height:60px;background:purple}",
+    "features": [
+      "L02",
+      "directional reordered overlap and alpha paint"
+    ]
+  },
+  {
+    "name": "order-column",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:140px;flex-direction:column;background:navy}#a{order:-1;height:30px;width:20px;background:coral}#b{order:2;height:40px;width:30px;background:teal}#c{height:50px;width:40px;background:gold}#d{order:-1;height:20px;width:50px;background:purple}",
+    "features": [
+      "L02",
+      "stable ties and negative order"
+    ]
+  },
+  {
+    "name": "order-overlap-column",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:column;background:navy}#a{order:1;height:60px;width:100px;flex-direction:column;background:teal}#g{height:100px;width:40px;background:coral}#b{order:2;height:50px;width:80px;background:rgb(255 215 0 / 50%)}#c{order:-1;height:30px;width:60px;background:purple}",
+    "features": [
+      "L02",
+      "directional reordered overlap and alpha paint"
+    ]
+  },
+  {
+    "name": "order-column-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:140px;flex-direction:column-reverse;background:navy}#a{order:-1;height:30px;width:20px;background:coral}#b{order:2;height:40px;width:30px;background:teal}#c{height:50px;width:40px;background:gold}#d{order:-1;height:20px;width:50px;background:purple}",
+    "features": [
+      "L02",
+      "stable ties and negative order"
+    ]
+  },
+  {
+    "name": "order-overlap-column-reverse",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:180px;flex-direction:column-reverse;background:navy}#a{order:1;height:60px;width:100px;flex-direction:column-reverse;background:teal}#g{height:100px;width:40px;background:coral}#b{order:2;height:50px;width:80px;background:rgb(255 215 0 / 50%)}#c{order:-1;height:30px;width:60px;background:purple}",
+    "features": [
+      "L02",
+      "directional reordered overlap and alpha paint"
+    ]
+  },
+  {
+    "name": "order-all-ties",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#a,#b,#c,#d{order:-3}",
+    "features": [
+      "L02",
+      "all-ties"
+    ]
+  },
+  {
+    "name": "order-cascade",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#a{order:3!important}#a{order:-1}#b{order:2}#c{order:-1}#d{order:0}",
+    "features": [
+      "L02",
+      "cascade"
+    ]
+  },
+  {
+    "name": "order-variables",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#root{--first:-2;--last:3}#a{order:var(--last)}#b{order:var(--missing,var(--first))}#d{order:1}",
+    "features": [
+      "L02",
+      "variables"
+    ]
+  },
+  {
+    "name": "order-css-wide",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#root{order:-2}#a{order:inherit}#b{order:7;order:initial}#c{order:-7;order:unset}#d{order:-1}",
+    "features": [
+      "L02",
+      "css-wide"
+    ]
+  },
+  {
+    "name": "order-integer-boundaries",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#a{order:2147483647}#b{order:-2147483648}#c{order:+0002}#d{order:-0}",
+    "features": [
+      "L02",
+      "integer-boundaries"
+    ]
+  },
+  {
+    "name": "order-original-dom-selectors",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#root>:first-child{order:2;background:lime}#root>:nth-child(2){order:-1}#b+#c{background:cyan}#root>:last-child{order:-1;background:red}",
+    "features": [
+      "L02",
+      "original-dom-selectors"
+    ]
+  },
+  {
+    "name": "order-responsive-percent",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{width:30px;height:30px;background:coral}#b{width:40px;height:40px;background:teal}#c{width:50px;height:50px;background:gold}#d{width:20px;height:60px;background:purple}#root{width:75%}#a,#b,#c,#d{width:25%}#a{order:3}#b{order:2}#c{order:1}#d{order:0}",
+    "features": [
+      "L02",
+      "responsive-percent"
+    ]
+  },
+  {
+    "name": "order-host-roots",
+    "html": "<div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div>",
+    "css": "#a{height:20px;order:2;background:coral}#b{height:30px;order:-1;background:teal}#c{height:40px;background:gold}",
+    "features": [
+      "L02",
+      "host order"
+    ]
+  },
+  {
+    "name": "order-nested-inheritance",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div><div id=\"h\"></div></div><div id=\"b\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{order:2;width:100px;flex-direction:row;background:teal}#g{order:inherit;width:30px;height:30px;background:coral}#h{width:40px;height:40px;background:gold}#b{width:50px;height:50px;background:purple}",
+    "features": [
+      "L02",
+      "inherited and noninherited order"
+    ]
+  },
+  {
+    "name": "order-intrinsic-minmax",
+    "html": "<div id=\"root\"><div id=\"a\"><div id=\"g\"></div></div><div id=\"b\"></div><div id=\"c\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;background:navy}#a{order:1;max-width:80px;background:teal}#g{width:120px;height:30px;background:coral}#b{order:2;min-width:30px;height:60px;background:gold}#c{order:-1;width:20px;height:40px;background:purple}",
+    "features": [
+      "L02",
+      "intrinsic bounded reorder"
+    ]
+  },
+  {
+    "name": "order-variable-integer-precision",
+    "html": "<div id=\"root\"><div id=\"a\"></div><div id=\"b\"></div><div id=\"c\"></div><div id=\"d\"></div></div>",
+    "css": "#root{width:180px;height:100px;flex-direction:row;--high:16777217;--low:16777216;--max:2147483647;--min:-2147483648;background:navy}#a{order:var(--high);width:30px;height:30px;background:coral}#b{order:var(--low);width:40px;height:40px;background:teal}#c{order:var(--max);width:50px;height:50px;background:gold}#d{order:var(--min);width:20px;height:60px;background:purple}",
+    "features": [
+      "L02",
+      "exact variable integer precision"
+    ]
+  }
+]

@@ -1,0 +1,1396 @@
+{
+  "scope": "Width/height CSSwide inherit/initial/unset in current column-box profile and color keywords; no general inline/row or arbitrary-property qualification",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "cases": 17,
+  "geometryPass": 136,
+  "pixelPass": 136,
+  "directReviewedPairs": 51,
+  "exactRepeatTransfers": 85,
+  "visualCoverage": [
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "ae0c36f30440d619f1edbb6c7fa99c9fed9160982aee6e59da84a7b0a74d5fb1",
+      "nativeSha256": "9ac2f05c5f457b26ff93af8966afc54e101b5d06f6878671e6c8ff9ee69a3be3"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "8e7fc1f0367befcc602c5fb30e131148ee93020d62150d5e95aacaa4a47dbbef",
+      "nativeSha256": "8e4c6ecaee68312390054f7cb0e9f847dc7d7e5ea89e0b71f4a7fd97c644a00c"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "f5118f5c282166c376d0e0eb921e376db0f6974a81a49e171d769d9409864bc6",
+      "nativeSha256": "3b19859a50efedb6a9c25c9732418b1bf956ece4d56c78f8803e8fb32ac313da"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "ae0c36f30440d619f1edbb6c7fa99c9fed9160982aee6e59da84a7b0a74d5fb1",
+      "nativeSha256": "9ac2f05c5f457b26ff93af8966afc54e101b5d06f6878671e6c8ff9ee69a3be3"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "ae0c36f30440d619f1edbb6c7fa99c9fed9160982aee6e59da84a7b0a74d5fb1",
+      "nativeSha256": "9ac2f05c5f457b26ff93af8966afc54e101b5d06f6878671e6c8ff9ee69a3be3"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "8e7fc1f0367befcc602c5fb30e131148ee93020d62150d5e95aacaa4a47dbbef",
+      "nativeSha256": "8e4c6ecaee68312390054f7cb0e9f847dc7d7e5ea89e0b71f4a7fd97c644a00c"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "f5118f5c282166c376d0e0eb921e376db0f6974a81a49e171d769d9409864bc6",
+      "nativeSha256": "3b19859a50efedb6a9c25c9732418b1bf956ece4d56c78f8803e8fb32ac313da"
+    },
+    {
+      "name": "inherit-pixel-dimensions",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-pixel-dimensions/review.png",
+      "sheetSha256": "2433762f89ac12e1e18ab1d90c50f530b269b892a4402b43d39ea04dafecd3c2",
+      "chromeSha256": "ae0c36f30440d619f1edbb6c7fa99c9fed9160982aee6e59da84a7b0a74d5fb1",
+      "nativeSha256": "9ac2f05c5f457b26ff93af8966afc54e101b5d06f6878671e6c8ff9ee69a3be3"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "5562c4226bebe7516461aa158eee0b6db1d7f1c880b3c4aee022d06631b67b6d",
+      "nativeSha256": "feca9bfc0f5042c0d0cf9a96c249730cc1781ce274aae69fd5d9f2868da74513"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "3bf85122eb9635af5ad853ef5f69003eb201b8668dc70d7267d04c085f7a57a5",
+      "nativeSha256": "e130f40e03fb516b2d8a9db27def09a8a4d99dcb8ccb9dc802110973deb495b3"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "61ab2056dd978c8be40087b9a3d9a26ea5e93108539f481cc16ee56f54854ea8",
+      "nativeSha256": "3e69471ff42eb9275a210601eb76484df7cb8912c1e640b72bd054c0703a1b99"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "5562c4226bebe7516461aa158eee0b6db1d7f1c880b3c4aee022d06631b67b6d",
+      "nativeSha256": "feca9bfc0f5042c0d0cf9a96c249730cc1781ce274aae69fd5d9f2868da74513"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "5562c4226bebe7516461aa158eee0b6db1d7f1c880b3c4aee022d06631b67b6d",
+      "nativeSha256": "feca9bfc0f5042c0d0cf9a96c249730cc1781ce274aae69fd5d9f2868da74513"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "3bf85122eb9635af5ad853ef5f69003eb201b8668dc70d7267d04c085f7a57a5",
+      "nativeSha256": "e130f40e03fb516b2d8a9db27def09a8a4d99dcb8ccb9dc802110973deb495b3"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "61ab2056dd978c8be40087b9a3d9a26ea5e93108539f481cc16ee56f54854ea8",
+      "nativeSha256": "3e69471ff42eb9275a210601eb76484df7cb8912c1e640b72bd054c0703a1b99"
+    },
+    {
+      "name": "inherit-percentage-width-chain",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-width-chain/review.png",
+      "sheetSha256": "21b63674cde6b283fe040994c75769e6a8b2d89565923b9944c34901ebc28ea6",
+      "chromeSha256": "5562c4226bebe7516461aa158eee0b6db1d7f1c880b3c4aee022d06631b67b6d",
+      "nativeSha256": "feca9bfc0f5042c0d0cf9a96c249730cc1781ce274aae69fd5d9f2868da74513"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "e17be27b1e7aeebe2ff8315758ed906f78a3dcd39e9de8b253fc5890f5228848",
+      "nativeSha256": "3ca86a927dab18c1718718601568c9e7ccdcbd11671773cb5cb8af59416a6fd9"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "bfe1f3ed295e8068390becade3d107872a326929424a4616e48849a78e0ab873",
+      "nativeSha256": "bd518dfbef2215acf89b48a7a988b999b6cd1f8d645e7a18b7b4c8b23f62df80"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "d6fc9dfce228ffdcb41cb8311de3e7bdcda7f1e72b49d3c55069e4d99dfa6cf1",
+      "nativeSha256": "37a441c4a6c196e88f577b91b56c528f5cbe9c8720c0f0d8cb415c48d50e54dc"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "e17be27b1e7aeebe2ff8315758ed906f78a3dcd39e9de8b253fc5890f5228848",
+      "nativeSha256": "3ca86a927dab18c1718718601568c9e7ccdcbd11671773cb5cb8af59416a6fd9"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "e17be27b1e7aeebe2ff8315758ed906f78a3dcd39e9de8b253fc5890f5228848",
+      "nativeSha256": "3ca86a927dab18c1718718601568c9e7ccdcbd11671773cb5cb8af59416a6fd9"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "bfe1f3ed295e8068390becade3d107872a326929424a4616e48849a78e0ab873",
+      "nativeSha256": "bd518dfbef2215acf89b48a7a988b999b6cd1f8d645e7a18b7b4c8b23f62df80"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "d6fc9dfce228ffdcb41cb8311de3e7bdcda7f1e72b49d3c55069e4d99dfa6cf1",
+      "nativeSha256": "37a441c4a6c196e88f577b91b56c528f5cbe9c8720c0f0d8cb415c48d50e54dc"
+    },
+    {
+      "name": "inherit-percentage-height-chain",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-percentage-height-chain/review.png",
+      "sheetSha256": "d40b2ef7213f392dc591661a9a714512954714fc5baee51c112a3b312eb3e2b4",
+      "chromeSha256": "e17be27b1e7aeebe2ff8315758ed906f78a3dcd39e9de8b253fc5890f5228848",
+      "nativeSha256": "3ca86a927dab18c1718718601568c9e7ccdcbd11671773cb5cb8af59416a6fd9"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "8416427b5e758abd10c69be5fd5f6f4669ad8f0fa63cc4bb42e44484605726e5",
+      "nativeSha256": "71707a4dd4bbfafd38273393213c6a4bd853a7ebcc4456dcdefd490d81f6f1fa"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "75577ae62266dfe190344cd1c46aece260c0fda391c1ce626145686fc24a3b20",
+      "nativeSha256": "da648fb16f2f2db15a4d3e07d71c2a9dbbcbd1a2311ad9fff043a8b8bd51b1c1"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "8416427b5e758abd10c69be5fd5f6f4669ad8f0fa63cc4bb42e44484605726e5",
+      "nativeSha256": "71707a4dd4bbfafd38273393213c6a4bd853a7ebcc4456dcdefd490d81f6f1fa"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "75577ae62266dfe190344cd1c46aece260c0fda391c1ce626145686fc24a3b20",
+      "nativeSha256": "da648fb16f2f2db15a4d3e07d71c2a9dbbcbd1a2311ad9fff043a8b8bd51b1c1"
+    },
+    {
+      "name": "width-initial-stretch",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-initial-stretch/review.png",
+      "sheetSha256": "ed2bc245a5b6fd2dfe03c212db167951682e9c7ad1edb78834ba6571b8c7447a",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "085206fb90d56b7768f67f0c610999e9f85354b65b373ab16f7376a3e5a8d098",
+      "nativeSha256": "39d968174d02f8d35c98e1b1b108e799e474c9e64c5c1f45bde470fe8c2a4daa"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "86005a6351757d52fd64996dbc001a09f0ba24cf2dac177f7db1f134645b3895",
+      "nativeSha256": "55393d0bd71b91161f39f1b713c753cbe807e8557545eeed68fc3bf6d7ccebcc"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "085206fb90d56b7768f67f0c610999e9f85354b65b373ab16f7376a3e5a8d098",
+      "nativeSha256": "39d968174d02f8d35c98e1b1b108e799e474c9e64c5c1f45bde470fe8c2a4daa"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "86005a6351757d52fd64996dbc001a09f0ba24cf2dac177f7db1f134645b3895",
+      "nativeSha256": "55393d0bd71b91161f39f1b713c753cbe807e8557545eeed68fc3bf6d7ccebcc"
+    },
+    {
+      "name": "height-initial-content",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-initial-content/review.png",
+      "sheetSha256": "d459ca0026961244521f7f49b11a577f93addda9731086436ae9ffd4c3472912",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "8416427b5e758abd10c69be5fd5f6f4669ad8f0fa63cc4bb42e44484605726e5",
+      "nativeSha256": "71707a4dd4bbfafd38273393213c6a4bd853a7ebcc4456dcdefd490d81f6f1fa"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "75577ae62266dfe190344cd1c46aece260c0fda391c1ce626145686fc24a3b20",
+      "nativeSha256": "da648fb16f2f2db15a4d3e07d71c2a9dbbcbd1a2311ad9fff043a8b8bd51b1c1"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "8416427b5e758abd10c69be5fd5f6f4669ad8f0fa63cc4bb42e44484605726e5",
+      "nativeSha256": "71707a4dd4bbfafd38273393213c6a4bd853a7ebcc4456dcdefd490d81f6f1fa"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "75577ae62266dfe190344cd1c46aece260c0fda391c1ce626145686fc24a3b20",
+      "nativeSha256": "da648fb16f2f2db15a4d3e07d71c2a9dbbcbd1a2311ad9fff043a8b8bd51b1c1"
+    },
+    {
+      "name": "width-unset-stretch",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/width-unset-stretch/review.png",
+      "sheetSha256": "f811da41a61f0ba5dafbed75fdba39117f31f427d3a950c5b89d9aded3f39b9c",
+      "chromeSha256": "8f06759379e9e34ec5e05239b8d29e304623ee36d7373b867fcde704b968cef4",
+      "nativeSha256": "28ec3e289da604da0f4a65807a471b1af90781c7f102c0cffc9078326664e567"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "085206fb90d56b7768f67f0c610999e9f85354b65b373ab16f7376a3e5a8d098",
+      "nativeSha256": "39d968174d02f8d35c98e1b1b108e799e474c9e64c5c1f45bde470fe8c2a4daa"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "86005a6351757d52fd64996dbc001a09f0ba24cf2dac177f7db1f134645b3895",
+      "nativeSha256": "55393d0bd71b91161f39f1b713c753cbe807e8557545eeed68fc3bf6d7ccebcc"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "085206fb90d56b7768f67f0c610999e9f85354b65b373ab16f7376a3e5a8d098",
+      "nativeSha256": "39d968174d02f8d35c98e1b1b108e799e474c9e64c5c1f45bde470fe8c2a4daa"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "86005a6351757d52fd64996dbc001a09f0ba24cf2dac177f7db1f134645b3895",
+      "nativeSha256": "55393d0bd71b91161f39f1b713c753cbe807e8557545eeed68fc3bf6d7ccebcc"
+    },
+    {
+      "name": "height-unset-content",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/height-unset-content/review.png",
+      "sheetSha256": "8907592c9fca041887cba6f895738bf9ee9bfb8f9f7cb3191f1b2915da91ea31",
+      "chromeSha256": "0765e2c3207b18ba9c445602ec5f0b446e5f28687181c8693117fb0fd34dff0a",
+      "nativeSha256": "2089226f543abcb91488e393e94ff30caee66979cc3177e9a4835c3605f2533d"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "9b173870f169a02b30a4205dbcc156485758b5e7247ef613696122503af4304f",
+      "nativeSha256": "f08061f0207c73382b8443c1069785f7982bfbd25878ebc3c76ab5de08ddca38"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "4276dcd79974789423bce20b5c8c1375def7ceedd3fdb8429ed310ffd50de8a6",
+      "nativeSha256": "5c90bf273a418e12040bc391bd1350ad17912a4a0e11abcd6ac08e0f3026dd6b"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "973191341e75997babf3bb2b8f9d151354cc589e3dd533f773570d12d706d6e9",
+      "nativeSha256": "824ed39a753c6ab43c7058a44425f61db4cbf07a5dcead4f70728d37f27209ca"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "9b173870f169a02b30a4205dbcc156485758b5e7247ef613696122503af4304f",
+      "nativeSha256": "f08061f0207c73382b8443c1069785f7982bfbd25878ebc3c76ab5de08ddca38"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "9b173870f169a02b30a4205dbcc156485758b5e7247ef613696122503af4304f",
+      "nativeSha256": "f08061f0207c73382b8443c1069785f7982bfbd25878ebc3c76ab5de08ddca38"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "4276dcd79974789423bce20b5c8c1375def7ceedd3fdb8429ed310ffd50de8a6",
+      "nativeSha256": "5c90bf273a418e12040bc391bd1350ad17912a4a0e11abcd6ac08e0f3026dd6b"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "973191341e75997babf3bb2b8f9d151354cc589e3dd533f773570d12d706d6e9",
+      "nativeSha256": "824ed39a753c6ab43c7058a44425f61db4cbf07a5dcead4f70728d37f27209ca"
+    },
+    {
+      "name": "inherit-auto-height",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-height/review.png",
+      "sheetSha256": "2af71e14046d2dcad2265f1dc78621c5ff91cc89006da0b81c5e81d5c18ccbf7",
+      "chromeSha256": "9b173870f169a02b30a4205dbcc156485758b5e7247ef613696122503af4304f",
+      "nativeSha256": "f08061f0207c73382b8443c1069785f7982bfbd25878ebc3c76ab5de08ddca38"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "cf2875eba9b079757e220122c08bb06d17f4f224849130cb932e2b2738f4c296",
+      "nativeSha256": "9f1a122a48dc5d6a69ffb0b5d823178b3181cec16194900c17511ce721f8e314"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "462e3aa96f6ad011cd0e5cd4e2d49df5cceea4bb11a42dd4d1aefa8e88e3d8c3",
+      "nativeSha256": "82d840c3423aba516d576ae19be03a192e49f56eb4286a715079e6c2a39743ff"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "8484ba0aa98b74a1f8a1793b84e33fe1a15f8061838a03f9233cb389b245828a",
+      "nativeSha256": "3abf1d90e21e0307e66ceeade9760a4bf7033d7a8c9c4d969a4ccb44659c25be"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "cf2875eba9b079757e220122c08bb06d17f4f224849130cb932e2b2738f4c296",
+      "nativeSha256": "9f1a122a48dc5d6a69ffb0b5d823178b3181cec16194900c17511ce721f8e314"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "cf2875eba9b079757e220122c08bb06d17f4f224849130cb932e2b2738f4c296",
+      "nativeSha256": "9f1a122a48dc5d6a69ffb0b5d823178b3181cec16194900c17511ce721f8e314"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "462e3aa96f6ad011cd0e5cd4e2d49df5cceea4bb11a42dd4d1aefa8e88e3d8c3",
+      "nativeSha256": "82d840c3423aba516d576ae19be03a192e49f56eb4286a715079e6c2a39743ff"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "8484ba0aa98b74a1f8a1793b84e33fe1a15f8061838a03f9233cb389b245828a",
+      "nativeSha256": "3abf1d90e21e0307e66ceeade9760a4bf7033d7a8c9c4d969a4ccb44659c25be"
+    },
+    {
+      "name": "inherit-auto-width",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-auto-width/review.png",
+      "sheetSha256": "aaf5ffbc20581ce398a4b3849d3687ea57c41aceae8b49da22563659d14518d2",
+      "chromeSha256": "cf2875eba9b079757e220122c08bb06d17f4f224849130cb932e2b2738f4c296",
+      "nativeSha256": "9f1a122a48dc5d6a69ffb0b5d823178b3181cec16194900c17511ce721f8e314"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "4fce5ee457bd7552e624dbca818bf7a1fc4da626f79607b835c0533bce327957",
+      "nativeSha256": "960739b4bb676925491bc344a41c9d2ee5605f6ffa2469d7f20c56163639c461"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "5fefed86aef9b935ea7fcb15d14cda06d2729994e708308824b7de73482ba0d8",
+      "nativeSha256": "f1a7b41425029fb65fd2eb7ca87b3ab1f35abe0e9e21a5fd0ce018bfe147376f"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "1250882b7ede90467d843c81222ed2b6975a82779b3967ea69251ad78821c440",
+      "nativeSha256": "9b0f6e9c2aa27bf93b05b8e0b1bd0492fee3c7f6cbb386b3938b24641cdeb90e"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "4fce5ee457bd7552e624dbca818bf7a1fc4da626f79607b835c0533bce327957",
+      "nativeSha256": "960739b4bb676925491bc344a41c9d2ee5605f6ffa2469d7f20c56163639c461"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "4fce5ee457bd7552e624dbca818bf7a1fc4da626f79607b835c0533bce327957",
+      "nativeSha256": "960739b4bb676925491bc344a41c9d2ee5605f6ffa2469d7f20c56163639c461"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "5fefed86aef9b935ea7fcb15d14cda06d2729994e708308824b7de73482ba0d8",
+      "nativeSha256": "f1a7b41425029fb65fd2eb7ca87b3ab1f35abe0e9e21a5fd0ce018bfe147376f"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "1250882b7ede90467d843c81222ed2b6975a82779b3967ea69251ad78821c440",
+      "nativeSha256": "9b0f6e9c2aa27bf93b05b8e0b1bd0492fee3c7f6cbb386b3938b24641cdeb90e"
+    },
+    {
+      "name": "inherit-top-level-host-size",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inherit-top-level-host-size/review.png",
+      "sheetSha256": "51b55c061bd742e652fb236a6052e5d7a9a294c0d84f42a9a18cf95f35a3cc24",
+      "chromeSha256": "4fce5ee457bd7552e624dbca818bf7a1fc4da626f79607b835c0533bce327957",
+      "nativeSha256": "960739b4bb676925491bc344a41c9d2ee5605f6ffa2469d7f20c56163639c461"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "eb44223067fbcbec0adf87435ceb7cab24313f8ed86a29749a208b026e2b74e0",
+      "nativeSha256": "5ae48cc175f0b3181b352ae80480105d6750782b90b00fa62d7543801386dcb7"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "d3069faeb821cdd119e2c4db7365256765019124262ea6ac1d19340c713b5088",
+      "nativeSha256": "6d7bdbf62d328672b88e375a315ba2b9688a89a36f6cccaf6a79cfd7b381cbed"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "8c431922eaec2eb64fef6f4dbcb260bbf83bfecb96181cc4e0a9498bdd4786f1",
+      "nativeSha256": "612a05c058f34917da743c41320a485d26b9e3239d101a96689b7ef802d84bba"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "eb44223067fbcbec0adf87435ceb7cab24313f8ed86a29749a208b026e2b74e0",
+      "nativeSha256": "5ae48cc175f0b3181b352ae80480105d6750782b90b00fa62d7543801386dcb7"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "eb44223067fbcbec0adf87435ceb7cab24313f8ed86a29749a208b026e2b74e0",
+      "nativeSha256": "5ae48cc175f0b3181b352ae80480105d6750782b90b00fa62d7543801386dcb7"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "d3069faeb821cdd119e2c4db7365256765019124262ea6ac1d19340c713b5088",
+      "nativeSha256": "6d7bdbf62d328672b88e375a315ba2b9688a89a36f6cccaf6a79cfd7b381cbed"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "8c431922eaec2eb64fef6f4dbcb260bbf83bfecb96181cc4e0a9498bdd4786f1",
+      "nativeSha256": "612a05c058f34917da743c41320a485d26b9e3239d101a96689b7ef802d84bba"
+    },
+    {
+      "name": "inline-keyword-precedence",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/inline-keyword-precedence/review.png",
+      "sheetSha256": "cc81ec3290f7b5d022e417077be89f1177e23ed3ccd94b7379fac9b13db5795c",
+      "chromeSha256": "eb44223067fbcbec0adf87435ceb7cab24313f8ed86a29749a208b026e2b74e0",
+      "nativeSha256": "5ae48cc175f0b3181b352ae80480105d6750782b90b00fa62d7543801386dcb7"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "7c0099dc6e30d1c8e2b3ed4752414cd8634796f9787e3c3bd9ea9f0381670bf1",
+      "nativeSha256": "7b00cf076603b444f7dd0e63eee15db1e78044c10541fe19ae4541df70c6e2ec"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "9ad3ca759523f479f70983aaeb01b4fbfce40d12d7cb253965a9ece183e8ca27",
+      "nativeSha256": "9b961a85206da9ce865438fa6812f3188e626156238028f68d90b1490a27901b"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "d520064c5f58f09eef8d2ae2ee1836433664cf718430b3348f27cbc9dada392b",
+      "nativeSha256": "163958c71c8882d422dac4080eea523ca6e1eeb00a665bf63f91269c5e305eb5"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "7c0099dc6e30d1c8e2b3ed4752414cd8634796f9787e3c3bd9ea9f0381670bf1",
+      "nativeSha256": "7b00cf076603b444f7dd0e63eee15db1e78044c10541fe19ae4541df70c6e2ec"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "7c0099dc6e30d1c8e2b3ed4752414cd8634796f9787e3c3bd9ea9f0381670bf1",
+      "nativeSha256": "7b00cf076603b444f7dd0e63eee15db1e78044c10541fe19ae4541df70c6e2ec"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "9ad3ca759523f479f70983aaeb01b4fbfce40d12d7cb253965a9ece183e8ca27",
+      "nativeSha256": "9b961a85206da9ce865438fa6812f3188e626156238028f68d90b1490a27901b"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "d520064c5f58f09eef8d2ae2ee1836433664cf718430b3348f27cbc9dada392b",
+      "nativeSha256": "163958c71c8882d422dac4080eea523ca6e1eeb00a665bf63f91269c5e305eb5"
+    },
+    {
+      "name": "important-keyword-precedence",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/important-keyword-precedence/review.png",
+      "sheetSha256": "b0c1572f80ec0bfb06cbf90a11e8bb9aca15e27e3c8161fce675f7c0def30c4f",
+      "chromeSha256": "7c0099dc6e30d1c8e2b3ed4752414cd8634796f9787e3c3bd9ea9f0381670bf1",
+      "nativeSha256": "7b00cf076603b444f7dd0e63eee15db1e78044c10541fe19ae4541df70c6e2ec"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "6ed524daf3e8e17ec8fa8c7ab72c06adc4e94f206a3285f8637ccde93b74c849",
+      "nativeSha256": "a6590f01c0dfbca63d1fab5ae98499d95f0809769ce8c006c964e39389a5bfda"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "1318e012004781aa430cd7df2cf759ccc6c081bf80457eae696e5b36cc27271e",
+      "nativeSha256": "892ab4e278c579cb3cfc89f30ba299b18edb6c9514929a40fcf74d89224bf6f0"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "6ed524daf3e8e17ec8fa8c7ab72c06adc4e94f206a3285f8637ccde93b74c849",
+      "nativeSha256": "a6590f01c0dfbca63d1fab5ae98499d95f0809769ce8c006c964e39389a5bfda"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "1318e012004781aa430cd7df2cf759ccc6c081bf80457eae696e5b36cc27271e",
+      "nativeSha256": "892ab4e278c579cb3cfc89f30ba299b18edb6c9514929a40fcf74d89224bf6f0"
+    },
+    {
+      "name": "color-inherit-currentcolor",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-inherit-currentcolor/review.png",
+      "sheetSha256": "29a1520fc6389e9cfa8c0535a41b7b38819f0c2448ce9a25b6cdefa91a52fac9",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "6ed524daf3e8e17ec8fa8c7ab72c06adc4e94f206a3285f8637ccde93b74c849",
+      "nativeSha256": "a6590f01c0dfbca63d1fab5ae98499d95f0809769ce8c006c964e39389a5bfda"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "1318e012004781aa430cd7df2cf759ccc6c081bf80457eae696e5b36cc27271e",
+      "nativeSha256": "892ab4e278c579cb3cfc89f30ba299b18edb6c9514929a40fcf74d89224bf6f0"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "6ed524daf3e8e17ec8fa8c7ab72c06adc4e94f206a3285f8637ccde93b74c849",
+      "nativeSha256": "a6590f01c0dfbca63d1fab5ae98499d95f0809769ce8c006c964e39389a5bfda"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "1318e012004781aa430cd7df2cf759ccc6c081bf80457eae696e5b36cc27271e",
+      "nativeSha256": "892ab4e278c579cb3cfc89f30ba299b18edb6c9514929a40fcf74d89224bf6f0"
+    },
+    {
+      "name": "color-unset-currentcolor",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-unset-currentcolor/review.png",
+      "sheetSha256": "29b462ae2aec53248e4490039e408edf13cb34ca9e653242d26682ae721c132b",
+      "chromeSha256": "869ff47b82d271b3d53f4a54591ee606636856e848e76a0def69cde792615752",
+      "nativeSha256": "a972622e2868bb4c80b086aaf9b5ad0248658d84755730f885743c63788723e7"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "65e2fe96a921b51cd9324dc7f8d824c08e5b81a66c83883c55ff7e391566ea86",
+      "nativeSha256": "c8f494d6722e0cf716c07ab32129baf7f96dda454536e4d3c8b0398dee80806c"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "76bccc4fc915d113e50152eb7ab9cd0baa3925578a48bf140c7fd05788b1ca88",
+      "nativeSha256": "ae14f7b48a8c0355e6cbfdc574e36736380bae1848b48e7842245c8f91ef2b0e"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "a28f63a77594eb93483e1a2b9a0ef57f16aebc5e174a869ce38984d7c0b3f945",
+      "nativeSha256": "0ce2f38c753b2deb66eac16ffa245af912be2ddbd07d52fd0e1ed751688d3b3c"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "65e2fe96a921b51cd9324dc7f8d824c08e5b81a66c83883c55ff7e391566ea86",
+      "nativeSha256": "c8f494d6722e0cf716c07ab32129baf7f96dda454536e4d3c8b0398dee80806c"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "65e2fe96a921b51cd9324dc7f8d824c08e5b81a66c83883c55ff7e391566ea86",
+      "nativeSha256": "c8f494d6722e0cf716c07ab32129baf7f96dda454536e4d3c8b0398dee80806c"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "76bccc4fc915d113e50152eb7ab9cd0baa3925578a48bf140c7fd05788b1ca88",
+      "nativeSha256": "ae14f7b48a8c0355e6cbfdc574e36736380bae1848b48e7842245c8f91ef2b0e"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "a28f63a77594eb93483e1a2b9a0ef57f16aebc5e174a869ce38984d7c0b3f945",
+      "nativeSha256": "0ce2f38c753b2deb66eac16ffa245af912be2ddbd07d52fd0e1ed751688d3b3c"
+    },
+    {
+      "name": "color-initial-currentcolor",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/color-initial-currentcolor/review.png",
+      "sheetSha256": "9078b39056366145df31c1a01ba56cb6db7e17a02f3837d17354e524daf3a41f",
+      "chromeSha256": "65e2fe96a921b51cd9324dc7f8d824c08e5b81a66c83883c55ff7e391566ea86",
+      "nativeSha256": "c8f494d6722e0cf716c07ab32129baf7f96dda454536e4d3c8b0398dee80806c"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "113acf7112b728f0eb85a82b80f13507f6a319a6e3f70f053669f2e2c91af820",
+      "nativeSha256": "a72edff9fe73b13649ccf3ea454c41e99582d6b85a4ef1f5f736cac07539e294"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "9d123c70b3fed368d82ccf9e1a545dd465e0ec8962e02b8ab7b36e93a3ddc27a",
+      "nativeSha256": "07971ec16678fe67148a46eca3a5fa7a630b789106992c7bd49e05201ec05015"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "113acf7112b728f0eb85a82b80f13507f6a319a6e3f70f053669f2e2c91af820",
+      "nativeSha256": "a72edff9fe73b13649ccf3ea454c41e99582d6b85a4ef1f5f736cac07539e294"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "9d123c70b3fed368d82ccf9e1a545dd465e0ec8962e02b8ab7b36e93a3ddc27a",
+      "nativeSha256": "07971ec16678fe67148a46eca3a5fa7a630b789106992c7bd49e05201ec05015"
+    },
+    {
+      "name": "background-initial-breaks-inheritance",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-initial-breaks-inheritance/review.png",
+      "sheetSha256": "b2e740e6e3fdbeda29d7236fc2794b8be0e18972291f6150dff4e7e16b230aeb",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 0,
+      "reviewedFrame": 0,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 1,
+      "reviewedFrame": 1,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "113acf7112b728f0eb85a82b80f13507f6a319a6e3f70f053669f2e2c91af820",
+      "nativeSha256": "a72edff9fe73b13649ccf3ea454c41e99582d6b85a4ef1f5f736cac07539e294"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 2,
+      "reviewedFrame": 2,
+      "mode": "direct full-resolution paired sheet",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "9d123c70b3fed368d82ccf9e1a545dd465e0ec8962e02b8ab7b36e93a3ddc27a",
+      "nativeSha256": "07971ec16678fe67148a46eca3a5fa7a630b789106992c7bd49e05201ec05015"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 3,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 4,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 5,
+      "reviewedFrame": 1,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "113acf7112b728f0eb85a82b80f13507f6a319a6e3f70f053669f2e2c91af820",
+      "nativeSha256": "a72edff9fe73b13649ccf3ea454c41e99582d6b85a4ef1f5f736cac07539e294"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 6,
+      "reviewedFrame": 2,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "9d123c70b3fed368d82ccf9e1a545dd465e0ec8962e02b8ab7b36e93a3ddc27a",
+      "nativeSha256": "07971ec16678fe67148a46eca3a5fa7a630b789106992c7bd49e05201ec05015"
+    },
+    {
+      "name": "background-unset-breaks-inheritance",
+      "frame": 7,
+      "reviewedFrame": 0,
+      "mode": "exact original/clone/repeat transfer",
+      "sheet": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/background-unset-breaks-inheritance/review.png",
+      "sheetSha256": "0b23170fb27d73b4f43b1feb54217715502b416aacb6305e0e1008dcaa9d3423",
+      "chromeSha256": "75efd70c8184676c6ec2ddfb8194f6e9f8fdc40f147f9970cbd79af8c0780db2",
+      "nativeSha256": "ce2928b964027f11a27cb044198a3747315969143982ba8260b8b90e35cdb5b5"
+    }
+  ],
+  "run": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-r1/receipt.json",
+    "sha256": "79e37c9e6e0b20177d181aff67982be1a0fda7ca5c62154680c4766a5a4447dd"
+  },
+  "tests": {
+    "rust": 23,
+    "node": 8,
+    "corpusCliWasmPairs": 108,
+    "typescript": "strict noEmit passed",
+    "freezeHarness": 5
+  },
+  "limitations": [
+    "display initial/unset and flex-direction initial/unset still rejected: CSS initial inline/row differs from the flex/column authoring reset",
+    "Percentage height directly within auto-height authored parent rejected after computed keyword resolution",
+    "No arbitrary property inheritance support beyond admitted declarations",
+    "No runtime changes; original and clone each resize the same file without recompilation"
+  ],
+  "checkpoint": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-css-wide-checkpoint-r1/manifest.json",
+    "sha256": "7a4f7bc8a8f434568f9411a959870830ee480ac0a2385a08e5d13ff39f7e1acb",
+    "recompiledArtifacts": 37,
+    "existingFrames": 296,
+    "sourceBinding": "Contemporaneous snapshot only; supplied binary build provenance must be bound separately"
+  }
+}

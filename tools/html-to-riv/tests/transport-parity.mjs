@@ -97,3 +97,10 @@ test('inherited currentColor and literal control have exact CLI/WASM parity',asy
  assert.equal(fixtures.length,2);
  await assertCorpusParity(fixtures);
 });
+
+
+test('CSS-wide sizing and color corpus has exact CLI/WASM parity',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-css-wide-cases.json',import.meta.url)));
+ assert(fixtures.length>=10,'CSS-wide corpus must retain sizing and color cases');
+ await assertCorpusParity(fixtures);
+});

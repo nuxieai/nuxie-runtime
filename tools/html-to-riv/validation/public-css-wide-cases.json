@@ -1,0 +1,159 @@
+[
+  {
+    "name": "inherit-pixel-dimensions",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:96px;height:40px;background-color:coral;}#inner{width:inherit;height:inherit;background-color:rebeccapurple;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Child inherits computed pixel width96 and height40."
+  },
+  {
+    "name": "inherit-percentage-width-chain",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:50%;height:80px;background-color:coral;}#inner{width:inherit;height:60px;background-color:rebeccapurple;}#leaf{width:inherit;height:40px;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Inherited computed50% resolves separately at each containing block:50%,25%,12.5% of viewport width."
+  },
+  {
+    "name": "inherit-percentage-height-chain",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:50%;background-color:coral;}#inner{width:75%;height:inherit;background-color:rebeccapurple;}#leaf{width:50%;height:inherit;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Definite height chain:50% viewport, then25%, then12.5%; all fits shortest120px viewport."
+  },
+  {
+    "name": "width-initial-stretch",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:75%;height:60px;background-color:coral;}#inner{width:40px;width:initial;height:30px;background-color:rebeccapurple;}",
+    "features": [
+      "A04"
+    ],
+    "coverageNote": "Noninherited width keyword computesauto; child stretches to containing block width."
+  },
+  {
+    "name": "height-initial-content",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100px;background-color:aliceblue;}#inner{width:75%;height:70px;height:initial;background-color:coral;}#leaf{width:50%;height:20px;background-color:rebeccapurple;}#sibling{width:60%;height:30px;background-color:gold;}",
+    "features": [
+      "A04"
+    ],
+    "coverageNote": "Innerautoheight is20px from descendant; following30px sibling makes placement observable."
+  },
+  {
+    "name": "width-unset-stretch",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:75%;height:60px;background-color:coral;}#inner{width:40px;width:unset;height:30px;background-color:rebeccapurple;}",
+    "features": [
+      "A05"
+    ],
+    "coverageNote": "Noninherited width keyword computesauto; child stretches to containing block width."
+  },
+  {
+    "name": "height-unset-content",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:100px;background-color:aliceblue;}#inner{width:75%;height:70px;height:unset;background-color:coral;}#leaf{width:50%;height:20px;background-color:rebeccapurple;}#sibling{width:60%;height:30px;background-color:gold;}",
+    "features": [
+      "A05"
+    ],
+    "coverageNote": "Innerautoheight is20px from descendant; following30px sibling makes placement observable."
+  },
+  {
+    "name": "inherit-auto-height",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:auto;background-color:aliceblue;}#inner{width:75%;height:inherit;background-color:coral;}#leaf{width:50%;height:20px;background-color:rebeccapurple;}#sibling{width:60%;height:30px;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Inheritedautoheight remainsauto, not parentused50px; inner20px and sibling30px remain visible."
+  },
+  {
+    "name": "inherit-auto-width",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:auto;height:80px;background-color:coral;}#inner{width:inherit;height:50px;background-color:rebeccapurple;}#leaf{width:50%;height:20px;background-color:gold;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Inheritedautowidth remainsauto; outer andinnerstretch, leafhalfwidth."
+  },
+  {
+    "name": "inherit-top-level-host-size",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:inherit;height:inherit;background-color:coral;}#inner{width:50%;height:50%;background-color:rebeccapurple;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Top-levelinherits host100% dimensions; confirmsimplicitrootcontract againstbrowserbody100%."
+  },
+  {
+    "name": "inline-keyword-precedence",
+    "html": "<div id=\"outer\"><div id=\"inner\" style=\"width:inherit;height:initial;background-color:currentColor\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:90px;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:40px;height:30px;}#leaf{width:50%;height:20px;background-color:gold;}",
+    "features": [
+      "A03",
+      "A04"
+    ],
+    "coverageNote": "Inlineinheritwidth overridesrule40px; initialheight derives20px fromvisiblechild."
+  },
+  {
+    "name": "important-keyword-precedence",
+    "html": "<div id=\"outer\"><div id=\"inner\" style=\"width:40px;height:30px;background-color:coral\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:90px;height:70px;color:rebeccapurple;background-color:aliceblue;}#inner{width:inherit!important;height:initial!important;background-color:currentColor!important;}#leaf{width:50%;height:20px;background-color:gold;}",
+    "features": [
+      "A03",
+      "A04"
+    ],
+    "coverageNote": "Importantkeywords overrideordinaryinline declarations; innerwidth90height20 givesvisiblecontrol."
+  },
+  {
+    "name": "color-inherit-currentcolor",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:75%;height:30px;color:inherit;background-color:currentColor;}",
+    "features": [
+      "A03"
+    ],
+    "coverageNote": "Color inherit/unset keeps purple; initial restoresblack. Background currentColor makescomputedcolorvisible."
+  },
+  {
+    "name": "color-unset-currentcolor",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:75%;height:30px;color:unset;background-color:currentColor;}",
+    "features": [
+      "A05"
+    ],
+    "coverageNote": "Color inherit/unset keeps purple; initial restoresblack. Background currentColor makescomputedcolorvisible."
+  },
+  {
+    "name": "color-initial-currentcolor",
+    "html": "<div id=\"outer\"><div id=\"inner\"></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:60px;color:rebeccapurple;background-color:coral;}#inner{width:75%;height:30px;color:initial;background-color:currentColor;}",
+    "features": [
+      "A04"
+    ],
+    "coverageNote": "Color inherit/unset keeps purple; initial restoresblack. Background currentColor makescomputedcolorvisible."
+  },
+  {
+    "name": "background-initial-breaks-inheritance",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:80px;color:rebeccapurple;background-color:currentColor;}#inner{width:75%;height:60px;color:gold;background-color:inherit;background-color:initial;}#leaf{width:50%;height:30px;background-color:inherit;}",
+    "features": [
+      "A03",
+      "A04"
+    ],
+    "coverageNote": "Backgroundkeyword restorestransparent; leafinherits transparent, not currentColor from outer; purpleparentremainsvisible."
+  },
+  {
+    "name": "background-unset-breaks-inheritance",
+    "html": "<div id=\"outer\"><div id=\"inner\"><div id=\"leaf\"></div></div></div>",
+    "css": "div{display:flex;flex-direction:column;}#outer{width:100%;height:80px;color:rebeccapurple;background-color:currentColor;}#inner{width:75%;height:60px;color:gold;background-color:inherit;background-color:unset;}#leaf{width:50%;height:30px;background-color:inherit;}",
+    "features": [
+      "A03",
+      "A05"
+    ],
+    "coverageNote": "Backgroundkeyword restorestransparent; leafinherits transparent, not currentColor from outer; purpleparentremainsvisible."
+  }
+]

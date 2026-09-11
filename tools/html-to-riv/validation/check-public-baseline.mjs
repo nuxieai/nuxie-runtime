@@ -9,6 +9,9 @@ const hash=f=>crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex
 const tools={compiler,probe,renderer};const toolHashes=Object.fromEntries(Object.entries(tools).map(([name,file])=>[name,hash(file)]));
 const fixtures=read(fixturesFile);assert(fixtures.length>0&&new Set(fixtures.map(f=>f.name)).size===fixtures.length);for(const f of fixtures)assert(/^[a-z0-9-]+$/.test(f.name));
 fs.copyFileSync(fixturesFile,path.join(out,'source-cases.json'));
+// Preserve the exact comparison implementation even when a later run changes it.
+fs.copyFileSync(fileURLToPath(import.meta.url),path.join(out,'check-public-baseline.mjs'));
+fs.copyFileSync(fileURLToPath(new URL('./pixels.mjs',import.meta.url)),path.join(out,'pixels.mjs'));
 const defaultSizes=[[240,160],[390,200],[768,120],[240,160]];
 const reset=fs.readFileSync(new URL('../src/reset.css',import.meta.url),'utf8');fs.writeFileSync(path.join(out,'browser-reset.css'),reset);
 const rows=[],artifacts=[];const browser=await chromium.launch();assert.equal(browser.version(),'153.0.8010.12');
@@ -31,6 +34,7 @@ try{const page=await browser.newPage({deviceScaleFactor:1,colorScheme:'light',lo
   for(const f of frames){assert.equal(f.instance,Math.floor(f.frame/4));assert.equal(f.step,f.frame%4);assert.deepEqual([f.width,f.height],sizes[f.step]);
    const prefix=path.join(dir,`frame-${f.frame}`);await page.setViewportSize({width:f.width,height:f.height});await page.setContent(html);
    const boxes=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const{x,y,width,height}=e.getBoundingClientRect();return[e.id,{x,y,width,height}]})));
+   const computedStyles=await page.evaluate(()=>Object.fromEntries([...document.querySelectorAll('[id]')].map(e=>{const s=getComputedStyle(e);return[e.id,{width:s.width,height:s.height,color:s.color,backgroundColor:s.backgroundColor,display:s.display,flexDirection:s.flexDirection}]})));
    const swatchObservations=[];
    if(fixture.swatches){
     for(const[index,swatch]of fixture.swatches.entries()){
@@ -49,14 +53,14 @@ try{const page=await browser.newPage({deviceScaleFactor:1,colorScheme:'light',lo
    // Baseline rust-metal selects raster ordering; clockwise-atomic is its CLI's
    // accepted non-MSAA token, not a claim that this path uses forced winding.
    run(command,prefix+'.native.log');const comparison=comparePixels(PNG.sync.read(fs.readFileSync(prefix+'.chrome.png')),PNG.sync.read(fs.readFileSync(prefix+'.native.png')),boxes,false);fs.writeFileSync(prefix+'.diff.png',PNG.sync.write(comparison.diff));
-   rows.push({name:fixture.name,...f,prefix,boxes,swatchObservations,geometry,geometryFailures,pixelFailures:comparison.failures,metrics:comparison.metrics,command,requestSha256:hash(request),rivSha256:hash(riv),sourceMapSha256:hash(map),streamSha256:hash(streamFile),geometrySha256:hash(geometryFile),chromeSha256:hash(prefix+'.chrome.png'),nativeSha256:hash(prefix+'.native.png')});
+   rows.push({name:fixture.name,...f,prefix,boxes,computedStyles,swatchObservations,geometry,geometryFailures,pixelFailures:comparison.failures,metrics:comparison.metrics,command,requestSha256:hash(request),rivSha256:hash(riv),sourceMapSha256:hash(map),streamSha256:hash(streamFile),geometrySha256:hash(geometryFile),chromeSha256:hash(prefix+'.chrome.png'),nativeSha256:hash(prefix+'.native.png')});
   }
  }
 }finally{await browser.close();}
 for(const[name,file]of Object.entries(tools))assert.equal(hash(file),toolHashes[name]);
 const repeated=rows.map(r=>{const first=rows.find(p=>p.name===r.name&&p.width===r.width&&p.height===r.height);return{name:r.name,frame:r.frame,firstFrame:first.frame,nativeIdentical:r.nativeSha256===first.nativeSha256,chromeIdentical:r.chromeSha256===first.chromeSha256};}).filter(r=>r.frame!==r.firstFrame);
 const passed=rows.every(r=>!r.geometryFailures.length&&!r.pixelFailures.length)&&repeated.every(r=>r.nativeIdentical&&r.chromeIdentical);
-const receipt={status:passed?'passed-public-baseline':'failed-public-baseline',scope:'Bounded public compiler ordinary files on immutable runtime; independently captured Chrome geometry/pixels, original/clone resizing. No complete A01/A02 language coverage or direct visual-review claim.',browser:'153.0.8010.12',backend:'rust-metal',effectiveMode:'RasterOrdering',cliModeToken:'clockwise-atomic',tools,toolHashes,driverSha256:hash(fileURLToPath(import.meta.url)),fixturesSha256:hash(fixturesFile),pixelGateSha256:hash(fileURLToPath(new URL('./pixels.mjs',import.meta.url))),artifacts,rows,repeated};
+const receipt={status:passed?'passed-public-baseline':'failed-public-baseline',scope:'Bounded public compiler ordinary files on immutable runtime; independently captured Chrome geometry/pixels, original/clone resizing. No complete language coverage or direct visual-review claim.',browser:'153.0.8010.12',backend:'rust-metal',effectiveMode:'RasterOrdering',cliModeToken:'clockwise-atomic',tools,toolHashes,driverSha256:hash(fileURLToPath(import.meta.url)),fixturesSha256:hash(fixturesFile),resetSha256:hash(path.join(out,'browser-reset.css')),pixelGateSha256:hash(fileURLToPath(new URL('./pixels.mjs',import.meta.url))),artifacts,rows,repeated};
 fs.writeFileSync(path.join(out,'receipt.json'),JSON.stringify(receipt,null,2)+'\n');
 const cells=rows.map(r=>`<section><h2>${r.name} · ${r.width}×${r.height} · instance ${r.instance} step ${r.step}</h2><p>${[...r.geometryFailures,...r.pixelFailures].join('; ')||'metric gates pass'}</p><div><img src="${r.name}/frame-${r.frame}.chrome.png" alt="Chrome"><img src="${r.name}/frame-${r.frame}.native.png" alt="Immutable native"></div></section>`).join('');
 fs.writeFileSync(path.join(out,'gallery.html'),`<!doctype html><meta charset="utf-8"><title>Public compiler / immutable Rive</title><style>body{font:15px system-ui;margin:24px}section{margin:32px 0}section div{display:flex;gap:16px}img{max-width:48%;object-fit:contain;object-position:left top;border:1px solid #aaa}</style><h1>Chrome / immutable native Rive</h1><p>Bounded public compiler validation. Direct visual review is separate.</p>${cells}`);

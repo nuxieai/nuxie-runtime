@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-11",
-  "focus": "Public compiler and immutable color validation",
-  "status": "Public interfaces restored; feature qualification continues",
-  "current": "Public Rust/CLI/WASM/JavaScript compiler checkpoint: 160 geometry/pixel comparisons pass with visual evidence. All 148 named colors and 24 HSL boundary swatches covered. Corrected inherited currentColor; preserved 8 failing pre-fix frames. 17 Rust tests, 7 Node tests, 57 corpus parity pairs and strict TypeScript pass.",
-  "next": "Expand inherit/initial/unset to sizing with browser/native proof, preserving computed percentage semantics and rejecting unproved layout contexts. Continue all 99 backlog items.",
+  "focus": "CSS-wide sizing and color semantics",
+  "status": "Sizing keyword checkpoint validated; backlog continues",
+  "current": "Width/height inherit, initial and unset now emit responsive ordinary Rive values. 17 new scenes pass all 136 geometry/pixel comparisons; 51 unique pairs reviewed and 85 exact repeat/clone transfers recorded. Public corpus now has 296 passing frames, with prior failures preserved. 23 Rust tests and 8 Node tests (108 corpus byte/map parity pairs) pass.",
+  "next": "Add solid-color background shorthand with correct cascade priority and explicit unsupported constituents, then continue typography/layout and remaining backlog proofs. Runtime remains immutable.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "CSS-wide sizing/color evidence",
+      "path": "tools/html-to-riv/validation/public-css-wide-receipt.json"
+    },
+    {
+      "label": "CSS-wide Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-css-wide-r1/gallery.html"
+    },
     {
       "label": "Inheritance correction and preserved failure",
       "path": "tools/html-to-riv/validation/public-inheritance-receipt.json"

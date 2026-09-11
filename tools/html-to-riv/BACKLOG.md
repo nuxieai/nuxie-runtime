@@ -12,9 +12,9 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | --- | --- | --- | --- |
 | A01 | Standard CSS named colors | partial | All 148 named colors now pass public HTML/CSS native pixels and original/clone resizing; CLI/WASM parity and visual review recorded. Qualification remains bounded to box fills; see validation/public-color-receipt.json. |
 | A02 | HSL/HSLA | partial | Public HSL/HSLA admission, 24 angle/alpha/clamping boundary swatches, CLI/WASM parity and immutable native visual comparisons pass. Broader contexts remain open; see validation/public-color-receipt.json. |
-| A03 | `inherit` | partial | Corrected inherited currentColor with preserved 8-frame failure and 24 passing/reviewed native regression frames. Size/layout inheritance remains pending. See validation/public-inheritance-receipt.json. |
-| A04 | `initial` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
-| A05 | `unset` | pending | Immutable-target audit and revalidation required; historical status: qualified. |
+| A03 | `inherit` | partial | Corrected inherited currentColor with preserved 8-frame failure and 24 passing/reviewed native regression frames. Width/height descriptor inheritance now passes the public CSS-wide corpus, including percent and auto-height chains. Broader properties remain pending. See validation/public-inheritance-receipt.json and validation/public-css-wide-receipt.json. |
+| A04 | `initial` | partial | Width/height reset to auto; foreground/background reset semantics pass public native comparisons and visual review. Inline display/row direction contexts remain rejected pending proof. See validation/public-css-wide-receipt.json. |
+| A05 | `unset` | partial | Inherited color vs initial dimensions/background distinguished, with cascade and native resize proof. Broader property contexts remain pending. See validation/public-css-wide-receipt.json. |
 | A06 | Solid-color `background` shorthand | pending | Immutable-target audit and revalidation required; historical status: qualified. |
 | A07 | `font` shorthand | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | A08 | Unitless line-height | pending | Immutable-target audit and revalidation required; historical status: qualified. |

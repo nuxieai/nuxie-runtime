@@ -34,15 +34,29 @@ fn size(text: &str, source: &str) -> Result<Size, Diagnostic> {
     Ok(if percent { Size::Percent(value) } else { Size::Pixels(value) })
 }
 
+// Inheritance copies computed descriptors, not dimensions resolved at the
+// parent's containing block. Percentages remain responsive at the receiving box.
+fn computed_size(text: &str, inherited: Size, source: &str) -> Result<Size, Diagnostic> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "inherit" => Ok(inherited),
+        "initial" | "unset" => Ok(Size::Auto),
+        _ => size(text, source),
+    }
+}
+
 fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
     let value = css::ordinary_value(&d.value)?.trim().to_ascii_lowercase();
     match d.name.as_str() {
-        "width" | "height" => { size(&value, &d.source)?; }
+        "width" | "height" => {
+            if !["inherit", "initial", "unset"].contains(&value.as_str()) { size(&value, &d.source)?; }
+        }
         "background-color" | "color" => {
             if !["currentcolor", "inherit", "initial", "unset"].contains(&value.as_str()) { color::parse(&value, &d.source)?; }
         }
-        "display" if value == "flex" => {}
-        "flex-direction" if value == "column" => {}
+        // All admitted elements and the explicit host compute to flex/column.
+        // CSS initial/unset would mean inline/row, not the authoring reset.
+        "display" if matches!(value.as_str(), "flex" | "inherit") => {}
+        "flex-direction" if matches!(value.as_str(), "column" | "inherit") => {}
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
     }
     Ok(())
@@ -65,8 +79,8 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
     }
     for d in &declarations {
         match d.name.as_str() {
-            "width" => style.width = size(&d.value, &d.source)?,
-            "height" => style.height = size(&d.value, &d.source)?,
+            "width" => style.width = computed_size(&d.value, parent.width, &d.source)?,
+            "height" => style.height = computed_size(&d.value, parent.height, &d.source)?,
             "background-color" => {
                 style.background = match d.value.trim().to_ascii_lowercase().as_str() {
                     "currentcolor" => BackgroundColor::CurrentColor,

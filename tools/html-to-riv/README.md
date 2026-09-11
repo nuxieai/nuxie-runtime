@@ -1,6 +1,6 @@
 # HTML/CSS to ordinary Rive
 
-An initial standalone compiler is available through Rust, CLI and WASM/JavaScript. It emits ordinary `.riv` bytes for the unchanged runtime pinned in [TARGET.md](TARGET.md). The currently admitted profile is deliberately small: nested box elements, column layout, width/height, selectors/cascade and solid colors. Native visual qualification remains provisional; this is not a qualified release or a general web-page importer.
+An initial standalone compiler is available through Rust, CLI and WASM/JavaScript. It emits ordinary `.riv` bytes for the unchanged runtime pinned in [TARGET.md](TARGET.md). The currently admitted profile is deliberately small: nested box elements, column layout, width/height with inheritance and initial/unset sizing, selectors/cascade and solid colors. Native visual qualification remains provisional; this is not a qualified release or a general web-page importer.
 
 PR #628 was reverted by [PR #629](https://github.com/nuxieai/nuxie-runtime/pull/629) because it depended on runtime and renderer extensions. This replacement has its own Cargo workspace and authoring dependencies. It requires no CSS runtime policies, custom renderer methods, requirements sidecar or editor integration. The historical implementation at `20248ee6835a7bb071dbf83a364606f5e58aeef9` is reference material; its native qualification does not transfer.
 

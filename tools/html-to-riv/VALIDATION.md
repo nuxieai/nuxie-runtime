@@ -28,9 +28,9 @@ node tools/html-to-riv/node_modules/typescript/bin/tsc \
 python3 tools/html-to-riv/validation/check-target-runtime.py
 ```
 
-Transport tests default to `tools/html-to-riv/target/debug/html-to-riv` and `tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm`; override with `HTML_TO_RIV_BIN` and `HTML_TO_RIV_WASM` to test frozen artifacts. They require `public-baseline-cases.json`, `public-color-palettes.json` and `public-inheritance-cases.json`; missing fixtures fail rather than skip.
+Transport tests default to `tools/html-to-riv/target/debug/html-to-riv` and `tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm`; override with `HTML_TO_RIV_BIN` and `HTML_TO_RIV_WASM` to test frozen artifacts. They require `public-baseline-cases.json`, `public-color-palettes.json` `public-inheritance-cases.json` and `public-css-wide-cases.json`; missing fixtures fail rather than skip.
 
-The seven Node tests cover exact Rive bytes/source maps across CLI/WASM, all 15 baseline cases, both palettes and both inheritance scenes at three viewports, rejected-style diagnostic parity, strict document contracts, output ownership across failures/reuse, and direct ABI 2 buffer reset checks. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
+The eight Node tests cover exact Rive bytes/source maps across CLI/WASM, all 15 baseline cases, both palettes and both inheritance scenes and 17 CSS-wide sizing/color scenes at three viewports, rejected-style diagnostic parity, strict document contracts, output ownership across failures/reuse, and direct ABI 2 buffer reset checks. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
 
 ## Immutable native/browser run
 
@@ -77,3 +77,21 @@ Current durable public evidence is `validation/public-color-receipt.json`: 136 f
 Earlier source audits cover 36 former custom capabilities, 44 renderer/interface/stream files and 62 runtime/vendor paths; these establish mutation scope, not replacement support. The first 56-frame ordinary-layout experiment and its preserved corner failures remain documented in `validation/ordinary-layout-review.md`.
 
 Run `public-inheritance-cases.json` through the same native driver command above to reproduce the inherited currentColor and literal-control scenes.
+
+The CSS-wide corpus uses the same native driver with `public-css-wide-cases.json`. Its 136 passing frames and full visual coverage are bound in `validation/public-css-wide-receipt.json`. New driver runs preserve the exact comparator scripts, reset hash and browser-computed styles automatically.
+
+## Freeze and verify an evidence checkpoint
+
+After building and testing the compiler, freeze the native/WASM binaries and reproduce recorded ordinary files with:
+
+```sh
+python3 tools/html-to-riv/validation/freeze-public-compiler.py \
+  tools/html-to-riv/target/debug/html-to-riv \
+  tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm \
+  tools/html-to-riv/output/my-frozen-checkpoint \
+  tools/html-to-riv/output/my-public-baseline/receipt.json
+```
+
+Supply additional passed run receipts as trailing arguments. A fresh output directory is required. The command checks actual source requests, maps, Rive files, probe manifests, streams, geometry and PNG hashes; verifies original/clone frame coverage; and compares entire recompiled Rive/map files. It snapshots binaries, current sources and available matching comparison scripts, records commands and rejects mutation during the run. Five negative/success controls run with `python3 tools/html-to-riv/validation/test-freeze-public-compiler.py`.
+
+This verifies exact-file reuse of existing render evidence. It does not rerender or review images and cannot independently prove that a supplied binary was built from its contemporaneous source snapshot. Preserve build commands/results and the immutable toolchain manifest separately. The CSS-wide checkpoint is `output/public-css-wide-checkpoint-r1/manifest.json`.

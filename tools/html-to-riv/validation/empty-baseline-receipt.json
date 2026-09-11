@@ -1,0 +1,18 @@
+{
+  "status": "experimental-composition-evidence-only",
+  "scope": "Six exact empty-box fixtures, no general baseline compiler admission",
+  "experimentManifest": {
+    "path": "output/empty-baseline-experiment-r1/experiment-manifest.json",
+    "sha256": "c68c6f3a1de21a14deba31427b22732658c9d5695190a1b5dd3f73ce35b71e3e"
+  },
+  "visualProof": {
+    "path": "output/empty-baseline-experiment-r1/render/visual-transfer.json",
+    "sha256": "ae0cea1eb37fa238ed8182339470e54c73d5eb98e118b6a66370e219b80fbf2e"
+  },
+  "visualNote": "Original experimental manifest predates direct visual review; this supplemental receipt records it. Raw driver public label does not qualify public support.",
+  "geometryPassed": 48,
+  "pixelsPassed": 48,
+  "clearChecksPassed": 96,
+  "directVisualPairs": 18,
+  "repeatCloneTransfers": 30
+}

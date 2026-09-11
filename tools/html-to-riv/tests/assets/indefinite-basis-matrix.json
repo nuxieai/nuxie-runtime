@@ -1,0 +1,6245 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "indefinite-basis-row-0-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 102.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 120.859375,
+              "y": 10,
+              "width": 141.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 126.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 102.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 120.859375,
+              "y": 10,
+              "width": 141.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 126.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 102.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 120.859375,
+              "y": 10,
+              "width": 141.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 126.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-0-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 109.71875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 127.71875,
+              "y": 10,
+              "width": 150.28125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 133.71875,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 109.71875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 127.71875,
+              "y": 10,
+              "width": 150.28125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 133.71875,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 109.71875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 127.71875,
+              "y": 10,
+              "width": 150.28125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 133.71875,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 129.9375,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 135.9375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 129.9375,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 135.9375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 129.9375,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 135.9375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 137.484375,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 143.484375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 137.484375,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 143.484375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 137.484375,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 143.484375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-100-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 183.28125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 201.28125,
+              "y": 10,
+              "width": 60.71875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 207.28125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 183.28125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 201.28125,
+              "y": 10,
+              "width": 60.71875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 207.28125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 183.28125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 201.28125,
+              "y": 10,
+              "width": 60.71875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 207.28125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-100-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 195.296875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 213.296875,
+              "y": 10,
+              "width": 64.703125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 219.296875,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 195.296875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 213.296875,
+              "y": 10,
+              "width": 64.703125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 219.296875,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 195.296875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 213.296875,
+              "y": 10,
+              "width": 64.703125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 219.296875,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-0-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 159.140625,
+              "y": 10,
+              "width": 102.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 165.140625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 141.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 159.140625,
+              "y": 10,
+              "width": 102.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 165.140625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 141.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 159.140625,
+              "y": 10,
+              "width": 102.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 165.140625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 141.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-0-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 168.28125,
+              "y": 10,
+              "width": 109.71875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 174.28125,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 150.28125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 168.28125,
+              "y": 10,
+              "width": 109.71875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 174.28125,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 150.28125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 168.28125,
+              "y": 10,
+              "width": 109.71875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 174.28125,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 150.28125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 150.0625,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 156.0625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 150.0625,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 156.0625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 150.0625,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 156.0625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 158.515625,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 164.515625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 158.515625,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 164.515625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 158.515625,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 164.515625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-100-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 78.71875,
+              "y": 10,
+              "width": 183.28125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 84.71875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 60.71875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 78.71875,
+              "y": 10,
+              "width": 183.28125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 84.71875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 60.71875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 78.71875,
+              "y": 10,
+              "width": 183.28125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 84.71875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 60.71875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-100-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 82.703125,
+              "y": 10,
+              "width": 195.296875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 88.703125,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 64.703125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 82.703125,
+              "y": 10,
+              "width": 195.296875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 88.703125,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 64.703125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 82.703125,
+              "y": 10,
+              "width": 195.296875,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 88.703125,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 64.703125,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-0-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 60.859375,
+              "width": 220,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 66.859375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 60.859375,
+              "width": 370,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 66.859375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 60.859375,
+              "width": 748,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 66.859375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-0-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 60.859375,
+              "width": 220,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 66.859375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 60.859375,
+              "width": 370,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 66.859375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 60.859375,
+              "width": 748,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 66.859375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-100-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 95.953125,
+              "width": 220,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 101.953125,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 95.953125,
+              "width": 370,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 101.953125,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 95.953125,
+              "width": 748,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 101.953125,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-100-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 95.953125,
+              "width": 220,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 101.953125,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 95.953125,
+              "width": 370,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 101.953125,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 95.953125,
+              "width": 748,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 101.953125,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-0-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 79.140625,
+              "width": 220,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 85.140625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 79.140625,
+              "width": 370,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 85.140625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 79.140625,
+              "width": 748,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 85.140625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-0-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 0%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 79.140625,
+              "width": 220,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 85.140625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 79.140625,
+              "width": 370,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 85.140625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 79.140625,
+              "width": 748,
+              "height": 42.859375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 85.140625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 61.140625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-100-auto",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 44.046875,
+              "width": 220,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 50.046875,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 44.046875,
+              "width": 370,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 50.046875,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 44.046875,
+              "width": 748,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 50.046875,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-100-fixed",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 100%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 44.046875,
+              "width": 220,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 50.046875,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 44.046875,
+              "width": 370,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 50.046875,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 44.046875,
+              "width": 748,
+              "height": 77.953125
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 50.046875,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 26.046875
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-auto-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{max-width:60px}#b{max-width:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 78,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 84,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 78,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 84,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 78,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 84,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-fixed-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}#a{max-width:60px}#b{max-width:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 78,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 84,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 78,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 84,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 78,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 84,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-auto-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{max-width:60px}#b{max-width:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 103,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 109,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 12.859375,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 18.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 103,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 109,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 12.859375,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 18.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 103,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 109,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 12.859375,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 18.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-fixed-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}#a{max-width:60px}#b{max-width:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 103,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 109,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 12.859375,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 18.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 103,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 109,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 12.859375,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 18.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 173,
+              "height": 80
+            },
+            "a": {
+              "x": 103,
+              "y": 10,
+              "width": 60,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 109,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 12.859375,
+              "y": 10,
+              "width": 82.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 18.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-auto-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{max-height:60px}#b{max-height:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-fixed-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}#a{max-height:60px}#b{max-height:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-auto-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{max-height:60px}#b{max-height:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-fixed-item-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}#a{max-height:60px}#b{max-height:85px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 220,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 220,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 370,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 370,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 748,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 748,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-auto-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 96.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 114.859375,
+              "y": 10,
+              "width": 115.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 120.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 129.9375,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 135.9375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 129.9375,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 135.9375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-auto-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{max-width:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 86.578125,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 92.578125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 86.578125,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 92.578125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 86.578125,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 92.578125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-fixed-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 96.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 114.859375,
+              "y": 10,
+              "width": 115.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 120.859375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 137.484375,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 143.484375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 137.484375,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 143.484375,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-30-fixed-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}#root{max-width:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 86.578125,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 92.578125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 86.578125,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 92.578125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 86.578125,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 92.578125,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-auto-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "a": {
+              "x": 133.140625,
+              "y": 10,
+              "width": 96.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 139.140625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 115.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 150.0625,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 156.0625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 272,
+              "height": 80
+            },
+            "a": {
+              "x": 150.0625,
+              "y": 10,
+              "width": 111.9375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 156.0625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 132.0625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-auto-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{max-width:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 101.421875,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 107.421875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 101.421875,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 107.421875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 101.421875,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 107.421875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-fixed-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "a": {
+              "x": 133.140625,
+              "y": 10,
+              "width": 96.859375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 139.140625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 115.140625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 158.515625,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 164.515625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 288,
+              "height": 80
+            },
+            "a": {
+              "x": 158.515625,
+              "y": 10,
+              "width": 119.484375,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 164.515625,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 140.515625,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-row-reverse-30-fixed-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:row-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#a{width:110px}#b{width:150px}#root{max-width:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 101.421875,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 107.421875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 101.421875,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 107.421875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 80
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 180,
+              "height": 80
+            },
+            "a": {
+              "x": 101.421875,
+              "y": 10,
+              "width": 68.578125,
+              "height": 60
+            },
+            "inner-a": {
+              "x": 107.421875,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 83.421875,
+              "height": 60
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-auto-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-auto-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#root{max-height:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-fixed-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-30-fixed-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}#root{max-height:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 16,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 63.9375,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 69.9375,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-auto-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-auto-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#root{max-height:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-fixed-wrap",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}#root{flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "indefinite-basis-column-reverse-30-fixed-root-max",
+      "html": "<div id=host><div id=root><div id=a><div id=inner-a></div></div><div id=b><div id=inner-b></div></div></div></div>",
+      "css": "#host{width:100%;align-items:flex-start;background:#eee}#root{flex-direction:column-reverse;padding:10px;gap:8px;background:#eef}#a{flex:1.5 .5 30%;padding:6px;background:#8cf}#b{flex:.25 1 50%;padding:6px;background:#fc8}#inner-a{width:80px;height:32px;background:#369}#inner-b{width:140px;height:48px;background:#a63}#root{width:100%}#a{height:70px}#b{height:90px}#root{max-height:180px;flex-wrap:wrap}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "root": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 132
+            },
+            "a": {
+              "x": 10,
+              "y": 76.0625,
+              "width": 152,
+              "height": 45.9375
+            },
+            "inner-a": {
+              "x": 16,
+              "y": 82.0625,
+              "width": 80,
+              "height": 32
+            },
+            "b": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 58.0625
+            },
+            "inner-b": {
+              "x": 16,
+              "y": 16,
+              "width": 140,
+              "height": 48
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

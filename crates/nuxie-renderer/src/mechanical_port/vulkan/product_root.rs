@@ -449,6 +449,10 @@ impl ExactSourceBackend for VulkanProductBackend {
     }
 
     fn begin_frame(&mut self, clear_color: u32, mode: RenderMode) -> Result<u64, RendererError> {
+        if mode == RenderMode::Atomics {
+            return Err(RendererError::Unsupported(
+                "ordinary atomics is not exposed by the vulkan product host"));
+        }
         #[cfg(feature = "native-ore-vulkan-experimental")]
         self.gpu_canvas_mut()
             .map_err(|error| RendererError::Device(error.to_string()))?;
@@ -496,6 +500,7 @@ impl ExactSourceBackend for VulkanProductBackend {
         match mode {
             RenderMode::RasterOrdering => {}
             RenderMode::Msaa => descriptor.msaaSampleCount = 4,
+            RenderMode::Atomics => unreachable!("rejected before frame setup"),
             RenderMode::ClockwiseAtomic => {
                 descriptor.disableRasterOrdering = true;
                 descriptor.clockwiseFillOverride = true;

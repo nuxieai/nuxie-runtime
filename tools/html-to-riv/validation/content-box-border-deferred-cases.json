@@ -1,0 +1,482 @@
+[
+  {
+    "name": "content-box-row-content-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-content-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-border-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-content-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-row-reverse-border-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:row-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-content-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-border-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-content-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:content-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-fixed",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:80px;height:40px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-zero",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:0;height:0;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:50%;height:40%;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-minimum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:10px;height:10px;min-width:90px;min-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-maximum",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:180px;height:100px;max-width:90px;max-height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-min-over-max",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:20px;height:20px;min-width:90px;max-width:40px;min-height:50px;max-height:30px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;width:auto;height:auto;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-basis-px",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:0 1 80px;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-basis-percent",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:1 1 30%;width:120px;height:70px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  },
+  {
+    "name": "content-box-column-reverse-border-box-basis-auto",
+    "font": false,
+    "html": "<div id=host><div id=a><div id=inner></div></div><div id=b></div></div>",
+    "css": "#host{width:100%;height:240px;flex-direction:column-reverse;align-items:flex-start;gap:7px;padding:9px;background:#eef}#a{box-sizing:border-box;flex:auto;width:90px;height:50px;padding:5px 11px 7px 13px;border-width:3px;border-style:solid;border-color:#369;background:#8cf}#inner{width:24px;height:18px;background:#963}#b{width:35px;height:25px;background:#fc8}"
+  }
+]

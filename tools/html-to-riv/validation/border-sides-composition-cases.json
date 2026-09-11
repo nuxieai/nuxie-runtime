@@ -1,0 +1,986 @@
+[
+  {
+    "name": "border-sides-composition-content-text-border-box-visible-r0",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-border-box-visible-r24",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-border-box-clip-r0",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-border-box-clip-r24",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-border-box-hidden-r0",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-border-box-hidden-r24",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-content-box-visible-r0",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-content-box-visible-r24",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-content-box-clip-r0",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-content-box-clip-r24",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-content-box-hidden-r0",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-text-content-box-hidden-r24",
+    "html": "<div id=\"frame\"><p id=\"subject\">Small daily steps build a lasting routine. Make room for progress today.</p><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{display:block;font-family:Inter;font-size:16px;line-height:24px;color:#123;}",
+    "font": true,
+    "image": false,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-border-box-visible-r0",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-border-box-visible-r24",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-border-box-clip-r0",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-border-box-clip-r24",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-border-box-hidden-r0",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-border-box-hidden-r24",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:border-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-content-box-visible-r0",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-content-box-visible-r24",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-content-box-clip-r0",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-content-box-clip-r24",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-content-box-hidden-r0",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:0px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-content-image-content-box-hidden-r24",
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{box-sizing:content-box;width:60%;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;background:#eaa43d;} #sibling{width:70px;height:24px;background:#86ae83;} #subject{height:90px;}",
+    "font": false,
+    "image": true,
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-clip-visible-content-box--4px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip visible;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-clip-visible-padding-box-8px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip visible;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-clip-visible-border-box-0px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip visible;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-visible-clip-content-box--4px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible clip;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-visible-clip-padding-box-8px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible clip;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-visible-clip-border-box-0px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible clip;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-hidden-content-box--4px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-hidden-padding-box-8px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-hidden-border-box-0px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-clip-content-box--4px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-clip-padding-box-8px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-container-clip-border-box-0px",
+    "image": false,
+    "html": "<div id=\"frame\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-clip-visible-content-box--4px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip visible;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-clip-visible-padding-box-8px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip visible;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-clip-visible-border-box-0px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip visible;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-visible-clip-content-box--4px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible clip;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-visible-clip-padding-box-8px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible clip;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-visible-clip-border-box-0px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:visible clip;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-hidden-content-box--4px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-hidden-padding-box-8px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-hidden-border-box-0px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:hidden;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-clip-content-box--4px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;overflow-clip-margin:content-box -4px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-clip-padding-box-8px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;overflow-clip-margin:padding-box 8px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  },
+  {
+    "name": "border-sides-composition-axis-margin-image-clip-border-box-0px",
+    "image": true,
+    "html": "<div id=\"frame\"><img id=\"subject\" src=\"asset:photo\"><div id=\"sibling\"></div></div>",
+    "css": "#frame{width:100%;padding:20px;} #subject{width:60%;height:100px;padding:8px 12px;border-style:solid;border-width:2px 8px 14px 20px;border-color:#563cab80 #ba672a80 #563cab80 #563cab80;border-radius:24px;overflow:clip;overflow-clip-margin:border-box 0px;background:#eaa43d;} #child{position:relative;left:-30px;top:-20px;width:280px;height:180px;background:#318ba1;} #sibling{width:70px;height:24px;background:#86ae83;}",
+    "borderTarget": "subject",
+    "borderWidth": 8,
+    "sideWidths": [
+      2,
+      8,
+      14,
+      20
+    ],
+    "sideColors": [
+      2153135275,
+      2159699754,
+      2153135275,
+      2153135275
+    ]
+  }
+]

@@ -1,0 +1,110 @@
+[
+  {
+    "name": "content-auto-alignment-column-normal-left",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:left;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-row-normal-left",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:left;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#a{flex:.25 .5 auto}#b{flex:2 1 auto}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-nested-normal-left",
+    "html": "<div id=root><div id=wrapper><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div><div id=side>Side</div></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:left;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#wrapper{flex:1 1 auto;min-width:80px;gap:8px}#side{width:38px;background:#fc8}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-column-nowrap-left",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:left;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-row-nowrap-left",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:left;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#a{flex:.25 .5 auto}#b{flex:2 1 auto}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-nested-nowrap-left",
+    "html": "<div id=root><div id=wrapper><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div><div id=side>Side</div></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:left;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#wrapper{flex:1 1 auto;min-width:80px;gap:8px}#side{width:38px;background:#fc8}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-column-normal-center",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:center;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-row-normal-center",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:center;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#a{flex:.25 .5 auto}#b{flex:2 1 auto}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-nested-normal-center",
+    "html": "<div id=root><div id=wrapper><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div><div id=side>Side</div></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:center;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#wrapper{flex:1 1 auto;min-width:80px;gap:8px}#side{width:38px;background:#fc8}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-column-nowrap-center",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:center;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-row-nowrap-center",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:center;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#a{flex:.25 .5 auto}#b{flex:2 1 auto}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-nested-nowrap-center",
+    "html": "<div id=root><div id=wrapper><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div><div id=side>Side</div></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:center;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#wrapper{flex:1 1 auto;min-width:80px;gap:8px}#side{width:38px;background:#fc8}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-column-normal-right",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:right;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-row-normal-right",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:right;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#a{flex:.25 .5 auto}#b{flex:2 1 auto}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-nested-normal-right",
+    "html": "<div id=root><div id=wrapper><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div><div id=side>Side</div></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:right;white-space:normal;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#wrapper{flex:1 1 auto;min-width:80px;gap:8px}#side{width:38px;background:#fc8}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-column-nowrap-right",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:right;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-row-nowrap-right",
+    "html": "<div id=root><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:right;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#a{flex:.25 .5 auto}#b{flex:2 1 auto}",
+    "font": true
+  },
+  {
+    "name": "content-auto-alignment-nested-nowrap-right",
+    "html": "<div id=root><div id=wrapper><p id=a>Short label</p><p id=b>A longer paragraph with words that wrap across narrow panels.</p></div><div id=side>Side</div></div>",
+    "css": "#root{width:100%;padding:12px;gap:8px;font-family:Inter;font-size:16px;line-height:24px;text-align:right;white-space:nowrap;background:#eef}#a{background:#def;padding:6px}#b{background:#bde;padding:6px}#root{flex-direction:row}#wrapper{flex:1 1 auto;min-width:80px;gap:8px}#side{width:38px;background:#fc8}",
+    "font": true
+  }
+]

@@ -1,0 +1,594 @@
+{
+  "browser": "153.0.8010.12",
+  "reset": "/* nuxie-html-v1 authoring profile. Browser comparisons use these exact rules.\n   This is an explicit authoring stylesheet, not an emulation of UA defaults. */\nhtml, body { margin: 0; padding: 0; width: 100%; height: 100%; }\nhtml { font-size: 16px; }\nbody { display: flex; flex-direction: column; align-items: stretch; }\ndiv, section, main, article, header, footer, p, h1, h2, h3, h4, h5, h6, span {\n  display: flex; flex-direction: column; align-items: stretch; align-content: flex-start;\n}\n* { box-sizing: border-box; margin: 0; padding: 0; border: 0; min-width: 0; min-height: 0; flex: 0 0 auto; }\nbody { font-family: Inter; font-size: 16px; font-weight: 400; line-height: 24px; color: #000; }\nh1, h2, h3, h4, h5, h6 { font-size: inherit; font-weight: inherit; }\n",
+  "cases": [
+    {
+      "name": "0",
+      "css": "border:0 solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "0px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.00000001px",
+      "css": "border:0.00000001px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.001px",
+      "css": "border:0.001px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.1px",
+      "css": "border:0.1px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.5px",
+      "css": "border:0.5px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.99px",
+      "css": "border:0.99px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "1px",
+      "css": "border:1px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "1.5px",
+      "css": "border:1.5px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "1.99px",
+      "css": "border:1.99px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "2.25px",
+      "css": "border:2.25px solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "2px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 96,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "thin",
+      "css": "border:thin solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "medium",
+      "css": "border:medium solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "3px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 94,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "thick",
+      "css": "border:thick solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "5px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 90,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.075em",
+      "css": "border:0.075em solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0.125rem",
+      "css": "border:0.125rem solid #123456;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "2px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 96,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "style-only",
+      "css": "border-style:solid",
+      "dpr": 1,
+      "result": {
+        "width": "0px",
+        "style": "solid",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "shorthand-style-only",
+      "css": "border:solid",
+      "dpr": 1,
+      "result": {
+        "width": "3px",
+        "style": "solid",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 94,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "shorthand-width-only",
+      "css": "border:8px",
+      "dpr": 1,
+      "result": {
+        "width": "0px",
+        "style": "none",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "hidden",
+      "css": "border:8px hidden",
+      "dpr": 1,
+      "result": {
+        "width": "0px",
+        "style": "hidden",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "current-color",
+      "css": "border:8px solid currentColor;color:#123456",
+      "dpr": 1,
+      "result": {
+        "width": "8px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "16px",
+        "clientWidth": 84,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "width-before-font",
+      "css": "border:0.075em solid;font-size:20px",
+      "dpr": 1,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 1
+      }
+    },
+    {
+      "name": "0",
+      "css": "border:0 solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "0px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.00000001px",
+      "css": "border:0.00000001px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.001px",
+      "css": "border:0.001px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.1px",
+      "css": "border:0.1px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.5px",
+      "css": "border:0.5px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.99px",
+      "css": "border:0.99px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "1px",
+      "css": "border:1px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "1.5px",
+      "css": "border:1.5px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "1.99px",
+      "css": "border:1.99px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "2.25px",
+      "css": "border:2.25px solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "2px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 96,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "thin",
+      "css": "border:thin solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "medium",
+      "css": "border:medium solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "3px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 94,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "thick",
+      "css": "border:thick solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "5px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 90,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.075em",
+      "css": "border:0.075em solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "0.125rem",
+      "css": "border:0.125rem solid #123456;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "2px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "20px",
+        "clientWidth": 96,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "style-only",
+      "css": "border-style:solid",
+      "dpr": 2,
+      "result": {
+        "width": "0px",
+        "style": "solid",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "shorthand-style-only",
+      "css": "border:solid",
+      "dpr": 2,
+      "result": {
+        "width": "3px",
+        "style": "solid",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 94,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "shorthand-width-only",
+      "css": "border:8px",
+      "dpr": 2,
+      "result": {
+        "width": "0px",
+        "style": "none",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "hidden",
+      "css": "border:8px hidden",
+      "dpr": 2,
+      "result": {
+        "width": "0px",
+        "style": "hidden",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "16px",
+        "clientWidth": 100,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "current-color",
+      "css": "border:8px solid currentColor;color:#123456",
+      "dpr": 2,
+      "result": {
+        "width": "8px",
+        "style": "solid",
+        "color": "rgb(18, 52, 86)",
+        "fontSize": "16px",
+        "clientWidth": 84,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    },
+    {
+      "name": "width-before-font",
+      "css": "border:0.075em solid;font-size:20px",
+      "dpr": 2,
+      "result": {
+        "width": "1px",
+        "style": "solid",
+        "color": "rgb(0, 0, 0)",
+        "fontSize": "20px",
+        "clientWidth": 98,
+        "outerWidth": 100,
+        "dpr": 2
+      }
+    }
+  ]
+}

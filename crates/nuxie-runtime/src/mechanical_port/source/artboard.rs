@@ -1,3 +1,5 @@
+mod css_paint_plan;
+
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
@@ -184,6 +186,11 @@ pub struct Artboard {
     #[cfg(feature = "tools")]
     external_parent_focus_node: Option<FocusNodeRef>,
     draw_order_change_counter: u8,
+    css_paint_order: bool,
+    css_positioned_objects: HashSet<usize>,
+    css_stacking_levels: HashMap<usize, i32>,
+    css_group_opacities: HashMap<usize, f32>,
+    css_positioned_plan: Option<Vec<css_paint_plan::PaintGroup<RuntimeDrawableOccurrence, CoreHandle>>>,
     #[cfg(feature = "tools")]
     artboard_id: u16,
     artboard_source: Option<CoreHandle>,
@@ -255,6 +262,11 @@ impl Default for Artboard {
             #[cfg(feature = "tools")]
             external_parent_focus_node: None,
             draw_order_change_counter: 0,
+            css_paint_order: false,
+            css_positioned_objects: HashSet::new(),
+            css_stacking_levels: HashMap::new(),
+            css_group_opacities: HashMap::new(),
+            css_positioned_plan: None,
             #[cfg(feature = "tools")]
             artboard_id: 0,
             artboard_source: None,
@@ -1104,6 +1116,394 @@ impl Artboard {
         StatusCode::Ok
     }
 
+    /// Opt-in paint policy for the compiler's static layout tree. Layout child
+    /// order is unchanged; only complete sibling paint groups are reversed in
+    /// Rive's backwards paint list. Hosts must apply this to each instance.
+    pub fn set_css_paint_order(&mut self, enabled: bool) {
+        if self.css_paint_order != enabled {
+            self.css_paint_order = enabled;
+            self.sort_draw_order();
+        }
+    }
+
+    /// Install authored CSS relative-position markers on this artboard instance.
+    /// Invalid/duplicate targets leave the existing policy unchanged. Empty clears.
+    pub fn set_css_positioned_paint_order(&mut self, object_ids: &[u32]) -> bool {
+        let mut ids = HashSet::new();
+        for &id in object_ids {
+            let id = id as usize;
+            if id == 0 || !ids.insert(id) || !self.objects.get(id).and_then(|o| o.as_ref())
+                .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        if ids != self.css_positioned_objects {
+            self.css_positioned_objects = ids;
+            self.sort_draw_order();
+        }
+        true
+    }
+
+    /// Atomically replace CSS group alpha on layout occurrences. Alpha must be
+    /// finite and normalized. Omitted targets restore one; this policy is
+    /// independent of Rive inherited paint opacity. Use a group-capable renderer
+    /// or try_draw_internal_handle to detect unsupported drawing before paint.
+    pub fn set_css_group_opacity(&mut self, targets: &[(u32, f32)]) -> bool {
+        let mut opacities = HashMap::new();
+        for &(id, alpha) in targets {
+            let id = id as usize;
+            if id == 0 || !alpha.is_finite() || !(0.0..=1.0).contains(&alpha)
+                || opacities.insert(id, alpha).is_some()
+                || !self.objects.get(id).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        opacities.retain(|_, alpha| *alpha < 1.0);
+        if opacities != self.css_group_opacities {
+            self.css_group_opacities = opacities;
+            self.sort_draw_order();
+        }
+        true
+    }
+
+    /// Install integer CSS stacking contexts on this occurrence. Omitted targets
+    /// retain auto stacking; empty clears. The caller identifies eligible CSS
+    /// positioned boxes or flex items. This does not change containing blocks.
+    /// Validate every target before replacing the existing policy.
+    pub fn set_css_stacking_order(&mut self, targets: &[(u32, i32)]) -> bool {
+        let mut levels = HashMap::new();
+        for &(id, level) in targets {
+            let id = id as usize;
+            if id == 0 || levels.insert(id, level).is_some()
+                || !self.objects.get(id).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        if levels != self.css_stacking_levels {
+            self.css_stacking_levels = levels;
+            self.sort_draw_order();
+        }
+        true
+    }
+
+    /// Atomically replace computed two-axis clip-margin policies. Omitted
+    /// layouts restore their imported clip path. Requiring an imported clip
+    /// also guarantees its drawable proxy already exists.
+    pub fn set_css_overflow_clip_margins_occurrence(
+        root: &CoreHandle,
+        targets: &[(u32, crate::mechanical_port::source::layout_component::CssOverflowClipMargin)],
+    ) -> bool {
+        let Some(objects) = root.with_downcast::<Artboard, _>(|a| a.objects.clone()) else { return false; };
+        let mut margins = HashMap::new();
+        for &(id, margin) in targets {
+            if id == 0 || margins.insert(id, margin).is_some()
+                || !objects.get(id as usize).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some_and(|layout|
+                        layout.base.clip() && layout.css_overflow_axis().is_none())))
+                    .unwrap_or(false) {
+                return false;
+            }
+        }
+        for (id, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue; };
+            object.with_mut(|o| {
+                if let Some(layout) = o.as_layout_component_mut() {
+                    layout.set_css_overflow_clip_margin(margins.get(&(id as u32)).copied());
+                }
+            });
+        }
+        true
+    }
+
+    /// Replace one-axis overflow overrides after validating every target.
+    /// Omitted layouts return to their imported two-axis clipping flag. Release
+    /// the artboard borrow before invalidating live layout occurrences.
+    pub fn set_css_overflow_axes_occurrence(
+        root: &CoreHandle,
+        targets: &[(u32, crate::mechanical_port::source::layout_component::CssOverflowAxis)],
+    ) -> bool {
+        let Some(objects) = root.with_downcast::<Artboard, _>(|a| a.objects.clone()) else { return false; };
+        let mut axes = HashMap::new();
+        for &(id, axis) in targets {
+            if id == 0 || axes.insert(id, axis).is_some()
+                || !objects.get(id as usize).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        for (id, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue; };
+            object.with_mut(|o| {
+                if let Some(layout) = o.as_layout_component_mut() {
+                    layout.set_css_overflow_axis(axes.get(&(id as u32)).copied());
+                }
+            });
+        }
+        Self::install_css_drawable_proxies_occurrence(root, &objects);
+        true
+    }
+
+    /// Replace CSS border paint and geometry policies after checking all IDs.
+    /// Border widths remain live layout-style properties. Empty targets clear
+    /// this policy; retained proxies allow subsequent reinstallation.
+    pub fn set_css_borders_occurrence(root: &CoreHandle, targets: &[(u32, u32)]) -> bool {
+        Self::set_css_border_sides_occurrence(root,
+            &targets.iter().map(|&(id, color)| (id, [color; 4])).collect::<Vec<_>>())
+    }
+
+    /// Atomically replace all CSS border policies with top/right/bottom/left
+    /// ARGB colors. Widths remain live layout properties. Uniform and individual
+    /// policies share replacement semantics: omitted layouts are cleared.
+    pub fn set_css_border_sides_occurrence(root: &CoreHandle, targets: &[(u32, [u32; 4])]) -> bool {
+        let Some(objects) = root.with_downcast::<Artboard, _>(|a| a.objects.clone()) else { return false; };
+        let mut colors = HashMap::new();
+        for &(id, color) in targets {
+            if id == 0 || colors.insert(id, color).is_some()
+                || !objects.get(id as usize).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        for (id, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue; };
+            object.with_mut(|o| {
+                if let Some(layout) = o.as_layout_component_mut() {
+                    let color = colors.get(&(id as u32)).copied();
+                    layout.set_css_border_geometry(color.is_some());
+                    layout.set_css_border_color(color.map(|sides| sides[0]));
+                    layout.set_experimental_css_border_side_colors(color.filter(|sides|
+                        sides.iter().any(|side| *side != sides[0])));
+                }
+            });
+        }
+        Self::install_css_drawable_proxies_occurrence(root, &objects);
+        true
+    }
+
+    /// Replace per-axis CSS corner values on this occurrence. Validate every
+    /// target before changing any layout; omitted targets revert to their
+    /// imported radii. Authored percentages remain live across resize and clone.
+    /// Atomically replace opt-in CSS gradient paints on non-root layout owners.
+    pub fn set_css_linear_gradients_occurrence(root: &CoreHandle, targets: &[(u32, super::css_linear_gradient::CssLinearGradient)]) -> bool {
+        let Some(objects) = root.with_downcast::<Artboard, _>(|a| a.objects.clone()) else { return false; };
+        let mut gradients = HashMap::new();
+        for (id, value) in targets {
+            if *id == 0 || gradients.insert(*id, value.clone()).is_some()
+                || !objects.get(*id as usize).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        for (id, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue; };
+            object.with_mut(|o| {
+                if let Some(layout) = o.as_layout_component_mut() {
+                    layout.set_experimental_css_gradient(gradients.get(&(id as u32)).cloned());
+                }
+            });
+        }
+        Self::install_css_drawable_proxies_occurrence(root, &objects);
+        true
+    }
+
+    pub fn set_css_corner_radii_occurrence(root: &CoreHandle, targets: &[(u32, super::css_corner_radii::CssCornerRadii)]) -> bool {
+        let Some(objects) = root.with_downcast::<Artboard, _>(|a| a.objects.clone()) else { return false; };
+        let mut radii = HashMap::new();
+        for &(id, value) in targets {
+            if id == 0 || radii.insert(id, value).is_some()
+                || !objects.get(id as usize).and_then(|o| o.as_ref())
+                    .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        for (id, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue; };
+            object.with_mut(|o| {
+                if let Some(layout) = o.as_layout_component_mut() {
+                    layout.set_experimental_css_corner_radii(radii.get(&(id as u32)).copied());
+                }
+            });
+        }
+        Self::install_css_drawable_proxies_occurrence(root, &objects);
+        true
+    }
+
+    fn install_css_drawable_proxies_occurrence(root: &CoreHandle, objects: &[Option<CoreHandle>]) {
+        // Import omits proxies for plain, unclipped layouts. An occurrence
+        // override can make one necessary after import; sorting alone cannot
+        // add that missing draw occurrence. Insert children before ancestors
+        // so each proxy closes its complete subtree in authored order.
+        let mut drawables = root.with_downcast::<Artboard, _>(|a| a.drawables.clone()).unwrap();
+        for object in objects.iter().flatten().rev() {
+            if object == root { continue; }
+            let needs_proxy = object.with(|o| o.as_layout_component()
+                .is_some_and(|layout| layout.needs_drawable_proxy())).unwrap_or(false);
+            if !needs_proxy || drawables.iter().any(|entry| match entry {
+                RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().hittable_component() == *object,
+                _ => false,
+            }) { continue; }
+            let end = drawables.iter().rposition(|entry| {
+                let mut owner = Some(match entry {
+                    RuntimeDrawableOccurrence::Authored(owner) => owner.clone(),
+                    RuntimeDrawableOccurrence::RuntimeProxy(proxy) => proxy.borrow().hittable_component(),
+                });
+                while let Some(current) = owner {
+                    if current == *object { return true; }
+                    if current == *root { break; }
+                    owner = current.with(|o| o.component_parent_handle()).flatten();
+                }
+                false
+            });
+            if let Some(end) = end {
+                if let Some(proxy) = object.with_mut(|o| o.as_layout_component_mut()
+                    .and_then(|layout| layout.proxy())).flatten() {
+                    drawables.insert(end + 1, proxy);
+                }
+            }
+        }
+        root.with_downcast_mut::<Artboard, _>(|a| {
+            a.drawables = drawables;
+            a.sort_draw_order();
+        });
+    }
+
+    /// Atomically install CSS containing-block and positioned-paint policies.
+    /// Absolute targets must exactly match absolute layout wires. Empty lists
+    /// clear the policy without changing the imported layout's position wires.
+    pub fn set_css_absolute_position_policy_occurrence(root: &CoreHandle, positioned: &[u32], absolute: &[u32]) -> bool {
+        use crate::mechanical_port::source::layout_component::LayoutComponent;
+        let Some(objects) = root.with_downcast::<Artboard, _>(|a| a.objects.clone()) else { return false; };
+        let positioned_set: HashSet<_> = positioned.iter().copied().collect();
+        let absolute_set: HashSet<_> = absolute.iter().copied().collect();
+        let clearing = positioned.is_empty() && absolute.is_empty();
+        if positioned_set.len() != positioned.len() || absolute_set.len() != absolute.len()
+            || (!clearing && absolute.is_empty()) || !absolute_set.is_subset(&positioned_set) {
+            return false;
+        }
+        for &id in positioned {
+            if id == 0 || !objects.get(id as usize).and_then(|o| o.as_ref())
+                .and_then(|o| o.with(|o| o.as_layout_component().is_some())).unwrap_or(false) {
+                return false;
+            }
+        }
+        let mut layouts = Vec::new();
+        for (id, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue; };
+            let is_absolute = object.with(|o| o.as_layout_component().map(|layout|
+                layout.has_absolute_position_wire())).flatten();
+            let Some(is_absolute) = is_absolute else { continue; };
+            if !clearing && is_absolute != absolute_set.contains(&(id as u32)) { return false; }
+            layouts.push((id as u32, object.clone()));
+        }
+        // Everything is validated before the first mutation.
+        for (id, object) in layouts {
+            let mode = if clearing { None } else { Some(positioned_set.contains(&id)) };
+            assert!(LayoutComponent::set_css_positioned_occurrence(&object, mode));
+        }
+        assert_eq!(root.with_downcast_mut::<Artboard, _>(|a| a.set_css_positioned_paint_order(positioned)), Some(true));
+        true
+    }
+
+    fn css_ordered_drawables(
+        drawables: &[RuntimeDrawableOccurrence],
+        root: &CoreHandle,
+        reverse_groups: bool,
+    ) -> Vec<RuntimeDrawableOccurrence> {
+        // Each imported layout starts a contiguous subtree. Its generated
+        // proxy belongs to that subtree too: it draws the background and opens
+        // its clip, paired with the authored layout at the other end.
+        fn belongs(
+            drawable: &RuntimeDrawableOccurrence,
+            layout: &CoreHandle,
+            root: &CoreHandle,
+        ) -> bool {
+            let owner = match drawable {
+                RuntimeDrawableOccurrence::Authored(owner) => owner.clone(),
+                RuntimeDrawableOccurrence::RuntimeProxy(proxy) => {
+                    proxy.borrow().hittable_component()
+                }
+            };
+            let mut current = Some(owner);
+            while let Some(owner) = current {
+                if owner == *layout {
+                    return true;
+                }
+                // The artboard is already mutably borrowed while sorting.
+                if owner == *root {
+                    return false;
+                }
+                current = owner
+                    .with(|owner| owner.component_parent_handle())
+                    .flatten();
+            }
+            false
+        }
+        let mut groups = Vec::new();
+        let mut index = 0;
+        while index < drawables.len() {
+            let start = index;
+            let layout = drawables[index].authored_handle().filter(|owner| {
+                owner
+                    .with(|owner| owner.as_layout_component().is_some())
+                    .unwrap_or(false)
+            });
+            index += 1;
+            if let Some(layout) = layout {
+                while index < drawables.len() && belongs(&drawables[index], &layout, root) {
+                    index += 1;
+                }
+                let mut end = index;
+                let has_proxy = end > start + 1
+                    && matches!(&drawables[end-1], RuntimeDrawableOccurrence::RuntimeProxy(proxy)
+                    if proxy.borrow().hittable_component() == layout);
+                if has_proxy {
+                    end -= 1;
+                }
+                let mut group = vec![drawables[start].clone()];
+                // Chromium's flex paint traversal follows the reversed item
+                // sequence for reverse directions as well as CSS order. Rive's
+                // backwards traversal already supplies that reversal here.
+                let child_reverse_groups = layout
+                    .with(|owner| {
+                        owner.as_layout_component().and_then(|layout| {
+                            layout
+                                .with_style(|style| !matches!(style.flex_direction_value(), 1 | 3))
+                        })
+                    })
+                    .flatten()
+                    .unwrap_or(true);
+                group.extend(Self::css_ordered_drawables(
+                    &drawables[start + 1..end],
+                    root,
+                    child_reverse_groups,
+                ));
+                if has_proxy {
+                    group.push(drawables[index - 1].clone());
+                }
+                groups.push(group);
+            } else {
+                // Preserve the internal ordering of consecutive text/shape
+                // records; they are a single content group, not flex siblings.
+                while index < drawables.len()
+                    && !drawables[index].authored_handle().is_some_and(|owner| {
+                        owner
+                            .with(|owner| owner.as_layout_component().is_some())
+                            .unwrap_or(false)
+                    })
+                {
+                    index += 1;
+                }
+                groups.push(drawables[start..index].to_vec());
+            }
+        }
+        if reverse_groups {
+            groups.reverse();
+        }
+        groups.into_iter().flatten().collect()
+    }
+
     fn sort_draw_order(&mut self) {
         self.draw_order_change_counter = if self.draw_order_change_counter == u8::MAX {
             0
@@ -1119,7 +1519,32 @@ impl Artboard {
 
         self.first_drawable = None;
         let mut last_drawable = None::<RuntimeDrawableOccurrence>;
-        for drawable in self.drawables.iter().cloned() {
+        let paint_drawables = if self.css_paint_order || !self.css_positioned_objects.is_empty() || !self.css_stacking_levels.is_empty() || !self.css_group_opacities.is_empty() {
+            Self::css_ordered_drawables(
+                &self.drawables,
+                self.objects[0].as_ref().expect("imported artboard root"),
+                true,
+            )
+        } else {
+            self.drawables.clone()
+        };
+        self.css_positioned_plan = if self.css_positioned_objects.is_empty() && self.css_stacking_levels.is_empty() && self.css_group_opacities.is_empty() {
+            None
+        } else {
+            let positioned = self.css_positioned_objects.iter()
+                .filter_map(|&id| self.objects.get(id).cloned().flatten()).collect();
+            // The CSS compiler emits object subtrees in order-modified preorder.
+            // Keep that identity for stacking ties even when ordinary flex paint
+            // traverses siblings in reverse. Include auto positioned occurrences.
+            let levels = self.objects.iter().enumerate().filter_map(|(id, owner)|
+                owner.clone().map(|owner| (owner, (id, self.css_stacking_levels.get(&id).copied())))).collect();
+            let opacities = self.css_group_opacities.iter().filter_map(|(&id, &alpha)|
+                self.objects.get(id).cloned().flatten().map(|owner| (owner, alpha))).collect();
+            let tree = css_paint_plan::runtime_tree(&paint_drawables,
+                self.objects[0].as_ref().expect("imported artboard root"), &positioned, &levels, &opacities);
+            Some(css_paint_plan::plan(&tree))
+        };
+        for drawable in paint_drawables {
             let active_target = drawable
                 .with(|drawable| drawable.flattened_draw_rules.clone())
                 .flatten()
@@ -2298,17 +2723,71 @@ impl Artboard {
         Self::draw_internal_handle(root, renderer);
     }
 
+    /// Checked public draw entry point, preserving per-frame glyph/cache identity.
+    pub fn try_draw_handle(root: &CoreHandle, renderer: &mut Renderer) -> bool {
+        nuxie_render_api::increment_artboard_draw_frame_id();
+        Self::try_draw_internal_handle(root, renderer)
+    }
+
     pub fn draw_internal_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        assert!(Self::try_draw_internal_handle(root, renderer),
+            "CSS opacity requires a group-capable renderer; use try_draw_internal_handle for checked admission");
+    }
+
+    /// Returns false before painting when the renderer lacks required group depth.
+    pub fn try_draw_internal_handle(root: &CoreHandle, renderer: &mut Renderer) -> bool {
+        let plan = root.with_downcast::<Artboard, _>(|a| a.css_positioned_plan.clone()).flatten();
+        let mut depth = 0usize;
+        let mut maximum = 0;
+        if let Some(plan) = &plan {
+            for group in plan {
+                match group.opacity_boundary {
+                    Some(css_paint_plan::OpacityBoundary::Begin(_)) => { depth += 1; maximum = maximum.max(depth); }
+                    Some(css_paint_plan::OpacityBoundary::End) => depth -= 1,
+                    None => {},
+                }
+            }
+        }
+        if maximum > renderer.opacity_group_capacity() { return false; }
         let Some((save, first_drawable)) = root
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
             .flatten()
         else {
-            return;
+            return true;
         };
-        Self::draw_drawables(renderer, first_drawable);
+        if let Some(plan) = plan {
+            for group in plan {
+                match group.opacity_boundary {
+                    Some(css_paint_plan::OpacityBoundary::Begin(alpha)) => {
+                        assert!(renderer.begin_opacity_group(alpha), "renderer violated opacity capacity contract");
+                        continue;
+                    }
+                    Some(css_paint_plan::OpacityBoundary::End) => {
+                        assert!(renderer.end_opacity_group(), "renderer violated opacity capacity contract");
+                        continue;
+                    }
+                    None => {},
+                }
+                let mut saved = 0;
+                let mut visible = true;
+                for ancestor in &group.ancestor_clips {
+                    match ancestor.with_mut(|o| o.as_layout_component_mut()
+                        .and_then(|l| l.begin_css_ancestor_clip(renderer))).flatten() {
+                        Some(true) => saved += 1,
+                        Some(false) => {},
+                        None => { visible = false; break; },
+                    }
+                }
+                if visible { Self::draw_occurrences(renderer, group.draws.into_iter()); }
+                for _ in 0..saved { renderer.restore(); }
+            }
+        } else {
+            Self::draw_drawables(renderer, first_drawable);
+        }
         if save {
             renderer.restore();
         }
+        true
     }
 
     fn draw_background(
@@ -2373,11 +2852,14 @@ impl Artboard {
     }
 
     fn draw_drawables(renderer: &mut Renderer, first_drawable: Option<RuntimeDrawableOccurrence>) {
+        let occurrences = std::iter::successors(first_drawable, |current| current.with(Drawable::prev_drawable).flatten());
+        Self::draw_occurrences(renderer, occurrences);
+    }
+
+    fn draw_occurrences(renderer: &mut Renderer, occurrences: impl Iterator<Item = RuntimeDrawableOccurrence>) {
         let mut empty_clips = 0;
         let mut pending_clip_operations = Vec::<RuntimeDrawableOccurrence>::new();
-        let mut drawable = first_drawable;
-        while let Some(current) = drawable {
-            drawable = current.with(Drawable::prev_drawable).flatten();
+        for current in occurrences {
             let previous_clips = empty_clips;
             empty_clips += current.empty_clip_count();
             if !current.will_draw() || empty_clips != previous_clips || empty_clips > 0 {
@@ -3764,6 +4246,10 @@ impl Artboard {
         base.copy(&self.base, &mut clone.base);
         clone.base.base = base;
         clone.base.factory = self.factory.clone();
+        clone.base.css_paint_order = self.css_paint_order;
+        clone.base.css_positioned_objects = self.css_positioned_objects.clone();
+        clone.base.css_stacking_levels = self.css_stacking_levels.clone();
+        clone.base.css_group_opacities = self.css_group_opacities.clone();
         clone.base.file = self.file.clone();
         clone.base.scripting_vm = self.scripting_vm.clone();
         clone.base.frame_origin = self.frame_origin;
@@ -4399,6 +4885,10 @@ impl RuntimeArtboardInstanceHandle {
     }
     pub fn draw(&self, renderer: &mut Renderer) {
         Artboard::draw_handle(&self.core_handle(), renderer);
+    }
+    /// Returns false before painting if required group compositing is unavailable.
+    pub fn try_draw(&self, renderer: &mut Renderer) -> bool {
+        Artboard::try_draw_handle(&self.core_handle(), renderer)
     }
     pub fn draw_internal(&self, renderer: &mut Renderer) {
         Artboard::draw_internal_handle(&self.core_handle(), renderer);

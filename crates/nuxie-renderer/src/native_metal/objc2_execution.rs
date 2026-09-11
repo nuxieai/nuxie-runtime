@@ -42,18 +42,7 @@ use crate::mechanical_metal_implementation::source_execution::{
 };
 
 fn source_static_function_name(name: &str) -> Option<&'static NSString> {
-    Some(match name {
-        "HF" => objc2_foundation::ns_string!("HF"),
-        "IF" => objc2_foundation::ns_string!("IF"),
-        "AG" => objc2_foundation::ns_string!("AG"),
-        "BG" => objc2_foundation::ns_string!("BG"),
-        "UF" => objc2_foundation::ns_string!("UF"),
-        "WE" => objc2_foundation::ns_string!("WE"),
-        "XE" => objc2_foundation::ns_string!("XE"),
-        "HC" => objc2_foundation::ns_string!("HC"),
-        "JB" => objc2_foundation::ns_string!("JB"),
-        _ => return None,
-    })
+    crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports::source_function_literal(name)
 }
 
 pub(crate) trait NativeMetalHostCallbacks {

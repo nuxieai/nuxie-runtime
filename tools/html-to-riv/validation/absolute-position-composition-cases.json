@@ -1,0 +1,338 @@
+[
+  {
+    "name": "absolute-position-row-border-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-row-border-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-row-content-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-row-reverse-border-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-row-reverse-content-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-column-border-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-column-content-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-column-reverse-border-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:border-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-overlap",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-both-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:65px;top:25px}#side{position:absolute;left:-20px;top:10px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-nested-positioned",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#inner{position:absolute;left:90px;top:40px;width:70px;height:70px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-clip",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{overflow:clip}#card{position:absolute;left:60px;top:30px;overflow:clip}#inner{position:absolute;left:30px;top:30px;width:120px;height:100px}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:45px;top:20px;order:2}#side{order:-1}#host{position:relative}"
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-text",
+    "html": "<div id=host><div id=card><div id=inner>Quiet weekend</div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px;height:auto}#inner{display:block;width:auto;height:auto;font:16px/1.4 Inter;background:transparent;position:absolute;left:3px;top:2px}#host{position:relative}",
+    "font": true
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-image",
+    "html": "<div id=host><div id=card><img id=inner src=asset:photo></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#card{position:absolute;left:12px;top:-7px}#inner{width:70px;height:54px;position:absolute;left:12%;top:10%}#host{position:relative}",
+    "image": true
+  },
+  {
+    "name": "absolute-position-column-reverse-content-box-composition-wrap-ratio",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{box-sizing:content-box;width:90px;height:70px;padding:8px;background:#e9a344}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#card{}#host{height:auto;flex-wrap:wrap}#card{position:absolute;left:-5%;top:10%;width:40%;height:auto;aspect-ratio:3/2;flex-shrink:1}#host{position:relative}"
+  }
+]

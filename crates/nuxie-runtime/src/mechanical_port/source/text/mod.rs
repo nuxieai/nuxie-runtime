@@ -1,3 +1,7 @@
+pub mod css_decoration;
+pub mod css_ellipsis;
+mod css_skip_ink;
+mod css_pre_wrap;
 pub mod cursor;
 pub mod font_hb;
 pub mod fully_shaped_text;

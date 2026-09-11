@@ -1,0 +1,221 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "lang": "",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "en",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "en",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "en",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "tr",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "İ I İ̇ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "tr",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "ı i i ı́ j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "tr",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "az",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "İ I İ̇ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "az",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "ı i i ı́ j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "az",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "TR-tr",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "İ I İ̇ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "TR-tr",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "ı i i ı́ j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "TR-tr",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "tr-Cyrl",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "İ I İ̇ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "tr-Cyrl",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "ı i i ı́ j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "tr-Cyrl",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "lt",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I I Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "lt",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇̇ i̇́ j̇̀ į̇́ i̇̀ i̇́ i̇̃ ος"
+    },
+    {
+      "lang": "lt",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "el",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Α Ε Ή Ο Υ Ω ΜΑΪΟΥ"
+    },
+    {
+      "lang": "el",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "el",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "nl",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "nl",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "nl",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "de",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "de",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "de",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "hy",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "hy",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "hy",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    },
+    {
+      "lang": "bogus",
+      "mode": "uppercase",
+      "source": "i ı i̇ ά έ ή ό ύ ώ μαΐου",
+      "rendered": "I I İ Ά Έ Ή Ό Ύ Ώ ΜΑΪ́ΟΥ"
+    },
+    {
+      "lang": "bogus",
+      "mode": "lowercase",
+      "source": "I İ İ Í J̀ Į́ Ì Í Ĩ ΟΣ",
+      "rendered": "i i̇ i̇ í j̀ į́ ì í ĩ ος"
+    },
+    {
+      "lang": "bogus",
+      "mode": "capitalize",
+      "source": "istanbul ijsselmeer íjssel ßETA ﬃORD ǳUNGLE",
+      "rendered": "Istanbul Ijsselmeer Íjssel ßETA ﬃORD ǲUNGLE"
+    }
+  ]
+}

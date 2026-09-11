@@ -2972,7 +2972,11 @@ impl PaintData {
                             0
                         };
                     self.value.m_gradTextureY =
-                        (row as f32 + 0.5) * gradTextureLayout.inverseHeight;
+                        (row as f32 + 0.5) * gradTextureLayout.inverseHeight
+                        // Normalized rows lie strictly between zero and one.
+                        // A +1 tag carries CSS interpolation through the existing
+                        // floating-point paint varying without another varying.
+                        + if loc.isPremultiplied() { 1.0 } else { 0.0 };
                     localParams |= shiftedClipID | shiftedBlendMode;
                 }
                 PaintType::clipUpdate => {
@@ -3010,6 +3014,7 @@ pub fn set_paint_aux_data(
     framebufferBottomUp: bool,
     renderTargetHeight: u32,
 ) {
+    out.m_padding[1..5].fill(0.0);
     if matches!(paintType, PaintType::linearGradient | PaintType::radialGradient) {
         let coeffs = gradientCoeffs.expect("gradient is required");
         let mut paintMatrix = inverse_mat2d(viewMatrix).unwrap_or(Mat2D::IDENTITY);
@@ -3082,6 +3087,38 @@ pub fn set_paint_aux_data(
 }
 
 impl PaintAuxData {
+    /// Replace scalar gradient coordinates with two-dimensional tile UVs.
+    /// Padding lanes 1..5 are aligned at auxiliary float4 element 6.
+    pub fn set_css_gradient_tile(
+        &mut self,
+        view_matrix: Mat2D,
+        gradient_coeffs: [f32; 3],
+        tile: [f32; 4],
+        framebuffer_bottom_up: bool,
+        render_target_height: u32,
+    ) -> bool {
+        if !tile.iter().chain(gradient_coeffs.iter()).all(|v| v.is_finite())
+            || tile[2] <= 0.0 || tile[3] <= 0.0 {
+            return false;
+        }
+        let [x, y, width, height] = tile;
+        let [cx, cy, cz] = gradient_coeffs;
+        let projection = [cx * width, cy * height, cx * x + cy * y + cz, 1.0];
+        let Some(mut inverse) = inverse_mat2d(view_matrix) else { return false; };
+        if framebuffer_bottom_up {
+            inverse = multiply_mat2d(inverse,
+                Mat2D([1.0, 0.0, 0.0, -1.0, 0.0, render_target_height as f32]));
+        }
+        let matrix = multiply_mat2d(
+            Mat2D([1.0 / width, 0.0, 0.0, 1.0 / height, -x / width, -y / height]), inverse);
+        if !projection.iter().chain(matrix.0.iter()).all(|v| v.is_finite()) {
+            return false;
+        }
+        self.m_paintMatrix = matrix.0;
+        self.m_padding[1..5].copy_from_slice(&projection);
+        true
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn set(
         &mut self,
@@ -4387,3 +4424,55 @@ pub static g_inverseGaussianIntegralTableF16: [u16; 512] = [
     0x3a5d, 0x3a65, 0x3a6e, 0x3a77, 0x3a80, 0x3a8a, 0x3a95, 0x3aa0, 0x3aac, 0x3ab9, 0x3ac7, 0x3ad6,
     0x3ae7, 0x3afa, 0x3b10, 0x3b29, 0x3b48, 0x3b70, 0x3baa, 0x3c00,
 ];
+
+#[cfg(test)]
+mod css_gradient_tile_tests {
+    use super::*;
+
+    fn sample(aux: &PaintAuxData, screen: [f32; 2]) -> f32 {
+        let m = aux.m_paintMatrix;
+        let u = m[0] * screen[0] + m[2] * screen[1] + m[4];
+        let v = m[1] * screen[0] + m[3] * screen[1] + m[5];
+        let p = &aux.m_padding[1..5];
+        (u - u.floor()) * p[0] + (v - v.floor()) * p[1] + p[2]
+    }
+
+    #[test]
+    fn css_gradient_tile_wraps_both_axes_before_projection() {
+        let mut aux: PaintAuxData = unsafe { core::mem::zeroed() };
+        // t=(x-10)/200+(y-20)/100 on a100x50 tile.
+        assert!(aux.set_css_gradient_tile(Mat2D::IDENTITY, [0.005, 0.01, -0.25],
+            [10.0, 20.0, 100.0, 50.0], false, 320));
+        for point in [[35.0, 45.0], [-65.0, 45.0], [35.0, -5.0], [235.0, 145.0]] {
+            assert!((sample(&aux, point) - 0.375).abs() < 0.00001);
+        }
+        // Exact tile boundaries return the leading edge, including negative UV.
+        assert!(sample(&aux, [-90.0, -30.0]).abs() < 0.00001);
+        assert_eq!(core::mem::size_of::<PaintAuxData>(), 128);
+    }
+
+    #[test]
+    fn css_gradient_tile_respects_host_transform_and_framebuffer_flip() {
+        let mut aux: PaintAuxData = unsafe { core::mem::zeroed() };
+        // Local35,45 transformed by90degree rotation/scale plus translation.
+        let view = Mat2D([0.0, 2.0, -2.0, 0.0, 200.0, 100.0]);
+        for (bottom_up, point) in [(false, [110.0, 170.0]), (true, [110.0, 150.0])] {
+            assert!(aux.set_css_gradient_tile(view, [0.005, 0.01, -0.25],
+                [10.0, 20.0, 100.0, 50.0], bottom_up, 320));
+            assert!((sample(&aux, point) - 0.375).abs() < 0.00001);
+        }
+    }
+
+    #[test]
+    fn css_gradient_tile_rejects_nonfinite_geometry_without_mutation() {
+        let mut aux: PaintAuxData = unsafe { core::mem::zeroed() };
+        assert!(aux.set_css_gradient_tile(Mat2D::IDENTITY, [1.0, 0.0, 0.0],
+            [0.0, 0.0, 0.00001, 0.00001], false, 320));
+        let before = (aux.m_paintMatrix, aux.m_padding);
+        for tile in [[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, -1.0, 1.0],
+                     [f32::NAN, 0.0, 1.0, 1.0], [0.0, 0.0, f32::INFINITY, 1.0]] {
+            assert!(!aux.set_css_gradient_tile(Mat2D::IDENTITY, [1.0, 0.0, 0.0], tile, false, 320));
+            assert_eq!((aux.m_paintMatrix, aux.m_padding), before);
+        }
+    }
+}

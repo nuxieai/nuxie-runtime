@@ -1,0 +1,82 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-clone-footer-only",
+      "font": true,
+      "html": "<div id=footer><p id=action>View report</p><p id=count>12 items</p></div>",
+      "css": "p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#footer{width:100%;flex-direction:row;justify-content:space-between;gap:8px}#action{color:#247}#count{font-size:12px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "footer": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 24
+            },
+            "action": {
+              "x": 0,
+              "y": 0,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 194.671875,
+              "y": 0,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "footer": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 24
+            },
+            "action": {
+              "x": 0,
+              "y": 0,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 344.671875,
+              "y": 0,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "footer": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 24
+            },
+            "action": {
+              "x": 0,
+              "y": 0,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 722.671875,
+              "y": 0,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

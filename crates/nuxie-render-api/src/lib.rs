@@ -17,6 +17,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod aabb;
 pub mod authored_ore_shader;
 mod factory;
+mod glyphs;
+pub use glyphs::{GlyphFontRef, GlyphFontVariation, PositionedGlyph, RenderGlyphRun};
 mod routing;
 pub mod serialize_ops;
 pub mod serialized_replay;
@@ -2496,6 +2498,35 @@ pub trait RenderPath: Any {
 }
 
 pub trait Renderer {
+    /// Optional platform-font adapter capability. False preserves the existing
+    /// vector path, including its recording/serialization behavior. Callers can
+    /// avoid building glyph requests when no adapter is installed.
+    fn supports_glyph_runs(&self) -> bool {
+        false
+    }
+
+    /// Draw the entire shaped run through an explicitly installed adapter.
+    /// True means it was consumed. False must leave both pixels and renderer
+    /// state untouched so the caller can draw its vector fallback exactly once.
+    /// An adapter must not partially draw a run before declining it.
+    fn draw_glyph_run(&mut self, _run: &RenderGlyphRun<'_>) -> bool {
+        false
+    }
+
+    /// Begin an isolated group with finite alpha in [0, 1]. A successful
+    /// begin requires a matching end. Groups implicitly scope renderer state.
+    /// Returning false must leave state and output untouched. Immediate
+    /// backends may decline; recording backends can defer texture preparation.
+    fn begin_opacity_group(&mut self, _opacity: f32) -> bool { false }
+
+    /// Additional nested groups this renderer guarantees it can record/draw.
+    /// Used to reject unsupported scenes before drawing their background.
+    fn opacity_group_capacity(&self) -> usize { 0 }
+
+    /// End a successfully begun isolated group. False means unsupported or
+    /// unmatched and must leave state and output untouched.
+    fn end_opacity_group(&mut self) -> bool { false }
+
     fn save(&mut self);
     fn restore(&mut self);
     fn transform(&mut self, transform: Mat2D);
@@ -2519,6 +2550,31 @@ pub trait Renderer {
 
     fn draw_path(&mut self, path: &dyn RenderPath, paint: &dyn RenderPaint);
     fn clip_path(&mut self, path: &dyn RenderPath);
+
+    /// Intersect the clip with min..max on one local axis, without restricting
+    /// the other axis. Uses ordinary antialiased path coverage after the full
+    /// device transform. Save/restore restores this clip. Invalid inputs or an
+    /// unsupported backend return false without changing renderer state.
+    fn clip_axis(&mut self, _horizontal: bool, _min: f32, _max: f32) -> bool {
+        false
+    }
+
+    /// Clip a strip in an additional local transform without changing the
+    /// current drawing transform. The clip survives until the matching restore.
+    /// Unsupported or invalid operations return false without changing state.
+    fn clip_axis_transformed(&mut self, horizontal: bool, min: f32, max: f32, local: Mat2D) -> bool {
+        local == Mat2D::IDENTITY && self.clip_axis(horizontal, min, max)
+    }
+
+    /// Subtract a rectangle from the current clip without antialiasing. The
+    /// rectangle is in current local coordinates; coverage must be resolved
+    /// after the complete device transform. Save/restore also restores this clip.
+    /// Returns false without changing state when the backend cannot represent
+    /// this operation. Callers must then use an explicit fallback or report it.
+    fn clip_out_rect(&mut self, _rect: Aabb) -> bool {
+        false
+    }
+
     fn draw_image(
         &mut self,
         image: Option<&dyn RenderImage>,
@@ -2571,6 +2627,15 @@ pub trait RenderCanvas: std::any::Any {
         &mut self,
         clear_color: ColorInt,
     ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError>;
+    /// Intermediate texture frame: disable output dithering so subsequent
+    /// composition does not accumulate spatial quantization noise. Backends
+    /// must opt in; ordinary canvas frames retain their existing semantics.
+    fn begin_compositing_frame(
+        &mut self,
+        _clear_color: ColorInt,
+    ) -> Result<Box<dyn RenderCanvasFrame>, RenderCanvasError> {
+        Err(RenderCanvasError::new("canvas does not support undithered compositing frames"))
+    }
 }
 
 /// A render factory could not create or submit an exact offscreen canvas.
@@ -2676,6 +2741,17 @@ impl PersistentFactoryContext {
     }
 }
 
+/// Whether a CSS tile has a finite local-to-tile transform in the f32 renderer.
+/// Positivity alone is insufficient: tiny dimensions or large origin/dimension
+/// ratios can overflow before any host transform is applied.
+pub fn css_gradient_tile_is_representable(tile: [f32; 4]) -> bool {
+    let [x, y, width, height] = tile;
+    tile.into_iter().all(f32::is_finite)
+        && width > 0.0 && height > 0.0
+        && [1.0 / width, 1.0 / height, x / width, y / height]
+            .into_iter().all(f32::is_finite)
+}
+
 pub trait Factory {
     /// Return the stable owned context used by scripting VMs, when this
     /// factory is a [`PersistentFactory`] proxy.
@@ -2712,6 +2788,20 @@ pub trait Factory {
         flags: RenderBufferFlags,
         size_in_bytes: usize,
     ) -> Box<dyn RenderBuffer>;
+    /// CSS background-image repeat in a local rectangular tile. Tile coordinates
+    /// are [origin_x, origin_y, width, height], with finite positive dimensions and a representable f32 inverse transform.
+    /// None means unsupported or invalid; callers must not fall back to untiled.
+    fn make_tiled_premultiplied_linear_gradient(
+        &mut self, _sx: f32, _sy: f32, _ex: f32, _ey: f32,
+        _tile: [f32; 4], _colors: &[ColorInt], _stops: &[f32],
+    ) -> Option<Box<dyn RenderShader>> { None }
+    /// Opt-in CSS interpolation: interpolate premultiplied sRGB and alpha.
+    /// Colors are authored unpremultiplied ARGB; None explicitly means unsupported
+    /// or invalid input. Ordinary make_linear_gradient semantics are unchanged.
+    fn make_premultiplied_linear_gradient(
+        &mut self, _sx: f32, _sy: f32, _ex: f32, _ey: f32,
+        _colors: &[ColorInt], _stops: &[f32],
+    ) -> Option<Box<dyn RenderShader>> { None }
     fn make_linear_gradient(
         &mut self,
         sx: f32,
@@ -2931,6 +3021,14 @@ impl Factory for PersistentFactoryContext {
     ) -> Box<dyn RenderBuffer> {
         self.with_factory(|factory| factory.make_render_buffer(kind, flags, size))
     }
+    fn make_tiled_premultiplied_linear_gradient(&mut self, sx: f32, sy: f32, ex: f32, ey: f32,
+        tile: [f32; 4], colors: &[ColorInt], stops: &[f32]) -> Option<Box<dyn RenderShader>> {
+        self.with_factory(|factory| factory.make_tiled_premultiplied_linear_gradient(sx, sy, ex, ey, tile, colors, stops))
+    }
+    fn make_premultiplied_linear_gradient(&mut self, sx: f32, sy: f32, ex: f32, ey: f32,
+        colors: &[ColorInt], stops: &[f32]) -> Option<Box<dyn RenderShader>> {
+        self.with_factory(|factory| factory.make_premultiplied_linear_gradient(sx, sy, ex, ey, colors, stops))
+    }
     fn make_linear_gradient(
         &mut self,
         sx: f32,
@@ -3077,6 +3175,14 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
             .make_render_buffer(buffer_type, flags, size_in_bytes)
     }
 
+    fn make_tiled_premultiplied_linear_gradient(&mut self, sx: f32, sy: f32, ex: f32, ey: f32,
+        tile: [f32; 4], colors: &[ColorInt], stops: &[f32]) -> Option<Box<dyn RenderShader>> {
+        self.borrow_mut().make_tiled_premultiplied_linear_gradient(sx, sy, ex, ey, tile, colors, stops)
+    }
+    fn make_premultiplied_linear_gradient(&mut self, sx: f32, sy: f32, ex: f32, ey: f32,
+        colors: &[ColorInt], stops: &[f32]) -> Option<Box<dyn RenderShader>> {
+        self.borrow_mut().make_premultiplied_linear_gradient(sx, sy, ex, ey, colors, stops)
+    }
     fn make_linear_gradient(
         &mut self,
         sx: f32,
@@ -3279,6 +3385,10 @@ struct RecordingShaderSnapshot {
 
 #[derive(Debug, Clone)]
 enum RecordingGradientSnapshot {
+    TiledPremultipliedLinear {
+        sx: f32, sy: f32, ex: f32, ey: f32, tile: [f32; 4],
+        colors: Vec<ColorInt>, stops: Vec<f32>,
+    },
     Linear {
         sx: f32,
         sy: f32,
@@ -3314,11 +3424,12 @@ struct RecordingBufferSnapshot {
 
 pub struct RecordingRenderer {
     stream: Rc<RefCell<RecordingStream>>,
+    opacity_depth: usize,
 }
 
 impl RecordingRenderer {
     fn new(stream: Rc<RefCell<RecordingStream>>) -> Self {
-        Self { stream }
+        Self { stream, opacity_depth: 0 }
     }
 }
 
@@ -3721,6 +3832,89 @@ impl Factory for RecordingFactory {
             flags,
             bytes: vec![0; size_in_bytes],
         })
+    }
+
+    fn make_tiled_premultiplied_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        tile: [f32; 4],
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Option<Box<dyn RenderShader>> {
+        if !css_gradient_tile_is_representable(tile)
+            || colors.len() != stops.len() || colors.len() < 2
+            || ![sx, sy, ex, ey].into_iter().all(f32::is_finite)
+            || !stops.iter().all(|v| v.is_finite() && (0. ..=1.).contains(v))
+            || !stops.windows(2).all(|pair| pair[0] <= pair[1]) { return None; }
+        let id = self.next_shader_id;
+        self.next_shader_id += 1;
+        let mut line = format!(
+            "makeTiledPremultipliedLinearGradient id={id} start=({},{}) end=({},{}) tile=({},{},{},{}) stops=[",
+            float_to_string(sx),
+            float_to_string(sy),
+            float_to_string(ex),
+            float_to_string(ey),
+            float_to_string(tile[0]), float_to_string(tile[1]),
+            float_to_string(tile[2]), float_to_string(tile[3])
+        );
+        write_stops(&mut line, colors, stops);
+        line.push(']');
+        self.stream.borrow_mut().line(line);
+        Some(Box::new(RecordingRenderShader {
+            identity: Rc::new(()),
+            id,
+            gradient: RecordingGradientSnapshot::TiledPremultipliedLinear {
+                tile,
+                sx,
+                sy,
+                ex,
+                ey,
+                colors: colors.to_vec(),
+                stops: stops.to_vec(),
+            },
+        }))
+    }
+
+    fn make_premultiplied_linear_gradient(
+        &mut self,
+        sx: f32,
+        sy: f32,
+        ex: f32,
+        ey: f32,
+        colors: &[ColorInt],
+        stops: &[f32],
+    ) -> Option<Box<dyn RenderShader>> {
+        if colors.len() != stops.len() || colors.len() < 2
+            || ![sx, sy, ex, ey].into_iter().all(f32::is_finite)
+            || !stops.iter().all(|v| v.is_finite() && (0. ..=1.).contains(v))
+            || !stops.windows(2).all(|pair| pair[0] <= pair[1]) { return None; }
+        let id = self.next_shader_id;
+        self.next_shader_id += 1;
+        let mut line = format!(
+            "makePremultipliedLinearGradient id={id} start=({},{}) end=({},{}) stops=[",
+            float_to_string(sx),
+            float_to_string(sy),
+            float_to_string(ex),
+            float_to_string(ey)
+        );
+        write_stops(&mut line, colors, stops);
+        line.push(']');
+        self.stream.borrow_mut().line(line);
+        Some(Box::new(RecordingRenderShader {
+            identity: Rc::new(()),
+            id,
+            gradient: RecordingGradientSnapshot::Linear {
+                sx,
+                sy,
+                ex,
+                ey,
+                colors: colors.to_vec(),
+                stops: stops.to_vec(),
+            },
+        }))
     }
 
     fn make_linear_gradient(
@@ -4469,6 +4663,25 @@ impl RenderBuffer for RecordingRenderBuffer {
 }
 
 impl Renderer for RecordingRenderer {
+    fn opacity_group_capacity(&self) -> usize { 64 - self.opacity_depth }
+    fn begin_opacity_group(&mut self, opacity: f32) -> bool {
+        if !opacity.is_finite() || !(0.0..=1.0).contains(&opacity) || self.opacity_depth == 64 {
+            return false;
+        }
+        self.opacity_depth += 1;
+        self.stream.borrow_mut().semantic_line(format!(
+            "beginOpacity opacity={}", float_to_string(opacity)
+        ));
+        true
+    }
+
+    fn end_opacity_group(&mut self) -> bool {
+        if self.opacity_depth == 0 { return false; }
+        self.opacity_depth -= 1;
+        self.stream.borrow_mut().semantic_line("endOpacity");
+        true
+    }
+
     fn save(&mut self) {
         self.stream.borrow_mut().semantic_line("save");
     }
@@ -4497,6 +4710,37 @@ impl Renderer for RecordingRenderer {
             path: path.snapshot(),
             paint: paint.snapshot(),
         });
+    }
+
+    fn clip_out_rect(&mut self, rect: Aabb) -> bool {
+        let values = [rect.min_x, rect.min_y, rect.max_x, rect.max_y];
+        if values.iter().any(|value| !value.is_finite()) {
+            return false;
+        }
+        // Preserve float round-trip precision: hard clip edges at half pixels
+        // can change device coverage when rounded by the ordinary path writer.
+        self.stream.borrow_mut().semantic_line(format!(
+            "clipOutRect rect=[{},{},{},{}]",
+            values[0], values[1], values[2], values[3]
+        ));
+        true
+    }
+
+    fn clip_axis(&mut self, horizontal: bool, min: f32, max: f32) -> bool {
+        if !min.is_finite() || !max.is_finite() { return false; }
+        self.stream.borrow_mut().semantic_line(format!(
+            "clipAxis axis={} range=[{min},{max}]", if horizontal { "x" } else { "y" }
+        ));
+        true
+    }
+
+    fn clip_axis_transformed(&mut self, horizontal: bool, min: f32, max: f32, local: Mat2D) -> bool {
+        if !min.is_finite() || !max.is_finite() || local.0.iter().any(|v| !v.is_finite()) { return false; }
+        let matrix = local.0.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(",");
+        self.stream.borrow_mut().semantic_line(format!(
+            "clipAxis axis={} range=[{min},{max}] matrix=[{matrix}]", if horizontal { "x" } else { "y" }
+        ));
+        true
     }
 
     fn clip_path(&mut self, path: &dyn RenderPath) {
@@ -4769,6 +5013,18 @@ fn write_canonical_shader(
     };
     write!(out, "{{id={},", ids.canonicalize(shader.id)).expect("writing to a String cannot fail");
     match &shader.gradient {
+        RecordingGradientSnapshot::TiledPremultipliedLinear { sx, sy, ex, ey, tile, colors, stops } => {
+            out.push_str("kind=tiledPremultipliedLinear,start=(");
+            write_float(out, *sx); out.push(','); write_float(out, *sy);
+            out.push_str("),end=(");
+            write_float(out, *ex); out.push(','); write_float(out, *ey);
+            out.push_str("),tile=(");
+            for (index, value) in tile.iter().enumerate() {
+                if index > 0 { out.push(','); }
+                write_float(out, *value);
+            }
+            out.push_str("),stops=["); write_stops(out, colors, stops);
+        }
         RecordingGradientSnapshot::Linear {
             sx,
             sy,

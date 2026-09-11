@@ -1,0 +1,3805 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 12595.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 26995.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 63283.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:32.808px;height:auto;aspect-ratio:1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 12595.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 26995.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 63283.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-width:180.808px;min-width:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 180.796875,
+              "height": 17356.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 189.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 180.796875,
+              "height": 17356.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 189.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 180.796875,
+              "height": 17356.5
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 189.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-auto-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:auto 1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-auto-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:auto 1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 40647.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 40647.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 40647.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-auto-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:auto 1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 10158.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 24558.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 60846.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-auto-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:32.808px;height:auto;aspect-ratio:auto 1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 10158.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 24558.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 60846.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-border-box-auto-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:auto 1 / 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-width:180.808px;min-width:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 180.796875,
+              "height": 14919.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 189.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 180.796875,
+              "height": 14919.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 189.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 180.796875,
+              "height": 14919.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 189.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 474.390625,
+              "height": 43104.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 483.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 474.390625,
+              "height": 43104.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 483.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 474.390625,
+              "height": 43104.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 483.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 10158.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 24558.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 60846.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:32.808px;height:auto;aspect-ratio:1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 10158.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 24558.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 60846.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-width:180.808px;min-width:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 206.390625,
+              "height": 17376.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 215.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 206.390625,
+              "height": 17376.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 215.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 206.390625,
+              "height": 17376.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 215.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-auto-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:auto 1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 448.796875,
+              "height": 43084.5
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 457.59375,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-auto-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:448.808px;height:auto;aspect-ratio:auto 1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 474.390625,
+              "height": 43104.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 483.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 474.390625,
+              "height": 43104.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 483.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 474.390625,
+              "height": 43104.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 483.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-auto-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:auto 1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 10158.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 24558.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 60846.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-auto-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:32.808px;height:auto;aspect-ratio:auto 1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 131.203125,
+              "height": 10158.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 140,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 281.203125,
+              "height": 24558.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 290,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 659.203125,
+              "height": 60846.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 668,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-row-content-box-auto-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:row;align-items:flex-start;gap:8.808px;background:#eef}#ratio{width:90.7%;height:auto;aspect-ratio:auto 1 / 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-width:180.808px;min-width:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 206.390625,
+              "height": 17376.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 215.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 206.390625,
+              "height": 17376.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 215.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 206.390625,
+              "height": 17376.09375
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 215.1875,
+              "y": 0,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:96;box-sizing:border-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 19315.5,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 19315.5,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 19315.5,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:32.808px;width:auto;aspect-ratio:96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 19315.5,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 19315.5,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 19315.5,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-height:180.808px;min-height:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17356.5,
+              "height": 180.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 189.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17356.5,
+              "height": 180.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 189.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17356.5,
+              "height": 180.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 189.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-auto-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:auto 96;box-sizing:border-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-auto-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:auto 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 41229.09375,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 41229.09375,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 41229.09375,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-auto-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:auto 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-auto-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:32.808px;width:auto;aspect-ratio:auto 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-border-box-auto-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:auto 96;box-sizing:border-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-height:180.808px;min-height:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 15501.09375,
+              "height": 180.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 189.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 15501.09375,
+              "height": 180.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 189.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 15501.09375,
+              "height": 180.796875
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 189.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:96;box-sizing:content-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43110.09375,
+              "height": 468.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 477.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43110.09375,
+              "height": 468.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 477.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43110.09375,
+              "height": 468.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 477.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:32.808px;width:auto;aspect-ratio:96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-height:180.808px;min-height:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17382.09375,
+              "height": 200.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 209.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17382.09375,
+              "height": 200.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 209.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17382.09375,
+              "height": 200.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 209.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-auto-fixed",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:auto 96;box-sizing:content-box;flex-shrink:0;background:#8cf;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43084.5,
+              "height": 448.796875
+            },
+            "mark": {
+              "x": 0,
+              "y": 0,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 457.59375,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-auto-padding",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:448.808px;width:auto;aspect-ratio:auto 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43110.09375,
+              "height": 468.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 477.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43110.09375,
+              "height": 468.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 477.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 43110.09375,
+              "height": 468.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 477.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-auto-shrink",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:auto 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-shrink:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-auto-grow",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:32.808px;width:auto;aspect-ratio:auto 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;flex-grow:1;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17460.09375,
+              "height": 201.203125
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 210,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-rounding-stress-column-content-box-auto-constraint",
+      "font": false,
+      "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+      "css": "#host{width:100%;height:280px;flex-direction:column;align-items:flex-start;gap:8.808px;background:#eef}#ratio{height:90.7%;width:auto;aspect-ratio:auto 96;box-sizing:content-box;flex-shrink:0;background:#8cf;padding:5.808px 11.808px 13.808px 13.808px;max-height:180.808px;min-height:100.808px;}#mark{width:24px;height:18px;background:#963}#side{width:100px;height:70px;flex-shrink:0;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17382.09375,
+              "height": 200.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 209.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17382.09375,
+              "height": 200.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 209.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "ratio": {
+              "x": 0,
+              "y": 0,
+              "width": 17382.09375,
+              "height": 200.390625
+            },
+            "mark": {
+              "x": 13.796875,
+              "y": 5.796875,
+              "width": 24,
+              "height": 18
+            },
+            "side": {
+              "x": 0,
+              "y": 209.1875,
+              "width": 100,
+              "height": 70
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

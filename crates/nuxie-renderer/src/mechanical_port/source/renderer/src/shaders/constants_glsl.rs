@@ -81,9 +81,10 @@ pub const PINNED_CONSTANTS_GLSL_SOURCE: &str = r###"/*
 #define GRAD_SPAN_FLAG_LEFT_BORDER 0x80000000u
 #define GRAD_SPAN_FLAG_RIGHT_BORDER 0x40000000u
 #define GRAD_SPAN_FLAG_COMPLEX_BORDER 0x20000000u
+#define GRAD_SPAN_FLAG_PREMULTIPLIED 0x10000000u
 #define GRAD_SPAN_FLAGS_MASK                                                   \
     (GRAD_SPAN_FLAG_LEFT_BORDER | GRAD_SPAN_FLAG_RIGHT_BORDER |                \
-     GRAD_SPAN_FLAG_COMPLEX_BORDER)
+     GRAD_SPAN_FLAG_COMPLEX_BORDER | GRAD_SPAN_FLAG_PREMULTIPLIED)
 
 // Tells shaders that a cubic should actually be drawn as a non-AA triangle
 // strip of up to 5 points: [p0, p1, p3, p2, joinTangent]. This is used to

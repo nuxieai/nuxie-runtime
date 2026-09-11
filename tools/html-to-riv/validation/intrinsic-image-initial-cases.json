@@ -1,0 +1,226 @@
+[
+  {
+    "name": "intrinsic-image-initial-row-border-box-natural",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-percent-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-fixed-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-max-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-max-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-both-auto-bare-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-auto-natural-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-border-box-constrained-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-natural",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-percent-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-fixed-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-max-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-max-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-both-auto-bare-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-auto-natural-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-row-content-box-constrained-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-natural",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-percent-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-fixed-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-max-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-max-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-both-auto-bare-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-auto-natural-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-border-box-constrained-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:border-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-natural",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-percent-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-fixed-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-max-width",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-max-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;max-height:18px}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-both-auto-bare-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;aspect-ratio:3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-auto-natural-ratio",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;width:60%;aspect-ratio:auto 3/2}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  },
+  {
+    "name": "intrinsic-image-initial-column-content-box-constrained-height",
+    "html": "<div id=host><img id=photo src=asset:photo><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#photo{box-sizing:content-box;padding:5px 11px 13px 13px;background:#fc8;height:80px;max-width:50%}#side{width:40px;height:30px;background:#963}",
+    "image": true,
+    "font": false
+  }
+]

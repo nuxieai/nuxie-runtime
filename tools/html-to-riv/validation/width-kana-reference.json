@@ -1,0 +1,101 @@
+{
+  "browser": "155.0",
+  "cases": [
+    {
+      "name": "ascii",
+      "mode": "full-width",
+      "white": "normal",
+      "source": "aA12!?",
+      "expected": "ａＡ１２！？",
+      "expectDifference": false
+    },
+    {
+      "name": "normal-space-narrow",
+      "mode": "full-width",
+      "white": "normal",
+      "source": "a   b",
+      "expected": "ａ ｂ",
+      "expectDifference": true
+    },
+    {
+      "name": "normal-space-wide",
+      "mode": "full-width",
+      "white": "normal",
+      "source": "a   b",
+      "expected": "ａ　ｂ",
+      "expectDifference": false
+    },
+    {
+      "name": "pre-space",
+      "mode": "full-width",
+      "white": "pre",
+      "source": "a b",
+      "expected": "ａ　ｂ",
+      "expectDifference": false
+    },
+    {
+      "name": "preline-space-narrow",
+      "mode": "full-width",
+      "white": "pre-line",
+      "source": "a   b",
+      "expected": "ａ ｂ",
+      "expectDifference": true
+    },
+    {
+      "name": "preline-space-wide",
+      "mode": "full-width",
+      "white": "pre-line",
+      "source": "a   b",
+      "expected": "ａ　ｂ",
+      "expectDifference": false
+    },
+    {
+      "name": "voiced",
+      "mode": "full-width",
+      "white": "pre",
+      "source": "ｶﾞﾊﾟｳﾞ",
+      "expected": "ガパヴ",
+      "expectDifference": false
+    },
+    {
+      "name": "small-kana",
+      "mode": "full-size-kana",
+      "white": "pre",
+      "source": "ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮㇰㇷ",
+      "expected": "あいうえおつやゆよわアイウエオツヤユヨワクフ",
+      "expectDifference": false
+    },
+    {
+      "name": "half-small",
+      "mode": "full-size-kana",
+      "white": "pre",
+      "source": "ｧｨｩｪｫｯｬｭｮ",
+      "expected": "ｱｲｳｴｵﾂﾔﾕﾖ",
+      "expectDifference": false
+    },
+    {
+      "name": "combined",
+      "mode": "uppercase full-width full-size-kana",
+      "white": "pre",
+      "source": "a ぁｧｶﾞ",
+      "expected": "Ａ　あアガ",
+      "expectDifference": false
+    },
+    {
+      "name": "combined-reorder",
+      "mode": "full-size-kana full-width uppercase",
+      "white": "pre",
+      "source": "a ぁｧｶﾞ",
+      "expected": "Ａ　あアガ",
+      "expectDifference": false
+    },
+    {
+      "name": "excluded",
+      "mode": "full-width",
+      "white": "pre",
+      "source": "é Ω ﬃ　",
+      "expected": "é　Ω　ﬃ　",
+      "expectDifference": false
+    }
+  ]
+}

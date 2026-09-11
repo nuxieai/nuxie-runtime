@@ -1,0 +1,33 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "mode": "full-width",
+      "supported": false,
+      "computed": "none",
+      "source": "a A 12 ｶﾞ ぁっゃㇰ",
+      "rendered": "a A 12 ｶﾞ ぁっゃㇰ"
+    },
+    {
+      "mode": "full-size-kana",
+      "supported": false,
+      "computed": "none",
+      "source": "a A 12 ｶﾞ ぁっゃㇰ",
+      "rendered": "a A 12 ｶﾞ ぁっゃㇰ"
+    },
+    {
+      "mode": "uppercase full-width",
+      "supported": false,
+      "computed": "none",
+      "source": "a A 12 ｶﾞ ぁっゃㇰ",
+      "rendered": "a A 12 ｶﾞ ぁっゃㇰ"
+    },
+    {
+      "mode": "full-width full-size-kana",
+      "supported": false,
+      "computed": "none",
+      "source": "a A 12 ｶﾞ ぁっゃㇰ",
+      "rendered": "a A 12 ｶﾞ ぁっゃㇰ"
+    }
+  ]
+}

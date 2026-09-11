@@ -1,0 +1,2133 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "corner-radii-nested-isolated-top-left-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-top-left-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-top-right-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-top-right-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-bottom-right-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-bottom-right-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-bottom-left-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-bottom-left-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-fractional-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:.125px 8.75px 17.5px 33.25px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-overlap-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:160px 120px 80px 40px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-inherit-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:4px 8px 12px 16px;border-bottom-right-radius:inherit;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-invalid-variable-border-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:border-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;--r:-2px;border-radius:4px 8px 12px 16px;border-bottom-left-radius:var(--r, 40px);}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 89.171875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 157.421875,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 170
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 146
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 329.40625,
+              "height": 110
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 134,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-top-left-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-top-left-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-top-right-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-top-right-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-bottom-right-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-bottom-right-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-isolated-bottom-left-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:0;border-bottom-left-radius:36px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-fractional-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:.125px 8.75px 17.5px 33.25px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-overlap-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:160px 120px 80px 40px;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-inherit-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;border-radius:4px 8px 12px 16px;border-bottom-right-radius:inherit;}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    },
+    {
+      "name": "corner-radii-nested-invalid-variable-content-box",
+      "html": "<div id=\"frame\"><div id=\"panel\"><div id=\"subject\"><div id=\"child\"></div></div><div id=\"sibling\"></div></div><div id=\"aside\"></div></div>",
+      "css": "#frame{width:100%;padding:12px;flex-direction:row;gap:9px;align-items:flex-start;}#panel{width:70%;padding:7px;gap:5px;border-radius:3px 7px 29px 19px;background:#e7e9ee;}#subject{box-sizing:content-box;width:65%;height:110px;padding:5px 9px;border:3px solid #76539a;background:#eaa43d;overflow:clip;--r:-2px;border-radius:4px 8px 12px 16px;border-bottom-left-radius:var(--r, 40px);}#child{width:160px;height:130px;background:#308da5;}#sibling{width:40px;height:17px;background:#86ae83;}#aside{width:18%;height:60px;background:#bc7184;border-radius:12px 2px 18px 6px;}",
+      "borderTarget": "subject",
+      "borderWidth": 3,
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 151.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 113.171875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 172.1875,
+              "y": 12,
+              "width": 38.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 256.1875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 181.421875,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 277.1875,
+              "y": 12,
+              "width": 65.875,
+              "height": 60
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "frame": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 186
+            },
+            "panel": {
+              "x": 12,
+              "y": 12,
+              "width": 520.796875,
+              "height": 162
+            },
+            "subject": {
+              "x": 19,
+              "y": 19,
+              "width": 353.40625,
+              "height": 126
+            },
+            "child": {
+              "x": 31,
+              "y": 27,
+              "width": 160,
+              "height": 130
+            },
+            "sibling": {
+              "x": 19,
+              "y": 150,
+              "width": 40,
+              "height": 17
+            },
+            "aside": {
+              "x": 541.796875,
+              "y": 12,
+              "width": 133.90625,
+              "height": 60
+            }
+          }
+        }
+      ],
+      "borderColor": 4285944730
+    }
+  ]
+}

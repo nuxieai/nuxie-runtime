@@ -1,0 +1,242 @@
+[
+  {
+    "name": "stacking-row-auto-descendant-escapes",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-zero-descendant-contained",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-negative-descendant-auto",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:auto}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-negative-descendant-zero",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:0}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-positive-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:2}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-equal-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:1}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-equal-sibling-css-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:1;order:2}#side{z-index:1;order:-1}"
+  },
+  {
+    "name": "stacking-row-negative-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-static-flex-item-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-ancestor-clip-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-absolute-sibling-levels",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}"
+  },
+  {
+    "name": "stacking-row-auto-descendant-negative-sibling",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-reverse-auto-descendant-escapes",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-reverse-zero-descendant-contained",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-reverse-negative-descendant-auto",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:auto}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-reverse-negative-descendant-zero",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:0}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-reverse-positive-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:2}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-reverse-equal-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:1}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-reverse-equal-sibling-css-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:1;order:2}#side{z-index:1;order:-1}"
+  },
+  {
+    "name": "stacking-row-reverse-negative-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-reverse-static-flex-item-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-row-reverse-ancestor-clip-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-row-reverse-absolute-sibling-levels",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}"
+  },
+  {
+    "name": "stacking-row-reverse-auto-descendant-negative-sibling",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:row-reverse}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-auto-descendant-escapes",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-zero-descendant-contained",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-negative-descendant-auto",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:auto}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-negative-descendant-zero",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:0}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-positive-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:2}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-equal-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:1}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-equal-sibling-css-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:1;order:2}#side{z-index:1;order:-1}"
+  },
+  {
+    "name": "stacking-column-negative-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-static-flex-item-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-ancestor-clip-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-absolute-sibling-levels",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}"
+  },
+  {
+    "name": "stacking-column-auto-descendant-negative-sibling",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-reverse-auto-descendant-escapes",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:auto}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-reverse-zero-descendant-contained",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-reverse-negative-descendant-auto",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:auto}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-reverse-negative-descendant-zero",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:0}#inner{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-reverse-positive-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:2}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-reverse-equal-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:1}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-reverse-equal-sibling-css-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:1;order:2}#side{z-index:1;order:-1}"
+  },
+  {
+    "name": "stacking-column-reverse-negative-sibling-order",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#host{z-index:0}#card{z-index:-2}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-reverse-static-flex-item-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{position:static;z-index:0}#inner{z-index:3}#side{z-index:1}"
+  },
+  {
+    "name": "stacking-column-reverse-ancestor-clip-context",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:0;overflow:clip}#inner{z-index:3}#side{z-index:-1}"
+  },
+  {
+    "name": "stacking-column-reverse-absolute-sibling-levels",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{position:absolute;left:25px;top:20px;z-index:2}#side{position:absolute;left:70px;top:40px;z-index:1}"
+  },
+  {
+    "name": "stacking-column-reverse-auto-descendant-negative-sibling",
+    "html": "<div id=host><div id=card><div id=inner></div></div><div id=side></div><div id=tail></div></div>",
+    "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;align-items:flex-start;background:#e9eff5}#card{position:relative;width:90px;height:70px;background:#e9a344}#inner{position:absolute;left:45px;top:20px;width:110px;height:80px;background:#318ea8}#side{position:relative;left:-45px;top:20px;width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#host{flex-direction:column-reverse}#card{z-index:auto}#inner{z-index:2}#side{z-index:-1}"
+  }
+]

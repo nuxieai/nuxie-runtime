@@ -418,6 +418,29 @@ impl std::ops::DerefMut for Text {
 
 impl Text {
     pub const TYPE_KEY: u16 = TextBase::TYPE_KEY;
+
+    /// Retain host-installed CSS semantics on a clone, but rebuild all derived
+    /// shaping, measurement and drawing state for the new occurrence.
+    pub fn clone_core(&self) -> Self {
+        let mut twin = self.base.clone_into(&mut Self::default());
+        twin.css_wrap_policy = self.css_wrap_policy;
+        twin.css_nowrap_alignment = self.css_nowrap_alignment;
+        twin.experimental_css_ellipsis = self.experimental_css_ellipsis;
+        twin.css_underlines = self.css_underlines.clone();
+        twin.css_strikethroughs = self.css_strikethroughs.clone();
+        twin
+    }
+}
+
+struct CssDecorationPath {
+    strike: Option<super::css_decoration::StrikethroughStripe>,
+    bounds: Aabb,
+    snapped_bounds: Option<Aabb>,
+    after_glyphs: bool,
+    color: u32,
+    full: ShapePaintPath,
+    fallback: ShapePaintPath,
+    exclusions: Vec<Aabb>,
 }
 
 pub struct Text {
@@ -439,6 +462,14 @@ pub struct Text {
     // Last fitFontSize multiplier. Read paragraph spacing through the guarded
     // helper so switching overflow modes cannot reuse a stale fitted gap.
     fitted_font_scale: f32,
+    css_nowrap_alignment: bool,
+    measured_css_baseline: Option<f32>,
+    experimental_css_ellipsis: bool,
+    css_underlines: Vec<super::css_decoration::ResolvedUnderline>,
+    css_strikethroughs: Vec<super::css_decoration::ResolvedStrikethrough>,
+    css_decoration_paths: Vec<CssDecorationPath>,
+    css_decoration_paint: Option<Box<dyn nuxie_render_api::RenderPaint>>,
+    css_wrap_policy: Option<super::css_pre_wrap::CssWrapPolicy>,
     modifier_groups: Vec<CoreHandle>,
     styled_text: StyledText,
     modifier_styled_text: StyledText,
@@ -473,6 +504,14 @@ impl Default for Text {
             clip_path: ShapePaintPath::default(),
             bounds: Aabb::default(),
             fitted_font_scale: 1.0,
+            css_nowrap_alignment: false,
+            measured_css_baseline: None,
+            experimental_css_ellipsis: false,
+            css_underlines: Vec::new(),
+            css_strikethroughs: Vec::new(),
+            css_decoration_paths: Vec::new(),
+            css_decoration_paint: None,
+            css_wrap_policy: None,
             modifier_groups: Vec::new(),
             styled_text: StyledText::default(),
             modifier_styled_text: StyledText::default(),
@@ -491,6 +530,150 @@ impl Default for Text {
 }
 
 impl Text {
+    /// Install resolved solid underlines on this occurrence. These are not Rive
+    /// properties; reinstall on a fresh import. Empty input removes them.
+    pub fn set_css_underlines(
+        &mut self,
+        underlines: Vec<super::css_decoration::ResolvedUnderline>,
+    ) {
+        if self.css_underlines != underlines {
+            self.css_underlines = underlines;
+            self.mark_shape_dirty();
+        }
+    }
+
+    /// Install resolved strikethroughs, painted after glyphs. Reinstall on a
+    /// fresh import; resizing retains them. Empty input removes them.
+    pub fn set_css_strikethroughs(
+        &mut self,
+        lines: Vec<super::css_decoration::ResolvedStrikethrough>,
+    ) {
+        if self.css_strikethroughs != lines {
+            self.css_strikethroughs = lines;
+            self.mark_shape_dirty();
+        }
+    }
+
+    /// Opt into CSS nowrap overflow alignment for this text occurrence. Hosts
+    /// must reinstall this policy on a fresh import; clones retain it, and it is not a Rive
+    /// property. Resizing and reshaping retain it. Ordinary wrapped text and
+    /// default Rive interpretation are unchanged.
+    pub fn set_css_nowrap_alignment(&mut self, enabled: bool) {
+        if self.css_nowrap_alignment != enabled {
+            self.css_nowrap_alignment = enabled;
+            self.mark_shape_dirty();
+        }
+    }
+
+    /// Validate the static LTR single-line occurrence contract before installation.
+    /// Hosts must validate every target before installing any occurrence policy.
+    pub fn validate_css_single_line_ellipsis(&self) -> Result<(), &'static str> {
+        if self.wrap() != TextWrap::NoWrap || self.css_wrap_policy.is_some() {
+            return Err("CSS single-line ellipsis requires nowrap text");
+        }
+        if self.have_modifiers() {
+            return Err("CSS single-line ellipsis does not support text modifiers");
+        }
+        let mut font_metrics = None;
+        for run in &self.all_runs {
+            let style = run.with(TextValueRun::style).flatten()
+                .ok_or("CSS single-line ellipsis requires resolved text styles")?;
+            let current = style.with_downcast::<TextStylePaint, _>(|style| {
+                let base = &style.base.base;
+                (base.font_asset_id(), base.font_size(), base.line_height())
+            }).ok_or("CSS single-line ellipsis requires paint styles")?;
+            if font_metrics.is_some_and(|first| first != current) {
+                return Err("CSS single-line ellipsis does not support mixed source fonts or sizes");
+            }
+            font_metrics = Some(current);
+        }
+        let source = self.settled_text_value();
+        for character in source.chars() {
+            if matches!(character, '\n' | '\r' | '\t' | '\u{2028}' | '\u{2029}') {
+                return Err("CSS single-line ellipsis does not support breaks or tabs");
+            }
+            use unicode_bidi::BidiClass;
+            if matches!(unicode_bidi::bidi_class(character), BidiClass::B | BidiClass::S) {
+                return Err("CSS single-line ellipsis does not support breaks or tabs");
+            }
+            if matches!(unicode_bidi::bidi_class(character),
+                BidiClass::R | BidiClass::AL | BidiClass::AN |
+                BidiClass::RLE | BidiClass::RLO | BidiClass::LRE | BidiClass::LRO |
+                BidiClass::PDF | BidiClass::LRI | BidiClass::RLI | BidiClass::FSI | BidiClass::PDI) {
+                return Err("CSS single-line ellipsis does not support bidi text");
+            }
+        }
+        Ok(())
+    }
+
+    /// Install the checked static single-line policy. Reinstall on fresh imports;
+    /// resizing retains original source and recomputes truncation. The host must
+    /// supply CSS shaping precision and an enclosing CSS overflow clip.
+    pub fn install_css_single_line_ellipsis(&mut self) -> Result<(), &'static str> {
+        self.validate_css_single_line_ellipsis()?;
+        if self.base.set_overflow_value_value(3) {
+            self.overflow_value_changed();
+        }
+        self.set_css_nowrap_alignment(true);
+        self.set_experimental_css_ellipsis(true);
+        Ok(())
+    }
+
+    /// Probe-only single-line CSS ellipsis experiment; no compiler capability yet.
+    pub fn set_experimental_css_ellipsis(&mut self, enabled: bool) {
+        if self.experimental_css_ellipsis != enabled {
+            self.experimental_css_ellipsis = enabled;
+            self.mark_shape_dirty();
+        }
+    }
+
+    /// Opt into preserved CSS soft wrapping for this occurrence. Reinstall on
+    /// fresh imports; resizing, reshaping and font replacement retain the policy.
+    pub fn set_css_pre_wrap(&mut self, enabled: bool) {
+        self.set_css_wrap_policy(enabled.then_some(super::css_pre_wrap::CssWrapPolicy::PreWrap));
+    }
+
+    /// Opt into pre-line hanging for this occurrence.
+    /// The compiler supplies text with collapsed ASCII spaces and preserved LF.
+    pub fn set_css_pre_line(&mut self, enabled: bool) {
+        self.set_css_wrap_policy(enabled.then_some(super::css_pre_wrap::CssWrapPolicy::PreLine));
+    }
+
+    /// Opt into CSS normal wrapping: words overflow instead of emergency glyph
+    /// splitting. The compiler supplies already-collapsed normal whitespace.
+    pub fn set_css_normal_wrap(&mut self, enabled: bool) {
+        self.set_css_wrap_policy(enabled.then_some(super::css_pre_wrap::CssWrapPolicy::Normal));
+    }
+
+    fn set_css_wrap_policy(&mut self, policy: Option<super::css_pre_wrap::CssWrapPolicy>) {
+        if self.css_wrap_policy != policy {
+            self.css_wrap_policy = policy;
+            self.mark_shape_dirty();
+        }
+    }
+
+    fn break_lines_for_layout(
+        &self,
+        paragraphs: &mut [Paragraph],
+        source: &[u32],
+        width: f32,
+        align: TextAlign,
+        wrap: TextWrap,
+    ) -> Vec<Vec<GlyphLine>> {
+        if let Some(policy) = self.css_wrap_policy {
+            return super::css_pre_wrap::break_lines(
+                paragraphs, source, width, align, wrap, policy,
+            );
+        }
+        let mut lines = Self::break_lines(paragraphs, width, align, wrap);
+        if self.css_nowrap_alignment && wrap == TextWrap::NoWrap {
+            for line in lines.iter_mut().flatten() {
+                line.start_x = line.start_x.max(0.0);
+            }
+        }
+        lines
+    }
+
     pub fn internal_transform(&self) -> Mat2D {
         self.internal_transform
     }
@@ -829,13 +1012,14 @@ impl Text {
                 let mut styled = std::mem::take(&mut self.modifier_styled_text);
                 if self.make_styled(&mut styled, false, font_scale) {
                     let runs = styled.runs();
-                    self.modifier_shape = runs[0]
+                    let mut shape = runs[0]
                         .font
                         .as_ref()
                         .expect("shaped text retains its font")
                         .shape_text(styled.unichars(), runs, 0);
-                    self.modifier_lines = Self::break_lines(
-                        &self.modifier_shape,
+                    self.modifier_lines = self.break_lines_for_layout(
+                        &mut shape,
+                        styled.unichars(),
                         if self.effective_sizing() == TextSizing::AutoWidth
                             && !parent_is_layout_not_artboard
                         {
@@ -846,6 +1030,7 @@ impl Text {
                         self.align(),
                         self.wrap(),
                     );
+                    self.modifier_shape = shape;
                     self.glyph_lookup
                         .compute(styled.unichars(), &self.modifier_shape);
                     let text_size = styled.unichars().len() as u32;
@@ -870,13 +1055,14 @@ impl Text {
             let mut styled = std::mem::take(&mut self.styled_text);
             if self.make_styled(&mut styled, true, font_scale) {
                 let runs = styled.runs();
-                self.shape = runs[0]
+                let mut shape = runs[0]
                     .font
                     .as_ref()
                     .expect("shaped text retains its font")
                     .shape_text(styled.unichars(), runs, 0);
-                self.lines = Self::break_lines(
-                    &self.shape,
+                self.lines = self.break_lines_for_layout(
+                    &mut shape,
+                    styled.unichars(),
                     if self.effective_sizing() == TextSizing::AutoWidth
                         && !parent_is_layout_not_artboard
                     {
@@ -887,6 +1073,7 @@ impl Text {
                     self.align(),
                     self.wrap(),
                 );
+                self.shape = shape;
                 if !precompute_modifier_coverage && !self.modifier_groups.is_empty() {
                     self.glyph_lookup.compute(styled.unichars(), &self.shape);
                     let text_size = styled.unichars().len() as u32;
@@ -988,6 +1175,7 @@ impl Text {
     }
 
     fn clear_render_styles(&mut self) {
+        self.css_decoration_paths.clear();
         for style in &mut self.render_styles {
             style.with_downcast_mut::<TextStylePaint, _>(TextStylePaint::rewind_path);
         }
@@ -1126,12 +1314,18 @@ impl Text {
                 return true;
             }
             let runs = styled.runs();
-            let shape = runs[0]
+            let mut shape = runs[0]
                 .font
                 .as_ref()
                 .expect("shaped text retains its font")
                 .shape_text(styled.unichars(), runs, 0);
-            let lines = Text::break_lines(&shape, box_width, this.align(), this.wrap());
+            let lines = this.break_lines_for_layout(
+                &mut shape,
+                styled.unichars(),
+                box_width,
+                this.align(),
+                this.wrap(),
+            );
             let mut measured_width = 0.0f32;
             let mut y = 0.0f32;
             for (paragraph, paragraph_lines) in shape.iter().zip(&lines) {
@@ -1311,6 +1505,18 @@ impl Text {
                     &mut self.ellipsis_run,
                     render_y,
                 ));
+                if self.experimental_css_ellipsis {
+                    assert!(self.shape.len() == 1 && paragraph_lines.len() == 1 && !has_modifiers, "CSS ellipsis probe requires one unmodified LTR line");
+                    let prepared = super::css_ellipsis::prepare_runs(
+                        self.styled_text.unichars(),
+                        &paragraph.runs,
+                        &self.styled_text.runs()[0],
+                        self.effective_width(),
+                    ).expect("CSS ellipsis probe received unsupported shaping");
+                    if let Some(prepared) = prepared {
+                        *self.ordered_lines.last_mut().unwrap() = OrderedLine::from_css_runs(prepared.runs, line, render_y);
+                    }
+                }
                 let ordered_line = self.ordered_lines.last().unwrap();
                 let mut current_x = line.start_x;
                 minimum_x = minimum_x.min(current_x);
@@ -1480,6 +1686,52 @@ impl Text {
                 y_offset += self.bounds.height() - info.total_height * scale;
             }
         }
+        let stripes = self
+            .css_underlines
+            .iter()
+            .flat_map(|line| {
+                line.build_stripes(&self.ordered_lines, self.styled_text.unichars())
+                    .into_iter()
+                    .map(move |stripe| (false, line.color(), stripe, None))
+            })
+            .chain(self.css_strikethroughs.iter().flat_map(|line| {
+                line.build_stripes(&self.ordered_lines)
+                    .into_iter()
+                    .map(move |stripe| {
+                        (
+                            true,
+                            line.color(),
+                            super::css_decoration::UnderlineStripe {
+                                bounds: stripe.bounds,
+                                exclusions: Vec::new(),
+                            },
+                            Some(stripe),
+                        )
+                    })
+            }));
+        for (after_glyphs, color, stripe, strike) in stripes {
+            let mut raw = RawPath::default();
+            raw.add_rect(
+                stripe.bounds,
+                crate::source::math::path_types::PathDirection::Clockwise,
+            );
+            let mut full = ShapePaintPath::default();
+            full.add_path(&raw, None);
+            raw.rewind();
+            stripe.append_fallback(&mut raw);
+            let mut fallback = ShapePaintPath::default();
+            fallback.add_path(&raw, None);
+            self.css_decoration_paths.push(CssDecorationPath {
+                strike,
+                bounds: stripe.bounds,
+                snapped_bounds: None,
+                after_glyphs,
+                color,
+                full,
+                fallback,
+                exclusions: stripe.exclusions,
+            });
+        }
         self.internal_transform =
             Mat2D::from_scale_and_translation(scale, scale, x_offset, y_offset);
         self.base.mark_layout_node_dirty();
@@ -1529,9 +1781,15 @@ impl Text {
                 });
             }
         }
+        self.draw_css_decorations(renderer, &world_transform, blend_mode, false);
         for index in 0..self.draw_commands.len() {
             match &self.draw_commands[index] {
                 TextDrawCommand::Style(style) => {
+                    if renderer.supports_glyph_runs()
+                        && self.draw_solid_glyph_style(renderer, style, blend_mode)
+                    {
+                        continue;
+                    }
                     style.with_downcast_mut::<TextStylePaint, _>(|style| {
                         style.draw(renderer, &world_transform, blend_mode)
                     });
@@ -1553,9 +1811,183 @@ impl Text {
                 ),
             }
         }
+        self.draw_css_decorations(renderer, &world_transform, blend_mode, true);
         if self.base.needs_save_operation() {
             renderer.restore();
         }
+    }
+
+    fn draw_css_decorations(
+        &mut self,
+        renderer: &mut Renderer,
+        world: &Mat2D,
+        blend: BlendMode,
+        after_glyphs: bool,
+    ) {
+        if !self
+            .css_decoration_paths
+            .iter()
+            .any(|line| line.after_glyphs == after_glyphs)
+        {
+            return;
+        }
+        let Some(factory) = self
+            .base
+            .with_artboard(|artboard| artboard.factory())
+            .flatten()
+        else {
+            return;
+        };
+        let paint = self
+            .css_decoration_paint
+            .get_or_insert_with(|| factory.with_factory_mut(|factory| factory.make_render_paint()));
+        paint.style(RenderPaintStyle::Fill);
+        paint.blend_mode(blend);
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(*world.values()));
+        for line in self
+            .css_decoration_paths
+            .iter_mut()
+            .filter(|line| line.after_glyphs == after_glyphs)
+        {
+            let values = world.values();
+            let paint_bounds = if let Some(strike) = line.strike {
+                Some(strike.paint_bounds(values[5]))
+            } else if values[0] == 1.0 && values[1] == 0.0 && values[2] == 0.0 && values[3] == 1.0 {
+                // Snap after CSS layout translation, before the host's DPR or
+                // transform. Local snapping alone leaves fractional containers
+                // with an antialiased stripe spread over two pixel rows.
+                let top = (line.bounds.min_y + values[5] + 0.5).floor() - values[5];
+                Some(Aabb::new(line.bounds.min_x, top, line.bounds.max_x,
+                    top + line.bounds.max_y - line.bounds.min_y))
+            } else {
+                Some(line.bounds)
+            };
+            if let Some(bounds) = paint_bounds {
+                if line.snapped_bounds != Some(bounds) {
+                    let mut raw = RawPath::default();
+                    raw.add_rect(
+                        bounds,
+                        crate::source::math::path_types::PathDirection::Clockwise,
+                    );
+                    line.full = ShapePaintPath::default();
+                    line.full.add_path(&raw, None);
+                    raw.rewind();
+                    super::css_decoration::UnderlineStripe {
+                        bounds,
+                        exclusions: line.exclusions.clone(),
+                    }.append_fallback(&mut raw);
+                    line.fallback = ShapePaintPath::default();
+                    line.fallback.add_path(&raw, None);
+                    line.snapped_bounds = Some(bounds);
+                }
+            }
+            paint.color(color_modulate_opacity(
+                line.color,
+                self.base.render_opacity(),
+            ));
+            renderer.save();
+            let clipped = line.exclusions.iter().all(|rect| {
+                renderer.clip_out_rect(nuxie_render_api::Aabb::new(
+                    rect.min_x, rect.min_y, rect.max_x, rect.max_y,
+                ))
+            });
+            if clipped {
+                renderer.draw_path(line.full.render_path(&factory), paint.as_ref());
+            }
+            renderer.restore();
+            if !clipped && !line.fallback.empty() {
+                // Declining a later exclusion must discard all earlier clips
+                // before drawing the explicit geometric fallback.
+                renderer.draw_path(line.fallback.render_path(&factory), paint.as_ref());
+            }
+        }
+        renderer.restore();
+    }
+
+    fn draw_solid_glyph_style(
+        &self,
+        renderer: &mut Renderer,
+        style: &CoreHandle,
+        blend: nuxie_render_api::BlendMode,
+    ) -> bool {
+        use super::font_hb::HbFont;
+        use nuxie_render_api::{GlyphFontRef, PositionedGlyph, RenderGlyphRun};
+        if self.have_modifiers()
+            || !(matches!(self.overflow(), TextOverflow::Visible | TextOverflow::Clipped)
+                || (self.experimental_css_ellipsis && self.overflow() == TextOverflow::Ellipsis))
+            || self
+                .draw_commands
+                .iter()
+                .any(|command| matches!(command, TextDrawCommand::ColorGlyph { .. }))
+        {
+            return false;
+        }
+        let Some(color) = style
+            .with_downcast::<TextStylePaint, _>(TextStylePaint::solid_glyph_color)
+            .flatten()
+        else {
+            return false;
+        };
+        let mut selected_font: Option<FontRef> = None;
+        let mut size = 0.0;
+        let mut glyphs = Vec::new();
+        for line in self.ordered_lines() {
+            let mut x = line.glyph_line().start_x;
+            for (run, index) in line {
+                let i = index as usize;
+                if self.style_from_shaper_id(run.style_id).as_ref() == Some(style) {
+                    let Some(font) = run.font.as_ref() else {
+                        return false;
+                    };
+                    if let Some(selected) = selected_font.as_ref() {
+                        if !Rc::ptr_eq(selected, font) || size != run.size {
+                            return false;
+                        }
+                    } else {
+                        selected_font = Some(font.clone());
+                        size = run.size;
+                    }
+                    if glyphs.len() == 16_384 {
+                        return false;
+                    }
+                    glyphs.push(PositionedGlyph {
+                        id: run.glyphs[i],
+                        x: x + run.offsets[i].x,
+                        y: line.y() + run.offsets[i].y,
+                    });
+                }
+                x += run.advances[i];
+            }
+        }
+        let Some(font) = selected_font else {
+            return false;
+        };
+        if font.get_axis_count() != 0 {
+            return false;
+        }
+        let Some(font) = font.as_any().downcast_ref::<HbFont>() else {
+            return false;
+        };
+        let bytes = font.source_bytes();
+        let request = RenderGlyphRun {
+            font: GlyphFontRef {
+                bytes: &bytes,
+                face_index: font.face_index(),
+                variations: &[],
+            },
+            glyphs: &glyphs,
+            font_size: size,
+            color,
+            blend_mode: blend,
+        };
+        renderer.save();
+        renderer.transform(nuxie_render_api::Mat2D(
+            *self.shape_world_transform.values(),
+        ));
+        let consumed = renderer.draw_glyph_run(&request);
+        renderer.restore();
+        consumed
     }
 
     fn draw_color_glyph(
@@ -1728,6 +2160,11 @@ impl Text {
     pub fn is_participating_in_layout(&self) -> bool {
         self.layout_participant().is_some()
     }
+    /// First alphabetic baseline from the most recent intrinsic measurement.
+    /// Read by the explicitly enabled CSS layout baseline channel only.
+    pub fn measured_css_baseline(&self) -> Option<f32> {
+        self.measured_css_baseline
+    }
     pub fn measure_layout(
         &mut self,
         width: f32,
@@ -1774,6 +2211,7 @@ impl Text {
         }
     }
     fn measure(&mut self, max: Vec2D, exact_width: Option<f32>) -> Vec2D {
+        self.measured_css_baseline = None;
         let mut styled = std::mem::take(&mut self.styled_text);
         if !self.make_styled(&mut styled, true, 1.0) {
             self.styled_text = styled;
@@ -1781,7 +2219,7 @@ impl Text {
         }
         let paragraph_space = self.base.paragraph_spacing();
         let runs = styled.runs();
-        let shape = runs[0]
+        let mut shape = runs[0]
             .font
             .as_ref()
             .expect("shaped text retains its font")
@@ -1800,8 +2238,40 @@ impl Text {
             } else {
                 self.wrap()
             };
-        let lines = Self::break_lines(
-            &shape,
+        // CSS intrinsic width is based on unwrapped content, not the widest
+        // resulting wrapped line. A fit-content box can therefore be wider
+        // than every line it contains; nowrap content can exceed available space.
+        let css_intrinsic_width = if self.sizing() == TextSizing::AutoWidth
+            && (self.css_wrap_policy.is_some() || self.css_nowrap_alignment)
+        {
+            let intrinsic_advance = |available, wrap| {
+                let mut intrinsic_shape = shape.clone();
+                let intrinsic_lines = self.break_lines_for_layout(
+                    &mut intrinsic_shape, styled.unichars(), available,
+                    TextAlign::Left, wrap,
+                );
+                intrinsic_shape.iter().zip(&intrinsic_lines)
+                    .flat_map(|(paragraph, lines)| lines.iter().map(move |line| {
+                        let start = &paragraph.runs[line.start_run_index as usize];
+                        let end = &paragraph.runs[line.end_run_index as usize];
+                        end.xpos[line.end_glyph_index as usize] - start.xpos[line.start_glyph_index as usize]
+                    })).fold(0.0f32, f32::max)
+            };
+            Some(exact_width.unwrap_or_else(|| {
+                let maximum = intrinsic_advance(f32::MAX, TextWrap::NoWrap);
+                if self.wrap() == TextWrap::NoWrap || maximum <= max.x {
+                    maximum
+                } else {
+                    // Fit-content cannot be narrower than its longest
+                    // unbreakable segment, even with limited available width.
+                    let minimum = intrinsic_advance(0.0, self.wrap());
+                    maximum.min(max.x.max(minimum))
+                }
+            }))
+        } else { None };
+        let lines = self.break_lines_for_layout(
+            &mut shape,
+            styled.unichars(),
             max.x.min(measuring_width),
             self.align(),
             measuring_wrap,
@@ -1845,20 +2315,29 @@ impl Text {
             self.vertical_trim_top(),
             self.vertical_trim_bottom(),
         );
+        self.measured_css_baseline = lines.first().and_then(|lines| lines.first()).map(|line| {
+            let origin = if self.text_origin() == TextOrigin::Baseline { -line.baseline } else { 0.0 };
+            line.baseline + origin - top_trim + self.base.y()
+        });
         let bounds = match self.sizing() {
             TextSizing::AutoWidth => Vec2D::new(
-                max_width,
+                css_intrinsic_width.unwrap_or(max_width),
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::AutoHeight => Vec2D::new(
-                exact_width.unwrap_or(self.base.width()),
+                // CSS nowrap text still contributes its intrinsic advance to
+                // an auto-sized ancestor. The authored fallback width can be
+                // zero; an exact stretch constraint takes precedence later.
+                exact_width.unwrap_or_else(|| {
+                    if self.css_nowrap_alignment { max_width } else { self.base.width() }
+                }),
                 min_y.max(computed_height - top_trim - bottom_trim),
             ),
             TextSizing::Fixed => Vec2D::new(self.base.width(), min_y + self.base.height()),
             TextSizing::Unknown(_) => Vec2D::default(),
         };
         self.styled_text = styled;
-        Vec2D::new(max.x.min(bounds.x), max.y.min(bounds.y))
+        Vec2D::new(if css_intrinsic_width.is_some() { bounds.x } else { max.x.min(bounds.x) }, max.y.min(bounds.y))
     }
     pub fn align_value_changed(&mut self) {
         self.mark_shape_dirty();
@@ -1964,6 +2443,497 @@ impl Text {
 #[cfg(test)]
 mod settled_text_value_tests {
     use super::*;
+
+    fn css_test_font_bytes() -> Vec<u8> {
+        let font_path = std::env::var_os("NUXIE_TEXT_TEST_FONT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                let root = std::env::var_os("RIVE_RUNTIME_DIR")
+                    .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+                std::path::PathBuf::from(root)
+                    .join("tests/unit_tests/assets/fonts/Inter_18pt-Regular.ttf")
+            });
+        std::fs::read(font_path).expect("pinned text fixture font")
+    }
+
+    #[test]
+    fn css_nowrap_alignment_is_opt_in_per_line_and_survives_resizing() {
+        use crate::mechanical_port::source::{text::font_hb::HbFont, text_engine::TextRun};
+        let bytes = css_test_font_bytes();
+        let font = HbFont::decode(&bytes).unwrap();
+        let chars: Vec<u32> = "one two three four five six seven\nshort"
+            .chars()
+            .map(u32::from)
+            .collect();
+        let shape = font.shape_text(
+            &chars,
+            &[TextRun {
+                font: Some(font.clone()),
+                size: 20.0,
+                line_height: 30.0,
+                letter_spacing: 0.0,
+                unichar_count: chars.len() as u32,
+                script: u32::from_be_bytes(*b"Latn"),
+                style_id: 0,
+                level: 0,
+            }],
+            0,
+        );
+        let mut text = Text::default();
+        for align in [TextAlign::Center, TextAlign::Right] {
+            let origins = |text: &Text, width, wrap| -> Vec<f32> {
+                text.break_lines_for_layout(&mut shape.clone(), &chars, width, align, wrap)
+                    .iter()
+                    .flatten()
+                    .map(|line| line.start_x)
+                    .collect()
+            };
+            text.set_css_nowrap_alignment(false);
+            let legacy = origins(&text, 224.0, TextWrap::NoWrap);
+            assert_eq!(legacy.len(), 2);
+            assert!(legacy[0] < 0.0);
+            assert!(legacy[1] > 0.0);
+            let wrapped = origins(&text, 224.0, TextWrap::Wrap);
+            let wide = origins(&text, 752.0, TextWrap::NoWrap);
+            text.set_css_nowrap_alignment(true);
+            assert_eq!(
+                origins(&text, 224.0, TextWrap::NoWrap),
+                vec![0.0, legacy[1]]
+            );
+            assert_eq!(origins(&text, 752.0, TextWrap::NoWrap), wide);
+            assert_eq!(
+                origins(&text, 224.0, TextWrap::NoWrap),
+                vec![0.0, legacy[1]]
+            );
+            assert_eq!(origins(&text, 224.0, TextWrap::Wrap), wrapped);
+            assert_eq!(origins(&Text::default(), 224.0, TextWrap::NoWrap), legacy);
+            text.set_css_nowrap_alignment(false);
+            assert_eq!(origins(&text, 224.0, TextWrap::NoWrap), legacy);
+        }
+    }
+
+    #[test]
+    fn css_pre_wrap_hangs_spaces_and_preserves_words_without_changing_legacy() {
+        use crate::mechanical_port::source::text::font_hb::HbFont;
+        let bytes = css_test_font_bytes();
+        let font = HbFont::decode(&bytes).unwrap();
+        let mut text = Text::default();
+        for (value, expected) in [
+            (
+                "SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious".to_owned(),
+                1,
+            ),
+            (" ".repeat(56), 1),
+            (format!("one{}\ntwo", " ".repeat(60)), 2),
+            ("  one  \n  two  ".to_owned(), 2),
+            (
+                "one two three four five six seven eight nine  ".to_owned(),
+                2,
+            ),
+        ] {
+            let chars: Vec<u32> = value.chars().map(u32::from).collect();
+            let shape = font.shape_text(
+                &chars,
+                &[TextRun {
+                    font: Some(font.clone()),
+                    size: 20.0,
+                    line_height: 30.0,
+                    letter_spacing: 0.0,
+                    unichar_count: chars.len() as u32,
+                    script: u32::from_be_bytes(*b"Latn"),
+                    style_id: 0,
+                    level: 0,
+                }],
+                0,
+            );
+            let lines = |text: &Text, width| {
+                text.break_lines_for_layout(
+                    &mut shape.clone(),
+                    &chars,
+                    width,
+                    TextAlign::Center,
+                    TextWrap::Wrap,
+                )
+            };
+            text.set_css_pre_wrap(false);
+            let legacy = format!("{:?}", lines(&text, 224.0));
+            text.set_css_pre_wrap(true);
+            let narrow = lines(&text, 224.0);
+            assert_eq!(
+                narrow.iter().map(Vec::len).sum::<usize>(),
+                expected,
+                "{value:?}"
+            );
+            assert!(narrow.iter().flatten().all(|line| line.start_x >= 0.0));
+            if value.starts_with("Super") || value.starts_with("one ") && value.contains('\n') {
+                assert_eq!(
+                    narrow[0][0].start_x, 0.0,
+                    "overflow must not hide the first word"
+                );
+                assert_ne!(
+                    format!("{narrow:?}"),
+                    legacy,
+                    "fixture must exercise the legacy defect"
+                );
+            }
+            let _ = lines(&text, 752.0);
+            assert_eq!(format!("{:?}", lines(&text, 224.0)), format!("{narrow:?}"));
+            assert_eq!(format!("{:?}", lines(&Text::default(), 224.0)), legacy);
+            text.set_css_pre_wrap(false);
+            assert_eq!(format!("{:?}", lines(&text, 224.0)), legacy);
+        }
+    }
+
+    #[test]
+    fn css_pre_line_hangs_forced_end_spaces_without_changing_pre_wrap() {
+        use crate::mechanical_port::source::text::font_hb::HbFont;
+        let font = HbFont::decode(&css_test_font_bytes()).unwrap();
+        let mut text = Text::default();
+        for value in ["word\u{2003}\u{2003}", "word\u{a0}\u{a0}\nnext"] {
+            let chars: Vec<u32> = value.chars().map(u32::from).collect();
+            let shape = font.shape_text(
+                &chars,
+                &[TextRun {
+                    font: Some(font.clone()),
+                    size: 20.0,
+                    line_height: 30.0,
+                    letter_spacing: 0.0,
+                    unichar_count: chars.len() as u32,
+                    script: u32::from_be_bytes(*b"Latn"),
+                    style_id: 0,
+                    level: 0,
+                }],
+                0,
+            );
+            let lines = |text: &Text, width| {
+                text.break_lines_for_layout(
+                    &mut shape.clone(),
+                    &chars,
+                    width,
+                    TextAlign::Right,
+                    TextWrap::Wrap,
+                )
+            };
+            let legacy = format!("{:?}", lines(&Text::default(), 224.0));
+            text.set_css_pre_wrap(true);
+            let preserved = lines(&text, 224.0);
+            text.set_css_pre_line(true);
+            let collapsed = lines(&text, 224.0);
+            assert!(collapsed[0][0].start_x > preserved[0][0].start_x);
+            assert_eq!(
+                collapsed[0][0].end_glyph_index, preserved[0][0].end_glyph_index,
+                "noncollapsible spaces retain source and glyph range while hanging"
+            );
+            assert!(
+                (lines(&text, 752.0)[0][0].start_x - collapsed[0][0].start_x - 528.0).abs() < 0.001
+            );
+            assert_eq!(
+                format!("{:?}", lines(&text, 224.0)),
+                format!("{collapsed:?}")
+            );
+            text.set_css_pre_wrap(true);
+            assert_eq!(
+                format!("{:?}", lines(&text, 224.0)),
+                format!("{preserved:?}")
+            );
+            text.set_css_pre_line(false);
+            assert_eq!(format!("{:?}", lines(&text, 224.0)), legacy);
+        }
+    }
+
+    #[test]
+    fn css_clone_retains_policies_without_sharing_derived_state() {
+        use crate::source::core::CoreObject;
+        use super::super::css_decoration::{ResolvedUnderline, ResolvedStrikethrough, SkipInk};
+        let mut source = Text::default();
+        source.set_css_normal_wrap(true);
+        source.set_css_nowrap_alignment(true);
+        source.set_experimental_css_ellipsis(true);
+        source.set_css_underlines(vec![ResolvedUnderline::solid(0xff123456, 1.0, 2.0, SkipInk::None).unwrap()]);
+        source.set_css_strikethroughs(vec![ResolvedStrikethrough::solid(0xff654321, 1.0, 3.0, 12.0).unwrap()]);
+        source.layout_width = 123.0;
+        source.measured_css_baseline = Some(12.0);
+        let mut cloned = source.clone_boxed().unwrap();
+        let clone = cloned.as_text_mut().unwrap();
+        assert!(clone.css_wrap_policy == source.css_wrap_policy);
+        assert_eq!(clone.css_underlines, source.css_underlines);
+        assert_eq!(clone.css_strikethroughs, source.css_strikethroughs);
+        assert!(clone.css_nowrap_alignment && clone.experimental_css_ellipsis);
+        assert!(clone.layout_width.is_nan());
+        assert_eq!(clone.measured_css_baseline, None);
+        clone.set_css_normal_wrap(false);
+        clone.set_css_underlines(Vec::new());
+        assert!(source.css_wrap_policy.is_some());
+        assert_eq!(source.css_underlines.len(), 1);
+        let default = Text::default().clone_core();
+        assert!(default.css_wrap_policy.is_none());
+        assert!(!default.css_nowrap_alignment && !default.experimental_css_ellipsis);
+    }
+
+    #[test]
+    fn css_intrinsic_width_preserves_available_box_and_nowrap_overflow() {
+        use crate::mechanical_port::source::{
+            assets::font_asset::FontAsset, core::CoreArena,
+            text::{font_hb::HbFont, text_style::TextStyle},
+        };
+        let arena = CoreArena::default();
+        let asset = arena.insert(FontAsset::default());
+        FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&css_test_font_bytes()).unwrap()));
+        let style = arena.insert(TextStyle::default());
+        TextStyle::set_asset_occurrence(&style, Some(asset));
+        style.with_downcast_mut::<TextStyle, _>(|style| {
+            style.base.set_font_size_value(20.0);
+            style.base.set_line_height_value(30.0);
+        }).unwrap();
+        let mut run = TextValueRun::default();
+        run.base.set_text_value("A longer paragraph with words that need to wrap in narrow panels".into());
+        run.set_style(style);
+        let mut text = Text::default();
+        text.base.set_sizing_value_value(0);
+        text.all_runs.push(TextValueRunHandle::Runtime(Rc::new(RefCell::new(run))));
+        let measure = |text: &mut Text, width, mode| text.measure_layout(
+            width, mode, f32::NAN, LayoutMeasureMode::Undefined,
+        );
+        let legacy = measure(&mut text, 224.0, LayoutMeasureMode::AtMost);
+        text.set_css_normal_wrap(true);
+        let narrow = measure(&mut text, 224.0, LayoutMeasureMode::AtMost);
+        assert_eq!(narrow.x, 224.0);
+        let wide = measure(&mut text, 1000.0, LayoutMeasureMode::AtMost);
+        assert!(wide.x > 224.0 && wide.x < 1000.0);
+        assert!(narrow.y > wide.y);
+        assert_eq!(measure(&mut text, 224.0, LayoutMeasureMode::AtMost), narrow);
+        text.set_css_normal_wrap(false);
+        assert_eq!(measure(&mut text, 224.0, LayoutMeasureMode::AtMost), legacy);
+        text.base.set_wrap_value_value(1);
+        text.set_css_nowrap_alignment(true);
+        let overflow = measure(&mut text, 224.0, LayoutMeasureMode::AtMost);
+        assert!(overflow.x > 224.0);
+        assert_eq!(measure(&mut text, 224.0, LayoutMeasureMode::Exactly).x, 224.0);
+        text.base.set_wrap_value_value(0);
+        text.set_css_nowrap_alignment(false);
+        text.set_css_normal_wrap(true);
+        if let TextValueRunHandle::Runtime(run) = &text.all_runs[0] {
+            run.borrow_mut().base.set_text_value("SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious".into());
+        }
+        let unbreakable = measure(&mut text, 224.0, LayoutMeasureMode::AtMost);
+        assert!(unbreakable.x > 224.0);
+        assert_eq!(measure(&mut text, 1000.0, LayoutMeasureMode::AtMost).x, unbreakable.x);
+        assert_eq!(measure(&mut text, 224.0, LayoutMeasureMode::Exactly).x, 224.0);
+    }
+
+    #[test]
+    fn css_pre_wrap_measurement_survives_resize_and_font_replacement() {
+        use crate::mechanical_port::source::{
+            assets::font_asset::FontAsset,
+            core::CoreArena,
+            text::{font_hb::HbFont, text_style::TextStyle},
+        };
+        let bytes = css_test_font_bytes();
+        let arena = CoreArena::default();
+        let asset = arena.insert(FontAsset::default());
+        FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&bytes).unwrap()));
+        let style = arena.insert(TextStyle::default());
+        TextStyle::set_asset_occurrence(&style, Some(asset.clone()));
+        style
+            .with_downcast_mut::<TextStyle, _>(|style| {
+                style.base.set_font_size_value(20.0);
+                style.base.set_line_height_value(30.0);
+            })
+            .unwrap();
+        let make_text = || {
+            let mut run = TextValueRun::default();
+            run.base.set_text_value(
+                "SupercalifragilisticexpialidociousSupercalifragilisticexpialidocious".into(),
+            );
+            run.set_style(style.clone());
+            let mut text = Text::default();
+            text.base.set_sizing_value_value(1);
+            text.base.set_width_value(224.0);
+            text.all_runs
+                .push(TextValueRunHandle::Runtime(Rc::new(RefCell::new(run))));
+            text
+        };
+        let measure = |text: &mut Text, width| {
+            text.measure_layout(
+                width,
+                LayoutMeasureMode::Exactly,
+                f32::NAN,
+                LayoutMeasureMode::Undefined,
+            )
+        };
+        for pre_line in [false, true] {
+            let mut text = make_text();
+            let legacy = measure(&mut text, 224.0);
+            if pre_line {
+                text.set_css_pre_line(true);
+            } else {
+                text.set_css_pre_wrap(true);
+            }
+            let narrow = measure(&mut text, 224.0);
+            assert!(legacy.y > narrow.y);
+            assert_eq!(narrow.y, measure(&mut text, 752.0).y);
+            text.control_size(
+                narrow,
+                LayoutScaleType::Fill,
+                LayoutScaleType::Hug,
+                LayoutDirection::Ltr,
+            );
+            assert_eq!(measure(&mut text, 224.0), narrow);
+            FontAsset::set_font_occurrence(&asset, None);
+            FontAsset::set_font_occurrence(&asset, Some(HbFont::decode(&bytes).unwrap()));
+            assert_eq!(measure(&mut text, 224.0), narrow);
+            assert_eq!(
+                measure(&mut make_text(), 224.0),
+                legacy,
+                "another occurrence sharing the font retains legacy wrapping"
+            );
+            text.set_css_pre_wrap(false);
+            assert_eq!(measure(&mut text, 224.0), legacy);
+        }
+    }
+
+    #[test]
+    fn css_pre_wrap_tabs_recompute_advances_for_each_soft_line() {
+        use crate::mechanical_port::source::text::font_hb::HbFont;
+        let decoded = HbFont::decode(&css_test_font_bytes()).unwrap();
+        let font = decoded
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .with_experimental_css_tabs(true);
+        let chars: Vec<u32> = "one two three four five six seven\tX"
+            .chars()
+            .map(u32::from)
+            .collect();
+        let original = font.shape_text(
+            &chars,
+            &[TextRun {
+                font: Some(font.clone()),
+                size: 20.0,
+                line_height: 30.0,
+                letter_spacing: 0.0,
+                unichar_count: chars.len() as u32,
+                script: u32::from_be_bytes(*b"Latn"),
+                style_id: 0,
+                level: 0,
+            }],
+            0,
+        );
+        let identities = |shape: &[Paragraph]| {
+            shape
+                .iter()
+                .flat_map(|p| &p.runs)
+                .map(|run| (run.glyphs.clone(), run.text_indices.clone()))
+                .collect::<Vec<_>>()
+        };
+        let origins = |text: &Text, shape: &mut [Paragraph], width| {
+            let lines =
+                text.break_lines_for_layout(shape, &chars, width, TextAlign::Left, TextWrap::Wrap);
+            let mut result = Vec::new();
+            let mut line_number = 0;
+            for (paragraph, lines) in shape.iter().zip(lines) {
+                for line in lines {
+                    for run_index in line.start_run_index..=line.end_run_index {
+                        let run = &paragraph.runs[run_index as usize];
+                        let start = if run_index == line.start_run_index {
+                            line.start_glyph_index
+                        } else {
+                            0
+                        };
+                        let end = if run_index == line.end_run_index {
+                            line.end_glyph_index
+                        } else {
+                            run.glyphs.len() as u32
+                        };
+                        for index in start..end {
+                            if chars[run.text_indices[index as usize] as usize] == u32::from('X') {
+                                let origin = paragraph.runs[line.start_run_index as usize].xpos
+                                    [line.start_glyph_index as usize];
+                                result.push((
+                                    line_number,
+                                    run.xpos[index as usize] - origin + line.start_x,
+                                ));
+                            }
+                        }
+                    }
+                    line_number += 1;
+                }
+            }
+            result
+        };
+        let mut text = Text::default();
+        let legacy = origins(&text, &mut original.clone(), 224.0);
+        text.set_css_pre_wrap(true);
+        let mut shape = original.clone();
+        let narrow = origins(&text, &mut shape, 224.0);
+        assert_eq!(
+            narrow,
+            vec![(1, 131.71875)],
+            "pinned Chromium X origin after a soft break"
+        );
+        assert_ne!(
+            narrow, legacy,
+            "paragraph-relative tabs must expose the original defect"
+        );
+        let wide = origins(&text, &mut shape, 752.0);
+        assert_eq!(wide, origins(&text, &mut original.clone(), 752.0));
+        assert_eq!(wide[0].0, 0);
+        assert_eq!(
+            origins(&text, &mut shape, 224.0),
+            narrow,
+            "reuse the same shaped runs across sizes"
+        );
+        assert_eq!(identities(&shape), identities(&original));
+        for run in shape.iter().flat_map(|p| &p.runs) {
+            for (index, source) in run.text_indices.iter().enumerate() {
+                if chars[*source as usize] == 9 {
+                    assert!(font.get_path(run.glyphs[index]).empty());
+                }
+            }
+        }
+        assert_eq!(
+            origins(&Text::default(), &mut original.clone(), 224.0),
+            legacy
+        );
+    }
+
+    #[test]
+    fn css_pre_wrap_long_tab_sequence_keeps_one_hanging_line_and_following_text() {
+        use crate::mechanical_port::source::text::font_hb::HbFont;
+        let decoded = HbFont::decode(&css_test_font_bytes()).unwrap();
+        let font = decoded
+            .as_any()
+            .downcast_ref::<HbFont>()
+            .unwrap()
+            .with_experimental_css_tabs(true);
+        let chars: Vec<u32> = ("\t".repeat(16384) + "X").chars().map(u32::from).collect();
+        let mut shape = font.shape_text(
+            &chars,
+            &[TextRun {
+                font: Some(font.clone()),
+                size: 20.0,
+                line_height: 30.0,
+                letter_spacing: 0.0,
+                unichar_count: chars.len() as u32,
+                script: u32::from_be_bytes(*b"Latn"),
+                style_id: 0,
+                level: 0,
+            }],
+            0,
+        );
+        let mut text = Text::default();
+        text.set_css_pre_wrap(true);
+        let lines =
+            text.break_lines_for_layout(&mut shape, &chars, 224.0, TextAlign::Left, TextWrap::Wrap);
+        assert_eq!(lines.iter().map(Vec::len).sum::<usize>(), 2);
+        let last = lines.last().unwrap().last().unwrap();
+        let run = &shape.last().unwrap().runs[last.start_run_index as usize];
+        assert_eq!(
+            chars[run.text_indices[last.start_glyph_index as usize] as usize],
+            u32::from('X')
+        );
+        assert_eq!(last.start_x, 0.0);
+    }
 
     fn runtime_run(value: &str) -> TextValueRunHandle {
         let mut run = TextValueRun::default();

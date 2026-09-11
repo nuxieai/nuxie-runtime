@@ -1,0 +1,170 @@
+[
+  {
+    "name": "aspect-ratio-unit-order-00",
+    "ratioValue": "calc(1in / 96px)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1in / 96px);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-01",
+    "ratioValue": "calc(1cm / 10mm)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1cm / 10mm);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-02",
+    "ratioValue": "calc(1Q / .25mm)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1Q / .25mm);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-03",
+    "ratioValue": "calc(1pc / 12pt)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1pc / 12pt);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-04",
+    "ratioValue": "calc(1turn / 400grad)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1turn / 400grad);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-05",
+    "ratioValue": "calc(1rad / 1deg)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1rad / 1deg);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-06",
+    "ratioValue": "calc(1s / 1000ms)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1s / 1000ms);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-07",
+    "ratioValue": "calc(1kHz / 1000Hz)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1kHz / 1000Hz);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-08",
+    "ratioValue": "calc(96dpi / 1dppx)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(96dpi / 1dppx);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-09",
+    "ratioValue": "calc(1dpcm / 2.54dpi)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1dpcm / 2.54dpi);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-10",
+    "ratioValue": "calc(1x / 1dppx)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1x / 1dppx);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-11",
+    "ratioValue": "calc(1p\\78 / 1px)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1p\\78 / 1px);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-12",
+    "ratioValue": "calc(1e308in / 1e308in)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e308in / 1e308in);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-13",
+    "ratioValue": "calc(1e400px / 1e400px)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e400px / 1e400px);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-14",
+    "ratioValue": "calc(1e308s / 1e308s)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e308s / 1e308s);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-15",
+    "ratioValue": "calc(1e308% / 1e308%)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e308% / 1e308%);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-16",
+    "ratioValue": "calc(1e-320ms / 1e-320ms)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e-320ms / 1e-320ms);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-17",
+    "ratioValue": "calc(1e308in - 1e308in)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e308in - 1e308in);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-18",
+    "ratioValue": "calc(1e308in / 1e308px)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e308in / 1e308px);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-19",
+    "ratioValue": "calc(1e308px / 1e308in)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e308px / 1e308in);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-20",
+    "ratioValue": "calc(1e40 / 1e39)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e40 / 1e39);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-21",
+    "ratioValue": "calc(1e40 - 1e39)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e40 - 1e39);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-22",
+    "ratioValue": "calc(1e-320 / 1e-320)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e-320 / 1e-320);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  },
+  {
+    "name": "aspect-ratio-unit-order-23",
+    "ratioValue": "calc(1e-320s / 1e-320s)",
+    "font": false,
+    "html": "<div id=host><div id=ratio><div id=mark></div></div><div id=side></div></div>",
+    "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#ratio{width:60%;height:auto;--ratio:calc(1e-320s / 1e-320s);aspect-ratio:2;aspect-ratio:var(--ratio);padding:5px 11px 13px 13px;background:#8cf}#mark{width:24px;height:18px;background:#963}#side{width:40px;height:30px;background:#fc8}"
+  }
+]

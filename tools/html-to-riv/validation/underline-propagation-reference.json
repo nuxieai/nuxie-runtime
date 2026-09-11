@@ -1,0 +1,33 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "display": "block",
+      "child": "none",
+      "computed": "none",
+      "redPixels": 102,
+      "bluePixels": 0
+    },
+    {
+      "display": "block",
+      "child": "underline",
+      "computed": "underline",
+      "redPixels": 0,
+      "bluePixels": 102
+    },
+    {
+      "display": "flex",
+      "child": "none",
+      "computed": "none",
+      "redPixels": 102,
+      "bluePixels": 0
+    },
+    {
+      "display": "flex",
+      "child": "underline",
+      "computed": "underline",
+      "redPixels": 0,
+      "bluePixels": 102
+    }
+  ]
+}

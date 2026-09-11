@@ -2408,8 +2408,12 @@ pub struct ColorRampLocation {
 
 impl ColorRampLocation {
     pub const kComplexGradientMarker: u16 = 0xffff;
+    pub const kPremultipliedGradientMarker: u16 = 0xfffe;
+    pub const fn isPremultiplied(&self) -> bool {
+        self.col == Self::kPremultipliedGradientMarker
+    }
     pub const fn isComplex(&self) -> bool {
-        self.col == Self::kComplexGradientMarker
+        self.col == Self::kComplexGradientMarker || self.isPremultiplied()
     }
 }
 
@@ -3263,6 +3267,7 @@ pub struct PaintAuxData {
     pub m_inverseFwidth: Vec2D,
     pub m_imageMatrix: [f32; 6],
     pub m_imageTextureLOD: f32,
+    // Lanes 1..5 (float4 element 6): CSS tile projection.xyz and enabled flag.
     pub m_padding: [f32; 9],
 }
 

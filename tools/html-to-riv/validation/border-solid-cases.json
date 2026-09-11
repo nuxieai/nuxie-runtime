@@ -1,0 +1,272 @@
+[
+  {
+    "name": "border-solid-w1-r0-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:0px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r0-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:0px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r0-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:0px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r0-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:0px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r0-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:0px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r0-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:0px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r18-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:18px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r18-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:18px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r18-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:18px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r18-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:18px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r18-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:18px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r18-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:18px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r90-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:90px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r90-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:90px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r90-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:90px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r90-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:90px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r90-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:90px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w1-r90-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:1px solid #563cab;border-radius:90px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r0-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:0px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r0-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:0px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r0-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:0px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r0-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:0px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r0-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:0px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r0-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:0px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r18-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:18px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r18-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:18px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r18-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:18px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r18-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:18px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r18-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:18px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r18-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:18px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r90-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:90px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r90-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:90px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r90-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:90px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r90-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:90px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r90-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:90px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w8-r90-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:8px solid #563cab;border-radius:90px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r0-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:0px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r0-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:0px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r0-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:0px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r0-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:0px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r0-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:0px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r0-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:0px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r18-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:18px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r18-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:18px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r18-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:18px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r18-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:18px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r18-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:18px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r18-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:18px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r90-border-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:90px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r90-border-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:90px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r90-border-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:border-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:90px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r90-content-box-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:90px;overflow:visible}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r90-content-box-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:90px;overflow:clip}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  },
+  {
+    "name": "border-solid-w24-r90-content-box-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div><div id=sibling></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;box-sizing:content-box;padding:12px 18px;background:#e9a344;border:24px solid #563cab;border-radius:90px;overflow:hidden}#child{position:relative;left:-25px;top:-20px;width:240px;height:160px;background:#318ea8}#sibling{width:70px;height:24px;background:#84ac80}"
+  }
+]

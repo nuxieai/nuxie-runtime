@@ -1,0 +1,4213 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "absolute-position-row-nested-auto",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-nested-left",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 24,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 32,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 39,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 47,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 76.796875,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 84.796875,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-nested-top",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-positioned-wrapper",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-auto",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 113,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 121,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 263,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 271,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 641,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 649,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-left",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 24,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 32,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 39,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 47,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 76.796875,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 84.796875,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-top",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 113,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 121,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 263,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 271,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 641,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 649,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-positioned-wrapper",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 112,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 120,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 262,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 270,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 640,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 648,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-auto",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-left",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 24,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 32,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 39,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 47,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 76.796875,
+              "y": 33,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 84.796875,
+              "y": 41,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-top",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-positioned-wrapper",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 38,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-auto",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 153,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 161,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 153,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 161,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 153,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 161,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-left",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 24,
+              "y": 153,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 32,
+              "y": 161,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 39,
+              "y": 153,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 47,
+              "y": 161,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 76.796875,
+              "y": 153,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 84.796875,
+              "y": 161,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-top",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 33,
+              "y": 26,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 41,
+              "y": 34,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-positioned-wrapper",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 158,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 158,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 40,
+              "y": 158,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-nested-auto-margin-insets",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#card{left:10px;right:20px;top:8px;bottom:12px;margin:auto}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 70,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 78,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 145,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 153,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 334,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 342,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-auto-margin-insets",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#card{left:10px;right:20px;top:8px;bottom:12px;margin:auto}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 70,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 78,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 145,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 153,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 334,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 342,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-auto-margin-insets",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#card{left:10px;right:20px;top:8px;bottom:12px;margin:auto}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 70,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 78,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 145,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 153,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 334,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 342,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-auto-margin-insets",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#card{left:10px;right:20px;top:8px;bottom:12px;margin:auto}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 70,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 78,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 145,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 153,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 334,
+              "y": 93,
+              "width": 90,
+              "height": 70
+            },
+            "inner": {
+              "x": 342,
+              "y": 101,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-nested-absolute-percent",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;left:20%;top:30%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-nested-absolute-end",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;right:10%;bottom:20%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-nested-absolute-auto-size",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{inset:10px;width:auto;height:auto}#inner{position:absolute;inset:5px;width:auto;height:auto}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 148,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 236,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-absolute-percent",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;left:20%;top:30%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 112,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 124,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 262,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 274,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 640,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 652,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-absolute-end",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;right:10%;bottom:20%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 112,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 130,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 262,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 280,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 640,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 658,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-row-reverse-nested-absolute-auto-size",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{inset:10px;width:auto;height:auto}#inner{position:absolute;inset:5px;width:auto;height:auto}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 100,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 110,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 115,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 12,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": -56,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 250,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 260,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 265,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 162,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 94,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 628,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 638,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 643,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 540,
+              "y": 20,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 472,
+              "y": 20,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-absolute-percent",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;left:20%;top:30%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 45,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-absolute-end",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;right:10%;bottom:20%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 30,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 46,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-nested-absolute-auto-size",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{inset:10px;width:auto;height:auto}#inner{position:absolute;inset:5px;width:auto;height:auto}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 20,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 30,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 35,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 20,
+              "y": 128,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 201,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-absolute-percent",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;left:20%;top:30%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 165,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 165,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 44,
+              "y": 165,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-absolute-end",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{left:10%;top:10%;width:50%;height:50%}#inner{position:absolute;right:10%;bottom:20%}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 166,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 166,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 32,
+              "y": 150,
+              "width": 60,
+              "height": 50
+            },
+            "inner": {
+              "x": 50,
+              "y": 166,
+              "width": 36,
+              "height": 24
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "absolute-position-column-reverse-nested-absolute-auto-size",
+      "html": "<div id=host><div id=wrapper><div id=card><div id=inner></div></div></div><div id=side></div><div id=tail></div></div>",
+      "css": "#host{position:relative;width:100%;height:260px;padding:20px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#e9eff5}#card{position:absolute;width:90px;height:70px;padding:8px;background:#e9a344;left:10%;top:10%}#inner{width:36px;height:24px;background:#318ea8}#side{width:80px;height:65px;background:#86ae83}#tail{width:60px;height:50px;background:#927da1}#wrapper{width:120px;height:100px;padding:13px;background:#eee}#wrapper{position:relative}#card{inset:10px;width:auto;height:auto}#inner{position:absolute;inset:5px;width:auto;height:auto}",
+      "absoluteIds": [
+        "card",
+        "inner"
+      ],
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 150,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 155,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 150,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 155,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 260
+            },
+            "wrapper": {
+              "x": 20,
+              "y": 140,
+              "width": 120,
+              "height": 100
+            },
+            "card": {
+              "x": 30,
+              "y": 150,
+              "width": 100,
+              "height": 80
+            },
+            "inner": {
+              "x": 35,
+              "y": 155,
+              "width": 90,
+              "height": 70
+            },
+            "side": {
+              "x": 20,
+              "y": 67,
+              "width": 80,
+              "height": 65
+            },
+            "tail": {
+              "x": 20,
+              "y": 9,
+              "width": 60,
+              "height": 50
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "name": "content-auto-isolated-row-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}"
+  },
+  {
+    "name": "content-auto-isolated-row-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-isolated-row-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-width:70px}#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-isolated-row-reverse-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}"
+  },
+  {
+    "name": "content-auto-isolated-row-reverse-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-isolated-row-reverse-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-width:70px}#b{max-width:170px}"
+  },
+  {
+    "name": "content-auto-isolated-column-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}"
+  },
+  {
+    "name": "content-auto-isolated-column-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-isolated-column-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-height:65px}#b{max-height:100px}"
+  },
+  {
+    "name": "content-auto-isolated-column-reverse-natural",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}"
+  },
+  {
+    "name": "content-auto-isolated-column-reverse-mixed",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#root>#a{flex:.25 .5 auto}#root>#b{flex:2 1 auto}#root>#c{flex:0 2 auto}"
+  },
+  {
+    "name": "content-auto-isolated-column-reverse-constrained",
+    "html": "<div id=root><div id=a><div id=ia></div></div><div id=b><div id=ib></div></div><div id=c><div id=ic></div></div></div>",
+    "css": "#root{width:100%;height:190px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start}#root>div{flex:1 1 auto;padding:8px}#ia{width:80px;height:24px}#ib{width:490px;height:24px}#ic{width:76px;height:24px}#a{min-height:65px}#b{max-height:100px}"
+  }
+]

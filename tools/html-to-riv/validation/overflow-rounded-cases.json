@@ -1,0 +1,155 @@
+[
+  {
+    "name": "overflow-rounded-shape-r0-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r0-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r0-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r18-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r18-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r18-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r90-visible",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r90-clip",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-shape-r90-hidden",
+    "html": "<div id=frame><div id=host><div id=child></div></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}"
+  },
+  {
+    "name": "overflow-rounded-text-r0-visible",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r0-clip",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r0-hidden",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r18-visible",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r18-clip",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r18-hidden",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r90-visible",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r90-clip",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-text-r90-hidden",
+    "html": "<div id=frame><div id=host><p id=child>Quiet weekend\nBright morning</p></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}#child{font:20px/28px Inter;color:#172d44;white-space:pre-wrap}",
+    "font": true
+  },
+  {
+    "name": "overflow-rounded-image-r0-visible",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r0-clip",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r0-hidden",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:0px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r18-visible",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r18-clip",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r18-hidden",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:18px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r90-visible",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:visible}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r90-clip",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:clip}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  },
+  {
+    "name": "overflow-rounded-image-r90-hidden",
+    "html": "<div id=frame><div id=host><img id=child src=\"asset:photo\"></div></div>",
+    "css": "#frame{width:100%;padding:20px}#host{width:60%;height:100px;padding:12px;background:#e9a344;border-radius:90px;overflow:hidden}#child{position:relative;left:36px;top:22px;width:180px;height:120px;background:#318ea8}",
+    "image": true
+  }
+]

@@ -1,0 +1,3457 @@
+{
+  "browser": "153.0.8010.12",
+  "cases": [
+    {
+      "name": "aspect-ratio-text-row-border-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 88
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 108,
+              "height": 96
+            },
+            "side": {
+              "x": 150,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 150,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 148
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 198,
+              "height": 48
+            },
+            "side": {
+              "x": 240,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 240,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 299.1875
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 424.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 466.796875,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 466.796875,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-border-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 103.328125
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 128,
+              "height": 72
+            },
+            "side": {
+              "x": 170,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 170,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 302,
+              "height": 203.328125
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 278,
+              "height": 48
+            },
+            "side": {
+              "x": 320,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 320,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 680,
+              "height": 455.328125
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 656,
+              "height": 24
+            },
+            "side": {
+              "x": 698,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 698,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-border-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-content-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 106
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 132,
+              "height": 72
+            },
+            "side": {
+              "x": 174,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 174,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 166
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 222,
+              "height": 48
+            },
+            "side": {
+              "x": 264,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 264,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 317.1875
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 448.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 490.796875,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 490.796875,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-content-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 152,
+              "height": 103.328125
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 128,
+              "height": 72
+            },
+            "side": {
+              "x": 170,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 170,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 302,
+              "height": 203.328125
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 278,
+              "height": 48
+            },
+            "side": {
+              "x": 320,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 320,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 680,
+              "height": 455.328125
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 656,
+              "height": 24
+            },
+            "side": {
+              "x": 698,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 698,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-content-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-reverse-border-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 98,
+              "y": 10,
+              "width": 132,
+              "height": 88
+            },
+            "copy": {
+              "x": 111,
+              "y": 15,
+              "width": 108,
+              "height": 96
+            },
+            "side": {
+              "x": 30,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 30,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 158,
+              "y": 10,
+              "width": 222,
+              "height": 148
+            },
+            "copy": {
+              "x": 171,
+              "y": 15,
+              "width": 198,
+              "height": 48
+            },
+            "side": {
+              "x": 90,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 90,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 309.203125,
+              "y": 10,
+              "width": 448.796875,
+              "height": 299.1875
+            },
+            "copy": {
+              "x": 322.203125,
+              "y": 15,
+              "width": 424.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 241.203125,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 241.203125,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-reverse-border-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 78,
+              "y": 10,
+              "width": 152,
+              "height": 103.328125
+            },
+            "copy": {
+              "x": 91,
+              "y": 15,
+              "width": 128,
+              "height": 72
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 78,
+              "y": 10,
+              "width": 302,
+              "height": 203.328125
+            },
+            "copy": {
+              "x": 91,
+              "y": 15,
+              "width": 278,
+              "height": 48
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 78,
+              "y": 10,
+              "width": 680,
+              "height": 455.328125
+            },
+            "copy": {
+              "x": 91,
+              "y": 15,
+              "width": 656,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-reverse-border-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 95,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 108,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 27,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 27,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 245,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 258,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 177,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 623,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 636,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 555,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 555,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-reverse-content-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 74,
+              "y": 10,
+              "width": 156,
+              "height": 106
+            },
+            "copy": {
+              "x": 87,
+              "y": 15,
+              "width": 132,
+              "height": 72
+            },
+            "side": {
+              "x": 6,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 6,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 134,
+              "y": 10,
+              "width": 246,
+              "height": 166
+            },
+            "copy": {
+              "x": 147,
+              "y": 15,
+              "width": 222,
+              "height": 48
+            },
+            "side": {
+              "x": 66,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 66,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 285.203125,
+              "y": 10,
+              "width": 472.796875,
+              "height": 317.1875
+            },
+            "copy": {
+              "x": 298.203125,
+              "y": 15,
+              "width": 448.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 217.203125,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 217.203125,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-reverse-content-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 78,
+              "y": 10,
+              "width": 152,
+              "height": 103.328125
+            },
+            "copy": {
+              "x": 91,
+              "y": 15,
+              "width": 128,
+              "height": 72
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 78,
+              "y": 10,
+              "width": 302,
+              "height": 203.328125
+            },
+            "copy": {
+              "x": 91,
+              "y": 15,
+              "width": 278,
+              "height": 48
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 78,
+              "y": 10,
+              "width": 680,
+              "height": 455.328125
+            },
+            "copy": {
+              "x": 91,
+              "y": 15,
+              "width": 656,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-row-reverse-content-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:row-reverse;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 71,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 84,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 3,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 3,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 221,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 234,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 153,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 599,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 612,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 531,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 531,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-border-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 132,
+              "height": 88
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 108,
+              "height": 96
+            },
+            "side": {
+              "x": 10,
+              "y": 106,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 106,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 222,
+              "height": 148
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 198,
+              "height": 48
+            },
+            "side": {
+              "x": 10,
+              "y": 166,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 166,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 448.796875,
+              "height": 299.1875
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 424.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 317.1875,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 317.1875,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-border-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-border-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 108,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 108,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 108,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 108,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-content-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 156,
+              "height": 106
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 132,
+              "height": 72
+            },
+            "side": {
+              "x": 10,
+              "y": 124,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 124,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 246,
+              "height": 166
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 222,
+              "height": 48
+            },
+            "side": {
+              "x": 10,
+              "y": 184,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 184,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 472.796875,
+              "height": 317.1875
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 448.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 335.1875,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 335.1875,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-content-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 238,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-content-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 126,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 126,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 126,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 126,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 10,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 15,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 126,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 126,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-reverse-border-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 182,
+              "width": 132,
+              "height": 88
+            },
+            "copy": {
+              "x": 23,
+              "y": 187,
+              "width": 108,
+              "height": 96
+            },
+            "side": {
+              "x": 10,
+              "y": 142,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 142,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 122,
+              "width": 222,
+              "height": 148
+            },
+            "copy": {
+              "x": 23,
+              "y": 127,
+              "width": 198,
+              "height": 48
+            },
+            "side": {
+              "x": 10,
+              "y": 82,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 82,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": -29.1875,
+              "width": 448.796875,
+              "height": 299.1875
+            },
+            "copy": {
+              "x": 23,
+              "y": -24.1875,
+              "width": 424.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": -69.1875,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": -69.1875,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-reverse-border-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 50,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 55,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 50,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 55,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 50,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 55,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-reverse-border-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#card{box-sizing:border-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 180,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 185,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 140,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 140,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 180,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 185,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 140,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 140,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 180,
+              "width": 135,
+              "height": 90
+            },
+            "copy": {
+              "x": 23,
+              "y": 185,
+              "width": 111,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 140,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 140,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-reverse-content-box-width-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;width:60%;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 164,
+              "width": 156,
+              "height": 106
+            },
+            "copy": {
+              "x": 23,
+              "y": 169,
+              "width": 132,
+              "height": 72
+            },
+            "side": {
+              "x": 10,
+              "y": 124,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 124,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 104,
+              "width": 246,
+              "height": 166
+            },
+            "copy": {
+              "x": 23,
+              "y": 109,
+              "width": 222,
+              "height": 48
+            },
+            "side": {
+              "x": 10,
+              "y": 64,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 64,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": -47.1875,
+              "width": 472.796875,
+              "height": 317.1875
+            },
+            "copy": {
+              "x": 23,
+              "y": -42.1875,
+              "width": 448.796875,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": -87.1875,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": -87.1875,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-reverse-content-box-flex-wrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;flex:1 1 100px;aspect-ratio:auto 3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 50,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 55,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 50,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 55,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 50,
+              "width": 327,
+              "height": 220
+            },
+            "copy": {
+              "x": 23,
+              "y": 55,
+              "width": 303,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 10,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-column-reverse-content-box-height-nowrap",
+      "font": true,
+      "html": "<div id=host><div id=card><p id=copy>Small daily steps build a lasting routine.</p></div><div id=side><p id=label>Today</p></div></div>",
+      "css": "#host{width:100%;height:280px;padding:10px;gap:8px;flex-direction:column-reverse;align-items:flex-start;background:#eef}#card{box-sizing:content-box;padding:5px 11px 13px 13px;background:#8cf;height:90px;aspect-ratio:3 / 2;}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#side{width:60px;height:32px;background:#fc8}#copy{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 162,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 167,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 122,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 122,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 162,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 167,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 122,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 122,
+              "width": 60,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 280
+            },
+            "card": {
+              "x": 10,
+              "y": 162,
+              "width": 159,
+              "height": 108
+            },
+            "copy": {
+              "x": 23,
+              "y": 167,
+              "width": 135,
+              "height": 24
+            },
+            "side": {
+              "x": 10,
+              "y": 122,
+              "width": 60,
+              "height": 32
+            },
+            "label": {
+              "x": 10,
+              "y": 122,
+              "width": 60,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-media-card-border-box-bare",
+      "font": true,
+      "html": "<div id=host><div id=card><div id=media><p id=caption>Weekly progress</p></div><p id=title>A steady routine</p><p id=body>Make time for small steps that bring lasting results.</p><div id=footer><p id=action>View report</p><p id=count>12 items</p></div></div></div>",
+      "css": "#host{width:100%;padding:12px;background:#eef;align-items:flex-start}#card{width:90%;max-width:420px;padding:10px;gap:8px;background:white;border-radius:10px}#media{box-sizing:border-box;width:100%;aspect-ratio:3 / 1;padding:5px 11px 13px 13px;background:#8cf;justify-content:flex-end}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#title{font-size:20px;line-height:28px}#footer{flex-direction:row;justify-content:space-between;gap:8px}#action{color:#247}#count{font-size:12px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 250.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 194.390625,
+              "height": 226.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 174.390625,
+              "height": 58.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 43.125,
+              "width": 150.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 88.125,
+              "width": 174.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 124.125,
+              "width": 174.390625,
+              "height": 72
+            },
+            "footer": {
+              "x": 22,
+              "y": 204.125,
+              "width": 174.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 204.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 151.0625,
+              "y": 204.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 271.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 329.390625,
+              "height": 247.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 309.390625,
+              "height": 103.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 88.125,
+              "width": 285.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 133.125,
+              "width": 309.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 169.125,
+              "width": 309.390625,
+              "height": 48
+            },
+            "footer": {
+              "x": 22,
+              "y": 225.125,
+              "width": 309.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 225.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 286.0625,
+              "y": 225.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 277.328125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 420,
+              "height": 253.328125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 400,
+              "height": 133.328125
+            },
+            "caption": {
+              "x": 35,
+              "y": 118.328125,
+              "width": 376,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 163.328125,
+              "width": 400,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 199.328125,
+              "width": 400,
+              "height": 24
+            },
+            "footer": {
+              "x": 22,
+              "y": 231.328125,
+              "width": 400,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 231.328125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 376.671875,
+              "y": 231.328125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-media-card-border-box-auto",
+      "font": true,
+      "html": "<div id=host><div id=card><div id=media><p id=caption>Weekly progress</p></div><p id=title>A steady routine</p><p id=body>Make time for small steps that bring lasting results.</p><div id=footer><p id=action>View report</p><p id=count>12 items</p></div></div></div>",
+      "css": "#host{width:100%;padding:12px;background:#eef;align-items:flex-start}#card{width:90%;max-width:420px;padding:10px;gap:8px;background:white;border-radius:10px}#media{box-sizing:border-box;width:100%;aspect-ratio:auto 3 / 1;padding:5px 11px 13px 13px;background:#8cf;justify-content:flex-end}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#title{font-size:20px;line-height:28px}#footer{flex-direction:row;justify-content:space-between;gap:8px}#action{color:#247}#count{font-size:12px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 260.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 194.390625,
+              "height": 236.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 174.390625,
+              "height": 68.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 53.125,
+              "width": 150.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 98.125,
+              "width": 174.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 134.125,
+              "width": 174.390625,
+              "height": 72
+            },
+            "footer": {
+              "x": 22,
+              "y": 214.125,
+              "width": 174.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 214.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 151.0625,
+              "y": 214.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 281.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 329.390625,
+              "height": 257.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 309.390625,
+              "height": 113.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 98.125,
+              "width": 285.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 143.125,
+              "width": 309.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 179.125,
+              "width": 309.390625,
+              "height": 48
+            },
+            "footer": {
+              "x": 22,
+              "y": 235.125,
+              "width": 309.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 235.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 286.0625,
+              "y": 235.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 287.328125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 420,
+              "height": 263.328125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 400,
+              "height": 143.328125
+            },
+            "caption": {
+              "x": 35,
+              "y": 128.328125,
+              "width": 376,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 173.328125,
+              "width": 400,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 209.328125,
+              "width": 400,
+              "height": 24
+            },
+            "footer": {
+              "x": 22,
+              "y": 241.328125,
+              "width": 400,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 241.328125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 376.671875,
+              "y": 241.328125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-media-card-content-box-bare",
+      "font": true,
+      "html": "<div id=host><div id=card><div id=media><p id=caption>Weekly progress</p></div><p id=title>A steady routine</p><p id=body>Make time for small steps that bring lasting results.</p><div id=footer><p id=action>View report</p><p id=count>12 items</p></div></div></div>",
+      "css": "#host{width:100%;padding:12px;background:#eef;align-items:flex-start}#card{width:90%;max-width:420px;padding:10px;gap:8px;background:white;border-radius:10px}#media{box-sizing:content-box;width:100%;aspect-ratio:3 / 1;padding:5px 11px 13px 13px;background:#8cf;justify-content:flex-end}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#title{font-size:20px;line-height:28px}#footer{flex-direction:row;justify-content:space-between;gap:8px}#action{color:#247}#count{font-size:12px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 268.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 194.390625,
+              "height": 244.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 198.390625,
+              "height": 76.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 61.125,
+              "width": 174.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 106.125,
+              "width": 174.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 142.125,
+              "width": 174.390625,
+              "height": 72
+            },
+            "footer": {
+              "x": 22,
+              "y": 222.125,
+              "width": 174.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 222.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 151.0625,
+              "y": 222.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 289.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 329.390625,
+              "height": 265.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 333.390625,
+              "height": 121.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 106.125,
+              "width": 309.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 151.125,
+              "width": 309.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 187.125,
+              "width": 309.390625,
+              "height": 48
+            },
+            "footer": {
+              "x": 22,
+              "y": 243.125,
+              "width": 309.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 243.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 286.0625,
+              "y": 243.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 295.328125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 420,
+              "height": 271.328125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 424,
+              "height": 151.328125
+            },
+            "caption": {
+              "x": 35,
+              "y": 136.328125,
+              "width": 400,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 181.328125,
+              "width": 400,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 217.328125,
+              "width": 400,
+              "height": 24
+            },
+            "footer": {
+              "x": 22,
+              "y": 249.328125,
+              "width": 400,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 249.328125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 376.671875,
+              "y": 249.328125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "aspect-ratio-text-media-card-content-box-auto",
+      "font": true,
+      "html": "<div id=host><div id=card><div id=media><p id=caption>Weekly progress</p></div><p id=title>A steady routine</p><p id=body>Make time for small steps that bring lasting results.</p><div id=footer><p id=action>View report</p><p id=count>12 items</p></div></div></div>",
+      "css": "#host{width:100%;padding:12px;background:#eef;align-items:flex-start}#card{width:90%;max-width:420px;padding:10px;gap:8px;background:white;border-radius:10px}#media{box-sizing:content-box;width:100%;aspect-ratio:auto 3 / 1;padding:5px 11px 13px 13px;background:#8cf;justify-content:flex-end}p{font-family:Inter;font-size:16px;line-height:24px;color:#123}#title{font-size:20px;line-height:28px}#footer{flex-direction:row;justify-content:space-between;gap:8px}#action{color:#247}#count{font-size:12px}",
+      "viewports": [
+        {
+          "width": 240,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 240,
+              "height": 268.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 194.390625,
+              "height": 244.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 198.390625,
+              "height": 76.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 61.125,
+              "width": 174.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 106.125,
+              "width": 174.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 142.125,
+              "width": 174.390625,
+              "height": 72
+            },
+            "footer": {
+              "x": 22,
+              "y": 222.125,
+              "width": 174.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 222.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 151.0625,
+              "y": 222.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 390,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 390,
+              "height": 289.125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 329.390625,
+              "height": 265.125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 333.390625,
+              "height": 121.125
+            },
+            "caption": {
+              "x": 35,
+              "y": 106.125,
+              "width": 309.390625,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 151.125,
+              "width": 309.390625,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 187.125,
+              "width": 309.390625,
+              "height": 48
+            },
+            "footer": {
+              "x": 22,
+              "y": 243.125,
+              "width": 309.390625,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 243.125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 286.0625,
+              "y": 243.125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        },
+        {
+          "width": 768,
+          "boxes": {
+            "host": {
+              "x": 0,
+              "y": 0,
+              "width": 768,
+              "height": 295.328125
+            },
+            "card": {
+              "x": 12,
+              "y": 12,
+              "width": 420,
+              "height": 271.328125
+            },
+            "media": {
+              "x": 22,
+              "y": 22,
+              "width": 424,
+              "height": 151.328125
+            },
+            "caption": {
+              "x": 35,
+              "y": 136.328125,
+              "width": 400,
+              "height": 24
+            },
+            "title": {
+              "x": 22,
+              "y": 181.328125,
+              "width": 400,
+              "height": 28
+            },
+            "body": {
+              "x": 22,
+              "y": 217.328125,
+              "width": 400,
+              "height": 24
+            },
+            "footer": {
+              "x": 22,
+              "y": 249.328125,
+              "width": 400,
+              "height": 24
+            },
+            "action": {
+              "x": 22,
+              "y": 249.328125,
+              "width": 85.84375,
+              "height": 24
+            },
+            "count": {
+              "x": 376.671875,
+              "y": 249.328125,
+              "width": 45.328125,
+              "height": 24
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

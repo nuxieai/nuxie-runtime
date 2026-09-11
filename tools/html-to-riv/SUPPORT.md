@@ -30,7 +30,7 @@ Admission is strict: the complete stylesheet is validated, including unmatched o
 ## Intentional exclusions and unresolved work
 
 - Text rendering, font assets, images, SVG/media and all asset input are not admitted.
-- Borders, border-radius, padding, margin, gaps, flex rows/wrapping/grow/shrink, alignment, aspect ratio and positioning are not in the public declaration whitelist yet. Ordinary-file experiments are not public support.
+- Borders, border-radius, padding, margin, gaps, flex wrapping/grow/shrink, align-content, aspect ratio and positioning are not in the public declaration whitelist yet. Flex directions and the item/main-axis alignment profiles listed above are admitted. Ordinary-file experiments do not expand public support.
 - Gradients, background-image/repeat, group opacity, transforms, clipping/overflow, decoration and blending declarations are not admitted.
 - Custom registrations and variable mutation, calc(), relative units beyond the admitted em/rem contexts, at-rules/media queries and stylesheet nesting are not in the current public computed-style path. Parser-internal groundwork does not establish admission.
 - CSS Grid, scripts, interactions, bindings, animation and editor integration remain excluded. No implicit raster, fixed-layout or recompile-on-resize fallback is enabled.

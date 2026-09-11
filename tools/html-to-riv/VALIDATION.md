@@ -157,3 +157,9 @@ See `validation/last-baseline-review.md` and `validation/public-last-baseline-re
 ## Public around/evenly spacing checkpoint
 
 `validation/public-spacing-cases.json` contains112 scenes across all directions, intrinsic/percentage sizing, bounds, ordering, inheritance, baseline groups and empty/zero cases. All896 geometry/pixel frames and1792 clear checks pass. Frozen compiler reproduces112 exact outputs;370 prior requests remain byte/map identical. Tests:98 Rust,28 Node, strict TypeScript and immutable source guard. Direct visual coverage and724 exact transfers are recorded in `validation/public-spacing-receipt.json`.
+
+## Wrapping and independent line-alignment experiments
+
+`validation/foreground-directions-review.md` records the 16-scene draw-order matrix: 128 geometry passes, 48 pixel passes and 256 clear controls. Mixed-reversal paint failures remain preserved across changing line partitions.
+
+`validation/line-alignment-wrappers-review.md` records the 40-scene independent item/line alignment experiment: 160/320 geometry and pixel passes, 640 clear controls. All tested positional wrappers pass; normal/stretch controls fail. `validation/line-alignment-boundaries-review.md` adds 24 positional wrapper scenes with overflowing or auto cross sizes: 192/192 geometry/pixel passes and 384 clear controls. Each review states the exact reproduction and visual coverage. The fixture adapters emit ordinary files but are not public compiler support; raw driver public labels do not override that distinction. General wrapping remains unresolved.

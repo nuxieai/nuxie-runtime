@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Public main-axis spacing and wrapped paint ordering",
-  "status": "Around/evenly spacing passes public native validation",
-  "current": "112 public spacing scenes pass896 geometry/pixel frames and1792 clear controls.98 Rust/28 Node tests pass;370 prior outputs unchanged. Foreground draw ordering also passes one bounded changing-line-partition experiment.",
-  "next": "Extend foreground draw-order composition across reverse flow, nested paint and clipping before public wrap/line alignment admission; continue remaining backlog.",
+  "focus": "Wrapping paint order and independent line alignment",
+  "status": "Experimental positional line alignment passes; general wrapping unresolved",
+  "current": "Public spacing remains qualified. Direction matrix: 128/128 geometry, 48/128 pixels. Positional wrappers pass, normal/stretch controls fail. Overflow/auto cross-size follow-up passes 192 geometry/pixel frames. No public wrap admission.",
+  "next": "Combine positional wrappers with foreground paint ordering across changing line partitions, nested painted parents and source order. Investigate mixed-reversal paint and normal/stretch without runtime changes.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Overflow and auto cross-size wrapper evidence",
+      "path": "tools/html-to-riv/validation/line-alignment-boundaries-receipt.json"
+    },
+    {
+      "label": "Independent line/item alignment experiment",
+      "path": "tools/html-to-riv/validation/line-alignment-wrappers-receipt.json"
+    },
+    {
+      "label": "Foreground direction and wrapping boundaries",
+      "path": "tools/html-to-riv/validation/foreground-directions-receipt.json"
+    },
     {
       "label": "Public around/evenly spacing qualification",
       "path": "tools/html-to-riv/validation/public-spacing-receipt.json"
@@ -186,7 +198,7 @@
   "activeWork": [
     {
       "name": "Wrapping and independent line alignment",
-      "work": "Foreground drawables separate visible paint from layout in one proven case; broader reverse/nested/clip/line contexts remain unresolved."
+      "work": "Completed directional, positional and overflow/auto cross-size experiments; integration and general wrapping remain unresolved."
     }
   ],
   "publication": {

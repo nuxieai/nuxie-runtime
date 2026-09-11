@@ -1,0 +1,299 @@
+{
+  "status": "mixed-foreground-direction-composition-evidence",
+  "publicAdmission": false,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "counts": {
+    "scenes": 16,
+    "frames": 128,
+    "geometryPass": 128,
+    "pixelPass": 48,
+    "clearPass": 256,
+    "fullyPassingCandidates": 4
+  },
+  "failures": {
+    "geometry": 0,
+    "pixels": 80,
+    "clear": 0
+  },
+  "scope": "Four CSS directions, wrap and wrap-reverse, two fixed foreground draw chains; fixed-size overflowing painted leaves, responsive parent main extent, explicit line/item flex-start.",
+  "validation": "Original and cloned ordinary scenes resize without recompilation; immutable geometry and renderer pixels compared to pinned Chrome. Raw driver public labels are overridden.",
+  "matrix": [
+    {
+      "name": "foreground-row-wrap-forward",
+      "direction": "row",
+      "wrap": "wrap",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "foreground-row-wrap-reverse",
+      "direction": "row",
+      "wrap": "wrap",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": []
+    },
+    {
+      "name": "foreground-row-wrap-reverse-forward",
+      "direction": "row",
+      "wrap": "wrap-reverse",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        1,
+        5
+      ]
+    },
+    {
+      "name": "foreground-row-wrap-reverse-reverse",
+      "direction": "row",
+      "wrap": "wrap-reverse",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        2,
+        6
+      ]
+    },
+    {
+      "name": "foreground-row-reverse-wrap-forward",
+      "direction": "row-reverse",
+      "wrap": "wrap",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        2,
+        6
+      ]
+    },
+    {
+      "name": "foreground-row-reverse-wrap-reverse",
+      "direction": "row-reverse",
+      "wrap": "wrap",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        1,
+        5
+      ]
+    },
+    {
+      "name": "foreground-row-reverse-wrap-reverse-forward",
+      "direction": "row-reverse",
+      "wrap": "wrap-reverse",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": []
+    },
+    {
+      "name": "foreground-row-reverse-wrap-reverse-reverse",
+      "direction": "row-reverse",
+      "wrap": "wrap-reverse",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "foreground-column-wrap-forward",
+      "direction": "column",
+      "wrap": "wrap",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "foreground-column-wrap-reverse",
+      "direction": "column",
+      "wrap": "wrap",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": []
+    },
+    {
+      "name": "foreground-column-wrap-reverse-forward",
+      "direction": "column",
+      "wrap": "wrap-reverse",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        1,
+        5
+      ]
+    },
+    {
+      "name": "foreground-column-wrap-reverse-reverse",
+      "direction": "column",
+      "wrap": "wrap-reverse",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        2,
+        6
+      ]
+    },
+    {
+      "name": "foreground-column-reverse-wrap-forward",
+      "direction": "column-reverse",
+      "wrap": "wrap",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        2,
+        6
+      ]
+    },
+    {
+      "name": "foreground-column-reverse-wrap-reverse",
+      "direction": "column-reverse",
+      "wrap": "wrap",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        1,
+        5
+      ]
+    },
+    {
+      "name": "foreground-column-reverse-wrap-reverse-forward",
+      "direction": "column-reverse",
+      "wrap": "wrap-reverse",
+      "chain": "forward",
+      "geometryPass": 8,
+      "pixelPassingFrames": []
+    },
+    {
+      "name": "foreground-column-reverse-wrap-reverse-reverse",
+      "direction": "column-reverse",
+      "wrap": "wrap-reverse",
+      "chain": "reverse",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    }
+  ],
+  "visualReview": {
+    "directPairs": 24,
+    "sheets": [
+      "tools/html-to-riv/output/flex-foreground-directions-r1/visual-0.png",
+      "tools/html-to-riv/output/flex-foreground-directions-r1/visual-4.png",
+      "tools/html-to-riv/output/flex-foreground-directions-r1/visual-8.png",
+      "tools/html-to-riv/output/flex-foreground-directions-r1/visual-12.png",
+      "tools/html-to-riv/output/flex-foreground-directions-r1/visual-16.png",
+      "tools/html-to-riv/output/flex-foreground-directions-r1/visual-20.png"
+    ],
+    "exactDecodedTransfers": 20,
+    "reviewedFullyPassingCandidateFrames": 32,
+    "partialOrFailingCandidates": "Frame0 pairs directly reviewed; other frames have automated comparisons only.",
+    "directReviewProvenance": "Performed by line_alignment_audit during experiment; source/hash/count and decoded-transfer identities reverified during tracked consolidation."
+  },
+  "reproductions": {
+    "fullAdapterExecutions": 16,
+    "exactRivAndSourceMap": 16,
+    "currentStoredOutputsReverified": true
+  },
+  "verification": {
+    "allManifestSourceHashesMatch": true,
+    "allDriverToolHashesMatch": true,
+    "receiptCountsRecomputed": true,
+    "matrixMatchesReceipt": true,
+    "exactTransfersRecomputed": true
+  },
+  "remaining": "Mixed reversal needs further ordinary-file investigation; two failed static chains do not rule out all compositions. Nested backgrounds, clipping, opacity, order, independent alignment and baseline groups remain outside qualification.",
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/FINDINGS.md",
+      "sha256": "45cadba881ef9977e4c6e1926a396a4126c8ca87042aad013f4d65e8ad046071"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/experiment-manifest.json",
+      "sha256": "9839eba55b4d8974258016963f7ffe9dd3a12522dc367622883a6e4b8d639f53"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/matrix.json",
+      "sha256": "1361b7fa7351ce5ed0351bf272c0d2ef8c962dc7c2022d9b4e79bbd06f177c72"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/visual-direct.json",
+      "sha256": "39277495b0ea98728fe11f6d4ccd6d6dec23b2f884cf795f21044ae05a87b34a"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/visual-transfer.json",
+      "sha256": "0742aa861f0c916d57c8ef99f7cb572af129f4cc6de18d5ed995d736d03c4db3"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/render/receipt.json",
+      "sha256": "0761da2115425f33944573af1fd811690bb9b87b46cc406abd6f870bf0cab6d0"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/src/main.rs",
+      "sha256": "5efea4fa7c2892ec41714be5bc0843b03587b7b173fb265a427f4b262f14dca1"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/src/wire.rs",
+      "sha256": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/augment",
+      "sha256": "3810cf1ff2b64c0608c33065d8855c2432c0110c55a60745548f878cea42c065"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/adapter.py",
+      "sha256": "7b1f20e20c6348fbe901cd0ad12670b408ce4b5f18937934ee7f444d4d82303d"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/build-command.json",
+      "sha256": "3bc0f84de7b48ba785ef67301d916291825059189fa63131c1710bdf1c4cf982"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/pairs.json",
+      "sha256": "9ea4cc0271d224e880ea824ee4b4886dc1e5f703e36708868713394a6f0f40a5"
+    },
+    {
+      "path": "tools/html-to-riv/output/flex-foreground-directions-r1/chrome-cases.json",
+      "sha256": "9ea4cc0271d224e880ea824ee4b4886dc1e5f703e36708868713394a6f0f40a5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-last-baseline-checkpoint-r2/html-to-riv",
+      "sha256": "a17c8d297ae8dc495fa997e683fe064e3274db645014cbf2cdc93f7e149e8dd0"
+    }
+  ]
+}

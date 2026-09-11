@@ -1,0 +1,430 @@
+{
+  "status": "bounded-experimental-line-alignment-boundaries-proven",
+  "publicAdmission": false,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Fixture-specific wrappers on ordinary row/column, wrap/wrap-reverse, positional start/center/end line alignment, fixed item main/cross sizes, parent cross20px orauto. Overrides raw public driver labels.",
+  "counts": {
+    "scenes": 24,
+    "frames": 192,
+    "geometryPass": 192,
+    "pixelPass": 192,
+    "clearPass": 384,
+    "exactReproductions": 24
+  },
+  "visualReview": {
+    "directPairs": 59,
+    "exactDecodedRGBATransfers": 133,
+    "full192FrameCoverage": true,
+    "sheetsInspected": 15
+  },
+  "autoSizingCaveat": "Row height:auto follows intrinsic line heights; column width:auto stretches within its outer column. No shrink-to-fit intrinsic column width claim.",
+  "provenanceCaveat": "Reconstructed source build differs in binary bytes but reproduces all 24 boundary RIVs and parsed maps exactly. No binary identity claim.",
+  "matrix": [
+    {
+      "name": "boundary-row-wrap-flex-start-wrapper-overflow",
+      "axis": "row",
+      "wrap": "wrap",
+      "content": "flex-start",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-flex-start-wrapper-intrinsic",
+      "axis": "row",
+      "wrap": "wrap",
+      "content": "flex-start",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-center-wrapper-overflow",
+      "axis": "row",
+      "wrap": "wrap",
+      "content": "center",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-center-wrapper-intrinsic",
+      "axis": "row",
+      "wrap": "wrap",
+      "content": "center",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-flex-end-wrapper-overflow",
+      "axis": "row",
+      "wrap": "wrap",
+      "content": "flex-end",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-flex-end-wrapper-intrinsic",
+      "axis": "row",
+      "wrap": "wrap",
+      "content": "flex-end",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-reverse-flex-start-wrapper-overflow",
+      "axis": "row",
+      "wrap": "wrap-reverse",
+      "content": "flex-start",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-reverse-flex-start-wrapper-intrinsic",
+      "axis": "row",
+      "wrap": "wrap-reverse",
+      "content": "flex-start",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-reverse-center-wrapper-overflow",
+      "axis": "row",
+      "wrap": "wrap-reverse",
+      "content": "center",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-reverse-center-wrapper-intrinsic",
+      "axis": "row",
+      "wrap": "wrap-reverse",
+      "content": "center",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-reverse-flex-end-wrapper-overflow",
+      "axis": "row",
+      "wrap": "wrap-reverse",
+      "content": "flex-end",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-row-wrap-reverse-flex-end-wrapper-intrinsic",
+      "axis": "row",
+      "wrap": "wrap-reverse",
+      "content": "flex-end",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-flex-start-wrapper-overflow",
+      "axis": "column",
+      "wrap": "wrap",
+      "content": "flex-start",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-flex-start-wrapper-intrinsic",
+      "axis": "column",
+      "wrap": "wrap",
+      "content": "flex-start",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-center-wrapper-overflow",
+      "axis": "column",
+      "wrap": "wrap",
+      "content": "center",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-center-wrapper-intrinsic",
+      "axis": "column",
+      "wrap": "wrap",
+      "content": "center",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-flex-end-wrapper-overflow",
+      "axis": "column",
+      "wrap": "wrap",
+      "content": "flex-end",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-flex-end-wrapper-intrinsic",
+      "axis": "column",
+      "wrap": "wrap",
+      "content": "flex-end",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-reverse-flex-start-wrapper-overflow",
+      "axis": "column",
+      "wrap": "wrap-reverse",
+      "content": "flex-start",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-reverse-flex-start-wrapper-intrinsic",
+      "axis": "column",
+      "wrap": "wrap-reverse",
+      "content": "flex-start",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-reverse-center-wrapper-overflow",
+      "axis": "column",
+      "wrap": "wrap-reverse",
+      "content": "center",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-reverse-center-wrapper-intrinsic",
+      "axis": "column",
+      "wrap": "wrap-reverse",
+      "content": "center",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-reverse-flex-end-wrapper-overflow",
+      "axis": "column",
+      "wrap": "wrap-reverse",
+      "content": "flex-end",
+      "crossSize": "20px",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    },
+    {
+      "name": "boundary-column-wrap-reverse-flex-end-wrapper-intrinsic",
+      "axis": "column",
+      "wrap": "wrap-reverse",
+      "content": "flex-end",
+      "crossSize": "auto",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8
+    }
+  ],
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/experiment-manifest.json",
+      "sha256": "f0be7a45ace8c8b4d1b5f4b13e3446990340dd3935957dd84bbc2f4192bf54af"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/EXPERIMENT.md",
+      "sha256": "b1d383c4609db5156a367f3dc65b7d47b11a5248d2615970dd9d68f6fa2f43cd"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/adapter.py",
+      "sha256": "42791fcbc5dee9ef6c38a38d051590c047dedab3ddb77f5ed2f1dff9d0ab647a"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/augment",
+      "sha256": "fba1c9aef1ccb00d04bf12019de201d55c47fa9e12723ab44fa619de4f0e0cf2"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/src/main.rs",
+      "sha256": "aa9edd7bb41a90d1bed611e28c203ac20dad6e4969fa491a422977ec10200bb4"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/src/wire.rs",
+      "sha256": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/pairs.json",
+      "sha256": "090577d9d0080889522460c75b695f62baef2f94fe6564b4124a5225580cbcff"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/chrome-cases.json",
+      "sha256": "27e10f83b4b74a98454d91400ebd2ada61d1019a311e03f0b29ea87beb18d263"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/render/receipt.json",
+      "sha256": "2f80549c37e950255e98c89d9dcf61ded05747981cce62c2b05d18f62d7c06ef"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/matrix.json",
+      "sha256": "25f299ecf114293f5a6e393c298f620bf7635bf295492e6c677c3e2e6cb9363b"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/reproductions.json",
+      "sha256": "2e5e50a03f77c8e2b199cde0cd34228d90ab8c6f30c73b9ad52c46de80fef6d5"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-direct.json",
+      "sha256": "eac52b332a1bce156c90a61bad9e770a504588160221a10660419c6b728772aa"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-transfer.json",
+      "sha256": "898a81c05112f368dc91e05e0282b33911a02b7c0c253ae72bc0063ad4da083d"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/build-provenance.json",
+      "sha256": "1bb2e686f69dc8b71d8ad64bc8c53cc3db4879c76bdd95c167ab115d5c3c6a40"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-0.png",
+      "sha256": "ec508a2a5537192c5c805a31e03d7b7543864304a667847a4bc4643d8e5bca3b"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-4.png",
+      "sha256": "0b1c057093f9b7112da9feb36cf02e234bf7f34a58c4959284f024bf49e5bc4c"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-8.png",
+      "sha256": "ca643bc13f72238c34f984774327cfa2f35fcca00c98a50180b2b3a42dad0e3a"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-12.png",
+      "sha256": "479baf43f72434a10d074a86cd946b72f02947b937711bcc752d9c07b2565c11"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-16.png",
+      "sha256": "fa6cf436b6a0748d54bbdc93c02b65164f8bff97314fc79650b8fac35d48e9ee"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-20.png",
+      "sha256": "5277cb9f89888732f3818e7c54bc9b0d9262f66fab91b8eca625665973cdf784"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-24.png",
+      "sha256": "0f305c5220e038ad6b68281dce6f945eaa429f885fee8e840cebef6f24dde1a1"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-28.png",
+      "sha256": "698c8cb11ac530398433c80777c9bb9b926d088d80771780d6610c6b8e45a13a"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-32.png",
+      "sha256": "cf699e0cf7032c8d1a6efcff4ade1fb557588a859c3e03ae719426d3bf6dcc5e"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-36.png",
+      "sha256": "8aee0919bd1dbd858b2745f503078405bb4f66299ff23b94d62ec565fd05f6eb"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-40.png",
+      "sha256": "b03925f76d81ed953a3d228c88e22897c92e437d153f02580d406041e173c725"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-44.png",
+      "sha256": "38bae79b08fcbf07d9823484963314c4caeea0eee280a7cfd50d1b4f70e77ec1"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-48.png",
+      "sha256": "3ac105a30ce21e0eebb2d3ed0526c9e7e127f7096308c9b4383fc0acf85bf1a0"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-52.png",
+      "sha256": "6e758f1b77831179690904181f13295c6e7ca298981efda8d6c695e740e6871f"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/visual-56.png",
+      "sha256": "9974652770e287180e31454ee827f9b49a0dd935f8a1585c0e3f8c7fefbc336f"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/adapter-rebuilt.py",
+      "sha256": "5a595922129603820e2e5223eea72c56621738175991d1049b78975e3b82b18e"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-boundaries-r1/rebuilt-reproduction.json",
+      "sha256": "b29c1eb58d9dc8fc420664593c7e5f61431b6f36b058efe007b94af7f485ef01"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-wrappers-r1/rebuild-receipt.json",
+      "sha256": "fe03da73162adbec6c4e01a439b6495a18aabb7a58428dbe6df78e58e57b0827"
+    },
+    {
+      "path": "tools/html-to-riv/output/line-alignment-wrappers-r1/augment-rebuilt",
+      "sha256": "52bdff738bb40394ee6929dd48734e0bf2befa1194cfcc5d39d14ddc426f5556"
+    }
+  ],
+  "coverageVerified": {
+    "all192FramesRepresentedExactlyOnce": true,
+    "fullImageTransfersRechecked": 133,
+    "fullAdapterReproductions": 24,
+    "rebuiltSourceAdapterReproductions": 24
+  },
+  "remaining": "Experimental only; public compiler admission and non-positional/default line alignment, general sizing, painting and baseline combinations remain unqualified.",
+  "buildProvenance": {
+    "kind": "exact-copy-of-existing-experimental-binary",
+    "originDirectory": "tools/html-to-riv/output/line-alignment-wrappers-r1",
+    "originManifestSha256": "a5b7a5a2ec9fb3f11b44e15028f80d2033a0e20b856ff8c5932cd340982939d4",
+    "verifiedCopies": {
+      "adapter.py": "42791fcbc5dee9ef6c38a38d051590c047dedab3ddb77f5ed2f1dff9d0ab647a",
+      "augment": "fba1c9aef1ccb00d04bf12019de201d55c47fa9e12723ab44fa619de4f0e0cf2",
+      "src/main.rs": "aa9edd7bb41a90d1bed611e28c203ac20dad6e4969fa491a422977ec10200bb4",
+      "src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19"
+    },
+    "buildCommand": "Original command not preserved; root reconstructed and executed the command in line-alignment-wrappers-r1/rebuild-receipt.json using hashed sources and dependencies.",
+    "scope": "Copied original binary and corresponding source snapshot. A source rebuild is not binary-identical, but its full adapter reproduces all 24 boundary output RIV bytes and parsed source maps exactly.",
+    "rebuiltOutputProof": {
+      "commandReceipt": "tools/html-to-riv/output/line-alignment-wrappers-r1/rebuild-receipt.json",
+      "commandReceiptSha256": "fe03da73162adbec6c4e01a439b6495a18aabb7a58428dbe6df78e58e57b0827",
+      "rebuiltBinarySha256": "52bdff738bb40394ee6929dd48734e0bf2befa1194cfcc5d39d14ddc426f5556",
+      "binaryIdentical": false,
+      "exactBoundaryRivAndParsedMapOutputs": 24,
+      "receipt": "tools/html-to-riv/output/line-alignment-boundaries-r1/rebuilt-reproduction.json",
+      "receiptSha256": "b29c1eb58d9dc8fc420664593c7e5f61431b6f36b058efe007b94af7f485ef01"
+    }
+  }
+}

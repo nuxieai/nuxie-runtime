@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Wrapping paint order and independent line alignment",
-  "status": "Experimental positional line alignment passes; general wrapping unresolved",
-  "current": "Public spacing remains qualified. Direction matrix: 128/128 geometry, 48/128 pixels. Positional wrappers pass, normal/stretch controls fail. Overflow/auto cross-size follow-up passes 192 geometry/pixel frames. No public wrap admission.",
-  "next": "Combine positional wrappers with foreground paint ordering across changing line partitions, nested painted parents and source order. Investigate mixed-reversal paint and normal/stretch without runtime changes.",
+  "focus": "Combined wrapped painting and geometry-driven ordering",
+  "status": "Nested paint composition passes bounded profiles; mixed reversal and general sizing unresolved",
+  "current": "Combined 72-scene matrix: 576 geometry, 268 pixel passes. Subtree paint chains work for ordinary+wrap and reverse+wrap-reverse. Cross-sizing failures preserved. A geometry-driven visibility gate passes with 20px line separation and fails tiny/zero controls.",
+  "next": "Test actual three-item mixed-reversal line-group selection, then address wrapper percentage containing blocks, auto-cross stretch and composition resource bounds.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Geometry-driven visibility gate",
+      "path": "tools/html-to-riv/validation/mixed-wrap-gate-receipt.json"
+    },
+    {
+      "label": "Wrapped sizing counterexamples",
+      "path": "tools/html-to-riv/validation/wrapped-sizing-counterexamples-receipt.json"
+    },
+    {
+      "label": "Combined line alignment and nested paint",
+      "path": "tools/html-to-riv/validation/wrapped-paint-alignment-receipt.json"
+    },
     {
       "label": "Overflow and auto cross-size wrapper evidence",
       "path": "tools/html-to-riv/validation/line-alignment-boundaries-receipt.json"
@@ -197,8 +209,8 @@
   ],
   "activeWork": [
     {
-      "name": "Wrapping and independent line alignment",
-      "work": "Completed directional, positional and overflow/auto cross-size experiments; integration and general wrapping remain unresolved."
+      "name": "Mixed-reversal line-group composition",
+      "work": "Positive-separation visibility primitive proven; actual three-item group-selection experiment in progress."
     }
   ],
   "publication": {

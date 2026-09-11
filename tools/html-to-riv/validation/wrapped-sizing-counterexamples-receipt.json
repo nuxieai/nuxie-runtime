@@ -1,0 +1,465 @@
+{
+  "status": "experimental-wrapper-sizing-counterexamples",
+  "scope": "Exact-fixture ordinary-file composition only; overrides raw driver public scope/status. No public compiler/runtime change, no general impossibility claim. Two compilation diagnostics are separate from six native-rendered scenes.",
+  "targetBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "42791fcbc5dee9ef6c38a38d051590c047dedab3ddb77f5ed2f1dff9d0ab647a",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "baseCompilerSha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+  "buildProvenance": "Copied previously reconstructed augmenter; local executable hash equals rebuild-receipt rebuiltSha256. Copied main.rs/wire.rs preserve that reconstructed build source; original command paths refer to line-alignment-wrappers-r1.",
+  "artifactHashes": {
+    "adapter.py": "42791fcbc5dee9ef6c38a38d051590c047dedab3ddb77f5ed2f1dff9d0ab647a",
+    "augment": "52bdff738bb40394ee6929dd48734e0bf2befa1194cfcc5d39d14ddc426f5556",
+    "src/main.rs": "aa9edd7bb41a90d1bed611e28c203ac20dad6e4969fa491a422977ec10200bb4",
+    "src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "rebuild-receipt.json": "fe03da73162adbec6c4e01a439b6495a18aabb7a58428dbe6df78e58e57b0827",
+    "pairs.json": "0037cac6f298bc9a9e7ffceba676724e40d3b4f9e5271c6d1267f6264a98ada0",
+    "chrome-cases.json": "3a84ef087665f8e6d7b38e8aadc5b83b2794b5218a63cac50a225b623ac70dc4",
+    "diagnostics.json": "ef85d16ae893036a574d74cedd35862c85040ea7a7a59e97d3ac4c55f9719b0b",
+    "diagnostic-chrome.json": "0d1e3710a3f73160ac54ccc4aa4b0a49f4ea463f2450b0795615a44e08651254",
+    "check-diagnostic-chrome.mjs": "7a25786f7abf908c3ff4bee0ba7a92ae65318556f6d6b1993de87c46727f1898",
+    "render/receipt.json": "dd3f7cf55fd8b92b5fa5a30be621424c4345918a9e9912ad62170d3797bc791a",
+    "matrix.json": "424ef7a23d6cf7a6c4999751e4c97de2cff41543c2695f5592740e7a941663fe",
+    "reproductions.json": "b7982187b7f349c45bb4d24821a68a076cfdca47525752fb2bbb0f19beb657a7",
+    "visual-0.png": "f124dbf4372b17b7fe18e5650cc71dddaf15fd51743dffa47b7affba3e5a8722",
+    "visual-3.png": "f7411ad9a6ee4d313278d47b05f0aa9b901abc1ca7f8a2a10b456b8683fbfbce",
+    "preflight/wrapped-sizing-row-auto-stretch/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "preflight/wrapped-sizing-column-fixed-control/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "preflight/wrapped-sizing-row-cross-percent/compile.log": "75b75ecb8eed857618926540762c10795baf308688bd56352466810a0b1e71b8",
+    "preflight/wrapped-sizing-row-cross-min-percent/compile.log": "c6a2b02367074e7fc5b2273b8f38bdc5b1aed806a40dd39bd9ae97dbd975262a",
+    "preflight/wrapped-sizing-row-fixed-control/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "preflight/wrapped-sizing-column-cross-min-percent/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "preflight/wrapped-sizing-column-auto-stretch/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "preflight/wrapped-sizing-column-cross-percent/compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "preflight/wrapped-sizing-row-cross-percent/chrome.png": "6e4484fb341cb4e09aedc8bf0965c4fd046138be9bf1e4e7cdff3578ecac11a9",
+    "preflight/wrapped-sizing-row-cross-min-percent/chrome.png": "6e4484fb341cb4e09aedc8bf0965c4fd046138be9bf1e4e7cdff3578ecac11a9"
+  },
+  "matrix": [
+    {
+      "name": "wrapped-sizing-row-fixed-control",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "wrapped-sizing-row-auto-stretch",
+      "geometryPassed": 4,
+      "pixelsPassed": 4,
+      "frames": 8,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "a.height: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "a.height: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "a.height: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "a.height: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wrapped-sizing-column-fixed-control",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "frames": 8,
+      "failures": []
+    },
+    {
+      "name": "wrapped-sizing-column-cross-percent",
+      "geometryPassed": 0,
+      "pixelsPassed": 0,
+      "frames": 8,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [
+            "a.width: 0 vs 60",
+            "b.x: 5 vs 65",
+            "c.x: 0 vs 60"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [
+            "a.width: 0 vs 60",
+            "b.x: 0 vs 60",
+            "c.x: 20 vs 80"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [
+            "a.width: 0 vs 60",
+            "b.x: 5 vs 65",
+            "c.x: 0 vs 60"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [
+            "a.width: 0 vs 60",
+            "b.x: 0 vs 60",
+            "c.x: 20 vs 80"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wrapped-sizing-column-cross-min-percent",
+      "geometryPassed": 0,
+      "pixelsPassed": 0,
+      "frames": 8,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [
+            "a.width: 10 vs 60",
+            "b.x: 15 vs 65",
+            "c.x: 10 vs 60"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [
+            "a.width: 10 vs 60",
+            "b.x: 10 vs 60",
+            "c.x: 30 vs 80"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [
+            "a.width: 10 vs 60",
+            "b.x: 15 vs 65",
+            "c.x: 10 vs 60"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [
+            "a.width: 10 vs 60",
+            "b.x: 10 vs 60",
+            "c.x: 30 vs 80"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "a.width: 15 vs 60",
+            "b.x: 5 vs 20",
+            "c.x: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "b: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "wrapped-sizing-column-auto-stretch",
+      "geometryPassed": 4,
+      "pixelsPassed": 4,
+      "frames": 8,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "a.width: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "a.width: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "a.width: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "a.width: 0 vs 30"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error"
+          ]
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "inputScenes": 8,
+    "compileRejected": 2,
+    "renderedScenes": 6,
+    "frames": 48,
+    "geometryPassed": 24,
+    "pixelsPassed": 24,
+    "clearPassed": 96,
+    "exactRivAndParsedMapReproductions": 6
+  },
+  "visualReview": {
+    "directPairs": 6,
+    "frame": 0,
+    "sheets": [
+      "visual-0.png",
+      "visual-3.png"
+    ],
+    "diagnosticChromeImages": 2,
+    "otherFrames": "42 frames automated only",
+    "findings": "Fixed controls match; auto stretch loses the coral item in native output; column cross percent and min-percent shrink the coral item and shift sibling columns. Diagnostic row Chrome images show a 60px tall coral item; no native image exists for these cases."
+  },
+  "manifestSha256": "031642431e67df026cdaf749387bda37cd634cda76bd8a2e1bd3f32a20ecc16e",
+  "evidenceDirectory": "tools/html-to-riv/output/wrapped-sizing-counterexamples-r1"
+}

@@ -1,0 +1,146 @@
+{
+  "status": "bounded-ordinary-visibility-gate-proven-with-threshold-failures",
+  "publicAdmission": false,
+  "scope": "Same-line visibility signal from native wrapped box cross coordinates; 20px success,0.0005px and0failures. Not general mixed-wrap paint ordering.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "counts": {
+    "scenes": 3,
+    "frames": 24,
+    "geometryPass": 24,
+    "pixelPass": 16,
+    "clearPass": 48
+  },
+  "matrix": [
+    {
+      "name": "gate-height-20",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ]
+    },
+    {
+      "name": "gate-height-tiny",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        3,
+        4,
+        7
+      ]
+    },
+    {
+      "name": "gate-height-0",
+      "geometryPass": 8,
+      "pixelPassingFrames": [
+        0,
+        3,
+        4,
+        7
+      ]
+    }
+  ],
+  "visualReview": {
+    "directPairs": 9,
+    "exactTransfers": 15,
+    "fullFrameCoverage": true
+  },
+  "exactReproductions": 3,
+  "hashes": {
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/src/main.rs": "0791649496e9de99de7e3acb142ca6e2f74d3c37e3b07776c2e0e4e0e17a7009",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/augment": "225da308d323ab871c8652f19b0c118b94071e065987f8327f6c7d3a9f66b423",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/adapter.py": "8e494a83d0beb5cde2e711c226a1e9b61df54a2e70c699ef0a7c6281f2ea574f",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/build-command.json": "ee565b11626b8da7faca3837a8924eadbf4900a3c024cc7ca0e26c6b92d6e527",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/build-source-bindings.json": "e8edfc5ff616659d0b65c5c84fbb5c7b72b5a119b48355a7276aa29a9d0d735f",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/pairs.json": "946d1ac52d7ebf28ba53d9999cfd4bca12eb009078a2b98d4039cf3483d4cbd9",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/chrome-cases.json": "946d1ac52d7ebf28ba53d9999cfd4bca12eb009078a2b98d4039cf3483d4cbd9",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/render-r2/receipt.json": "17b95483f44b5086d96bf7f1d362ff6207457887de4d059a498ee571accc1c80",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-frame0.png": "b0d0dadab575e5eb3ce30d27aa28681545d0c797eddffa3ab19dd35cfcf4683d",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-frame1.png": "3201f25c49de344e99d76853dd93b1d5097be619b7eb1ff3ed9199f2ee576d6d",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-frame2.png": "ddc1ff8ec1ad34bfa79552a4bd339ffe3fb1e40666b47da92df8df1647ebec83",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-transfer.json": "4e0675b04f17ffbc81b43d1c678e5ecc984f5080919eb509007725fae3256bd3",
+    "tools/html-to-riv/output/mixed-wrap-gate-r1/reproductions.json": "580ed7adcc486c3aed5f49777fc3c365d60fee1d207836ecfd6af1c895a5ea7e"
+  },
+  "baseCompiler": {
+    "path": "tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv",
+    "sha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b"
+  },
+  "toolHashes": {
+    "compiler": "8e494a83d0beb5cde2e711c226a1e9b61df54a2e70c699ef0a7c6281f2ea574f",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "referenceOnly": "Chrome @media toggles background at analytically known two60px boxes in50%parent threshold. Media rule removed before base compilation; emitted native file contains ordinary layout,constraints,clip and foreground objects only.",
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/experiment-manifest.json",
+      "sha256": "ac7136795b2177d9a35be84ba07a855df30bb3bae533072a03606ae956ec9eeb"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/src/main.rs",
+      "sha256": "0791649496e9de99de7e3acb142ca6e2f74d3c37e3b07776c2e0e4e0e17a7009"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/src/wire.rs",
+      "sha256": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/augment",
+      "sha256": "225da308d323ab871c8652f19b0c118b94071e065987f8327f6c7d3a9f66b423"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/adapter.py",
+      "sha256": "8e494a83d0beb5cde2e711c226a1e9b61df54a2e70c699ef0a7c6281f2ea574f"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/build-command.json",
+      "sha256": "ee565b11626b8da7faca3837a8924eadbf4900a3c024cc7ca0e26c6b92d6e527"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/build-source-bindings.json",
+      "sha256": "e8edfc5ff616659d0b65c5c84fbb5c7b72b5a119b48355a7276aa29a9d0d735f"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/pairs.json",
+      "sha256": "946d1ac52d7ebf28ba53d9999cfd4bca12eb009078a2b98d4039cf3483d4cbd9"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/chrome-cases.json",
+      "sha256": "946d1ac52d7ebf28ba53d9999cfd4bca12eb009078a2b98d4039cf3483d4cbd9"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/render-r2/receipt.json",
+      "sha256": "17b95483f44b5086d96bf7f1d362ff6207457887de4d059a498ee571accc1c80"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-frame0.png",
+      "sha256": "b0d0dadab575e5eb3ce30d27aa28681545d0c797eddffa3ab19dd35cfcf4683d"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-frame1.png",
+      "sha256": "3201f25c49de344e99d76853dd93b1d5097be619b7eb1ff3ed9199f2ee576d6d"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-frame2.png",
+      "sha256": "ddc1ff8ec1ad34bfa79552a4bd339ffe3fb1e40666b47da92df8df1647ebec83"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/visual-transfer.json",
+      "sha256": "4e0675b04f17ffbc81b43d1c678e5ecc984f5080919eb509007725fae3256bd3"
+    },
+    {
+      "path": "tools/html-to-riv/output/mixed-wrap-gate-r1/reproductions.json",
+      "sha256": "580ed7adcc486c3aed5f49777fc3c365d60fee1d207836ecfd6af1c895a5ea7e"
+    }
+  ]
+}

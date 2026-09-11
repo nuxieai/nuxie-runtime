@@ -1,0 +1,74 @@
+{
+  "status": "source-backed-composition-proposal-unvalidated",
+  "publicAdmission": false,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "baselineSourceEqualityVerified": true,
+  "nativeRerun": false,
+  "finding": "No layout-reactive DrawRules target selection found in inspected ordinary constraint/draw paths. Geometry-driven clipping of duplicated static groups is an untested alternative.",
+  "candidate": "One static paint group for each possible first item of a flex line; clip each group by leader gate and each member by same-line gate. O(n\u00b2) painted copies for flat n-item containers.",
+  "limitations": [
+    "Clipping gate not experimentally proved",
+    "Positive known line separation and equal line-anchor coordinates required for first profile",
+    "DistanceConstraint normalization returns unchanged below0.001",
+    "Zero-size coincident lines and tiny metrics unresolved",
+    "Nested backgrounds/transforms/opacity/resource ceilings unresolved"
+  ],
+  "bindings": [
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/draw_rules.rs",
+      "sha256": "3d8de1f9e1e300c9428f9cae5e8b864c4f8783038d93c31ecf84cb981d33dd6c"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/draw_target.rs",
+      "sha256": "504ae78a001fc4d3bf9eed007ae7e114e41374174b2deaa34a6dc9f2d503dd9b"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/artboard.rs",
+      "sha256": "6f218337cbf8daa1567f20244cadd9f0676cb1e6546ae0bc23751d02b404da01"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/constraints/targeted_constraint.rs",
+      "sha256": "3e2b462b6ecaf322ab7c333542c649a7c4ff3904f103b5c67001a885fd068b84"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/constraints/translation_constraint.rs",
+      "sha256": "b7d9eb0c64ebb1da20fbf37a296e16c41e8ed42b437d59c9f849e39b8d5eac14"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/constraints/scale_constraint.rs",
+      "sha256": "47a654274cc0f6e16d8952f8c96fdca8efdb558403ec78d9468f883f14dd2630"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/constraints/distance_constraint.rs",
+      "sha256": "ee2d2df3ec8fe3bf2d23ff974823c7f71260206ff7f50c15c44dfc6e9b9844cf"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/constraints/layout_constraint.rs",
+      "sha256": "bdb48d5b8f5c2d5b65584392c78066e769265e8984da34b3a933d735a58fccca"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/shapes/clipping_shape.rs",
+      "sha256": "466f8cb71255d1c082efdd41b27ee4f31b2f11cc3f4bdb5e512cf798539732d3"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/foreground_layout_drawable.rs",
+      "sha256": "e5163120dee92a7d708bed0cf6b5cc1185a05a9c6e9c616c5ddb04568defb4c4"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/generated/draw_rules_base.rs",
+      "sha256": "0f6b02ebcb6a3ee099bf619d8586c37f6b75194c86e3a300866e5a3317ff85a2"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/generated/constraints/distance_constraint_base.rs",
+      "sha256": "1bd46998f30c7cfbcef5ff3e2f54472460b26abf54998e40682de1c560880e04"
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/generated/foreground_layout_drawable_base.rs",
+      "sha256": "9add16652cbaff77b30167ac154354107fe019cdf7b9d6196567ac1c7e9df6da"
+    },
+    {
+      "path": "tools/html-to-riv/validation/foreground-directions-receipt.json",
+      "sha256": "183905d442693da0e13c0dade16aa2c8eeaa69f25447a4f7f3cfd9b78a5af997"
+    }
+  ]
+}

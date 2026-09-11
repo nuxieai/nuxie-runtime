@@ -1,0 +1,4188 @@
+{
+  "status": "experimental-composition-with-preserved-failures",
+  "publicAdmission": false,
+  "scope": "Fixed-size wrapped items, positional line alignment and nested alpha painting through ordinary foreground chains; fixture adapter, not public compiler lowering. Raw public driver labels do not apply.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "counts": {
+    "cases": 72,
+    "frames": 576,
+    "geometryPass": 576,
+    "pixelPass": 268,
+    "clearPass": 1152,
+    "fullyPassingCases": 15,
+    "exactReproductions": 72,
+    "directPairsPrepared": 100,
+    "exactTransfers": 252,
+    "automatedOnly": 224
+  },
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "tools": {
+    "compiler": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-paint-alignment-r1/adapter.py",
+    "probe": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+    "renderer": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay"
+  },
+  "toolHashes": {
+    "compiler": "7a86e253bbdcfd3707fa57a4c1288546ed3e01c852acc30fd17fbc40c6e7cebd",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "baseCompiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv",
+    "sha256": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b"
+  },
+  "artifactHashes": {
+    "src/main.rs": "25d480eba002bc4a3552ea332d27a300d699881d9998ef77b27af4d8f26cf381",
+    "src/wire.rs": "a5bbe9e315b7707824a7d66a53c4ced82b69b0ebfe248a11db8b29a035722c19",
+    "augment": "213937ff882a9a52bdbe2fb0ff20768c1062c2382668a6f6d8a3abb3f3ee72e7",
+    "adapter.py": "7a86e253bbdcfd3707fa57a4c1288546ed3e01c852acc30fd17fbc40c6e7cebd",
+    "pairs.json": "977afa8801aea02731c6efd54a6c198462974ca609578c54c982359a93922ef1",
+    "chrome-cases.json": "4f3e8ce63895c0e8dcc22dc97a4282e1d5d99945cfaeffd77ef09a34e77b8ff6",
+    "build-command.json": "12c07f35c425691c13c70109f046eb4b6e0fced64f7515b20ff04f9bb4130dc5",
+    "build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "render/receipt.json": "3cffc30bdfcc5ce00dbce2a9b467879e7d14095a110a38159d7d5cf160546f66",
+    "validation.log": "26dc9fd59d258c76a1818d8b104e2f1a070149b27e9e7328b13f214bfbdd6a37",
+    "matrix.json": "7aca2a771c9d55c7c5cf0fdd88f00ce9fd7c104ae1fb9887f068659de0e2af16",
+    "reproductions.json": "a9417005a36e07f1a6758ea857c651babfc4495837d30034bb858bb941ddde0b",
+    "counts.json": "6311c58ccfbfcf43fc41c2ce963e5b472603c89438fcd68dde2a52fd402513d9",
+    "visual-direct.json": "e34417713df62434ef9105b953ef43afcf3271758074f229f0aa90a1c1ae33fb",
+    "visual-transfer.json": "caad0fdd94070c353fc8bfa78998e47aa513efd74e384bf3bb602b080f421e13",
+    "visual-automated-only.json": "cd59d7545d7e7cce6a87ac4b62070f28510c4c8fb9fcc3fbe6b5de32a77f5604",
+    "visual-review.md": "5b8b8a29592c01eba5bbaa7b328929b6c47a7f12523b6970e242f88ce7b67bd8",
+    "collect-evidence.py": "6127ed2fa8b4f4770fc913e44e1a660d6543145fdcc9bede17b37f425a3b81e3",
+    "visual-0.png": "8e5da879c83a01229c1a80cbc3391d142cb957053f4eadbafbe6378fbef22590",
+    "visual-4.png": "b68b7025cdb0aaa1186657dff0a21260fab258939ae1e4de107b54cf0e926417",
+    "visual-8.png": "1beec42a3307e0db0d591a3a35d6feb806f09b8dabe47508ab78c9aeea59115b",
+    "visual-12.png": "10d14c63f88f386a4fc902cd295b69ec962078e999706505da84ffca5d2c392d",
+    "visual-16.png": "9b39f754e0ffcb942ab0a7f3c9817d07440a71557aa03110c0be7675da585b1e",
+    "visual-20.png": "35bbea29b8df7a4a5fb8cf26e0543420a40666524a800cf54feb7435788aa2d8",
+    "visual-24.png": "7925812848127fc8885e5afebbcaf8410392dd1268ae67ab57139a98c8587e07",
+    "visual-28.png": "aa637c0c66ed5d8f22a9731858bb79299391705fbc6506f137630d59ca7ab497",
+    "visual-32.png": "dcb8037bc90dd9a83b5ccba1e9fbadca30a46f073a26abfabe9d001f1360e75e",
+    "visual-36.png": "71f9dd0b11a685e55b49df756c5f64779969834fab8a3ecc3c3f6a6c050eddca",
+    "visual-40.png": "e53fb5c6a91226e450c0b031d037bf69079fd9c4d5ddec510e61139d1dfdc101",
+    "visual-44.png": "8b741267f012ffed38ed8112cb795bfae0a008ab2cb0b2c5b35a31ff0caa7acf",
+    "visual-48.png": "1fc010648c4892774543c86364f49ae6e1a2c8e6535e337e073058d41389af0b",
+    "visual-52.png": "bd69aa9847ea8eb008a995a284114ba630c8510acc3668d7036e94f51f37e336",
+    "visual-56.png": "f1de1801783387d406a92eed5971461d0785df053246ef235ea58845bb2dd26f",
+    "visual-60.png": "6fcdac771e734fe7081a428327bd4317abef9c34645bfb1085b165f8a673a4d7",
+    "visual-64.png": "a38a3c62b725c35af1d9ef5c858e331653f41227bc5e1189025edba8736472fe",
+    "visual-68.png": "a74e6c26df08f254829c062e9f03be5b01abaa979ffedf8aa7be2506774fe3ea",
+    "visual-72.png": "b9250ac7c33127dc6652fc95d2fb4fdc259ebd57949cc6c4e0a95c5c16725b26",
+    "visual-76.png": "2611d952f98b11d975745613feeadc536302836683b2da131f4c53851920e051",
+    "visual-80.png": "e8ef53cfe308367894b27cff5ea6ae6bf49169a20e82eb461b752e2a6ac641cf",
+    "visual-84.png": "6bbde5e4c0fd21c781437bba39517118934aeb301802e75e68cd170406eaefb9",
+    "visual-88.png": "80e765b1a32bd5cbbe2f95798e39f6262e379f45b88771df2dc4f87fbc4c39c5",
+    "visual-92.png": "e454ea17f13e18ce93fd459844b7b20692ec07ee4155ad203d7f4c39348492b4",
+    "visual-96.png": "a03cea906fde65454ba50be07f6282cec954a76cd62c63fd87a7de5ce73b7b95"
+  },
+  "visualReview": {
+    "directPairs": 100,
+    "exactFullRgbaTransfers": 252,
+    "automatedOnlyFrames": 224,
+    "allFullyPassingCasesCovered": true
+  },
+  "remaining": [
+    "Mixed reversal changes required paint order with line membership",
+    "General cross-percentage and auto-cross stretch sizing",
+    "Nested wrapping and deeper painted subtrees",
+    "Clipping, group opacity and baselines",
+    "Public API implementation and resource bounds"
+  ],
+  "evidenceDirectory": "tools/html-to-riv/output/wrapped-paint-alignment-r1",
+  "manifestSha256": "94f194f432af9d15d45d42c3f754c53c4a7d1ff7cd1a41ed1925ee32a28f0ea6",
+  "matrix": [
+    {
+      "name": "combined-row-wrap-flex-start-leaf-forward",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-flex-start-subtree-forward",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-row-wrap-flex-start-subtree-reverse",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-center-leaf-forward",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-center-subtree-forward",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-row-wrap-center-subtree-reverse",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-flex-end-leaf-forward",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-flex-end-subtree-forward",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-row-wrap-flex-end-subtree-reverse",
+      "directionValue": 2,
+      "wrapValue": 1,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-flex-start-leaf-forward",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-flex-start-subtree-forward",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-flex-start-subtree-reverse",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-center-leaf-forward",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-center-subtree-forward",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-center-subtree-reverse",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-flex-end-leaf-forward",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-flex-end-subtree-forward",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-wrap-reverse-flex-end-subtree-reverse",
+      "directionValue": 2,
+      "wrapValue": 2,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-flex-start-leaf-forward",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-flex-start-subtree-forward",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-flex-start-subtree-reverse",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-center-leaf-forward",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-center-subtree-forward",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-center-subtree-reverse",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-flex-end-leaf-forward",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-flex-end-subtree-forward",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-flex-end-subtree-reverse",
+      "directionValue": 3,
+      "wrapValue": 1,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-flex-start-leaf-forward",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-flex-start-subtree-forward",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-flex-start-subtree-reverse",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-center-leaf-forward",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-center-subtree-forward",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-center-subtree-reverse",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 3,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-flex-end-leaf-forward",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-flex-end-subtree-forward",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-row-reverse-wrap-reverse-flex-end-subtree-reverse",
+      "directionValue": 3,
+      "wrapValue": 2,
+      "alignmentValue": 6,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-wrap-flex-start-leaf-forward",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-flex-start-subtree-forward",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-wrap-flex-start-subtree-reverse",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-center-leaf-forward",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-center-subtree-forward",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-wrap-center-subtree-reverse",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-flex-end-leaf-forward",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-flex-end-subtree-forward",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-wrap-flex-end-subtree-reverse",
+      "directionValue": 0,
+      "wrapValue": 1,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-flex-start-leaf-forward",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-flex-start-subtree-forward",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-flex-start-subtree-reverse",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-center-leaf-forward",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-center-subtree-forward",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-center-subtree-reverse",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-flex-end-leaf-forward",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-flex-end-subtree-forward",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-wrap-reverse-flex-end-subtree-reverse",
+      "directionValue": 0,
+      "wrapValue": 2,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "c: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-flex-start-leaf-forward",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-flex-start-subtree-forward",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-flex-start-subtree-reverse",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-center-leaf-forward",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-center-subtree-forward",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-center-subtree-reverse",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "oa: local RGB error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-flex-end-leaf-forward",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 0,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "c: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-flex-end-subtree-forward",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "failingFrames": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "a: local RGB error",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-flex-end-subtree-reverse",
+      "directionValue": 1,
+      "wrapValue": 1,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "c: local RGB error",
+            "oc: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-flex-start-leaf-forward",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-flex-start-subtree-forward",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-flex-start-subtree-reverse",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 0,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-center-leaf-forward",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "failingFrames": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-center-subtree-forward",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-center-subtree-reverse",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 1,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-flex-end-leaf-forward",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "ob",
+        "oa",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-flex-end-subtree-forward",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "b",
+        "ob",
+        "a",
+        "oa",
+        "c",
+        "oc"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 4,
+      "failingFrames": [
+        {
+          "frame": 1,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio",
+            "oa: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mean channel error",
+            "b: local RGB error",
+            "ob: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "combined-column-reverse-wrap-reverse-flex-end-subtree-reverse",
+      "directionValue": 1,
+      "wrapValue": 2,
+      "alignmentValue": 2,
+      "paintOrder": [
+        "c",
+        "oc",
+        "a",
+        "oa",
+        "b",
+        "ob"
+      ],
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "failingFrames": []
+    }
+  ]
+}

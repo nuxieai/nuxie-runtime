@@ -1,0 +1,42 @@
+{
+  "status": "private-local-record-facts-and-percentage-owner-envelopes",
+  "sourceHashes": {
+    "flex_structure.rs": "f9894e36f7c165292bccd217fe3c5ade46a7e209bbfbe977797bbd843205a6f6",
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "d30d1e5ff14e89fce90531365c41ccf66236a90d8a4a11188d9f01beb4d3cd1f",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "computed_provenance.rs": "702754b214b429366273147aa0a56fc36deb9cf57c8ffde5d0c0c3db1d01509a",
+    "compiler.rs": "9ca45b4420c89c976f81634b9b6caee141494135167e6903f051a6a6135e581f",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "bf4f42624b6eb1b60f9ef0b3333d0b3cb4842d63de88e52de106a7e7507ac9a5",
+    "flex_descriptor.rs": "576ff32e1178709d0dee75313ccf77f46831b9df6e2b12727248fcc6d1c2f37c",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "gap.rs": "8b0848021dea9e2d1438e71ebf10ba2b7277a0ab10e41989ae14e7902686c67a",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "5098423575ecdf59ca264e72a9c9f6acfec4f906fc731a61d415a30646a626c8",
+    "flex_numeric.rs": "ff55512e7da524273eb46f91502fbe711d177a516910c7b0842c74e993bfc289",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  },
+  "artifactHashes": {
+    "tools/html-to-riv/output/flex-local-facts-r2/receipt.json": "df9b58de7b397616ae226ac513ed11577c59f291af92a363ff46b081f2763e9f",
+    "tools/html-to-riv/output/flex-local-facts-r2/public-regression.log": "d50dd7843ced53341ece944617e91d78568ac18eb46d530ef0a41d0fd5e9d7ee",
+    "tools/html-to-riv/output/flex-local-facts-r2/wasm.log": "f924913e69c2ef3d2c85527d166f802e35f6d7baf28c0bfd5696b7725ab3668d",
+    "tools/html-to-riv/output/flex-local-facts-r2/transport.log": "f092268154fffb36d3ced22638d70110521addf8fe5531f5d0f83c95f5fcfbbb",
+    "tools/html-to-riv/output/flex-local-facts-r2/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/flex-local-facts-r2/tests-final.log": "902aecaff75c9c3a633c2dbdb5e7948f570d43f2f68caaedc9bb3406d725906f",
+    "tools/html-to-riv/output/flex-percent-envelope-r1/receipt.json": "f2d28ce6efed77bb3d324f2b842da5064fad2c4126cff1dcc7194c45c721c59d"
+  },
+  "rustTests": 205,
+  "nodeTests": 36,
+  "publicRegression": 482,
+  "privateScenesExact": 64,
+  "publicAdmissionExpanded": false
+}

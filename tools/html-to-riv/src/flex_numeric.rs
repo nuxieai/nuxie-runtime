@@ -48,6 +48,7 @@ pub(crate) enum Unresolved {
     PossibleNativeOverflow,
     DivisorNotPositive,
     NegativeParent,
+    NegativePercentage,
     InvalidBudget,
     EmptyGroup,
     CountNotRepresentable,
@@ -79,6 +80,25 @@ impl ErrorEnvelope {
     pub(crate) fn lower(self) -> f64 { self.lo }
     pub(crate) fn upper(self) -> f64 { self.hi }
     pub(crate) fn error_upper(self) -> f64 { self.error }
+    /// Resolve a preferred/min/max percentage over an entire owner domain.
+    /// `percent` retains the authored coefficient (50 means 50%, not 0.5).
+    /// The immutable expression is fl(fl(percent * owner) * 0.01f32),
+    /// whereas ideal CSS arithmetic divides by exactly100. The literal0.01
+    /// therefore carries its own representation error. This is not the
+    /// padding/font percentage path, which divides before multiplication.
+    pub(crate) fn preferred_percent(self, percent: &ScalarProvenance) -> Proof<Self> {
+        self.validate()?;
+        if self.lo < 0. { return Err(Unresolved::NegativeParent); }
+        if !percent.is_nonnegative() || percent.native() < 0. {
+            return Err(Unresolved::NegativePercentage);
+        }
+        let coefficient = Self::scalar(percent)?;
+        let scale = ScalarProvenance::from_decimal("0.01", 0.01_f32)
+            .map_err(|_| Unresolved::InvalidEnvelope)?;
+        // Validate the first product before applying the small multiplier:
+        // a finite final ideal value cannot hide native intermediate overflow.
+        coefficient.mul(self)?.mul(Self::scalar(&scale)?)
+    }
     fn zero() -> Self { Self { lo: 0., hi: 0., error: 0. } }
     fn is_zero(self) -> bool { self.lo == 0. && self.hi == 0. && self.error == 0. }
     fn magnitude(self) -> f64 { self.lo.abs().max(self.hi.abs()) }
@@ -438,5 +458,44 @@ mod tests {
         descriptor.parent_world = ErrorEnvelope::new(-5., 10., 0.02).unwrap();
         let result = analyze(&descriptor).unwrap();
         assert!(result.positions.iter().all(|p| p.error >= 0.02));
+    }
+
+    #[test]
+    fn preferred_percentage_encloses_the_whole_owner_domain() {
+        let owner = ErrorEnvelope::new(0., 16384., 0.001).unwrap();
+        let percent = ScalarProvenance::from_decimal("33.333333", 33.333332_f32).unwrap();
+        let result = owner.preferred_percent(&percent).unwrap();
+        assert!(result.lower() <= 0.);
+        assert!(result.upper() >= 16384. * 33.333333 / 100.);
+        assert!(result.error_upper() > owner.error_upper() * 0.33333333);
+        for native_owner in [0_f32, 1., 100., 8192., 16384.] {
+            let native = (percent.native() * native_owner) * 0.01_f32;
+            let ideal = f64::from(native_owner) * 33.333333 / 100.;
+            assert!((f64::from(native) - ideal).abs() <= result.error_upper());
+        }
+    }
+
+    #[test]
+    fn preferred_percentage_preserves_tiny_ideal_and_scale_error() {
+        let owner = ErrorEnvelope::new(1., 16384., 0.).unwrap();
+        let tiny = ScalarProvenance::from_decimal("1e-9999", 0.).unwrap();
+        let result = owner.preferred_percent(&tiny).unwrap();
+        assert!(result.upper() > 0.);
+        assert!(result.error_upper() > 0.);
+        let half = owner.preferred_percent(&scalar(50.)).unwrap();
+        // Fifty and owner are exact; the result still accounts for both native
+        // multiplications and the inexact native literal0.01.
+        assert!(half.error_upper() > 16384. * 50. * (f64::from(0.01_f32) - 0.01).abs());
+        let zero = owner.preferred_percent(&scalar(0.)).unwrap();
+        assert!(zero.is_zero());
+    }
+
+    #[test]
+    fn preferred_percentage_rejects_intermediate_overflow_and_negative_inputs() {
+        let owner = ErrorEnvelope::new(MAX / 2., MAX / 2., 0.).unwrap();
+        assert_eq!(owner.preferred_percent(&scalar(4.)).unwrap_err(), Unresolved::PossibleNativeOverflow);
+        let ordinary = ErrorEnvelope::new(0., 16384., 0.).unwrap();
+        assert_eq!(ordinary.preferred_percent(&scalar(-1.)).unwrap_err(), Unresolved::NegativePercentage);
+        assert_eq!(ErrorEnvelope::new(-1., 0., 0.).unwrap().preferred_percent(&scalar(1.)).unwrap_err(), Unresolved::NegativeParent);
     }
 }

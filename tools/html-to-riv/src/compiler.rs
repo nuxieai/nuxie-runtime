@@ -25,6 +25,8 @@ mod padding;
 #[allow(dead_code)]
 #[path = "flex.rs"]
 mod flex;
+#[path = "flex_structure.rs"]
+mod flex_structure;
 #[path = "flex_descriptor.rs"]
 pub(super) mod flex_descriptor;
 // Staged lowering, exercised against frozen ordinary-file experiments before
@@ -477,8 +479,8 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     output.map.sort_by_cached_key(|node| node.path.split('/').skip(1)
         .map(|part| part.parse::<usize>().expect("generated numeric DOM path")).collect::<Vec<_>>());
     if output.map.is_empty() { return Err(Diagnostic::new("empty-document", "html", "At least one box element is required")); }
-    let constraint_owners = if capture { flex_descriptor::constraint_owners(&output.records) } else { BTreeSet::new() };
-    let descriptors = output.descriptors.into_iter().map(|pending| pending.finish(&output.records, &constraint_owners)).collect();
+    let scene_index = if capture { flex_descriptor::scene_index(&output.records) } else { Default::default() };
+    let descriptors = output.descriptors.into_iter().map(|pending| pending.finish(&output.records, &scene_index)).collect();
     Ok((CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map }, descriptors))
 }
 

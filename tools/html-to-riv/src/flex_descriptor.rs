@@ -13,7 +13,7 @@ impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,
 pub(super) struct Pending {
     pub parent:Parent,pub parent_id:u32,pub path:String,pub record_start:usize,pub record_end:usize,pub items:Vec<Item>,
 }
-impl Pending {pub fn finish(self,records:&[Record],constraint_owners:&std::collections::BTreeSet<u32>)->Group {Group::extract(&self.parent,self.parent_id,&self.path,records,self.record_start,self.record_end,self.items,constraint_owners)}}
+impl Pending {pub fn finish(self,records:&[Record],scene:&SceneIndex)->Group {Group::extract(&self.parent,self.parent_id,&self.path,records,self.record_start,self.record_end,self.items,scene)}}
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all="snake_case")]
 pub(crate) enum Length { Auto, Pixels(f32), Percent(f32) }
@@ -110,11 +110,13 @@ pub(crate) struct Item {
     pub dom_index:usize,pub css_order:i32,
     pub computed:Computed,pub native:Native,
     pub descendant_target_preservation:Option<bool>,
+    pub local_facts:Option<super::flex_structure::LocalFacts>,
 }
 #[derive(Debug, Serialize)]
 pub(crate) struct Group {
     pub parent_id:u32,pub parent_path:String,pub row:bool,pub logical_reverse:bool,
     pub native_flow:Option<u32>,pub native_alignment:Option<u32>,
+    pub parent_local_facts:super::flex_structure::LocalFacts,
     pub parent_main:Length,pub parent_cross:Length,
     #[serde(serialize_with="serialize_size")]
     pub parent_numeric_main:NumericSize,
@@ -129,8 +131,20 @@ pub(crate) struct Group {
     pub numerical_admission:bool,
     pub unresolved_premises:Vec<&'static str>,
 }
-pub fn constraint_owners(records:&[Record])->std::collections::BTreeSet<u32> {
-    records.iter().filter(|record|record.kind.ends_with("Constraint") || record.kind=="ComponentOrigin").filter_map(|record|uint(record,"parentId")).collect()
+#[derive(Default)]
+pub(super) struct SceneIndex {
+    constraints:std::collections::BTreeSet<u32>,
+    layout_children:std::collections::BTreeMap<u32,Vec<u32>>,
+}
+pub(super) fn scene_index(records:&[Record])->SceneIndex {
+    let mut index=SceneIndex::default();
+    for (position,record) in records.iter().enumerate().skip(1) {
+        if let Some(parent)=uint(record,"parentId") {
+            if record.kind=="LayoutComponent" {index.layout_children.entry(parent).or_default().push(position as u32-1);}
+            if record.kind.ends_with("Constraint") || record.kind=="ComponentOrigin" {index.constraints.insert(parent);}
+        }
+    }
+    index
 }
 fn uint(record:&Record,name:&str)->Option<u32>{match record.get(name){Some(Value::Uint(v))=>Some(*v),_=>None}}
 fn float(record:&Record,name:&str)->Option<f32>{match record.get(name){Some(Value::Float(v))=>Some(*v),_=>None}}
@@ -197,31 +211,40 @@ impl Item {
     }
     pub fn extract(style:&Style,direction:Direction,records:&[Record],source_id:&str,source_path:&str,authored_id:u32,participant_id:u32,dom_index:usize,css_order:i32)->Self {
         Self{source_id:source_id.into(),source_path:source_path.into(),authored_id,dom_index,css_order,
-            computed:Computed::extract(style,direction),native:native(records,participant_id,direction),descendant_target_preservation:None}
+            computed:Computed::extract(style,direction),native:native(records,participant_id,direction),descendant_target_preservation:None,local_facts:None}
     }
 }
 impl Group {
-    fn extract(parent:&Parent,parent_id:u32,path:&str,records:&[Record],record_start:usize,record_end:usize,mut items:Vec<Item>,constraint_owners:&std::collections::BTreeSet<u32>)->Self {
+    fn extract(parent:&Parent,parent_id:u32,path:&str,records:&[Record],_record_start:usize,_record_end:usize,mut items:Vec<Item>,scene:&SceneIndex)->Self {
         let direction=parent.direction;
         // Capture happens before descendant/ancestor helpers finish mutating the
         // scene. Bind inputs to final records, never an earlier native snapshot.
-        for item in &mut items {item.native=native(records,item.native.participant_id,direction);}
+        for item in &mut items {
+            item.native=native(records,item.native.participant_id,direction);
+            let record=&records[item.native.participant_id as usize+1];
+            let style=item.native.style_id.and_then(|id|records.get(id as usize+1));
+            let leaf=!scene.layout_children.contains_key(&item.native.participant_id);
+            item.local_facts=Some(super::flex_structure::LocalFacts::inspect(record,style,leaf));
+        }
         let parent_record=&records[parent_id as usize+1];
         let parent_style=uint(parent_record,"styleId").and_then(|id|records.get(id as usize+1));
         let flow=parent_style.and_then(|s|uint(s,"flexDirectionValue"));
         let alignment=parent_style.and_then(|s|uint(s,"layoutAlignmentType"));
-        let native_order:Vec<u32>=records.iter().enumerate().take(record_end).skip(record_start).filter(|(_,r)|r.kind=="LayoutComponent" && uint(r,"parentId")==Some(parent_id)).map(|(index,_)|index as u32-1).collect();
+        let native_order=scene.layout_children.get(&parent_id).cloned().unwrap_or_default();
         let expected:Vec<_>=items.iter().map(|i|i.native.participant_id).collect();
         let expected_set:std::collections::BTreeSet<_>=expected.iter().copied().collect();
         let helpers=native_order.iter().copied().filter(|id|!expected_set.contains(id)).collect::<Vec<_>>();
         let wrappers=items.iter().filter(|i|i.authored_id!=i.native.participant_id).map(|i|i.native.participant_id).collect::<Vec<_>>();
+        let parent_local_facts=super::flex_structure::LocalFacts::inspect(parent_record,parent_style,native_order.is_empty());
         let mut issues=Vec::new();
+        if !parent_local_facts.direct_box_defaults(){issues.push("parent native local defaults/overrides require separate proof".into());}
         if native_order!=expected {issues.push("actual native participants differ from authored participant emission order".into());}
         if !helpers.is_empty(){issues.push("generated helper participants require a different arithmetic model".into());}
         if !wrappers.is_empty(){issues.push("alignment wrapper topology is outside the direct participant model".into());}
         if !parent.padding_zero || parent.distributed{issues.push("parent padding, gaps or distributed spacing is outside the model".into());}
         if flow!=Some(direction.wire()) || alignment!=Some(direction.alignment()){issues.push("native flow/alignment differs from physical flex-start lowering".into());}
         for item in &items {
+            if !item.local_facts.as_ref().is_some_and(|f|f.direct_box_defaults()) {issues.push(format!("{}: native local defaults/overrides require separate proof",item.source_path));}
             let c=&item.computed;
             if !c.padding_zero || !c.margins_zero {issues.push(format!("{}: padding or automatic margin",item.source_path));}
             if !matches!(c.cross,Length::Pixels(_)) || !c.start_aligned_cross || !matches!(c.cross_minimum,Length::Pixels(0.)) || !matches!(c.cross_maximum,Length::Auto) {issues.push(format!("{}: cross target/origin needs separate proof",item.source_path));}
@@ -237,13 +260,13 @@ impl Group {
         // Record mutation/constraint machinery must never silently become a rigid
         // transform assertion. Ancestor/world facts remain unresolved regardless.
         let ids:std::collections::BTreeSet<_>=std::iter::once(parent_id).chain(items.iter().flat_map(|i|[i.authored_id,i.native.participant_id])).collect();
-        if ids.iter().any(|id|constraint_owners.contains(id)) {issues.push("participant or parent has a constraint/origin helper".into());}
+        if ids.iter().any(|id|scene.constraints.contains(id)) {issues.push("participant or parent has a constraint/origin helper".into());}
         let main=if direction.is_row(){parent.width}else{parent.height};let cross=if direction.is_row(){parent.height}else{parent.width};
         let metadata_available=size_known(&parent.numeric_width) && size_known(&parent.numeric_height) && items.iter().all(|item|item.computed.numeric.available());
         let mut unresolved_premises=vec!["parent_size_error","ancestor_world_error","native_default_transform_provenance","descendant_target_preservation"];
         if !metadata_available {unresolved_premises.push("missing_exact_literal_provenance");}
         Self{parent_id,parent_path:path.into(),row:direction.is_row(),logical_reverse:!direction.reverses_emission(),native_flow:flow,native_alignment:alignment,
-            parent_main:main.into(),parent_cross:cross.into(),
+            parent_local_facts,parent_main:main.into(),parent_cross:cross.into(),
             parent_numeric_main:if direction.is_row(){parent.numeric_width.clone()}else{parent.numeric_height.clone()},
             parent_numeric_cross:if direction.is_row(){parent.numeric_height.clone()}else{parent.numeric_width.clone()},native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,
             parent_main_error:None,parent_world_error:None,ideal_literal_metadata:metadata_available.then(||"computed_scalar_provenance".into()),numerical_admission:false,unresolved_premises}
@@ -274,6 +297,8 @@ mod tests {
             let logical:Vec<_>=group.items.iter().map(|i|i.native.participant_id).collect();
             assert_eq!(group.native_participant_file_order,if direction.ends_with("reverse"){logical}else{logical.into_iter().rev().collect::<Vec<_>>()});
             assert!(group.structural_issues.is_empty(),"{:?}",group.structural_issues);
+            assert!(group.parent_local_facts.direct_box_defaults());
+            assert!(group.items.iter().all(|i|i.local_facts.as_ref().is_some_and(|f|f.no_layout_children)));
             assert!(!group.numerical_admission);assert!(group.parent_main_error.is_none());assert!(group.parent_world_error.is_none());assert!(group.ideal_literal_metadata.is_some());
             let json=serde_json::to_value(group).unwrap();assert!(json["parent_main_error"].is_null());
         }
@@ -328,7 +353,10 @@ mod tests {
         assert!(item.numeric_input().is_ok());
         records[2].set("width",Value::Float(25.)).unwrap();
         let parent=Parent::extract(&Style{direction:Direction::Row,..Style::default()});
-        let group=Group::extract(&parent,0,"",&records,2,4,vec![item],&Default::default());
+        // A late helper lies outside the original captured range.
+        let mut late=Record::new("LayoutComponent");late.set("parentId",Value::Uint(1)).unwrap();records.push(late);
+        let group=Group::extract(&parent,0,"",&records,2,4,vec![item],&super::scene_index(&records));
+        assert!(!group.items[0].local_facts.as_ref().unwrap().no_layout_children);
         assert_eq!(group.items[0].native.main.value,Some(25.));
         assert_eq!(group.items[0].numeric_input().unwrap_err(),InputIssue::NativeMismatch("fixed main size"));
     }

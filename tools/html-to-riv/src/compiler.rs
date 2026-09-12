@@ -339,9 +339,18 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
         return computed_order(&declaration.value, parent.order, &declaration.source);
     }
     let environment = variables::compute(&declarations, &parent.variables)?;
-    let value = variables::substitute(&declaration.value, &environment, &declaration.source)?
-        .ok_or_else(|| unsupported(&declaration.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
-    computed_order(&value, parent.order, &declaration.source)
+    let value = substitute_ordinary(&declaration.value, &environment, &declaration.source)?;
+    computed_order(&value.native, parent.order, &declaration.source)
+}
+
+// A guaranteed-invalid substitution computes as unset, at the declaration's
+// existing cascade priority. Do not discard it or restore an earlier value.
+// Syntax/resource errors still propagate, and valid substituted tokens still
+// undergo property and target admission (including declarations that lose).
+fn substitute_ordinary(value: &str, variables: &variables::Variables, source: &str)
+    -> Result<variables::ResolvedValue, Diagnostic> {
+    Ok(variables::substitute_with_provenance(value, variables, source)?
+        .unwrap_or_else(|| variables::ResolvedValue { native: "unset".into(), original: None }))
 }
 
 /// A transient declaration pair consumed by typed property computation. The
@@ -363,8 +372,7 @@ fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style
     let mut resolved = Vec::with_capacity(declarations.len());
     for mut d in declarations {
         let original = if variables::contains_var(&d.value) {
-            let selected = variables::substitute_with_provenance(&d.value, &variable_values, &d.source)?
-                .ok_or_else(|| unsupported(&d.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
+            let selected = substitute_ordinary(&d.value, &variable_values, &d.source)?;
             d.value = selected.native;
             // Substitution cannot bypass property admission, even for a declaration
             // that loses the cascade. Keep the compiler's strict diagnostics.
@@ -827,7 +835,7 @@ mod gap_pipeline_tests {
         }
         assert!(compile_profile(&request("#p{width:auto;height:auto;gap:4px;align-self:flex-start}"),FlexPolicy::Guarded).is_ok());
         assert!(compile_profile(&request("#p{row-gap:5%;column-gap:10%}"),FlexPolicy::Guarded).is_ok());
-        for css in ["#unmatched{gap:-1px}","#p{gap:1px 2px 3px;gap:0}","#p{gap:var(--missing)}"] {
+        for css in ["#unmatched{gap:-1px}","#p{gap:1px 2px 3px;gap:0}","#p{gap:var(--missing,)}"] {
             assert!(compile_profile(&request(css),FlexPolicy::Guarded).is_err(),"{css}");
         }
     }

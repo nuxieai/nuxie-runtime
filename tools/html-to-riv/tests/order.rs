@@ -56,10 +56,10 @@ fn sibling_precomputation_keeps_global_element_limit() {
 fn lightweight_sorting_does_not_bypass_losing_declarations_or_custom_environments() {
     for css in [
         "#a{--bad:1.5;order:var(--bad);order:0}",
-        "#a{order:var(--missing);order:1}",
+        "#a{order:var(--missing,);order:1}",
         "#a{--bad:revert;order:0}",
         "#a{--bad:revert}",
-        "#a{width:var(--missing);order:0}",
+        "#a{width:var(--missing,);order:0}",
     ] {
         assert!(compile(&input(css)).is_err(),"{css}");
     }

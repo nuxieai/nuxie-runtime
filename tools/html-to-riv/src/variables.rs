@@ -347,6 +347,7 @@ pub(crate) fn compute(
     bound_provenance(&mut values);
     Ok(values)
 }
+#[cfg(test)]
 pub(crate) fn substitute(value:&str, vars:&Variables, source:&str) -> Result<Option<String>,Diagnostic> {
     substitute_with_provenance(value,vars,source).map(|value|value.map(|value|value.native))
 }

@@ -1,0 +1,386 @@
+[
+  {
+    "name": "recovery-missing-responsive-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{width:100%}#a{width:31px;width:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{width:100%}#a{width:31px;width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-intrinsic-height",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:60px;height:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:60px;height:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-inherited-color",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:red;color:var(--missing);background:currentColor}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:red;color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-background-missing",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-cycle-background",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--x:var(--x);background:var(--x)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-transitive-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--x:var(--missing);--y:var(--x);width:var(--y)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-inherited-font",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:11px;font-size:var(--missing);width:2em}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:11px;font-size:unset;width:2em}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-order-before-emission",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a{order:-4;order:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a{order:-4;order:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-direction-css-initial",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:column;flex-direction:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:column;flex-direction:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-self-alignment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:flex-end;align-self:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:flex-end;align-self:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-main-spacing",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{justify-content:space-evenly;justify-content:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{justify-content:space-evenly;justify-content:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-gap-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:row}#p{gap:8px 10px;gap:var(--missing);column-gap:4px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:row}#p{gap:8px 10px;gap:unset;column-gap:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-padding-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:auto}#p{padding:8px;padding:var(--missing);padding-right:4px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:auto}#p{padding:8px;padding:unset;padding-right:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-margin-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:auto;margin:var(--missing);margin-left:auto}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:auto;margin:unset;margin-left:auto}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-min-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:60px;min-width:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:60px;min-width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-max-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:30px;max-width:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:30px;max-width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-losing-invalid",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:var(--missing);background:coral}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset;background:coral}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-important-invalid",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:var(--missing)!important;background:coral}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset!important;background:coral}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-whole-expression",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing) 10px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-nested-invalid-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--absent,var(--also-absent))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-skipped-invalid-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--good:30px;width:var(--good,var(--missing))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:30px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-cycle-own-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--x:var(--y,10px);--y:var(--x,20px);width:var(--x)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-outside-cycle-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--x:var(--x);width:var(--x,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:30px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "recovery-order-dom-selector",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a:first-child{background:navy}#a{order:-4;order:var(--missing)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a:first-child{background:navy}#a{order:-4;order:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "failed-substitution-to-unset"
+    ]
+  }
+]

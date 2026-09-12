@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Static data attributes qualified; fractional paint failures isolated",
-  "status": "Runtime remains immutable; broad flex and borders remain unadmitted",
-  "current": "Public static data selection passes 219 Rust/37 Node tests, 589 prior exact outputs and 128/128 new Chrome/native geometry and pixel frames. Four selected flex failures reproduce in fixed native-size controls. Three ordinary border alternatives improve record cost but preserve fractional-edge failures; complete diagnostic visual evidence is retained.",
-  "next": "Implement browser-correct recovery for missing/cyclic variable substitution while preserving strict unsupported-semantics diagnostics. Investigate content-box file compositions independently. Continue paint work when a concrete untested composition offers a path forward.",
+  "focus": "Failed variable substitution now follows CSS unset behavior",
+  "status": "Public compiler extended; immutable runtime guard passes",
+  "current": "Variable recovery passes 224 Rust/38 Node tests, 605 prior exact outputs, 192/192 native/Chrome geometry and pixel frames and 384 clear controls. Static data attributes remain qualified. Content-box candidates establish a fixed-padding translation path; flex/border fractional paint failures remain preserved and unresolved.",
+  "next": "Implement content-box sizing translation with separate authored and emitted dimensions, correct inheritance and native numeric/provenance bounds. Continue variable recovery for successful but wrongly typed substitutions using an explicit grammar classification, preserving unsupported CSS diagnostics.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public variable recovery, retained diagnostics and complete visual qualification",
+      "path": "tools/html-to-riv/validation/public-variable-recovery-review.md"
+    },
     {
       "label": "Public static data attributes and complete native/Chrome qualification",
       "path": "tools/html-to-riv/validation/public-data-attributes-review.md"
@@ -406,11 +410,11 @@
   "activeWork": [
     {
       "name": "Variable recovery",
-      "work": "Investigate failed substitution followed by CSS unset at the same cascade position; retain errors for valid unsupported values and limits."
+      "work": "Failed substitution is publicly qualified. Successful empty/wrong-type substituted values remain compiler gaps requiring a property-grammar classifier; unsupported CSS and resource errors must stay distinct."
     },
     {
       "name": "Content-box sizing",
-      "work": "Eight fixed-padding translations pass 64 native/Chrome frames; no ordinary box-sizing property exists. Public lowering must preserve authored inheritance and adjust native numeric/provenance views. Mixed-unit compositions remain open."
+      "work": "Next implementation: lower content dimensions/minmax plus fixed padding into ordinary border-box fields while preserving authored inheritance and adjusting numeric/provenance views. Eight candidate cases pass 64 native/Chrome frames; broader mixed-unit composition remains open."
     },
     {
       "name": "Flex and painting",

@@ -1,0 +1,112 @@
+{
+  "scope": "S09/S10 public guaranteed-invalid ordinary variable substitution computes as unset at its original cascade position; successful empty/wrong-typed values and unsupported target/resource contexts still diagnose.",
+  "status": "qualified-bounded-failed-variable-substitution",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "cases": 24,
+  "frames": 192,
+  "geometryPass": 192,
+  "pixelPass": 192,
+  "clearPass": 384,
+  "expectedPaintAssertions": 576,
+  "everyAuthoredBoxEntirelyInsideEveryViewport": true,
+  "directVisualPairs": 26,
+  "exactFullRgbaTransferredPairs": 166,
+  "visualTransferMethod": "Complete decoded RGBA equality after explicit white-canvas extension; responsive case only at same viewport",
+  "rustTests": 224,
+  "nodeTests": 38,
+  "newRustTests": 5,
+  "newNodeTests": 1,
+  "newCorpusParityComparisons": 72,
+  "newCliWasmDiagnosticPairs": 16,
+  "priorExactPublicOutputs": 605,
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "2e63e64dabb3a18790e8c42812bf4afc2803b238bded24a2475bcba4ad8af2f9",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "wasmSha256": "c0a885ed395f6e96ba1dee1280e743141cd2460452ef3c0f6728578fa12dd4cb",
+  "fixturesSha256": "c0ea59cba02006a9bb3990aec53a5f6b412b1a0dbeb2011a93c25bed0d3ea9f7",
+  "resetSha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+  "pixelGateSha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/source-bindings.json",
+      "sha256": "58b3a158db394b8e2ac6c7f80e097dbe307ed0dcc8ffbcc988b45774e5bf4b81"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/checks-r2.json",
+      "sha256": "3a8153c1887a643bdcdefde7f3e098e4c1034417f4a5f62810569ff52db9ccda"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/rust-tests.log",
+      "sha256": "b888b06ee9c73a6e94487585870c2d76d287b3e244757df63a22f450cdeeb510"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/rust-tests-r2.log",
+      "sha256": "73f0ff00ed6cb8fb885d20d9e2bf0cbd7812c3e87aa341cf4649a710ac696eb7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/native-build.log",
+      "sha256": "a22fc4ac0fed77fa53489c19fdc051899cd7e332a7234734a7e772eb902a8d57"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/wasm-build.log",
+      "sha256": "af0ba9ae9328cdb8694c19422039150560cef5c37914c90b4699c3184545cb33"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/node-tests.log",
+      "sha256": "3c774accf4180c0d4feabfa7461c539902a8cb7a40088dfd95ce18e20a75c811"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/typescript.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/render-command.json",
+      "sha256": "0fd8d5d2696967c7fa848873d911b066f50f4e184971544d970f85151991134d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/render/receipt.json",
+      "sha256": "a06c472a2663e1d10c8db35b50a282084fcf834bf7797d30ebe14376290b2b17"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/visual-coverage.json",
+      "sha256": "f7bbbdc195cf7998721500ac3ee748009a856f1b219e04c666273b1ff1a4a286"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-variable-recovery-r1/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/variable-recovery-audit.md",
+      "sha256": "33cf92e925eb2899ca50ffa5c72e6bdb7bd6f198d17149bfe7f47fa4d49b6809"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-variable-recovery-review.md",
+      "sha256": "63205cde8999cb404e9b706a755f5ee5b080691f3e0a9799cfcfc1c54343f379"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-variable-recovery-visual.py",
+      "sha256": "386aa89b9a23949d22e84d9cce5b2cac3a7648a6104f0a2b71271e2f550cbc47"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-recovery-audit-r1/receipt.json",
+      "sha256": "693b9f66e740df0ddb0bab1b396a58a9c58b579a474d83c18606ed3c95fbd594"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-recovery-audit-r1/probe.mjs",
+      "sha256": "7a132e5b6f1cd8c1a0432927b462e20cd5c2851c222ae35a38e4393817a9b43f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-recovery-audit-r1/cases.json",
+      "sha256": "e9ffec943a449cfafb01ca24af6be5d9a9f3be40ffe479b86101a32bdb6874dd"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-recovery-prior-regression-r1/manifest.json",
+      "sha256": "68b6e2ce47f9c64119e9369b914460dba351b3b7817a2aa34671fee7ef922102"
+    }
+  ]
+}

@@ -37,10 +37,8 @@ fn public_variables_equal_independent_literal_controls() {
 fn public_variables_cannot_bypass_unsupported_semantics() {
     for css in [
         "#a{--mode:grid;display:var(--mode)}",
-        "#a{width:var(--missing)}",
         "#a{--n:10;width:var(--n)px}",
         "#a{--n:teal;width:var(--n)}",
-        "#a{--cycle:var(--cycle);background:var(--cycle)}",
         "#a{--n:10px;width:var(n)}",
     ] {
         let input = CompileInput {html:"<div id=a></div>".into(),css:css.into(),width:240.,height:160.};

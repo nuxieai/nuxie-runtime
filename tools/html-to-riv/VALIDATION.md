@@ -2,7 +2,9 @@
 
 The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.
 
-Current public checkpoint: [data-attribute qualification](validation/public-data-attributes-review.md) records 219 Rust and 37 Node tests, strict TypeScript, 482 bound output regressions and 107 additional public controls. The 16-scene extension passes 128/128 geometry and pixel frames, 256 clear controls and complete visual coverage. Public grow/shrink admission remains unchanged.
+Current public checkpoint: [variable-recovery qualification](validation/public-variable-recovery-review.md) records 224 Rust and 38 Node tests, strict TypeScript and 605 prior exact-output regressions. The 24-scene extension passes 192/192 geometry and pixel frames, 384 clear controls and complete visual coverage. Sixteen diagnostic inputs preserve CLI/WASM parity and no-output behavior. Public grow/shrink admission remains unchanged.
+
+The previous [data-attribute checkpoint](validation/public-data-attributes-review.md) passes 128/128 geometry and pixel frames and 256 clear controls; all 16 emitted files/maps retain exact equality under the new compiler.
 
 Current private flex prerequisite: [flex-scene-review.md](validation/flex-scene-review.md) documents the final record/ownership/ancestry certificate and its connection to size, world and flex analysis.
 
@@ -44,7 +46,7 @@ python3 tools/html-to-riv/validation/check-target-runtime.py
 
 Transport tests default to `tools/html-to-riv/target/debug/html-to-riv` and `tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm`; override with `HTML_TO_RIV_BIN` and `HTML_TO_RIV_WASM` to test frozen artifacts. They require `public-baseline-cases.json`, `public-color-palettes.json` `public-inheritance-cases.json` `public-css-wide-cases.json` and `public-background-cases.json`; missing fixtures fail rather than skip.
 
-The 37 Node tests cover exact Rive bytes/source maps across CLI/WASM for the public color, sizing, selector (including static data attributes), variable, layout, padding and gap corpora. They also check diagnostic parity for unsupported contexts, output ownership across failures/reuse, and direct ABI 2 buffer behavior. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
+The 38 Node tests cover exact Rive bytes/source maps across CLI/WASM for the public color, sizing, selector (including static data attributes), variable (including failed-substitution recovery), layout, padding and gap corpora. They also check diagnostic parity for unsupported contexts, output ownership across failures/reuse, and direct ABI 2 buffer behavior. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
 
 ## Immutable native/browser run
 

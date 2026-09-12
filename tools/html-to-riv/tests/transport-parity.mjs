@@ -74,7 +74,7 @@ test('every public baseline fixture has exact CLI/WASM parity at three viewports
 test('rejected styles produce identical native and WASM diagnostics and no output',async()=>{
  const compiler=await createCompiler(wasm);const dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-rejection-parity-'));
  try {
-  for(const [index,css] of ['#box{display:grid;}','#box{background-image:linear-gradient(red,blue);}','#box{background-color:var(--missing);}','#box{position:fixed;}','#box{transform:rotate(20deg);}','#box{opacity:0.5;}'].entries()) {
+  for(const [index,css] of ['#box{display:grid;}','#box{background-image:linear-gradient(red,blue);}','#box{background-color:var(--missing,);}','#box{position:fixed;}','#box{transform:rotate(20deg);}','#box{opacity:0.5;}'].entries()) {
    const value={...input,css},prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(value));
    const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'});
    const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...value});
@@ -359,4 +359,18 @@ test('static data attributes preserve CLI/WASM output and strict diagnostics',as
    assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
   }
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('failed variable substitution preserves unset cascade and strict CLI/WASM diagnostics',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-variable-recovery-cases.json',import.meta.url)));
+ assert.equal(fixtures.length,24);await assertCorpusParity(fixtures);
+ const rejections=JSON.parse(fs.readFileSync(new URL('../validation/public-variable-recovery-rejections.json',import.meta.url)));
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-variable-recovery-'));
+ try{for(const [index,fixture] of rejections.entries()){
+  const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
+  fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+  const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+  assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));
+  assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+ }}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

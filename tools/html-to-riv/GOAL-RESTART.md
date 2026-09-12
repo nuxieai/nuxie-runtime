@@ -12,11 +12,19 @@ For each feature, record its admitted contexts, intentional exclusions, implemen
 
 Use pinned Chrome as the browser reference and the immutable native importer/renderer as the target. Validate the public Rust, CLI, WASM and JavaScript interfaces, deterministic output, same-file original/clone resizing, geometry, pixels and direct visual inspection. Include combinations, malformed input, lifecycle and resource boundaries. Preserve failing controls and existing tolerances. Transfer prior evidence only when exact source, emitted file, reset, asset, viewport and relevant tool identities justify it.
 
-First finish the existing public content-owner checkpoint described below. Then continue the backlog in priority order, choosing independent work when an earlier item remains unresolved. Each investigation should test a concrete candidate or distinguish a concrete limitation. Preserve its result and next discriminating experiment; do not repeat unchanged experiments or validation without a new reason. Keep progress moving across the backlog without relabelling unresolved work as impossible.
+Continue from the completed checkpoints recorded below. Work through the backlog in priority order, choosing independent work when an earlier item remains unresolved. Each investigation should test a concrete candidate or distinguish a concrete limitation. Preserve its result and next discriminating experiment; do not repeat unchanged experiments or validation without a new reason. Keep progress moving across the backlog without relabelling unresolved work as impossible.
 
 Maintain SUPPORT.md, VALIDATION.md, per-item evidence and the progress webpage. Use parallel agents for independent bounded work. Keep CSS Grid, editor integration, scripting, interactions, bindings and animation excluded. Keep unfinished replacement work on the isolated branch; upstream the completed, reviewed compiler replacement under the user's existing publication instruction.
 
 The goal is complete only when every scoped item is qualified in its explicitly documented scope or has an evidenced immutable-runtime limitation or external dependency, and no independent implementation work remains. Partial support and unexplored combinations are not complete merely because the implemented subset passes.
+
+## Current continuation checkpoint
+
+The public content-owner integration and its documentation are complete in commit `389b94c8a8`; the ordinary line-height investigation is committed as `fcedc9e8ff`. The subsequent finite malformed-source campaign passes 1,000 cases (929 distinct requests), including CLI/WASM parity and worker recovery. See [its review](validation/public-malformed-mutations-review.md).
+
+Current backlog: **13 qualified, 15 partial, four investigating and 67 pending**. A08 remains investigating; Q05 is partial. Public typography is still unadmitted. Runtime, renderer and shared dependencies remain unchanged. The next concrete typography question is the source-backed baseline quantization rule behind the retained 16px discrepancy. Positive wrapper results do not establish reduced-leading, mixed-font or paint support. Continue independent items when that investigation remains unresolved.
+
+The following snapshot records the state before these resumed checkpoints and must not be used to repeat completed work.
 
 ## State at the restart review
 
@@ -59,4 +67,4 @@ Chrome: `153.0.8010.12`. Native renderer: Rust Metal, RasterOrdering. The histor
 
 The integration agents finished their current reviews and stopped during this goal review. No new feature implementation or publication was started.
 
-The resumed run completed the parent source/pixel review and reconciled SUPPORT.md, VALIDATION.md, L12 and the progress page. It rechecks the bound artifacts before the checkpoint commit. A separate unitless-line-height experiment is now testing an ordinary layout/text composition; public text admission has not changed. Read current git state and the latest progress page rather than repeating completed restart actions.
+All five restart actions above have advanced: the content-owner checkpoint is verified and committed; support and progress records are reconciled; line-height and robustness investigations have recorded new evidence. Public text admission has not changed. Read current git state and the latest progress page rather than repeating completed restart actions.

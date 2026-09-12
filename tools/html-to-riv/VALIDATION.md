@@ -66,6 +66,12 @@ Transport tests default to `tools/html-to-riv/target/debug/html-to-riv` and `too
 
 The 46 Node tests cover exact Rive bytes/source maps across CLI/WASM for the public color, sizing, selector (including static data attributes), variable (including failed-substitution recovery), layout, padding, gap and content-owner corpora. They also check diagnostic parity for unsupported contexts, output ownership across failures/reuse, and direct ABI 2 buffer behavior. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
 
+## Deterministic malformed-source campaign
+
+[The Q05 mutation harness](validation/public-malformed-mutations-review.md) checks frozen public CLI/WASM behavior using 20 source seeds, 960 deterministic mutations and 20 fixed controls. The 1,000 cases contain 929 distinct requests: 174 compile and 826 diagnose, with zero unexpected failures. Both transports preserve exact output/diagnostic parity, determinism, output ownership and recovery. A deliberate JavaScript worker exception exercises supervisor replacement without invoking the compiler; the retired worker's delayed exit cannot disrupt its replacement. All 10,652 bound case artifacts verify.
+
+Latest evidence is `output/public-malformed-mutations-r1/lifecycle-r2/receipt.json`. From the module directory, run `node validation/public-malformed-mutations.mjs --output output/public-malformed-mutations-r1/NEW_RUN` with a fresh path; add `--only CASE_ID` for a retained-case replay. Every process or worker batch is bounded to ten seconds. This finite source mutation campaign does not replace coverage-guided fuzzing, malformed transport input, large resource stress or renderer/browser validation. Public production code is unchanged.
+
 ## Immutable native/browser run
 
 Build a fresh baseline toolchain through the unchanged root workspace, with compiler-owned output paths:

@@ -2,10 +2,14 @@
   "updated": "2026-09-12",
   "focus": "Public content-box composition preserves authored content sizing",
   "status": "Public integration validated; six existing pixel failures retained",
-  "current": "270 Rust tests and 46 Node tests pass. All 794 prior requests compile: 719 exact files/maps and 75 reviewed ordinary composition changes. Those 75 files pass 600/600 geometry and 594/600 pixel frames, with full visual coverage and 1,200 clear checks. The measured large-coordinate geometry failure is repaired. Depth and element-boundary controls preserve their separate evidence scopes.",
-  "next": "Advance typography prerequisites and independent backlog work. Unitless line-height is being tested against ordinary text/layout objects, and a deterministic malformed-input campaign is checking public CLI/WASM robustness. Percentage content-owner mixtures and fractional painting remain open.",
+  "current": "Public content-owner integration is committed with 270 Rust/46 Node tests and 75 changed-reference native comparisons: 600 geometry passes, 594 pixel passes and six retained failures. The next line-height investigation covers 64 frames with responsive geometry candidates and preserved baseline/paint failures. A 1,000-case malformed-source campaign passes exact CLI/WASM checks, including ownership, recovery and worker replacement.",
+  "next": "Investigate the source-backed baseline quantization rule for line-height, then advance ordinary text/font admission and independent backlog work. Coverage-guided fuzzing, percentage content-owner mixtures and fractional painting remain open.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Deterministic source mutations, transport parity and recovery",
+      "path": "tools/html-to-riv/validation/public-malformed-mutations-review.md"
+    },
     {
       "label": "Unitless line-height: responsive metrics, retained paint and baseline failures",
       "path": "tools/html-to-riv/validation/unitless-line-height-review.md"
@@ -493,12 +497,12 @@
   ],
   "activeWork": [
     {
-      "name": "Unitless line-height prerequisite",
-      "work": "Eight-case investigation complete. Next: source-backed baseline quantization and reduced-leading compositions; public text remains unadmitted."
+      "name": "Next typography step",
+      "work": "Resolve the 16px baseline quantization hypothesis from source and independent controls; preserve reduced-leading and paint limitations."
     },
     {
-      "name": "Malformed-input robustness",
-      "work": "Reproducible mutations check frozen CLI/WASM parity, crashes and recovery after failures."
+      "name": "Robustness checkpoint complete",
+      "work": "1,000 cases/929 distinct requests passed; larger and coverage-guided campaigns remain future work."
     }
   ],
   "publication": {

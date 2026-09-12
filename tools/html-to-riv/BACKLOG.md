@@ -105,7 +105,7 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | Q02 | Actionable diagnostics | pending | Immutable-target audit and revalidation required; historical status: pending. |
 | Q03 | Machine-readable capability manifest | pending | Immutable-target audit and revalidation required; historical status: pending. |
 | Q04 | Determinism expansion | pending | Immutable-target audit and revalidation required; historical status: pending. |
-| Q05 | Malformed-input fuzzing | pending | Immutable-target audit and revalidation required; historical status: pending. |
+| Q05 | Malformed-input fuzzing | partial | Reproducible source mutation harness passes 1,000 cases (929 distinct requests): 174 accepted, 826 diagnosed, no unexpected compiler failures. Exact CLI/WASM parity, deterministic repeats, owned-output preservation and recovery pass. A deliberate worker-error/restart control validates the supervisor; all 10,652 result artifacts verify. Coverage-guided fuzzing, malformed JSON/ill-typed requests, broader seeds and large-input/resource stress remain open. No browser or native renderer claim. See validation/public-malformed-mutations-review.md. |
 | Q06 | Resource-limit boundary coverage | pending | Immutable-target audit and revalidation required; historical status: pending. |
 | Q07 | Performance benchmarks | pending | Immutable-target audit and revalidation required; historical status: pending. |
 | Q08 | Package/version compatibility | pending | Immutable-target audit and revalidation required; historical status: pending. |

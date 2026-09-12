@@ -9,7 +9,7 @@ use super::computed_provenance::{NumericSize, Scalar};
 pub(super) struct Parent {
     direction:Direction,width:Size,height:Size,numeric_width:NumericSize,numeric_height:NumericSize,padding_zero:bool,distributed:bool,
 }
-impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,numeric_width:style.numeric.width.clone(),numeric_height:style.numeric.height.clone(),padding_zero:style.padding.is_zero(),distributed:style.spacing.distributes()}}}
+impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,numeric_width:style.numeric.width.clone(),numeric_height:style.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes()}}}
 pub(super) struct Pending {
     pub parent:Parent,pub parent_id:u32,pub path:String,pub record_start:usize,pub record_end:usize,pub items:Vec<Item>,
 }
@@ -219,7 +219,7 @@ impl Group {
         if native_order!=expected {issues.push("actual native participants differ from authored participant emission order".into());}
         if !helpers.is_empty(){issues.push("generated helper participants require a different arithmetic model".into());}
         if !wrappers.is_empty(){issues.push("alignment wrapper topology is outside the direct participant model".into());}
-        if !parent.padding_zero || parent.distributed{issues.push("parent padding or distributed spacing is outside the model".into());}
+        if !parent.padding_zero || parent.distributed{issues.push("parent padding, gaps or distributed spacing is outside the model".into());}
         if flow!=Some(direction.wire()) || alignment!=Some(direction.alignment()){issues.push("native flow/alignment differs from physical flex-start lowering".into());}
         for item in &items {
             let c=&item.computed;

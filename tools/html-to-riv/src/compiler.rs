@@ -18,6 +18,8 @@ mod scalar_provenance;
 mod flex_numeric;
 #[path = "computed_provenance.rs"]
 mod computed_provenance;
+#[path = "gap.rs"]
+mod gap;
 #[path = "padding.rs"]
 mod padding;
 #[allow(dead_code)]
@@ -153,9 +155,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -256,9 +258,12 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
     if d.name.starts_with("--") {
         return variables::validate_value(&d.value, &d.source);
     }
+    if matches!(d.name.as_str(),"gap"|"row-gap"|"column-gap") && !candidate {
+        return Err(unsupported(&d.source,"Gap declarations await contextual and visual qualification"));
+    }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom"].contains(&d.name.as_str()) {
+             "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -303,6 +308,11 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
             if !candidate && !descriptor.legacy() {
                 return Err(unsupported(&d.source, "Nonlegacy flex declarations await aggregate numeric and visual qualification, including unmatched or overridden declarations"));
             }
+        }
+        "gap" | "row-gap" | "column-gap" => {
+            if !candidate { return Err(unsupported(&d.source,"Gap declarations await contextual and visual qualification")); }
+            let mut gap=gap::Gap::default();
+            gap.apply(&d.name,&value,gap::Gap::default(),0.,&d.source)?;
         }
         "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
@@ -385,6 +395,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
             "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
             "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => { style.flex.apply(&d.name, &d.value, parent.flex, style.font_size, &d.source)?; style.numeric.flex.apply(d,style.flex,&parent.numeric.flex,&style.numeric.font); },
+            "gap" | "row-gap" | "column-gap" => style.gap.apply(&d.name,&d.value,parent.gap,style.font_size,&d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => { style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?; style.numeric.width = computed_provenance::dimension(d,style.width,&parent.numeric.width,&style.numeric.font); },
             "height" => { style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?; style.numeric.height = computed_provenance::dimension(d,style.height,&parent.numeric.height,&style.numeric.font); },
@@ -647,6 +658,7 @@ impl Emitter {
             let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
                 native_parent_direction, sizes, bounds, stretch, authored_margins)?;
             style.padding.emit(&mut self.records[object_id as usize + 2])?;
+            style.gap.emit(&mut self.records[object_id as usize + 2])?;
             if let Some(plan) = flex_plan {
                 // Cross-alignment wrappers are the actual flex participants.
                 // Keep the authored box identity and its inner stretch sizing.
@@ -768,5 +780,29 @@ mod declaration_provenance_tests {
         let mut input=CompileInput {html:"<div id=a></div>".into(),css:"#a{--w:2em;width:var(--w);font-size:20px}".into(),width:240.,height:160.};
         let actual=compile(&input).unwrap();input.css="#a{width:40px;font-size:20px}".into();assert_eq!(actual,compile(&input).unwrap());
         for css in ["#a{--bad:calc(1px);width:var(--bad);width:1px}","#a{--f:1;flex:var(--f);flex:none}"] {assert!(declarations(css,&Style::default()).is_err());}
+    }
+}
+
+#[cfg(test)]
+mod gap_pipeline_tests {
+    use super::*;
+    fn request(css:&str)->CompileInput {CompileInput{html:"<div id=p><div id=a></div><div id=b></div></div>".into(),css:format!("#p{{width:200px;height:100px}}#a,#b{{width:20px;height:10px}}{css}"),width:400.,height:200.}}
+    #[test]
+    fn candidate_gap_uses_computed_inheritance_and_preserves_public_rejection() {
+        let css="#p{--g:.5em 1em;font-size:20px;gap:var(--g)}#a{font-size:10px;gap:inherit}";
+        let actual=compile_profile(&request(css),FlexPolicy::Candidate).unwrap();
+        let expected=compile_profile(&request("#p{gap:10px 20px}#a{gap:10px 20px}"),FlexPolicy::Candidate).unwrap();
+        assert_eq!(actual,expected);
+        assert!(compile_profile(&request(css),FlexPolicy::Guarded).is_err());
+        assert!(compile_profile(&request("#unmatched{gap:0}"),FlexPolicy::Guarded).is_err());
+    }
+    #[test]
+    fn candidate_zero_gaps_preserve_bytes_and_nonzero_gaps_exclude_flex_proof() {
+        let plain=compile_profile(&request(""),FlexPolicy::Candidate).unwrap();
+        assert_eq!(plain,compile_profile(&request("#p{gap:normal}"),FlexPolicy::Candidate).unwrap());
+        let (_,groups)=compile_profile_with_descriptors(&request("#p{gap:3px}"),FlexPolicy::Candidate).unwrap();
+        let parent=groups.iter().find(|g|g.items.len()==2).unwrap();
+        assert!(parent.structural_issues.iter().any(|issue|issue.contains("gaps")));
+        assert!(!parent.numerical_admission);
     }
 }

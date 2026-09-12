@@ -70,3 +70,7 @@ Flex direction qualification:41feature scenes pass328geometry/pixel frames with 
 Wrapping remains outside public admission. Compiler-private sizing and paint primitives reproduce the validated combined files exactly; they are not callable CSS support. Coordinate and visibility-gate bounds, intrinsic sizing, default normal/stretch line distribution, nested paint scopes and scene-wide resource guards remain unresolved. The snapped visibility-gate experiment repairs demonstrated rounding, but requires a layout-derived epsilon and separation bounds. See validation/public-wrap-plan.md, validation/wrapping-paint-lowering-review.md and validation/wrapped-snapped-gate-review.md.
 
 The private paint module now reproduces all48 dynamic snapped-layout files exactly with an explicit experimental threshold. See validation/wrapping-paint-snapped-module-review.md. This supersedes the selected private paint construction, without expanding public admission.
+
+## Staged gap implementation
+
+Private Candidate compilation now computes physical gap/row-gap/column-gap from HTML/CSS, reproducing all16 retained native gap experiment files and source maps. Public gap declarations remain rejected. Helper/baseline combinations, numeric context admission and intrinsic-percentage pixel failures remain unresolved. See validation/gap-integration-review.md.

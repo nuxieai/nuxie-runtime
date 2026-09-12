@@ -1,0 +1,43 @@
+{
+  "scope": "Bounded partial public point image min/max support; 16 pixel failures and 16 unsampleable zero-area presence controls retained",
+  "rustTests": 335,
+  "nodeTests": 56,
+  "publicRequests": 51,
+  "successfulFiles": 46,
+  "expectedDiagnostics": 5,
+  "publicInterfaceComparisons": 102,
+  "nativeFrames": 368,
+  "geometryPass": 368,
+  "pixelPass": 352,
+  "presencePass": 352,
+  "pixelFailures": 16,
+  "unsupportedPresenceControls": 16,
+  "historicalOutputsExact": 794,
+  "existingImageFilesExact": 126,
+  "visualReview": {
+    "privateInspectedPairs": 126,
+    "privateInspectedSheets": 43,
+    "privateVisualTransfers": 210,
+    "exactPublicFileAndMeasurementTransfers": 336,
+    "additionalPublicPngPairOnlyTransfers": 16,
+    "floorInspectedPairs": 6,
+    "floorInspectedSheets": 3,
+    "floorVisualTransfers": 10
+  },
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-point-constraints-checkpoint-r1/verification.json",
+    "sha256": "71eaaf3c663e6bb630bc056777e65e8e439bd32ee6e6e5ac952a84472561f66c"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-point-constraints-review.md",
+    "sha256": "fe0a1c0f189ddcf864e16decd9a7f1ed43333c7a41b7f84180c8e881b9be884d"
+  },
+  "primaryVisualTransferProof": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-point-constraints-r2/visual-r1/visual-transfer-review.json",
+    "sha256": "4ef51e57aa6caaeb9ff7bf67e7d31f77e876e190eec2f974aa3cf44110350e2a"
+  },
+  "floorVisualReview": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-point-constraints-floor-r1/visual-r1/review-receipt.json",
+    "sha256": "c3f34a7230ff719a4c6fa1dc1f8fe120b58cf33d8770e63803ea57d4a923a4a0"
+  }
+}

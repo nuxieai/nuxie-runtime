@@ -54,6 +54,8 @@ mod wrapping;
 mod wrapping_paint;
 #[path = "images.rs"]
 mod images;
+#[path = "image_constraints.rs"]
+mod image_constraints;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }

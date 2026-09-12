@@ -1,6 +1,6 @@
 # Image min/max constraints: immutable-target investigation plan
 
-Status: source-backed plan, not a qualification. Read against compiler commit `f7ea75e9e6`; no production or runtime changes made for this plan. Public images currently reject non-default min/max constraints in `src/images.rs::plan`. The first independent native controls are now captured (see evidence below). The existing percentage-padding row limitation still applies; this plan does not remove it.
+Status: source-backed historical plan, not blanket qualification. Initially read against compiler commit `f7ea75e9e6`, when public images rejected non-default min/max constraints. Subsequent source-derived point support is documented in `public-image-point-constraints-review.md`; responsive and automatic-minimum families below remain open. No runtime changes were made. The first independent native controls are now captured (see evidence below). The existing percentage-padding row limitation still applies; this plan does not remove it.
 
 ## What the source establishes
 

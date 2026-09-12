@@ -59,7 +59,7 @@ fn image_sources_are_explicit_and_no_external_loader_is_available() {
 
 #[test]
 fn unqualified_image_combinations_produce_diagnostics() {
-    for css in ["min-width:10px", "max-height:100px", "margin:auto", "align-self:baseline",
+    for css in ["min-width:10%", "max-height:100%", "margin:auto", "align-self:baseline",
         "align-self:center", "object-position:20px 30px", "object-position:100.000001%", "object-position:-1e-500%",
         "object-position:100.000000000000000000001%", "object-fit:invalid", "image-rendering:crisp-edges"] {
         let mut input = request("<img id=image src=logo>", &format!("#image{{width:96px;height:64px;{css}}}"));
@@ -81,4 +81,62 @@ fn empty_assets_preserve_the_existing_serialized_request_shape() {
     let mut explicit = value.clone(); explicit["assets"] = serde_json::json!({});
     let explicit: CompileInput = serde_json::from_value(explicit).unwrap();
     assert_eq!(compile(&input).unwrap(), compile(&explicit).unwrap());
+}
+
+#[test]
+fn source_point_constraints_emit_the_same_ordinary_scene_as_the_selected_sizes() {
+    for direction in ["row", "column"] {
+        for (constrained, literal) in [
+            ("min-width:192px", "width:192px;height:128px"),
+            ("max-width:48px", "width:48px;height:32px"),
+            ("min-width:120px;max-height:70px", "width:120px;height:70px"),
+            ("min-width:120px;max-width:48px", "width:120px;height:80px"),
+            ("width:120px;max-height:40px", "width:120px;height:40px"),
+            ("height:80px;max-width:60px", "width:60px;height:80px"),
+            ("width:120px;height:80px;max-width:60px", "width:60px;height:80px"),
+            ("width:120px;max-width:60px;padding:8px 10px;box-sizing:content-box", "width:60px;height:40px;padding:8px 10px;box-sizing:content-box"),
+            ("width:120px;max-width:68px;padding:8px 10px;box-sizing:border-box", "width:68px;height:48px;padding:8px 10px;box-sizing:border-box"),
+        ] {
+            let mut input = request("<div id=parent><img id=image src=logo><div id=tail></div></div>",
+                &format!("#parent{{width:200px;height:240px;flex-direction:{direction}}}#image{{align-self:flex-start;{constrained}}}#tail{{width:8px;height:8px}}"));
+            asset(&mut input,"logo","opaque.png");
+            let output=compile(&input).unwrap_or_else(|e|panic!("{direction}: {constrained}: {e:?}"));
+            assert_eq!(output,compile(&input).unwrap());
+            input.css=input.css.replace(constrained,literal);
+            let selected=compile(&input).unwrap();
+            // The packing direction of an existing image content owner can
+            // differ after replacing an authored auto axis with an explicit
+            // point. Compare exact files for the single-owner controls; native
+            // evidence covers the separate padded ordinary owners.
+            if !constrained.contains("padding") { assert_eq!(output,selected,"{direction}: {constrained}"); }
+            let Asset::Image{bytes}=&input.assets["logo"];
+            assert_eq!(output.riv.windows(bytes.len()).filter(|b|*b==bytes).count(),1);
+        }
+    }
+}
+
+#[test]
+fn constrained_automatic_main_is_admitted_but_automatic_cross_stretch_is_not() {
+    for (direction, accepted, rejected) in [
+        ("column","width:120px;max-height:40px","height:80px;max-width:60px"),
+        ("row","height:80px;max-width:60px","width:120px;max-height:40px"),
+    ] {
+        let mut input=request("<div id=parent><img id=image src=logo></div>",
+            &format!("#parent{{width:200px;height:240px;flex-direction:{direction}}}#image{{{accepted}}}"));
+        asset(&mut input,"logo","opaque.png");
+        assert!(compile(&input).is_ok(),"{direction}: {accepted}");
+        input.css=input.css.replace(accepted,rejected);
+        let error=compile(&input).unwrap_err();
+        assert!(error[0].message.contains("stretch"));
+    }
+}
+
+#[test]
+fn constrained_images_keep_responsive_and_automatic_minimum_diagnostics() {
+    for declaration in ["width:50%;max-width:100px", "max-width:50%", "max-height:50%",
+        "min-width:auto;max-width:100px", "max-width:100px;padding:5%"] {
+        let mut input=request("<img id=image src=logo>",&format!("#image{{align-self:flex-start;{declaration}}}"));
+        asset(&mut input,"logo","opaque.png");
+        assert_eq!(compile(&input).unwrap_err()[0].code,"unsupported-target-semantics","{declaration}");
+    }
 }

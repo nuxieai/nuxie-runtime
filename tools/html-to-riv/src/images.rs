@@ -71,6 +71,7 @@ pub(super) struct Plan {
     pub metadata: ImageMetadata,
     pub aspect_axis: Option<usize>,
     padded: Option<PaddedLayout>,
+    constraints: Option<super::image_constraints::Resolved>,
 }
 #[derive(Clone, Copy)]
 struct PaddedLayout {
@@ -83,10 +84,11 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
         .ok_or_else(|| Diagnostic::new("missing-image-source", source, "img requires a nonempty src naming an explicitly supplied asset"))?;
     let metadata = assets.get(src)?;
     if style.margins.any() || style.self_alignment.is_baseline()
-        || style.self_alignment.wrapper_alignment(parent.direction).is_some()
-        || !matches!(style.min_width, Size::Pixels(0.)) || !matches!(style.min_height, Size::Pixels(0.))
-        || !matches!(style.max_width, Size::Auto) || !matches!(style.max_height, Size::Auto) {
-        return Err(unsupported(source, "Image min/max constraints, automatic margins and alignment wrappers require separate replaced-element qualification"));
+        || style.self_alignment.wrapper_alignment(parent.direction).is_some() {
+        return Err(unsupported(source, "Image automatic margins and alignment wrappers require separate replaced-element qualification"));
+    }
+    if let Some(constraints) = super::image_constraints::resolve(style, parent, metadata, source)? {
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: Some(constraints) }));
     }
     if !style.padding.is_zero() { return padded_plan(metadata, style, parent, source).map(Some); }
     let auto = [matches!(style.width, Size::Auto), matches!(style.height, Size::Auto)];
@@ -101,7 +103,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.width as f32).map_err(Into::into));
         style.numeric.height = super::computed_provenance::NumericSize::Pixels(
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.height as f32).map_err(Into::into));
-        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None }));
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: None }));
     }
     if auto == [true, true] && stretches {
         // Resolve the ordinary owner's cross axis before measuring its Image.
@@ -118,7 +120,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
     // is fixed. Automatic main size instead follows the intrinsic aspect ratio.
     let aspect_axis = if auto[main] { Some(main) }
         else if auto[1-main] && !stretches { Some(1-main) } else { None };
-    Ok(Some(Plan { metadata, aspect_axis, padded: None }))
+    Ok(Some(Plan { metadata, aspect_axis, padded: None, constraints: None }))
 }
 
 fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &str) -> Result<Plan, Diagnostic> {
@@ -159,10 +161,11 @@ fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &
     Ok(Plan { metadata, aspect_axis, padded: Some(PaddedLayout {
         content: ContentOwner { packing, sizes, bounds: [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto] },
         outer_stretch_axis: (auto == [true, true] && stretches).then_some(1-main),
-    }) })
+    }), constraints: None })
 }
 impl Plan {
     pub fn lower_outer(&self, style: &Style, source: &str) -> Result<super::box_sizing::Lowered, Diagnostic> {
+        if let Some(constraints) = &self.constraints { return Ok(constraints.lower_outer(style)); }
         let mut lowered = if self.padded.is_some() {
             super::box_sizing::lower_image(style, source)?
         } else { super::box_sizing::lower(style, source)? };
@@ -170,6 +173,9 @@ impl Plan {
         Ok(lowered)
     }
     pub fn outer_stretch(&self, style: &Style, parent: &Style, lowered: &super::box_sizing::Lowered) -> bool {
+        // Constraint folding produces two definite axes, including authored
+        // automatic main dimensions; none should become native Fill.
+        if self.constraints.is_some() { return false; }
         let cross = usize::from(parent.direction.is_row());
         let authored = [style.width, style.height];
         style.self_alignment.stretches() && !(matches!(authored[cross], Size::Pixels(_))
@@ -186,7 +192,8 @@ impl Plan {
         }
     }
     pub fn content_owner(&self) -> Option<super::box_sizing::ContentOwner> {
-        self.padded.map(|p| p.content)
+        self.constraints.as_ref().and_then(|c|c.content_owner())
+            .or_else(||self.padded.map(|p| p.content))
     }
     pub fn emit(&self, records: &mut Vec<Record>, owner: u32, style: Paint) -> Result<(), Diagnostic> {
         records[owner as usize + 1].set("clip", Value::Bool(true))?;

@@ -1,0 +1,1936 @@
+[
+  {
+    "name": "image-point-constraints-intrinsic-min-width-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:144px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-min-width-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:144px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-max-width-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:48px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 48
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-max-width-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:48px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 48
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-min-height-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-height:96px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 96
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-min-height-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-height:96px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 96
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-max-height-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-height:32px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 32
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-max-height-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-height:32px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 32
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-both-min-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:120px;min-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 120,
+      "minHeight": 100
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-both-min-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:120px;min-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 120,
+      "minHeight": 100
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-both-max-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:72px;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 72,
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-both-max-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:72px;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 72,
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-opposing-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:120px;max-height:70px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 120,
+      "maxHeight": 70
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-opposing-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:120px;max-height:70px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 120,
+      "maxHeight": 70
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-opposing-reverse-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:80px;min-height:90px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80,
+      "minHeight": 90
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-opposing-reverse-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:80px;min-height:90px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80,
+      "minHeight": 90
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-inconsistent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:144px;max-width:48px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144,
+      "maxWidth": 48
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-inconsistent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;min-width:144px;max-width:48px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144,
+      "maxWidth": 48
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-zero-max-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:0px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 0
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-intrinsic-zero-max-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:0px;align-self:flex-start;max-width:0px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 0
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-both-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:80px;padding:0px;align-self:flex-start;min-width:140px;max-width:60px;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 140,
+      "maxWidth": 60,
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-both-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:80px;padding:0px;align-self:flex-start;min-width:140px;max-width:60px;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 140,
+      "maxWidth": 60,
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-max-width-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-max-width-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-height-max-height-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:80px;padding:0px;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-height-max-height-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:80px;padding:0px;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-auto-max-height-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-auto-max-height-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-auto-min-height-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;min-height:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 120
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-auto-min-height-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;min-height:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 120
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-height-auto-max-width-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:80px;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-height-auto-max-width-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:80px;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-border-max-width-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:8px;align-self:flex-start;max-width:80px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-border-max-width-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:8px;align-self:flex-start;max-width:80px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-content-max-width-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;padding:8px;align-self:flex-start;max-width:80px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80
+    },
+    "contentBox": true,
+    "pointInsets": 16,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-content-max-width-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;padding:8px;align-self:flex-start;max-width:80px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80
+    },
+    "contentBox": true,
+    "pointInsets": 16,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-border-floor-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:8px;align-self:flex-start;max-width:8px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 8
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-border-floor-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:8px;align-self:flex-start;max-width:8px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 8
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-content-intrinsic-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:auto;padding:8px;align-self:flex-start;min-width:144px;max-height:70px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144,
+      "maxHeight": 70
+    },
+    "contentBox": true,
+    "pointInsets": 16,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-content-intrinsic-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:auto;padding:8px;align-self:flex-start;min-width:144px;max-height:70px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144,
+      "maxHeight": 70
+    },
+    "contentBox": true,
+    "pointInsets": 16,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-border-intrinsic-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:8px;align-self:flex-start;min-width:144px;max-height:70px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144,
+      "maxHeight": 70
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-padded-border-intrinsic-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding:8px;align-self:flex-start;min-width:144px;max-height:70px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144,
+      "maxHeight": 70
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "preferred": [
+      null,
+      null
+    ],
+    "pointPadding": [
+      8,
+      8,
+      8,
+      8
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-percentage-dimension",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:50%;max-width:60px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-percentage-bound",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:120px;max-width:50%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-percentage-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:120px;max-width:60px;padding:5%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:120px;min-width:auto;max-width:60px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-genuine-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:auto;height:auto;align-self:stretch;max-width:60px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-width-max-width-column-default-alignment",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{align-self:auto}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-fixed-height-max-height-row-default-alignment",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:80px;padding:0px;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{align-self:auto}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      null,
+      80
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  }
+]

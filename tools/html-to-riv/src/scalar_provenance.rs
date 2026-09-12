@@ -184,6 +184,46 @@ impl ScalarProvenance {
         Ok(Self { native, ideal: self.ideal.add(rhs.ideal)?, sign: Sign::Positive,
             identity: Arc::new(Identity::Opaque) })
     }
+    /// Source-only image constraint arithmetic. The floor is part of CSS
+    /// border-to-content conversion; preserve the ideal residual even when the
+    /// emitted subtraction rounds a small authored content value to zero.
+    pub(crate) fn subtract_floor_zero(&self, rhs: &Self) -> Result<Self, ScalarError> {
+        if !self.is_nonnegative() || !rhs.is_nonnegative() { return Err(ScalarError::InvalidInterval); }
+        let native = (self.native - rhs.native).max(0.);
+        if self.proves_equal(rhs) { return Self::exact_constant(0.)?.with_native(native); }
+        if rhs.is_exact_zero() { return self.with_native(native); }
+        let lower = outward(self.ideal.lower - rhs.ideal.upper)?.0.max(0.);
+        let upper = outward(self.ideal.upper - rhs.ideal.lower)?.1.max(0.);
+        Ok(Self { native, ideal: IdealBounds::new(lower, upper)?,
+            sign: if upper == 0. { Sign::Zero } else { Sign::Positive }, identity: Arc::new(Identity::Opaque) })
+    }
+    /// Division by a mathematically exact, positive compiler constant such as
+    /// an encoded image dimension. Authored divisors must not use this method.
+    pub(crate) fn divide_positive_constant(&self, divisor: f32) -> Result<Self, ScalarError> {
+        if !divisor.is_finite() || divisor <= 0. { return Err(ScalarError::InvalidDivisor); }
+        let native = self.native / divisor;
+        finite_native(native)?;
+        Ok(Self { native, ideal: self.ideal.divide_positive(f64::from(divisor))?, sign: self.sign,
+            identity: Arc::new(Identity::Opaque) })
+    }
+    /// These continuous selections enclose both mathematical branches when
+    /// rounding makes their order uncertain; native equality is not ideal proof.
+    pub(crate) fn minimum(&self, rhs: &Self) -> Result<Self, ScalarError> {
+        if !self.is_nonnegative() || !rhs.is_nonnegative() { return Err(ScalarError::InvalidInterval); }
+        let native = self.native.min(rhs.native);
+        if self.proves_equal(rhs) { return self.with_native(native); }
+        Ok(Self { native, ideal: IdealBounds::new(self.ideal.lower.min(rhs.ideal.lower), self.ideal.upper.min(rhs.ideal.upper))?,
+            sign: if self.is_exact_zero() || rhs.is_exact_zero() { Sign::Zero } else { self.sign },
+            identity: Arc::new(Identity::Opaque) })
+    }
+    pub(crate) fn maximum(&self, rhs: &Self) -> Result<Self, ScalarError> {
+        if !self.is_nonnegative() || !rhs.is_nonnegative() { return Err(ScalarError::InvalidInterval); }
+        let native = self.native.max(rhs.native);
+        if self.proves_equal(rhs) { return self.with_native(native); }
+        Ok(Self { native, ideal: IdealBounds::new(self.ideal.lower.max(rhs.ideal.lower), self.ideal.upper.max(rhs.ideal.upper))?,
+            sign: if self.is_exact_zero() && rhs.is_exact_zero() { Sign::Zero } else { Sign::Positive },
+            identity: Arc::new(Identity::Opaque) })
+    }
     pub(crate) fn divide_100(&self) -> Result<Self, ScalarError> {
         let native = self.native / 100.0_f32;
         finite_native(native)?;
@@ -345,6 +385,45 @@ mod tests {
     fn scalar(text: &str, native: f32) -> ScalarProvenance { ScalarProvenance::from_decimal(text, native).unwrap() }
     fn contains(bounds: IdealBounds, value: f64) { assert!(bounds.lower() <= value && value <= bounds.upper(), "{bounds:?} does not enclose {value}"); }
 
+    #[test]
+    fn point_constraint_floor_and_selections_do_not_replace_ideal_with_rounded_native() {
+        let small = scalar("1000000.03125", 1000000.);
+        let base = ScalarProvenance::exact_constant(1000000.).unwrap();
+        let residual = small.subtract_floor_zero(&base).unwrap();
+        assert_eq!(residual.native(), 0.);
+        contains(residual.ideal_bounds(), 0.03125);
+        assert!(!residual.is_exact_zero());
+        let a = scalar("0.1000000001", 0.1);
+        let b = scalar("0.1", 0.1);
+        let minimum=a.minimum(&b).unwrap();
+        let maximum=a.maximum(&b).unwrap();
+        contains(minimum.ideal_bounds(),0.1);
+        contains(maximum.ideal_bounds(),0.1000000001);
+        assert!(maximum.ideal_bounds().lower()>minimum.ideal_bounds().upper());
+        assert_eq!(maximum.native(),minimum.native());
+        assert!(b.subtract_floor_zero(&a).unwrap().is_exact_zero());
+        assert!(a.subtract_floor_zero(&a).unwrap().is_exact_zero());
+        let normalized = a.with_native(1.).unwrap();
+        let same_ideal = normalized.subtract_floor_zero(&a).unwrap();
+        assert!(same_ideal.is_exact_zero());
+        assert_eq!(same_ideal.native(), 1. - 0.1_f32);
+        assert!(same_ideal.absolute_error_upper() > 0.8);
+    }
+    #[test]
+    fn exact_positive_divisors_preserve_ratio_error_and_reject_invalid_constants() {
+        let scalar=scalar("47.99",47.99);
+        let divided=scalar.divide_positive_constant(96.).unwrap();
+        contains(divided.ideal_bounds(),47.99/96.);
+        assert!(divided.absolute_error_upper()>0.);
+        for divisor in [0.,-1.,f32::INFINITY,f32::NAN] {
+            assert!(scalar.divide_positive_constant(divisor).is_err());
+        }
+        let huge=ScalarProvenance::exact_constant(f32::MAX).unwrap();
+        assert!(huge.divide_positive_constant(0.5).is_err());
+        let negative=ScalarProvenance::exact_constant(-1.).unwrap();
+        assert!(scalar.minimum(&negative).is_err());
+        assert!(scalar.maximum(&negative).is_err());
+    }
     #[test]
     fn missing_or_invalid_original_never_becomes_exact_native() {
         assert_eq!(ScalarProvenance::from_optional_decimal(None, 1.).unwrap_err(), ScalarError::MissingOriginal);

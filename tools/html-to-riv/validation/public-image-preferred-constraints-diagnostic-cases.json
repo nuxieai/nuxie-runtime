@@ -1,0 +1,206 @@
+[
+  {
+    "name": "image-preferred-diagnostic-mixed-point-percent",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row}#image{align-self:flex-start;width:50%;min-width:100px;max-width:80%}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-preferred-diagnostic-mixed-percent-point",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row}#image{align-self:flex-start;width:50%;min-width:40%;max-width:300px}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-preferred-diagnostic-both-axes",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row}#image{align-self:flex-start;width:50%;min-width:100px;max-height:200px}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-preferred-diagnostic-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row}#image{align-self:flex-start;width:50%;min-width:100px;padding:8px}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-preferred-diagnostic-cross-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row}#image{align-self:flex-start;width:50%;min-width:100px;align-self:stretch}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-preferred-diagnostic-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row}#image{align-self:flex-start;width:50%;min-width:auto}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  }
+]

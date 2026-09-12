@@ -69,6 +69,35 @@ impl Bounds {
         // for example when a large minimum produces a distorted content box.
         self.image(width,height,None,source)
     }
+    /// Preferred constraints are represented by actual opposite-axis ratio
+    /// bounds. Native computes ratio from the unbounded preferred expression
+    /// first; then it clamps both axes. Do not rederive from the already-clamped
+    /// preferred bound or erase the propagated automatic bounds.
+    pub fn image_preferred(mut self,width:u32,height:u32,axis:usize,containing:Self,
+        sizing:&super::box_sizing::Lowered,source:&str)->Result<Self,Diagnostic> {
+        let preferred=1-axis;
+        let raw=resolve(sizing.sizes[preferred],containing.upper[preferred])
+            .ok_or_else(||unsupported(source,"Preferred image percentage requires a bounded original containing axis"))?;
+        let ratio=width as f32 / height as f32;
+        let derive_upper=|v|if axis==0 {multiply_upper(v,ratio)} else {divide_upper(v,ratio)};
+        let derive_lower=|v|if axis==0 {v*ratio} else {v/ratio};
+        let intermediate=derive_upper(raw);
+        if !raw.is_finite() || !intermediate.is_finite() {
+            return Err(unsupported(source,"Preferred image ratio intermediate may exceed finite binary32 geometry before propagated bounds"));
+        }
+        let minimum=sizing.bounds[axis];let maximum=sizing.bounds[axis+2];
+        let min=resolve(minimum,containing.upper[axis]).ok_or_else(||unsupported(source,"Propagated image minimum is unresolved"))?;
+        let max=resolve(maximum,containing.upper[axis]);
+        if !min.is_finite() || (max.is_none() && !matches!(maximum,Size::Auto)) {
+            return Err(unsupported(source,"Propagated image bounds require finite minima and bounded percentage bases"));
+        }
+        self.upper[axis]=Some(max.map_or(intermediate,|v|intermediate.min(v)).max(min));
+        self.lower[axis]=cap_lower(resolve_witness(sizing.sizes[preferred],containing.lower[preferred]).map(derive_lower),
+            resolve_witness(minimum,containing.lower[axis]),resolve_witness(maximum,containing.lower[axis]),maximum);
+        self.witness[axis]=cap_lower(resolve_witness(sizing.sizes[preferred],containing.witness[preferred]).map(derive_lower),
+            resolve_witness(minimum,containing.witness[axis]),resolve_witness(maximum,containing.witness[axis]),maximum);
+        self.image(width,height,None,source)
+    }
     /// After image ratio/fit validation, bound the final automatic outer box.
     /// `self` is the original containing block: vertical percentage padding
     /// also uses its width, never the inner image's content width or height.
@@ -276,6 +305,29 @@ fn resolve_witness(size: Size, parent: Option<f32>) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn preferred_ratio_uses_raw_percentage_before_propagated_bounds_and_preserves_clamped_preferred() {
+        let style=Style::default();
+        let sizing=super::super::box_sizing::Lowered{sizes:[Size::Percent(50.),Size::Auto],
+            bounds:[Size::Pixels(200.),Size::Pixels(200./1.5),Size::Pixels(120.),Size::Pixels(200./1.5)],numeric:style.numeric};
+        let parent=Bounds{upper:[Some(240.),Some(320.)],lower:[Some(240.),Some(320.)],witness:[Some(240.),Some(320.)]};
+        let child=Bounds{upper:[Some(200.),None],lower:[Some(200.),None],witness:[Some(200.),None]};
+        let result=child.image_preferred(96,64,1,parent,&sizing,"image").unwrap();
+        assert_eq!(result.upper,[Some(200.),Some(200./1.5)]);
+        assert_eq!(result.lower,result.upper);assert_eq!(result.witness,result.upper);
+        let unknown=Bounds{upper:[None,Some(320.)],..parent};
+        assert!(child.image_preferred(96,64,1,unknown,&sizing,"image").is_err());
+    }
+    #[test]
+    fn preferred_ratio_overflow_cannot_hide_behind_point_maximum() {
+        let style=Style::default();
+        let sizing=super::super::box_sizing::Lowered{sizes:[Size::Percent(100.),Size::Auto],
+            bounds:[Size::Pixels(0.),Size::Pixels(0.),Size::Pixels(10.),Size::Pixels(10.)],numeric:style.numeric};
+        let parent=Bounds{upper:[Some(f32::MAX),Some(320.)],lower:[Some(0.);2],witness:[None;2]};
+        let child=Bounds{upper:[Some(10.),None],lower:[Some(0.);2],witness:[None;2]};
+        let error=child.image_preferred(1,8192,1,parent,&sizing,"image").err().unwrap();
+        assert!(error.message.contains("before propagated bounds"));
+    }
     #[test]
     fn responsive_ratio_clamps_use_original_opposite_parent_content_axis() {
         let parent=Bounds{upper:[Some(800.),Some(200.)],lower:[Some(800.),Some(200.)],witness:[Some(800.),Some(200.)]};

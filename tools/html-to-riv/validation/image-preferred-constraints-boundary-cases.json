@@ -1,0 +1,490 @@
+[
+  {
+    "name": "image-preferred-constraints-boundary-width-maximum-point-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-maximum-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "35%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-ordered-points-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:120px;max-width:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 120,
+      "maxWidth": 220
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-ordered-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:25%;max-width:40%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "25%",
+      "maxWidth": "40%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-maximum-point-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-maximum-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": "35%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-ordered-points-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:120px;max-height:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 120,
+      "maxHeight": 220
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-ordered-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:25%;max-height:40%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "25%",
+      "maxHeight": "40%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-maximum-point-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-maximum-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "35%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-ordered-points-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:120px;max-width:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 120,
+      "maxWidth": 220
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-width-ordered-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:25%;max-width:40%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "25%",
+      "maxWidth": "40%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-maximum-point-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-maximum-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": "35%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-ordered-points-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:120px;max-height:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 120,
+      "maxHeight": 220
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "propagated-point-bounds",
+    "preferredCoefficient": 50
+  },
+  {
+    "name": "image-preferred-constraints-boundary-height-ordered-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:25%;max-height:40%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "25%",
+      "maxHeight": "40%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private preferred-axis max-only and ordered bound boundary with parent content bases; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "composition": "coefficient-clamp",
+    "preferredCoefficient": 50
+  }
+]

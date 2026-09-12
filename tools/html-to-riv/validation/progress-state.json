@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
-  "focus": "Combined image bounds and preferred-axis compositions",
-  "status": "Combined public checkpoint verified; preferred-axis candidates reviewed",
-  "current": "Point/percentage automatic-axis min/max, including conflicting bounds, compile as ordinary responsive properties.31requests/62interface comparisons;216geometry/presence passes,204pixel passes. Twelve fractional tail failures remain.196older image files/maps and794historical outputs remain exact.",
-  "next": "Carry tested preferred point-bound propagation and same-parent percentage coefficient clamping through public/numeric validation. Preserve failed native-transfer and wrapper controls; do not rerender unchanged scenes.",
+  "focus": "Preferred-axis image constraints",
+  "status": "Public preferred-axis checkpoint verified; mixed/both-axis experiment captured",
+  "current": "Homogeneous point bounds propagate ratio limits; same-parent percentage bounds clamp source coefficients.53requests/106interface observations;264geometry/presence and222pixel passes.42fractional tail failures retained.223older image files/maps and794historical outputs exact.",
+  "next": "Review the new16-file mixed/both-axis private gallery (128geometry/presence,120pixel passes; eight tail failures), then carry viable compositions through provenance, numeric checks and public APIs. Keep diagnostics until integrated.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Preferred-axis public bounds and retained failures",
+      "path": "tools/html-to-riv/validation/public-image-preferred-constraints-review.md"
+    },
     {
       "label": "Combined image bounds and retained failures",
       "path": "tools/html-to-riv/validation/public-image-combined-constraints-review.md"

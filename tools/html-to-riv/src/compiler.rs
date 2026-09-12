@@ -58,6 +58,8 @@ mod images;
 mod image_constraints;
 #[path = "image_responsive_constraints.rs"]
 mod image_responsive_constraints;
+#[path = "image_preferred_constraints.rs"]
+mod image_preferred_constraints;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }

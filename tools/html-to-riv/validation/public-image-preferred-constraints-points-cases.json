@@ -1,0 +1,270 @@
+[
+  {
+    "name": "image-preferred-constraints-followup-width-min-point-row-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-width-conflicting-point-row-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-width-min-point-column-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-width-conflicting-point-column-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-height-min-point-row-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-height-conflicting-point-row-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-height-min-point-column-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-preferred-constraints-followup-height-conflicting-point-column-propagated-points",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true,
+    "composition": "propagated-point-bounds",
+    "expected": {
+      "outcome": "compile"
+    }
+  }
+]

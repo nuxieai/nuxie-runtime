@@ -1,0 +1,535 @@
+[
+  {
+    "name": "image-point-constraints-reject-percentage-dimension",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:50%;max-width:60px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-percentage-bound",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:120px;max-width:50%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-percentage-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:120px;max-width:60px;padding:5%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:120px;min-width:auto;max-width:60px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-point-constraints-reject-genuine-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:120px;height:auto;padding:0px;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:auto;height:auto;align-self:stretch;max-width:60px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "preferred": [
+      120,
+      null
+    ],
+    "pointPadding": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Source point constraint arbitration; no viewport/browser values used."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-image-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{padding:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{min-width:auto}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-cross-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{align-self:stretch}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-preferred-axis-maximum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{max-width:60%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-both-preferred-axes",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{height:40%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-intrinsic-both-auto",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:auto}\n#image{max-height:35%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-combined-constraints-diagnostic-preferred-axis",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{min-width:200px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": 180
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside opposite-axis combined-bound profile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-combined-constraints-diagnostic-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{min-height:auto}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": 180
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside opposite-axis combined-bound profile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-combined-constraints-diagnostic-image-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{padding:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": 180
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside opposite-axis combined-bound profile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-combined-constraints-diagnostic-cross-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{align-self:stretch}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": 180
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside opposite-axis combined-bound profile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  }
+]

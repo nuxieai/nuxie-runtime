@@ -133,7 +133,7 @@ fn constrained_automatic_main_is_admitted_but_automatic_cross_stretch_is_not() {
 
 #[test]
 fn constrained_images_keep_responsive_and_automatic_minimum_diagnostics() {
-    for declaration in ["width:50%;max-width:100px", "max-width:50%", "max-height:50%",
+    for declaration in ["width:50%;min-width:10%;max-width:100px", "max-width:50%", "max-height:50%",
         "min-width:auto;max-width:100px", "max-width:100px;padding:5%"] {
         let mut input=request("<img id=image src=logo>",&format!("#image{{align-self:flex-start;{declaration}}}"));
         asset(&mut input,"logo","opaque.png");
@@ -155,4 +155,26 @@ fn responsive_image_opposite_constraints_remain_runtime_sized_and_deterministic(
             assert_eq!(output.source_map.len(),3);
         }
     }
+}
+
+#[test]
+fn preferred_percentage_coefficient_arbitration_matches_independent_responsive_literal() {
+    for (authored,literal) in [("width:50%;min-width:75%","width:75%"),("height:50%;max-height:30%","height:30%"),("width:50%;min-width:75%;max-width:30%","width:75%")] {
+        let mut input=request("<div id=parent><img id=image src=logo></div>",
+            &format!("#parent{{width:100%;height:100%}}#image{{align-self:flex-start;{authored}}}"));
+        asset(&mut input,"logo","opaque.png");
+        let output=compile(&input).unwrap();
+        input.css=input.css.replace(authored,literal);
+        assert_eq!(output,compile(&input).unwrap(),"{authored}");
+    }
+}
+#[test]
+fn preferred_point_bounds_keep_source_assets_and_reject_both_axis_or_mixed_bounds() {
+    let mut input=request("<div id=parent><img id=image src=logo></div>","#parent{width:100%;height:100%}#image{align-self:flex-start;width:50%;min-width:200px;max-width:120px}");
+    asset(&mut input,"logo","opaque.png");
+    let output=compile(&input).unwrap();assert_eq!(output,compile(&input).unwrap());
+    let Asset::Image{bytes}=&input.assets["logo"];
+    assert_eq!(output.riv.windows(bytes.len()).filter(|b|*b==bytes).count(),1);
+    input.css.push_str("#image{max-height:100px}");assert!(compile(&input).is_err());
+    input.css=input.css.replace("max-height:100px","max-height:none;max-width:80%");assert!(compile(&input).is_err());
 }

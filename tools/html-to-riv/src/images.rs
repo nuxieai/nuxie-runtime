@@ -73,6 +73,7 @@ pub(super) struct Plan {
     padded: Option<PaddedLayout>,
     constraints: Option<super::image_constraints::Resolved>,
     responsive: Option<super::image_responsive_constraints::Resolved>,
+    preferred: Option<super::image_preferred_constraints::Resolved>,
 }
 #[derive(Clone, Copy)]
 struct PaddedLayout {
@@ -88,11 +89,14 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
         || style.self_alignment.wrapper_alignment(parent.direction).is_some() {
         return Err(unsupported(source, "Image automatic margins and alignment wrappers require separate replaced-element qualification"));
     }
+    if let Some(preferred)=super::image_preferred_constraints::resolve(style,parent,metadata,source)? {
+        return Ok(Some(Plan{metadata,aspect_axis:Some(preferred.automatic),padded:None,constraints:None,responsive:None,preferred:Some(preferred)}));
+    }
     if let Some(responsive) = super::image_responsive_constraints::resolve(style, parent, source)? {
-        return Ok(Some(Plan { metadata, aspect_axis: Some(responsive.automatic), padded: None, constraints: None, responsive: Some(responsive) }));
+        return Ok(Some(Plan { metadata, aspect_axis: Some(responsive.automatic), padded: None, constraints: None, responsive: Some(responsive), preferred: None }));
     }
     if let Some(constraints) = super::image_constraints::resolve(style, parent, metadata, source)? {
-        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: Some(constraints), responsive: None }));
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: Some(constraints), responsive: None, preferred: None }));
     }
     if !style.padding.is_zero() { return padded_plan(metadata, style, parent, source).map(Some); }
     let auto = [matches!(style.width, Size::Auto), matches!(style.height, Size::Auto)];
@@ -107,7 +111,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.width as f32).map_err(Into::into));
         style.numeric.height = super::computed_provenance::NumericSize::Pixels(
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.height as f32).map_err(Into::into));
-        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: None, responsive: None }));
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: None, responsive: None, preferred: None }));
     }
     if auto == [true, true] && stretches {
         // Resolve the ordinary owner's cross axis before measuring its Image.
@@ -124,7 +128,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
     // is fixed. Automatic main size instead follows the intrinsic aspect ratio.
     let aspect_axis = if auto[main] { Some(main) }
         else if auto[1-main] && !stretches { Some(1-main) } else { None };
-    Ok(Some(Plan { metadata, aspect_axis, padded: None, constraints: None, responsive: None }))
+    Ok(Some(Plan { metadata, aspect_axis, padded: None, constraints: None, responsive: None, preferred: None }))
 }
 
 fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &str) -> Result<Plan, Diagnostic> {
@@ -165,10 +169,11 @@ fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &
     Ok(Plan { metadata, aspect_axis, padded: Some(PaddedLayout {
         content: ContentOwner { packing, sizes, bounds: [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto] },
         outer_stretch_axis: (auto == [true, true] && stretches).then_some(1-main),
-    }), constraints: None, responsive: None })
+    }), constraints: None, responsive: None, preferred: None })
 }
 impl Plan {
     pub fn lower_outer(&self, style: &Style, source: &str) -> Result<super::box_sizing::Lowered, Diagnostic> {
+        if let Some(preferred)=&self.preferred {return Ok(preferred.lower_outer());}
         if let Some(constraints) = &self.constraints { return Ok(constraints.lower_outer(style)); }
         if let Some(responsive) = &self.responsive { return Ok(responsive.lower_outer(style)); }
         let mut lowered = if self.padded.is_some() {
@@ -201,7 +206,9 @@ impl Plan {
             .or_else(||self.padded.map(|p| p.content))
     }
     pub fn validate_bounds(&self, child: super::numeric::Bounds, containing: super::numeric::Bounds, source: &str) -> Result<super::numeric::Bounds, Diagnostic> {
-        if let Some(plan)=&self.responsive {
+        if let Some(plan)=&self.preferred {
+            plan.validate_bounds(child,containing,self.metadata,source)
+        } else if let Some(plan)=&self.responsive {
             child.image_constrained(self.metadata.width,self.metadata.height,plan.automatic,containing,plan.minimum,plan.maximum,source)
         } else { child.image(self.metadata.width,self.metadata.height,self.aspect_axis,source) }
     }
@@ -218,6 +225,15 @@ impl Plan {
                 }} else {(0.,1)};
                 records[owner as usize + 2].set(name,Value::Float(value))?;
                 records[owner as usize + 2].set(&format!("{name}UnitsValue"),Value::Uint(units))?;
+            }
+        }
+        if let Some(plan)=&self.preferred {
+            if plan.explicit_minima {
+                for (size,name) in plan.minima().into_iter().zip(["minWidth","minHeight"]) {
+                    let (value,units)=match size {Size::Pixels(v)=>(v,1),Size::Percent(v)=>(v,2),Size::Auto=>unreachable!("preferred minimum is definite")};
+                    records[owner as usize+2].set(name,Value::Float(value))?;
+                    records[owner as usize+2].set(&format!("{name}UnitsValue"),Value::Uint(units))?;
+                }
             }
         }
         if self.aspect_axis.is_some() {
@@ -269,7 +285,7 @@ mod tests {
             let parent=Style::default();
             let style=computed(&format!("#image{{align-self:flex-start;{css}}}"),&parent);
             let responsive=super::super::image_responsive_constraints::resolve(&style,&parent,"image").unwrap().unwrap();
-            let plan=Plan{metadata:ImageMetadata{width:96,height:64,asset_index:0},aspect_axis:Some(responsive.automatic),padded:None,constraints:None,responsive:Some(responsive)};
+            let plan=Plan{metadata:ImageMetadata{width:96,height:64,asset_index:0},aspect_axis:Some(responsive.automatic),padded:None,constraints:None,responsive:Some(responsive),preferred:None};
             let mut records=vec![Record::new("Artboard"),Record::new("LayoutComponent"),Record::new("LayoutComponentStyle")];
             plan.emit(&mut records,0,Paint::default()).unwrap();
             for (index,name) in ["minWidth","minHeight"].into_iter().enumerate() {

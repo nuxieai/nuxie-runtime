@@ -1,0 +1,49 @@
+{
+  "scope": "Partial public preferred-axis image constraints; 42 following-tail pixel failures retained",
+  "rustTests": 354,
+  "nodeTests": 56,
+  "liveAndFrozenSourceBindings": 277,
+  "publicRequests": 53,
+  "successfulFiles": 33,
+  "expectedDiagnostics": 20,
+  "publicInterfaceComparisons": 106,
+  "nativeFrames": 264,
+  "geometryPass": 264,
+  "pixelPass": 222,
+  "presencePass": 264,
+  "pixelFailures": 42,
+  "historicalOutputsExact": 794,
+  "existingImageFilesExact": 223,
+  "exactReviewedPublicTransfers": 256,
+  "freshReviewedPriorFrames": 8,
+  "priorOutcomes": {
+    "requests": 15,
+    "newlyAdmitted": 1,
+    "remainDiagnostic": 14,
+    "diagnosticsUnchanged": 11,
+    "messageChangedWithSameCodeAndSource": 3
+  },
+  "visualReview": {
+    "privateInspectedSheets": 36,
+    "privateRepresentativePairs": 108,
+    "privateExactVisualTransfers": 180,
+    "privateFrames": 288,
+    "privateWrapperFramesNotAdmitted": 32,
+    "priorInspectedSheets": 3,
+    "priorRepresentativePairs": 3,
+    "priorExactVisualTransfers": 5
+  },
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-preferred-constraints-checkpoint-r1/verification.json",
+    "sha256": "2dab374f289116ced46ac2dc1057cc3b82601c7c9892b56b38de407e7d8fb91b"
+  },
+  "visualTransferProof": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-preferred-constraints-checkpoint-r1/visual-transfer-review.json",
+    "sha256": "46ef5999e4ff8f47f21c34bf139ad454208bdc9f73b26c2e9b78d77798d02a66"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-preferred-constraints-review.md",
+    "sha256": "69deff36636c9a96910e0f3364d9053274e15d9cb0a7acee689f7560815880e3"
+  },
+  "artifactBindings": 8339
+}

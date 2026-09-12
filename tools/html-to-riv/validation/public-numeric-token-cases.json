@@ -1,0 +1,532 @@
+[
+  {
+    "name": "numeric-token-literal",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:999999.875px;height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-signed-exponent",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:+9.99999875e5px;height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-escaped-unit",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:999999.875p\\78 ;height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-uppercase-unit",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:999999.875PX;height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-one-ulp",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1.00000011920928955078125px;height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "1.00000011920928955078125"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-inline",
+    "group": "ordinary",
+    "html": "<div id=p style=\"width:999999.875px;height:20px\"></div>",
+    "css": "",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-negative-zero",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:-0px;height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "-0"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-variable",
+    "group": "variables",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:999999.875px;width:var(--w);height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-alias",
+    "group": "variables",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:999999.875px;--alias:var(--w);width:var(--alias);height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-fallback",
+    "group": "variables",
+    "html": "<div id=p></div>",
+    "css": "#p{width:var(--missing,+9.99999875e5px);height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-variable-escaped-unit",
+    "group": "variables",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:999999.875p\\78 ;width:var(--w);height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-inherited-variable",
+    "group": "variables",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{--w:999999.875px;height:20px}#c{width:var(--w);height:1px}",
+    "expectedFields": [
+      {
+        "node": "c",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-inherited-computed-width",
+    "group": "variables",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{width:999999.875px;height:20px}#c{width:inherit;height:1px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      },
+      {
+        "node": "c",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-percentage",
+    "group": "ordinary",
+    "html": "<div id=p></div>",
+    "css": "#p{width:99.9999875%;height:25.123456789%}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "99.9999875"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "widthUnitsValue",
+        "integer": 2
+      },
+      {
+        "node": "p",
+        "record": "component",
+        "property": "height",
+        "decimal": "25.123456789"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "heightUnitsValue",
+        "integer": 2
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-variable-percentage",
+    "group": "variables",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:+9.99999875e1%;width:var(--w);height:20px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "99.9999875"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "widthUnitsValue",
+        "integer": 2
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-em",
+    "group": "font",
+    "html": "<div id=p></div>",
+    "css": "#p{font-size:1000px;width:999.999875em;height:1px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-rem",
+    "group": "font",
+    "html": "<div id=p></div>",
+    "css": "#p{width:62499.9921875rem;height:1px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-font-size-number",
+    "group": "font",
+    "html": "<div id=p></div>",
+    "css": "#p{font-size:999.999875px;width:1000em;height:1px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-font-before-inheritance",
+    "group": "font",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{font-size:999.999875px;height:20px}#c{font-size:inherit;width:1000em;height:1px}",
+    "expectedFields": [
+      {
+        "node": "c",
+        "record": "component",
+        "property": "width",
+        "decimal": "999999.875"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-padding-shorthand",
+    "group": "bounds",
+    "html": "<div id=p></div>",
+    "css": "#p{width:200px;height:100px;padding:1.00000011920928955078125px 2.123456789px 3.123456789px 4.123456789px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingTop",
+        "decimal": "1.00000011920928955078125"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingRight",
+        "decimal": "2.123456789"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingBottom",
+        "decimal": "3.123456789"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingLeft",
+        "decimal": "4.123456789"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-variable-padding-percentage",
+    "group": "bounds",
+    "html": "<div id=p></div>",
+    "css": "#p{width:200px;height:100px;--pad:12.123456789%;padding-left:var(--pad)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingLeft",
+        "decimal": "12.123456789"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingLeftUnitsValue",
+        "integer": 2
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-minmax",
+    "group": "bounds",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:30px;min-width:99.9999875px;max-width:100.71428680419922px;min-height:12.123456789%;max-height:99.9999875%}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "style",
+        "property": "minWidth",
+        "decimal": "99.9999875"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "maxWidth",
+        "decimal": "100.71428680419922"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "minHeight",
+        "decimal": "12.123456789"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "maxHeight",
+        "decimal": "99.9999875"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "minHeightUnitsValue",
+        "integer": 2
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "maxHeightUnitsValue",
+        "integer": 2
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-content-box-derived",
+    "group": "bounds",
+    "html": "<div id=p></div>",
+    "css": "#p{box-sizing:content-box;width:100.71428680419922px;height:20px;padding:0 5.123456478118896px}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "component",
+        "property": "width",
+        "decimal": "110.96119689941406"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingLeft",
+        "decimal": "5.123456478118896"
+      },
+      {
+        "node": "p",
+        "record": "style",
+        "property": "paddingRight",
+        "decimal": "5.123456478118896"
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-rgb-number",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;background:rgb(127.49999 0 0)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 4286513152
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-rgb-percentage",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;background:rgb(49.99999% 0% 0%)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 4286513152
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-rgb-alpha",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;background:rgb(255 0 0 / .4999999)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 2147418112
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-hsl-angle",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;background:hsl(.11764706deg 100% 50%)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 4294902016
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-hsl-lightness",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;background:hsl(0 0% 49.99999%)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 4286545791
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-hsl-alpha",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;background:hsl(0 100% 50% / .4999999)}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 2147418112
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-color-variable",
+    "group": "color",
+    "html": "<div id=p></div>",
+    "css": "#p{width:100px;height:20px;--r:127.49999;--a:.4999999;color:rgb(var(--r) 0 0 / var(--a));background:currentColor}",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 2139029504
+      }
+    ]
+  },
+  {
+    "name": "numeric-token-color-inline",
+    "group": "color",
+    "html": "<div id=p style=\"width:100px;height:20px;background:rgb(127.49999 0 0)\"></div>",
+    "css": "",
+    "expectedFields": [
+      {
+        "node": "p",
+        "record": "paint",
+        "property": "colorValue",
+        "integer": 4286513152
+      }
+    ]
+  }
+]

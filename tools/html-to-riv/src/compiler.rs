@@ -849,11 +849,11 @@ mod declaration_provenance_tests {
         let values=declarations("#a{--v:999.123px;width:10px}#a{--v:100.71428680419922px;width:var(--v)}",&Style::default()).unwrap();
         let widths:Vec<_>=values.iter().filter(|d|d.name=="width").collect();
         assert_eq!(widths.len(),2);assert!(widths[0].original.as_ref().unwrap().contains("10px"));
-        assert_eq!(widths[1].native.value.trim(),"100.714px");
+        assert_eq!(widths[1].native.value.trim(),"100.71428680419922px");
         assert!(widths[1].original.as_ref().unwrap().contains("100.71428680419922px"));
         assert!(!widths[1].original.as_ref().unwrap().contains("999.123"));
         let direct=declarations("#a{width:100.71428680419922px}",&Style::default()).unwrap();
-        assert_eq!(direct[0].native.value.trim(),"100.714px");assert!(direct[0].original.as_ref().unwrap().contains("100.71428680419922px"));
+        assert_eq!(direct[0].native.value.trim(),"100.71428680419922px");assert!(direct[0].original.as_ref().unwrap().contains("100.71428680419922px"));
     }
     #[test]
     fn frozen_inherited_variables_and_fallbacks_supply_selected_originals() {

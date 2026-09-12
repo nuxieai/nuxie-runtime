@@ -1,11 +1,27 @@
 {
   "updated": "2026-09-12",
-  "focus": "Empty-variable recovery qualified; compiler numeric rounding repair next",
-  "status": "Runtime immutable; variable and content-box features remain partial",
-  "current": "Empty ordinary variable recovery passes 237 Rust tests, 40 Node tests, strict TypeScript and 668 prior exact outputs. All 231 browser token-form controls match unset. The 26 representative scenes pass 208 geometry/pixel comparisons and 416 clear checks, with 28 direct visual pairs and 180 complete-RGBA transfers. Nonempty wrong-type recovery and the pre-existing NBSP normalization bug remain.",
-  "next": "Repair shared numeric-token serialization, which rounds some authored values before Rive emission. Classify changed outputs and rerun content-box controls while preserving separate Chrome percentage/projection and fractional-paint failures. Continue nonempty grammar recovery and the remaining 99-item backlog.",
+  "focus": "Numeric-token serialization repaired; remaining layout and grammar limits explicit",
+  "status": "Runtime immutable; repaired numeric emission with retained native mismatches",
+  "current": "Numeric preservation passes 247 Rust tests, 41 Node tests and strict TypeScript. Of 694 prior outputs, 691 remain exact; three width corrections keep exact maps and pass 24 fresh native/Chrome frames. New visible scenes pass208/208 geometry and204/208 pixels; large controls pass48/80 geometry and80/80 pixels. Fractional paint and padded content-size cancellation remain explicit. All304 main/control image pairs are covered by65 direct inspections and239 complete-RGBA transfers; the three corrected historical outputs have separate24-frame visual coverage.",
+  "next": "Repair the preserved nonempty Unicode normalization and ordinary-value grammar recovery. Investigate an ordinary content-owner/padding composition for the retained large-coordinate content-box failure. Preserve all failures, gates and the full99-item backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Numeric native/Chrome visual evidence and retained controls",
+      "path": "tools/html-to-riv/validation/public-numeric-native-review.md"
+    },
+    {
+      "label": "Visible numeric Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-numeric-native-r1/visible/render/gallery.html"
+    },
+    {
+      "label": "Numeric-token repair, exact fields and remaining limitations",
+      "path": "tools/html-to-riv/validation/public-numeric-token-review.md"
+    },
+    {
+      "label": "Three changed historical outputs and fresh native qualification",
+      "path": "tools/html-to-riv/validation/public-numeric-regression-review.md"
+    },
     {
       "label": "Empty ordinary variable recovery, full visual coverage and retained boundaries",
       "path": "tools/html-to-riv/validation/public-empty-variable-review.md"

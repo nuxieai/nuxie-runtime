@@ -2,6 +2,7 @@
 //! Output uses ordinary Rive objects only; unsupported semantics fail admission.
 mod color;
 mod css;
+mod numeric_tokens;
 mod compiler;
 mod variables;
 #[allow(dead_code)]

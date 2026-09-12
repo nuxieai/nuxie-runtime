@@ -1,0 +1,80 @@
+[
+  {
+    "name": "numeric-regression-direct",
+    "html": "<div id=a></div>",
+    "css": "#a{width:100.71428680419922px;height:1px}",
+    "features": [
+      "source-identical changed numeric width"
+    ],
+    "viewports": [
+      [
+        400,
+        100
+      ],
+      [
+        200,
+        80
+      ],
+      [
+        100,
+        40
+      ],
+      [
+        400,
+        100
+      ]
+    ]
+  },
+  {
+    "name": "numeric-regression-fallback",
+    "html": "<div id=a></div>",
+    "css": "#a{width:var(--missing,100.71428680419922px);height:1px}",
+    "features": [
+      "source-identical changed numeric width"
+    ],
+    "viewports": [
+      [
+        400,
+        100
+      ],
+      [
+        200,
+        80
+      ],
+      [
+        100,
+        40
+      ],
+      [
+        400,
+        100
+      ]
+    ]
+  },
+  {
+    "name": "numeric-regression-variable",
+    "html": "<div id=a></div>",
+    "css": "#a{--n:100.71428680419922px;width:var(--n);height:1px}",
+    "features": [
+      "source-identical changed numeric width"
+    ],
+    "viewports": [
+      [
+        400,
+        100
+      ],
+      [
+        200,
+        80
+      ],
+      [
+        100,
+        40
+      ],
+      [
+        400,
+        100
+      ]
+    ]
+  }
+]

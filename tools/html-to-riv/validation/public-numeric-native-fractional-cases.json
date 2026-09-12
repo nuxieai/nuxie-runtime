@@ -1,0 +1,40 @@
+[
+  {
+    "name": "numeric-fractional-height-exact-half",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{height:25.5px;width:180px}",
+    "classification": "same-scene-exact-half-pixel-control",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-fractional-height-historical-minimal",
+    "html": "<div id=p></div>",
+    "css": "#p{height:25.5px;background:#14233f}",
+    "viewports": [
+      [
+        100,
+        80
+      ],
+      [
+        100,
+        80
+      ],
+      [
+        100,
+        80
+      ],
+      [
+        100,
+        80
+      ]
+    ],
+    "features": [
+      "single fixed fractional rectangle control"
+    ],
+    "classification": "historical-minimal-source-exact-copy"
+  }
+]

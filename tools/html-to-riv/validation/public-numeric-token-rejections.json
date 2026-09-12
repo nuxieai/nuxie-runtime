@@ -1,0 +1,224 @@
+[
+  {
+    "name": "numeric-token-reject-exponent-unit-0-literal",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1\\65 2px}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-0-variable",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:1\\65 2px;width:var(--w)}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-0-inline",
+    "group": "token-category",
+    "html": "<div id=p style=\"width:1\\65 2px\"></div>",
+    "css": ""
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-1-literal",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1\\45 2px}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-1-variable",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:1\\45 2px;width:var(--w)}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-1-inline",
+    "group": "token-category",
+    "html": "<div id=p style=\"width:1\\45 2px\"></div>",
+    "css": ""
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-2-literal",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1\\65-2px}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-2-variable",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:1\\65-2px;width:var(--w)}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-2-inline",
+    "group": "token-category",
+    "html": "<div id=p style=\"width:1\\65-2px\"></div>",
+    "css": ""
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-3-literal",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1\\45-2px}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-3-variable",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:1\\45-2px;width:var(--w)}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-3-inline",
+    "group": "token-category",
+    "html": "<div id=p style=\"width:1\\45-2px\"></div>",
+    "css": ""
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-4-literal",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1\\65 2}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-4-variable",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--w:1\\65 2;width:var(--w)}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-unit-4-inline",
+    "group": "token-category",
+    "html": "<div id=p style=\"width:1\\65 2\"></div>",
+    "css": ""
+  },
+  {
+    "name": "numeric-token-reject-color-exponent-unit",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{background:hsl(1\\65 2 100% 50%)}"
+  },
+  {
+    "name": "numeric-token-reject-number-unit-fragments",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--n:10;width:var(--n)px}"
+  },
+  {
+    "name": "numeric-token-reject-variable-unit-fragments",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--n:10;--u:px;width:var(--n)var(--u)}"
+  },
+  {
+    "name": "numeric-token-reject-exponent-fragments",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--n:1;--u:e2px;width:var(--n)var(--u)}"
+  },
+  {
+    "name": "numeric-token-reject-percentage-fragments",
+    "group": "token-category",
+    "html": "<div id=p></div>",
+    "css": "#p{--n:10;width:var(--n)%}"
+  },
+  {
+    "name": "numeric-token-reject-order-0-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:1.0;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-0-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:1.0;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-1-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:1e2;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-1-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:1e2;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-2-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:2147483648;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-2-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:2147483648;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-3-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:-2147483649;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-3-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:-2147483649;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-4-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:1px;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-4-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:1px;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-5-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:1%;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-5-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:1%;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-6-literal",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{order:+ 1;order:0}"
+  },
+  {
+    "name": "numeric-token-reject-order-6-variable",
+    "group": "integer-grammar",
+    "html": "<div id=p></div>",
+    "css": "#p{--o:+ 1;order:var(--o);order:0}"
+  },
+  {
+    "name": "numeric-token-reject-nonfinite-0",
+    "group": "nonfinite",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1e999px}"
+  },
+  {
+    "name": "numeric-token-reject-nonfinite-1",
+    "group": "nonfinite",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1e999%}"
+  },
+  {
+    "name": "numeric-token-reject-nonfinite-2",
+    "group": "nonfinite",
+    "html": "<div id=p></div>",
+    "css": "#p{width:1e999em}"
+  }
+]

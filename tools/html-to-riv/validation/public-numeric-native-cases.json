@@ -1,0 +1,282 @@
+[
+  {
+    "name": "numeric-decimal-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{width:100.71428680419922px}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-adjacent-f32-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{width:1.00000011920928955078125px}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-fractional-height",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{height:25.499998092651367px;width:180px}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-decimal-padding",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{padding:4.123456954956055px 7.654321193695068px}#a{width:100%}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-decimal-minimum",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{width:30px;min-width:100.71428680419922px}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-decimal-maximum",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{width:180px;max-width:100.71428680419922px}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-inherited-minimum",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{min-width:100.71428680419922px}#a{min-width:inherit}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-responsive-percentage",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{width:100%}#a{width:33.333335876464844%}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-percentage-minimum",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{width:100%}#a{width:10px;min-width:33.333335876464844%;max-width:66.66667175292969%}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-decimal-rem",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{width:6.294642925262451rem}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-decimal-em-font",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{font-size:12.345678329467773px}#a{width:8.125em}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-percentage-font",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{font-size:18.76543426513672px}#a{font-size:66.66667175292969%;width:8em}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-variable-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{--width:100.71428680419922px;--alias:var(--width);width:var(--alias)}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-inherited-variable-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{--width:100.71428680419922px;--alias:var(--width)}#a{--width:40px;width:var(--alias)}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-escaped-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{width:var(--missing,1.0071428680419922e2p\\78)}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-inline-escaped-em",
+    "html": "<div id=\"p\"><div id=\"a\" style=\"font-size:1.25e1p\\78;width:8.0571429443359375em\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-relative-padding",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{font-size:20px;padding:.20576131343841553em .4783950746059418em}#a{width:100%}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-responsive-percentage-padding",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#p{width:100%;padding:0 1.2345678806304932%}#a{width:100.71428680419922px}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-content-box-decimal-points",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{box-sizing:content-box;width:100.71428680419922px;padding:4.123456954956055px}#b{width:100%}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-content-box-decimal-rem",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:#14233f}#a{width:40px;height:20px;background:#669933}#b{width:30px;height:20px;background:#cc6644}#a{box-sizing:content-box;width:6.294642925262451rem;padding:.2577160596847534rem}",
+    "classification": "visible-numeric-consumer",
+    "expectedPaint": {
+      "p": "rgb(20, 35, 63)",
+      "a": "rgb(102, 153, 51)",
+      "b": "rgb(204, 102, 68)"
+    }
+  },
+  {
+    "name": "numeric-color-rgb-half-byte",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{--red:127.49999;--alpha:.4999999;width:160px;height:50px;background:rgb(127.49999 0 0)}",
+    "classification": "visible-numeric-color-boundary",
+    "expectedPaint": {
+      "p": "rgb(127, 0, 0)"
+    },
+    "expectedOrdinaryArgb": "0xff7f0000"
+  },
+  {
+    "name": "numeric-color-rgb-percent-half-byte",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{--red:127.49999;--alpha:.4999999;width:160px;height:50px;background:rgb(49.99999% 0% 0%)}",
+    "classification": "visible-numeric-color-boundary",
+    "expectedPaint": {
+      "p": "rgb(127, 0, 0)"
+    },
+    "expectedOrdinaryArgb": "0xff7f0000"
+  },
+  {
+    "name": "numeric-color-alpha-half-byte",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{--red:127.49999;--alpha:.4999999;width:160px;height:50px;background:rgba(255,0,0,.4999999)}",
+    "classification": "visible-numeric-color-boundary",
+    "expectedPaint": {
+      "p": "rgba(255, 0, 0, 0.498)"
+    },
+    "expectedOrdinaryArgb": "0x7fff0000"
+  },
+  {
+    "name": "numeric-color-hue-small-angle",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{--red:127.49999;--alpha:.4999999;width:160px;height:50px;background:hsl(.11764706deg 100% 50%)}",
+    "classification": "visible-numeric-color-boundary",
+    "expectedPaint": {
+      "p": "rgb(255, 1, 0)"
+    },
+    "expectedOrdinaryArgb": "0xffff0100"
+  },
+  {
+    "name": "numeric-color-hsl-lightness-half-byte",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{--red:127.49999;--alpha:.4999999;width:160px;height:50px;background:hsl(0 0% 49.99999%)}",
+    "classification": "visible-numeric-color-boundary",
+    "expectedPaint": {
+      "p": "rgb(128, 128, 128)"
+    },
+    "expectedOrdinaryArgb": "0xff7f7f7f"
+  },
+  {
+    "name": "numeric-color-variable-rgb-alpha",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{--red:127.49999;--alpha:.4999999;width:160px;height:50px;background:rgba(var(--red),0,0,var(--alpha))}",
+    "classification": "visible-numeric-color-boundary",
+    "expectedPaint": {
+      "p": "rgba(127, 0, 0, 0.498)"
+    },
+    "expectedOrdinaryArgb": "0x7f7f0000"
+  }
+]

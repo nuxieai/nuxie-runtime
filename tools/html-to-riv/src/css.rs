@@ -80,10 +80,11 @@ fn trim_value_whitespace(text: &str) -> &str {
 fn value_text_inner(p: &mut Parser<'_, '_>, allow_color: bool) -> Result<String, Diagnostic> {
     let mut text = String::new();
     while !p.is_exhausted() {
+        let token_start = p.position();
         let token = p
             .next_including_whitespace_and_comments()
-            .map_err(|e| error("css", format!("{e:?}")))?;
-        match token {
+            .map_err(|e| error("css", format!("{e:?}")))?.clone();
+        match &token {
             Token::Comment(_) => text.push(' '),
             Token::Function(name)
                 if allow_color
@@ -124,7 +125,7 @@ fn value_text_inner(p: &mut Parser<'_, '_>, allow_color: bool) -> Result<String,
                 return Err(error("css", "Non-finite percentage"));
             }
             token if token.is_parse_error() => return Err(error("css", "Invalid CSS token")),
-            token => text.push_str(&token.to_css_string()),
+            token => text.push_str(&crate::numeric_tokens::serialize(token, p.slice_from(token_start))),
         }
     }
     Ok(trim_value_whitespace(&text).to_owned())

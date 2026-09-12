@@ -1,0 +1,10 @@
+[
+  {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-repro-cases.json",
+    "sha256": "793be3fa3a46c73ee41640444721ed3ac9d47d9c4001b8080bcac9737fb51d5a"
+  },
+  {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-controls.json",
+    "sha256": "a7a275137159ee7bcc5c4624193468a46f57c7842d720a160f704e3e73e26c31"
+  }
+]

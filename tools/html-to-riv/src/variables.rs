@@ -123,11 +123,9 @@ fn parse_inner(
             let original = p.slice_from(token_start).to_owned();
             nodes.push(Node::Token(ResolvedValue::token(match token {
                 Token::Comment(_) | Token::WhiteSpace(_) => " ".into(),
-                // Keep numeric spelling: cssparser serializes its saturated integer
-                // field and rounded float, which can change order values or turn
-                // an invalid integer lexeme (1.0/1e2) into an admitted integer.
-                Token::Number { .. } => p.slice_from(token_start).to_owned(),
-                _ => token.to_css_string(),
+                // Preserve coefficient and integer spelling through substitutions;
+                // only decoded unit suffixes are normalized.
+                _ => crate::numeric_tokens::serialize(&token, &original),
             }, original)));
         }
     }
@@ -599,10 +597,10 @@ mod provenance_tests {
     fn vars(text:&str,parent:&Variables)->Variables {compute(&crate::css::declarations(text,"test").unwrap(),parent).unwrap()}
     fn resolved(text:&str,values:&Variables)->ResolvedValue {substitute_with_provenance(text,values,"test").unwrap().unwrap()}
     #[test]
-    fn rounded_native_dimensions_keep_selected_original_spelling() {
+    fn native_dimensions_keep_selected_original_numeric_spelling() {
         let values=vars("--x:999.123456789px;--alias:var(--x);--x:100.71428680419922px",&Variables::new());
         let value=resolved("var(--alias)",&values);
-        assert_eq!(crate::css::ordinary_value(&value.native).unwrap().trim(),"100.714px");
+        assert_eq!(crate::css::ordinary_value(&value.native).unwrap().trim(),"100.71428680419922px");
         assert!(value.original.as_ref().unwrap().contains("100.71428680419922px"));
         assert_eq!(substitute("var(--alias)",&values,"test").unwrap(),Some(value.native));
     }
@@ -643,7 +641,8 @@ mod provenance_tests {
     }
     #[test]
     fn provenance_value_limit_does_not_change_valid_native_expansion_or_choose_fallback() {
-        let spelling=format!("0.{}1px","0".repeat(3000));
+        // Escaped identifiers normalize compactly without rounding numeric data.
+        let spelling=format!("{}x",r"\000070".repeat(500));
         let values=vars(&format!("--x:{spelling};--many:{}", "var(--x) ".repeat(30)),&Variables::new());
         let value=resolved("var(--many,7px)",&values);
         assert!(value.original.is_none());assert!(!value.native.contains("7px"));
@@ -651,12 +650,25 @@ mod provenance_tests {
     }
     #[test]
     fn provenance_environment_limit_does_not_invalidate_native_values() {
-        let mut declarations=format!("--base:0.{}1px;","0".repeat(59000));
+        let mut declarations=format!("--base:{};",r"\000070".repeat(8400));
         for index in 0..20 {declarations.push_str(&format!("--v{index}:var(--base);"));}
         let values=vars(&declarations,&Variables::new());
         assert!(values.values().all(Option::is_some));
         assert!(values.values().flatten().any(|value|value.original.is_none()));
         assert!(values.iter().map(|(name,value)|value.as_ref().and_then(|v|v.original.as_ref()).map_or(0,|v|name.len()+v.len())).sum::<usize>()<=MAX_TOTAL);
-        for index in 0..20 {assert_eq!(crate::css::ordinary_value(&resolved(&format!("var(--v{index})"),&values).native).unwrap().trim(),"0.0px");}
+        for index in 0..20 {assert_eq!(crate::css::ordinary_value(&resolved(&format!("var(--v{index})"),&values).native).unwrap().trim(),"p".repeat(8400));}
     }
+    #[test]
+    fn preserved_numeric_lexemes_obey_expansion_limits_without_selecting_fallback() {
+        let spelling=format!("0.{}1px","0".repeat(3000));
+        let values=vars(&format!("--x:{spelling}"),&Variables::new());
+        let value=resolved("var(--x,7px)",&values);
+        assert_eq!(value.native,spelling);
+        let expression="var(--x) ".repeat(30);
+        let error=substitute_with_provenance(&expression,&values,"test").unwrap_err();
+        assert_eq!(error.code,"input-limit");
+        let declarations=crate::css::declarations(&format!("--x:{spelling};--many:{expression}"),"test").unwrap();
+        assert_eq!(compute(&declarations,&Variables::new()).unwrap_err().code,"input-limit");
+    }
+
 }

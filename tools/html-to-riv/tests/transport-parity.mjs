@@ -426,3 +426,24 @@ test('empty ordinary variable values preserve token boundaries and CLI/WASM sema
   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('numeric token preservation has exact CLI/WASM output and diagnostic parity',async()=>{
+ const cases=JSON.parse(fs.readFileSync(new URL('../validation/public-numeric-token-cases.json',import.meta.url)));
+ const rejected=JSON.parse(fs.readFileSync(new URL('../validation/public-numeric-token-rejections.json',import.meta.url)));
+ assert.equal(cases.length,31);assert.equal(rejected.length,37);
+ await assertCorpusParity(cases);
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-numeric-token-'));
+ try{
+  const large=`0.${'0'.repeat(3000)}1px`;
+  const resource={name:'numeric-expansion-limit',html:'<div id=p></div>',css:`#p{--x:${large};--many:${'var(--x) '.repeat(30)};width:var(--many,7px)}`};
+  for(const [index,fixture] of [...rejected,resource].entries()){
+   const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
+   fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),fixture.name);
+   if(fixture===resource)assert(result.diagnostics.some(d=>d.code==='input-limit'));
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

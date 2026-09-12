@@ -1,0 +1,1736 @@
+{
+  "status": "bounded-numeric-native-evidence-with-retained-failures",
+  "scope": "Shared token preservation on the immutable runtime; visible numeric consumers, exact original large sources, and supplemental fractional controls. No blanket browser or color equality claim.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/frozen/html-to-riv",
+    "sha256": "a77a45eac1d958d728a041a4a82f3d7e67e1685afee4ed1c8c06768cdf629e5b"
+  },
+  "wasm": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/frozen/compiler.wasm",
+    "sha256": "e4e4a9504f8dd022327b3064b532cf02a4f18a3bb94b1e3ec33926b38cc48bbe"
+  },
+  "verifiedFrozenPaths": 124,
+  "rustTests": 247,
+  "nodeTests": 41,
+  "priorOutputs": {
+    "total": 694,
+    "exact": 691,
+    "correctedFilesWithSeparateAudit": 3
+  },
+  "totals": {
+    "visible": {
+      "cases": 26,
+      "frames": 208,
+      "geometryPass": 208,
+      "pixelPass": 204,
+      "clearPass": 416,
+      "directVisualPairs": 35,
+      "exactFullRgbaTransferredPairs": 173,
+      "reviewedSheets": 11,
+      "allRepeatedViewportRoleImagesIdentical": true
+    },
+    "large": {
+      "cases": 10,
+      "frames": 80,
+      "geometryPass": 48,
+      "pixelPass": 80,
+      "clearPass": 160,
+      "directVisualPairs": 28,
+      "exactFullRgbaTransferredPairs": 52,
+      "reviewedSheets": 10,
+      "allRepeatedViewportRoleImagesIdentical": true
+    },
+    "fractional": {
+      "cases": 2,
+      "frames": 16,
+      "geometryPass": 16,
+      "pixelPass": 4,
+      "clearPass": 32,
+      "directVisualPairs": 2,
+      "exactFullRgbaTransferredPairs": 14,
+      "reviewedSheets": 1,
+      "allRepeatedViewportRoleImagesIdentical": true
+    }
+  },
+  "frames": 304,
+  "directVisualPairs": 65,
+  "exactFullRgbaTransferredPairs": 239,
+  "visualReviewCompleted": true,
+  "inspectedSheets": [
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-0.png",
+      "sha256": "58f62cc6042902c9d43a6f5b6183d8f373b158f2a11455db4fb316490bbc66f5",
+      "pairs": [
+        {
+          "name": "numeric-decimal-padding",
+          "frame": 0
+        },
+        {
+          "name": "numeric-decimal-padding",
+          "frame": 1
+        },
+        {
+          "name": "numeric-decimal-padding",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-1.png",
+      "sha256": "d2fdc47fa18b3b429187828eda3c1f7e2bab3833ad8f5c65ac44f0dba992ca40",
+      "pairs": [
+        {
+          "name": "numeric-responsive-percentage",
+          "frame": 0
+        },
+        {
+          "name": "numeric-responsive-percentage",
+          "frame": 1
+        },
+        {
+          "name": "numeric-responsive-percentage",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-2.png",
+      "sha256": "732d364ba478aa61c75eb231acb7032f7e35c38f9082015eba319f41e3208700",
+      "pairs": [
+        {
+          "name": "numeric-percentage-minimum",
+          "frame": 0
+        },
+        {
+          "name": "numeric-percentage-minimum",
+          "frame": 1
+        },
+        {
+          "name": "numeric-percentage-minimum",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-3.png",
+      "sha256": "153c359172d063107fb2e76d23a99c3f67065185c4a99eb3afc0dec6a87210d4",
+      "pairs": [
+        {
+          "name": "numeric-relative-padding",
+          "frame": 0
+        },
+        {
+          "name": "numeric-relative-padding",
+          "frame": 1
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-4.png",
+      "sha256": "28860fc57ed1208541c31b54d94e3eac0de8d751260dbe215c02c213f4483b5f",
+      "pairs": [
+        {
+          "name": "numeric-responsive-percentage-padding",
+          "frame": 0
+        },
+        {
+          "name": "numeric-responsive-percentage-padding",
+          "frame": 1
+        },
+        {
+          "name": "numeric-responsive-percentage-padding",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-5.png",
+      "sha256": "1bab48b8231540f16c7865b258d681157b157cec784c97d12d80708ac973b797",
+      "pairs": [
+        {
+          "name": "numeric-decimal-width",
+          "frame": 0
+        },
+        {
+          "name": "numeric-adjacent-f32-width",
+          "frame": 0
+        },
+        {
+          "name": "numeric-fractional-height",
+          "frame": 0
+        },
+        {
+          "name": "numeric-decimal-minimum",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-6.png",
+      "sha256": "7963c9b3896a7d3592836375bece1bac8f6805adf15a302ab2ae0b4ea9b533fe",
+      "pairs": [
+        {
+          "name": "numeric-decimal-maximum",
+          "frame": 0
+        },
+        {
+          "name": "numeric-inherited-minimum",
+          "frame": 0
+        },
+        {
+          "name": "numeric-decimal-rem",
+          "frame": 0
+        },
+        {
+          "name": "numeric-decimal-em-font",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-7.png",
+      "sha256": "220318b908c1cb87371386adf82048065ffcd2c0646dbb11ded203825e26d395",
+      "pairs": [
+        {
+          "name": "numeric-percentage-font",
+          "frame": 0
+        },
+        {
+          "name": "numeric-variable-alias",
+          "frame": 0
+        },
+        {
+          "name": "numeric-inherited-variable-alias",
+          "frame": 0
+        },
+        {
+          "name": "numeric-escaped-fallback",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-8.png",
+      "sha256": "82a4e0c82e19e70c6cdf64efa252ba7bb265ee404f57e95e76374ed682807e97",
+      "pairs": [
+        {
+          "name": "numeric-inline-escaped-em",
+          "frame": 0
+        },
+        {
+          "name": "numeric-content-box-decimal-points",
+          "frame": 0
+        },
+        {
+          "name": "numeric-content-box-decimal-rem",
+          "frame": 0
+        },
+        {
+          "name": "numeric-color-rgb-half-byte",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-9.png",
+      "sha256": "6fa3948b33b0f49f3444c8d90a21b85bc4bf9e66971df3fc8230b9b564abc80e",
+      "pairs": [
+        {
+          "name": "numeric-color-rgb-percent-half-byte",
+          "frame": 0
+        },
+        {
+          "name": "numeric-color-alpha-half-byte",
+          "frame": 0
+        },
+        {
+          "name": "numeric-color-hue-small-angle",
+          "frame": 0
+        },
+        {
+          "name": "numeric-color-hsl-lightness-half-byte",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "visible",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheet-10.png",
+      "sha256": "b9b9b7843c7c22e28267ad1b99a20c631d1aa418c364142ac6cda22b6fc176d3",
+      "pairs": [
+        {
+          "name": "numeric-color-variable-rgb-alpha",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-0.png",
+      "sha256": "3a55882eaa197aaa1a730beaafe4b29edc55b9898a554639fdcce7a5b2377b5f",
+      "pairs": [
+        {
+          "name": "content-large-rounded-outer",
+          "frame": 0
+        },
+        {
+          "name": "content-large-rounded-outer",
+          "frame": 1
+        },
+        {
+          "name": "content-large-rounded-outer",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-1.png",
+      "sha256": "51d409d49cd04048f656dc3bf243aee11df69126d79f09c6cb290348177c696c",
+      "pairs": [
+        {
+          "name": "rounding-percent-both-million",
+          "frame": 0
+        },
+        {
+          "name": "rounding-percent-both-million",
+          "frame": 1
+        },
+        {
+          "name": "rounding-percent-both-million",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-2.png",
+      "sha256": "eba77ad8736c48757779280858af282ad086290427f302ae63aeabf0e8af235f",
+      "pairs": [
+        {
+          "name": "rounding-fixed-both-million",
+          "frame": 0
+        },
+        {
+          "name": "rounding-fixed-both-million",
+          "frame": 1
+        },
+        {
+          "name": "rounding-fixed-both-million",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-3.png",
+      "sha256": "75b7a4d3919d532b3d5dff4b8fedbcb8bc2f3b6e8e65ac864354242c37530e32",
+      "pairs": [
+        {
+          "name": "rounding-auto-both-million",
+          "frame": 0
+        },
+        {
+          "name": "rounding-auto-both-million",
+          "frame": 1
+        },
+        {
+          "name": "rounding-auto-both-million",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-4.png",
+      "sha256": "3870cca1f1a4e175666b1eecf120bebb7e710475646d9f19eb94f1cd2f18a411",
+      "pairs": [
+        {
+          "name": "rounding-percent-zero",
+          "frame": 0
+        },
+        {
+          "name": "rounding-percent-zero",
+          "frame": 1
+        },
+        {
+          "name": "rounding-percent-zero",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-5.png",
+      "sha256": "3f035a7ee9a80c19c337733df4ef1fba923f9ff74f0279572264025981a811d5",
+      "pairs": [
+        {
+          "name": "rounding-fixed-zero",
+          "frame": 0
+        },
+        {
+          "name": "rounding-fixed-zero",
+          "frame": 1
+        },
+        {
+          "name": "rounding-fixed-zero",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-6.png",
+      "sha256": "9508209fe3418da16d32c3fb8cdcea24cef2c6fe25d2544fc3f831189408f551",
+      "pairs": [
+        {
+          "name": "rounding-percent-right-million",
+          "frame": 0
+        },
+        {
+          "name": "rounding-percent-right-million",
+          "frame": 1
+        },
+        {
+          "name": "rounding-percent-right-million",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-7.png",
+      "sha256": "ad29f8987d69570e0d95bb052e67d6f1f756f585512f4fb65af626efbce17d0e",
+      "pairs": [
+        {
+          "name": "rounding-percent-left-million",
+          "frame": 0
+        },
+        {
+          "name": "rounding-percent-left-million",
+          "frame": 1
+        },
+        {
+          "name": "rounding-percent-left-million",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-8.png",
+      "sha256": "aabe4117f898cc2c94a77b034b96164bddcb2c63bc478b4ce836d16193786211",
+      "pairs": [
+        {
+          "name": "rounding-percent-split-half-million",
+          "frame": 0
+        },
+        {
+          "name": "rounding-percent-split-half-million",
+          "frame": 1
+        },
+        {
+          "name": "rounding-percent-split-half-million",
+          "frame": 2
+        }
+      ]
+    },
+    {
+      "corpus": "large",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheet-9.png",
+      "sha256": "a3a6c896fcb7e2a39ccde5922d0d40524f8ac155077f02099611053b40f92408",
+      "pairs": [
+        {
+          "name": "rounded-minimal",
+          "frame": 0
+        }
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/review-sheet-0.png",
+      "sha256": "921c8c985b43fd84bb6539f4cdfb3084abe538f71d337802bbfbcd35ead313e7",
+      "pairs": [
+        {
+          "name": "numeric-fractional-height-exact-half",
+          "frame": 0
+        },
+        {
+          "name": "numeric-fractional-height-historical-minimal",
+          "frame": 0
+        }
+      ]
+    }
+  ],
+  "transferScope": "Within the same fixture and bound source/file/map: complete decoded RGBA equality after explicit white-canvas extension, including every region beyond the smaller viewport. All 304 pairs covered.",
+  "exactColorInteriors": [
+    {
+      "name": "numeric-color-rgb-half-byte",
+      "ordinaryArgb": "0xff7f0000",
+      "priorOrdinaryArgb": "0xff800000",
+      "cssom": "rgb(127, 0, 0)",
+      "interiorRegion": [
+        10,
+        10,
+        150,
+        40
+      ],
+      "rgbaHistograms": {
+        "chrome": [
+          {
+            "count": 4200,
+            "rgba": [
+              127,
+              0,
+              0,
+              255
+            ]
+          }
+        ],
+        "native": [
+          {
+            "count": 4071,
+            "rgba": [
+              127,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "count": 129,
+            "rgba": [
+              128,
+              0,
+              0,
+              255
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numeric-color-rgb-percent-half-byte",
+      "ordinaryArgb": "0xff7f0000",
+      "priorOrdinaryArgb": "0xff800000",
+      "cssom": "rgb(127, 0, 0)",
+      "interiorRegion": [
+        10,
+        10,
+        150,
+        40
+      ],
+      "rgbaHistograms": {
+        "chrome": [
+          {
+            "count": 4200,
+            "rgba": [
+              127,
+              0,
+              0,
+              255
+            ]
+          }
+        ],
+        "native": [
+          {
+            "count": 4071,
+            "rgba": [
+              127,
+              0,
+              0,
+              255
+            ]
+          },
+          {
+            "count": 129,
+            "rgba": [
+              128,
+              0,
+              0,
+              255
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numeric-color-alpha-half-byte",
+      "ordinaryArgb": "0x7fff0000",
+      "priorOrdinaryArgb": "0x80ff0000",
+      "cssom": "rgba(255, 0, 0, 0.498)",
+      "interiorRegion": [
+        10,
+        10,
+        150,
+        40
+      ],
+      "rgbaHistograms": {
+        "chrome": [
+          {
+            "count": 4200,
+            "rgba": [
+              255,
+              128,
+              128,
+              255
+            ]
+          }
+        ],
+        "native": [
+          {
+            "count": 4200,
+            "rgba": [
+              255,
+              128,
+              128,
+              255
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numeric-color-hue-small-angle",
+      "ordinaryArgb": "0xffff0100",
+      "priorOrdinaryArgb": "0xffff0000",
+      "cssom": "rgb(255, 1, 0)",
+      "interiorRegion": [
+        10,
+        10,
+        150,
+        40
+      ],
+      "rgbaHistograms": {
+        "chrome": [
+          {
+            "count": 4200,
+            "rgba": [
+              255,
+              0,
+              0,
+              255
+            ]
+          }
+        ],
+        "native": [
+          {
+            "count": 4200,
+            "rgba": [
+              255,
+              1,
+              0,
+              255
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numeric-color-hsl-lightness-half-byte",
+      "ordinaryArgb": "0xff7f7f7f",
+      "priorOrdinaryArgb": "0xff808080",
+      "cssom": "rgb(128, 128, 128)",
+      "interiorRegion": [
+        10,
+        10,
+        150,
+        40
+      ],
+      "rgbaHistograms": {
+        "chrome": [
+          {
+            "count": 4200,
+            "rgba": [
+              127,
+              127,
+              127,
+              255
+            ]
+          }
+        ],
+        "native": [
+          {
+            "count": 4071,
+            "rgba": [
+              127,
+              127,
+              127,
+              255
+            ]
+          },
+          {
+            "count": 129,
+            "rgba": [
+              128,
+              128,
+              128,
+              255
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "numeric-color-variable-rgb-alpha",
+      "ordinaryArgb": "0x7f7f0000",
+      "priorOrdinaryArgb": "0x80800000",
+      "cssom": "rgba(127, 0, 0, 0.498)",
+      "interiorRegion": [
+        10,
+        10,
+        150,
+        40
+      ],
+      "rgbaHistograms": {
+        "chrome": [
+          {
+            "count": 4200,
+            "rgba": [
+              191,
+              128,
+              128,
+              255
+            ]
+          }
+        ],
+        "native": [
+          {
+            "count": 3411,
+            "rgba": [
+              191,
+              128,
+              128,
+              255
+            ]
+          },
+          {
+            "count": 789,
+            "rgba": [
+              192,
+              128,
+              128,
+              255
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "fractionalControl": {
+    "sameSourceReplacementNativeImagesIdentical": 8,
+    "sameSourceReplacementChromeImagesDifferent": 8,
+    "differentChromePixelsPerFrame": 210,
+    "historicalMinimalBothRolesIdentical": 8
+  },
+  "limitations": [
+    "Four visible fractional pixel failures remain, plus 12 deliberately failing fractional control comparisons.",
+    "Large two-million padding retains 32 geometry failures; offscreen children and far edges are not visually qualified.",
+    "Left/split padding has a separate 0.0625px Chrome world-rectangle projection difference inside the unchanged 0.1px gate.",
+    "All color pixel gates pass but exact one-channel interior differences remain; CSSOM serialization is not a rendered-pixel oracle.",
+    "Original browser expectation failures and initial nonuniform-interior observer failure remain preserved.",
+    "This receipt is bounded validation; lexical admissions and retained strict diagnostics have independent Rust/CLI/WASM evidence."
+  ],
+  "retainedFailures": [
+    {
+      "corpus": "visible",
+      "name": "numeric-fractional-height",
+      "frame": 0,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "visible",
+      "name": "numeric-fractional-height",
+      "frame": 3,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "visible",
+      "name": "numeric-fractional-height",
+      "frame": 4,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "visible",
+      "name": "numeric-fractional-height",
+      "frame": 7,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 0,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 1,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 2,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 3,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 4,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 5,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 6,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "content-large-rounded-outer",
+      "frame": 7,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 0,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 1,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 2,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 3,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 4,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 5,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 6,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounded-minimal",
+      "frame": 7,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 0,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 1,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 2,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 3,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 4,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 5,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 6,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-percent-both-million",
+      "frame": 7,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 0,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 1,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 2,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 3,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 4,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 5,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 6,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "large",
+      "name": "rounding-auto-both-million",
+      "frame": 7,
+      "geometry": [
+        "c.width: 1000000 vs 999999.875"
+      ],
+      "pixels": []
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-exact-half",
+      "frame": 0,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-exact-half",
+      "frame": 3,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-exact-half",
+      "frame": 4,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-exact-half",
+      "frame": 7,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 0,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 1,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 2,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 3,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 4,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 5,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 6,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    },
+    {
+      "corpus": "fractional",
+      "name": "numeric-fractional-height-historical-minimal",
+      "frame": 7,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio",
+        "mean channel error"
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-evidence.py",
+      "sha256": "6c42e626be8f7d04939058e8cf5e5b3172e8c23120e6ac3d0eab3cdca27f8c4d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-review.md",
+      "sha256": "d58efcb7bac493ab49d76ab4873b1ba76859fbdcc0212688dea784a5377e416f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/frozen/source-bindings.json",
+      "sha256": "0adc01275288f66f30ccf117e184fa0e839a6b260f7248e5fba324497072c25a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/build-checks.json",
+      "sha256": "4ecbd362136ddd2f18d8a81e38a1cc10d158ae7b97c7e3d403a774c77de700ef"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/transport-check.json",
+      "sha256": "86c5a20078f90f601289f2bbcbed22f0304adb02787511fb189211f09222a170"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-regression-receipt.json",
+      "sha256": "448f269739dc791b88fa77dc7cc647a63004b905652aa73d1e8a84c75557ee41"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-prior-regression-r1/manifest.json",
+      "sha256": "6e1a0ec391f29f82a047685bf21c0486f97e752e9ac706bef534c65d30424a82"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-review.md",
+      "sha256": "0eacdfdae0d8d05fee3657fbd54f93df5bc35c2ac3fd2998665bf7fad5a6440c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/receipt.json",
+      "sha256": "aa0f5dbd22ecadc2e4602f00fbffe8eb745dcf7838bb55109cb25676d8e5f6d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/receipt.json",
+      "sha256": "d70a6199ed7686f3ffe1dd325e89c6519bf6e366de04cf859f8bea768ce4ef17"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/flex-fixed-controls-review.md",
+      "sha256": "619a83a3c84202c21879fa34d188b6d383bfd90e2ee880970ed9344629ab7071"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/flex-fixed-controls-receipt.json",
+      "sha256": "f7afe01a33283f91333c7961bfe0826d8760412cb46e92140d6b6d311bd684e2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/edges-render/receipt.json",
+      "sha256": "a59956891708709ff80eba40e516c5df12651f7a96b4cbc2da257712cac324b5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-visual.py",
+      "sha256": "4edecfaf8a3cf2eb014ad37abcefde0f9861307192285053141b05fea58f4456"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-public-baseline.mjs",
+      "sha256": "fd0ef07baa805e078f458d7729c5b80516e6a49ee6d92dff17ded30357a13f92"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/pixels.mjs",
+      "sha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-cases.json",
+      "sha256": "2fdfceacb3fd45e3525b2500cd8fffe5baf8550f9154bd08141c5ad1a40d8418"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-rejections.json",
+      "sha256": "ee3eec4f32fa777adf483794930899b0e93612a6478013ad57d271d1bdb90ae2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-wire.py",
+      "sha256": "5f78f2feb1404cd31bf784236ccd9ebd663b5c8ce27d86ab509426d60453ceb5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/html-to-riv",
+      "sha256": "e1b16fd2a068b96afe5f878ca0423877538760178ac78041f5c88b5918c2e9fc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-adjacent-f32-width/request.json",
+      "sha256": "4f12ea493e0f37b13ebb918af09011274388445b9c0ca45f72ca3770046e1fcc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-adjacent-f32-width/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-adjacent-f32-width/scene.riv",
+      "sha256": "ba1adeab7dc195e360e7a408f666da0770b9a26b3ae4601c0098a3385093142c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-alpha-half-byte/request.json",
+      "sha256": "f01013c239cd7165eca1ec5157f48a320b85f669be00ec4794734617bd7236ac"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-alpha-half-byte/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-alpha-half-byte/scene.riv",
+      "sha256": "ba16e751a6654041ab4567bc6b850f72f25ae477a96f6d4ee4eba4187f62f694"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-hsl-lightness-half-byte/request.json",
+      "sha256": "2cb06f4b0788eac444024c53a674cde96a7be1c28b12ad5dc9a8cd4ab34451c1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-hsl-lightness-half-byte/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-hsl-lightness-half-byte/scene.riv",
+      "sha256": "bd8486ec64d9b99b7020e37d2eb174b5803ee4afd905cb39b4b9aa4c4c97f284"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-hue-small-angle/request.json",
+      "sha256": "41648ee373c21505a0718a7b831afaa972bb994de5324db362df880ee47acf6e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-hue-small-angle/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-hue-small-angle/scene.riv",
+      "sha256": "492cf2e7359028d6ea327b7bb7947098ed51a5c07ba882ee6f45f562e8a1cdd7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-rgb-half-byte/request.json",
+      "sha256": "2019d50d24f92f0ca99e73d48efe830e5f65de35a9af7a8a6f6097d944bba9e0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-rgb-half-byte/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-rgb-half-byte/scene.riv",
+      "sha256": "de09a1ecfe5f2ee2d4d6309f2232176c9e2f70186e979062ae44175d82ae3edb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-rgb-percent-half-byte/request.json",
+      "sha256": "42999830f6e7a8b29d4069825ce8069e1963dc1bf88007b7e03cae71d20f9efb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-rgb-percent-half-byte/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-rgb-percent-half-byte/scene.riv",
+      "sha256": "de09a1ecfe5f2ee2d4d6309f2232176c9e2f70186e979062ae44175d82ae3edb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-variable-rgb-alpha/request.json",
+      "sha256": "4c2a222925688023b5749e892ccf76d40efcc4bf748227b95a2e7e4472a0fe21"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-variable-rgb-alpha/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-color-variable-rgb-alpha/scene.riv",
+      "sha256": "3ebd9b650a197dcbbc85fcea0dbf2db9d405806aa35a4060493ef494d4c36c59"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-content-box-decimal-points/request.json",
+      "sha256": "fbc27ca18061edad3bf057727d9888196899c38575982067bc04a52579e7826a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-content-box-decimal-points/scene.map.json",
+      "sha256": "b9a316b1d5e66d7df71667cd7fb20d73c8c3b569a9a289b0991e565dba823059"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-content-box-decimal-points/scene.riv",
+      "sha256": "a0396eeeb771ddf681d12f4a38c833c376b2f36ae1dcbd368a19815485a20ee1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-content-box-decimal-rem/request.json",
+      "sha256": "1cd2d4150e051c52992d52e1a79ed4ba93c4a285945cc1c2ee1ef2ca9f3188a2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-content-box-decimal-rem/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-content-box-decimal-rem/scene.riv",
+      "sha256": "317b418f6efe7f989539bc2d331e68522cac9a5dd5feb31d8960728c6b87adc2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-em-font/request.json",
+      "sha256": "28c5151a6fa8d995e0527c6673f7b29211e621fc9c4fca922d36bdfadc4834a8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-em-font/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-em-font/scene.riv",
+      "sha256": "23c5d6f01e2a4328ad29bbd6dcae3289a7b3f4c3328aeab59ba9f92a4b7bb574"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-maximum/request.json",
+      "sha256": "b94404ac90214b0f0d0b407c75f76a530f8020f7d736115e79a568a0261d3951"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-maximum/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-maximum/scene.riv",
+      "sha256": "1278329a474f563a60e4e4c4e5d974c18370a0e6a91d278a5e290763f439298e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-minimum/request.json",
+      "sha256": "08df7d4f6348d1d7d621cbf91aed31d9d80dc7938b9da8c8b8e6da8fd1e3fba9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-minimum/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-minimum/scene.riv",
+      "sha256": "4b35256c437ea9695363c58401282bfd29ed7e0677387a692fdf6b77735b7e0d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-padding/request.json",
+      "sha256": "d19713e8577747eda72cb87059348960836a38e400b6917d24b343f67de8ab7d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-padding/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-padding/scene.riv",
+      "sha256": "6f6877b668ba125d305dcf360db3b06c6138d5209341fa215018e2d7932d23b6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-rem/request.json",
+      "sha256": "c5432075d357229adac7485e3d384b172d8abb3373c20dac17d72c28959dbc85"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-rem/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-rem/scene.riv",
+      "sha256": "5482cf90a35cf8c764ad97d98049dde9de5b77adc825c226fe3e37539fac3cc9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-width/request.json",
+      "sha256": "ecd1562d266a287d24dd8246e1b6d9e28318ae8a841c25d49119cdbb3ae7559f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-width/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-decimal-width/scene.riv",
+      "sha256": "6067e802d35ecfa25b07b54420988b0b6a5a51f0f140e953ed6686db3107fce2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-escaped-fallback/request.json",
+      "sha256": "f8a47aace6015b2e938fcefcc4f8b38d068542837f6f292b1a49a1dde5456968"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-escaped-fallback/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-escaped-fallback/scene.riv",
+      "sha256": "6067e802d35ecfa25b07b54420988b0b6a5a51f0f140e953ed6686db3107fce2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-fractional-height/request.json",
+      "sha256": "63e77e60ebd71882cd00da7fa4e8fcb0f70ef3f6e728d104c1397734785aa742"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-fractional-height/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-fractional-height/scene.riv",
+      "sha256": "f86f8a9d436b7643f651a55c53dec772bf6982b97fa476fa9de4e946bbe400cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inherited-minimum/request.json",
+      "sha256": "c00faf5c3dae36d9a12811e1ce0645ff0ddd22cdcfb923113ff802033f9ff22a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inherited-minimum/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inherited-minimum/scene.riv",
+      "sha256": "aa40e3e33f580c5c4051bb0cfa3f07766c9994163f1f497448b8fb747520ec18"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inherited-variable-alias/request.json",
+      "sha256": "35286098665860612dd9238e70c211c5b5643ef615816e2c3625a79763178813"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inherited-variable-alias/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inherited-variable-alias/scene.riv",
+      "sha256": "6067e802d35ecfa25b07b54420988b0b6a5a51f0f140e953ed6686db3107fce2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inline-escaped-em/request.json",
+      "sha256": "77bc9321601506f2372bf0471dcd2c19adaa7c57b8440b5ae923b019f4aa9ee8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inline-escaped-em/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-inline-escaped-em/scene.riv",
+      "sha256": "e5994113005bacf1f80b9e480113b450a72c9a4f6f5403ddff9bc2e47b1f4e08"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-percentage-font/request.json",
+      "sha256": "8d5488ebc45641f0728c6aa911b4d6161620753a0fd82e5a126191202ddce2fb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-percentage-font/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-percentage-font/scene.riv",
+      "sha256": "ed8947a8fce4f47114f86899f52e56e64bf04915e215335739b6857f7ee0c09c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-percentage-minimum/request.json",
+      "sha256": "477620bd2acb44d340242b77e6d3f2c57dd27a68ae6d6f63aa62b3e1565e12d1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-percentage-minimum/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-percentage-minimum/scene.riv",
+      "sha256": "9fbf168304a91278fed99d74e87ee74d50b4f1e89c428bc6aa92aa34f45336b2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-relative-padding/request.json",
+      "sha256": "8cbbd0619b1fffcca36ba34cfa5cf5714de0b68f3100be6f330ee5b8da09abc2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-relative-padding/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-relative-padding/scene.riv",
+      "sha256": "a41cc882237b17c46a821df6c0f631ae253fc223a2f50590fff24c1992d1ea47"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-responsive-percentage/request.json",
+      "sha256": "2fe2135258f91853c09c86dba42aea27b3b2ede84ae0dc1fd3ace1ac64dd95b5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-responsive-percentage/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-responsive-percentage/scene.riv",
+      "sha256": "85d4d05c06932fd790fc5decba43a645120861ac91395d9df248264d3c367a44"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-responsive-percentage-padding/request.json",
+      "sha256": "83f2f6166a15c1786898c1659a190bbe24965383753c1fe67ef625a2173ca272"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-responsive-percentage-padding/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-responsive-percentage-padding/scene.riv",
+      "sha256": "474a3890f44a6eeca8b15efc8c498aff8e2286ee127c8fdbd725f25988a09c61"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-variable-alias/request.json",
+      "sha256": "7e40a533d78af58f1f1771a6b5dc0cd4c988a40a2820d1f1824abe3bafe3d88b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-variable-alias/scene.map.json",
+      "sha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight/numeric-variable-alias/scene.riv",
+      "sha256": "6067e802d35ecfa25b07b54420988b0b6a5a51f0f140e953ed6686db3107fce2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser/cases.json",
+      "sha256": "59c4be7bd11d200a80d5e3a50da8b0c9851d46f921d4b3348cd0719aaf01266b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser/reset.css",
+      "sha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser-r2/cases.json",
+      "sha256": "95e0dd17ead248cad966e8d63cf2c7dbc6b9dd5aa66f9e3e0ed0808a7f35006d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser-r2/reset.css",
+      "sha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-fractional-cases.json",
+      "sha256": "a6ac3a584331459331c10290e6a679c1f2ede2cd6d140a1c128c27d7ffd1c86b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-measure.mjs",
+      "sha256": "63b224e6f2972c86058b8ebb6cc07ffae054320c28ae03d3a5bd97bfacb4402c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-browser.mjs",
+      "sha256": "294fcb154dd3bcfceaf27402c9c4084099704d98631104ec8c87f54e289341b8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-cases.json",
+      "sha256": "95e0dd17ead248cad966e8d63cf2c7dbc6b9dd5aa66f9e3e0ed0808a7f35006d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-large-source-bindings.json",
+      "sha256": "42db6f8f5a2cd61f18b21b9445c39c785cad2ed0d9315c57b5716760f8f8d09c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-large-cases.json",
+      "sha256": "64dd65b35602434a1924d1de8fff17a52b23c6f8e1ec6cb1196e62d3840b30de"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-colors.py",
+      "sha256": "263cd76070bdf528589256c0aca1dd7a6c569538af551db3327091ff601fc013"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-fractional.py",
+      "sha256": "d2e70e4e984a90892f24b2b164ed87f6978bb813a0cae41944b2b57c5c5be3ba"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-visual.py",
+      "sha256": "ac7d86add453f6c7c9bf918b6cfe6f4b98e21e116993009d3493351990ff3110"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-fixtures.py",
+      "sha256": "54e2d8adcb89c488dbf41b41a2314849c2019db1143b1faabd7a47bafa35ef31"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/native-commands.json",
+      "sha256": "58097abf6277941ca74d953ae96d33a5910a1a3233295420160759dffb958ec3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/preflight.json",
+      "sha256": "8fd4226874ed21d5ea9efe17edc0a794eb2b0306b7ba8a16338d7514242d160d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser/receipt.json",
+      "sha256": "3b4cc12a3702f1f8ab1b302a1f7705b26e9bb128d5bdfa2f213261376dcd3386"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser-command.json",
+      "sha256": "574c4dec539aa3a8d464004020527ccccdd7937a88677ec066eefd9e76d1ee26"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser-r2/receipt.json",
+      "sha256": "1e432091aa80ae02eb095f7471d12a98c25ac56a55158922d908bad0568cf1a4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/browser-r2-command.json",
+      "sha256": "a1ad78d6d624c0a363ab318bb75f9dfe098f474f392345b0af00be6bce68237f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/color-interior-initial-failure.json",
+      "sha256": "35c1493dc69a821cf3de720f92b644b82b202ef0fe66d7e9cf01687162cd1413"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/color-interiors.json",
+      "sha256": "34b59740e3be8b2adf5256f8f64971f50d25eb66fea1341f9dea6ccbdfa3c80e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/freeze-check.json",
+      "sha256": "6843abf57aebb3d8a50fa0fc584f2cd6be133f6d769cc5ba8708d310904f2f4b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/measure/receipt.json",
+      "sha256": "59ad0515d0a6a8c8eceb3efedbabc2a166fd7b08e38eb4803ab58b0f452dca21"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/measure-command.json",
+      "sha256": "88aa1e5574cec651b4da17bcaba4e2f22e99e9930472ba2f1d7d78b955b2afc8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/native-command.json",
+      "sha256": "ac77503df054cf71d6537b5eee247a8391847371aa8891977ae7ea16482de307"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/comparisons.json",
+      "sha256": "70037f9b111436bb04eeaffa095d6b945a0f7bf29950567abfff8c0878114269"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/render/receipt.json",
+      "sha256": "cc56cfb404bc46c72c6a12dd07188ba10c22961e07ca96824a2ed4b462c7ee8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/visual-coverage.json",
+      "sha256": "f56706e2a89f01b9c5e4cc8bc063781146ee632bd9098fc53f17dda45041319c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/review-sheets.json",
+      "sha256": "e974ef5e278846a1bdf2b238dbc605c0f7e7c05cc6a327e37ec54849c6861408"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/render/receipt.json",
+      "sha256": "073077dbd47389bc0469df8a768644e20a7d4ff5d3094d63980a333611d0e514"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/visual-coverage.json",
+      "sha256": "e754f9e21301f7eecae520d53b3eea731cfc804eacf1a23f9477b63cca05a330"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/review-sheets.json",
+      "sha256": "76c6ed75bbef32b319c78a18c9fb08bbea3425cab8698a79bb47bb363307cfc4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/render/receipt.json",
+      "sha256": "963c7b48c9251783783a3dca37ee3ed9dd87fdbea2d49c60ee8c9ab873082d30"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/visual-coverage.json",
+      "sha256": "5216c31892bec61df45a2067b4b6f6e0d1885be004486a5ddea03ede045abf65"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/review-sheets.json",
+      "sha256": "2bdac04c2bb5057daa7f20bbbf098c0bae35cbaf1a4dd588b3fb1d3e309e010b"
+    }
+  ]
+}

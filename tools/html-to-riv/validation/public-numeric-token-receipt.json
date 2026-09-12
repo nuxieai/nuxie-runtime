@@ -1,0 +1,156 @@
+{
+  "status": "compiler-numeric-token-repair-with-retained-layout-and-paint-failures",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Authored numeric serialization only; no runtime changes or general numeric-domain qualification.",
+  "rustTests": 247,
+  "nodeTests": 41,
+  "publicNumericCases": 31,
+  "strictRejectionCases": 37,
+  "cliWasmOutputPairs": 93,
+  "cliWasmDiagnosticPairs": 38,
+  "priorOutputs": 694,
+  "exactPriorOutputs": 691,
+  "correctedPriorOutputs": 3,
+  "changedOutputGeometryAndPixelPass": 24,
+  "native": {
+    "visible": {
+      "frames": 208,
+      "geometryPass": 208,
+      "pixelPass": 204,
+      "clearPass": 416
+    },
+    "large": {
+      "frames": 80,
+      "geometryPass": 48,
+      "pixelPass": 80,
+      "clearPass": 160
+    },
+    "fractional": {
+      "frames": 16,
+      "geometryPass": 16,
+      "pixelPass": 4,
+      "clearPass": 32
+    }
+  },
+  "compilerSha256": "a77a45eac1d958d728a041a4a82f3d7e67e1685afee4ed1c8c06768cdf629e5b",
+  "wasmSha256": "e4e4a9504f8dd022327b3064b532cf02a4f18a3bb94b1e3ec33926b38cc48bbe",
+  "retained": "Four visible and12 supplemental fractional pixel failures;32 large geometry failures; small exact color differences within gates. Nonempty grammar and Unicode normalization remain separate compiler work.",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/frozen/source-bindings.json",
+      "sha256": "0adc01275288f66f30ccf117e184fa0e839a6b260f7248e5fba324497072c25a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/build-checks.json",
+      "sha256": "4ecbd362136ddd2f18d8a81e38a1cc10d158ae7b97c7e3d403a774c77de700ef"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/transport-check.json",
+      "sha256": "86c5a20078f90f601289f2bbcbed22f0304adb02787511fb189211f09222a170"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-prior-regression-r1/manifest.json",
+      "sha256": "6e1a0ec391f29f82a047685bf21c0486f97e752e9ac706bef534c65d30424a82"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-red-r1/command.json",
+      "sha256": "dd84b2613d27186ff844e736c003ea747e62185f02bc4ba3e4bbf04a0617208d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-red-r1/result.json",
+      "sha256": "ac747664bd8ec45b517d98f7c190873b8fe08f6f9577fb53bc8c6bda2246c747"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-red-r1/test.log",
+      "sha256": "42a81189765a9310f714455df3e05a783e4691db9b48abc58e7944c0d9f3e3ff"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-red-r1/verified-source-recovery.json",
+      "sha256": "c2653c8376ea93fda8de1e04bbfc49ab4e86b7005a0fd122fabc44afca2d12fb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-minimal-red-r1/receipt.json",
+      "sha256": "418f7ecce485e15398ceb721eb621c07580b96261c14b7aae99fcf471d140aad"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-minimal-green-r1/receipt.json",
+      "sha256": "3664d83d8baef4893e56457296bdcca97b151abeb98e5a99f9f3c87a343c072f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r1/stale-provenance-tests.log",
+      "sha256": "42f8db88d24bbcb1a6c1e1609c7a171349fe9bd3d994fd61273659cb06d8fa64"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r1/stale-provenance-tests-command.json",
+      "sha256": "1af869413497cab41615027ec0a287b2dfa023379acd34ec1b5d2cc69f27c2af"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r1/build-checks.json",
+      "sha256": "c1efc28a1f1741e134a183bbebe1e4af30f6159d0de5ca1463b9833a75bc988e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r1/full-rust.log",
+      "sha256": "db153a55766c89bfa7109cf82d72c9a70f235892864126d8d80c9f71ccf66b80"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r2/build-checks.json",
+      "sha256": "5254c36b51c9860ba5cb9d17b21f92a265d5eff602129f36288930e6b2174684"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r2/full-rust.log",
+      "sha256": "aedbecd05131a461bd7cabc66712a530e5019f6c8ec41b82dac9294c929a874c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-flex-bridge-build-r1/build-receipt.json",
+      "sha256": "df8264224a739c82724cd1b08697ea3716bb055f79c64cb8d4a64d752ddbc601"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/render/receipt.json",
+      "sha256": "cc56cfb404bc46c72c6a12dd07188ba10c22961e07ca96824a2ed4b462c7ee8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/render/receipt.json",
+      "sha256": "073077dbd47389bc0469df8a768644e20a7d4ff5d3094d63980a333611d0e514"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/render/receipt.json",
+      "sha256": "963c7b48c9251783783a3dca37ee3ed9dd87fdbea2d49c60ee8c9ab873082d30"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-native-receipt.json",
+      "sha256": "6c3bf1fafd765211ae5acf50b2850eec33cecf83cf1d4b7898e11624042fd78e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-regression-receipt.json",
+      "sha256": "448f269739dc791b88fa77dc7cc647a63004b905652aa73d1e8a84c75557ee41"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-review.md",
+      "sha256": "fa54a93e43a2d8506f04636f92010d62c43ad5e3221ef04ebe131324e2ca222e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-receipt.py",
+      "sha256": "3b87c6f61873771e069f4ccf269112129ec3daab80165301acf1ea90284075b2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-cases.json",
+      "sha256": "2fdfceacb3fd45e3525b2500cd8fffe5baf8550f9154bd08141c5ad1a40d8418"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-rejections.json",
+      "sha256": "ee3eec4f32fa777adf483794930899b0e93612a6478013ad57d271d1bdb90ae2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-token-fixtures.py",
+      "sha256": "473fbf75e893752c68a5d34148fad5f830d651cceeb305f9d484f3f509cd881e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-flex-proof-bridge.py",
+      "sha256": "d189c0d610dc09de43195c97877afa342e04ea831fc2186d8b2332264edb0a6f"
+    }
+  ]
+}

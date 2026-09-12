@@ -1,0 +1,1452 @@
+{
+  "status": "three-changed-outputs-audited-and-bounded-native-checks-pass",
+  "scope": "Exact source numeric correction with unchanged maps; transparent-source pixel evidence cannot prove width correctness.",
+  "priorRegression": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-prior-regression-r1/manifest.json",
+    "sha256": "6e1a0ec391f29f82a047685bf21c0486f97e752e9ac706bef534c65d30424a82"
+  },
+  "priorTotal": 694,
+  "priorExact": 691,
+  "changedFiles": 3,
+  "unchangedMaps": 3,
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/frozen/html-to-riv",
+    "sha256": "a77a45eac1d958d728a041a4a82f3d7e67e1685afee4ed1c8c06768cdf629e5b"
+  },
+  "sourceFreeze": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-token-r3/frozen/source-bindings.json",
+    "sha256": "0adc01275288f66f30ccf117e184fa0e839a6b260f7248e5fba324497072c25a"
+  },
+  "verifiedFrozenBindings": 63,
+  "fieldAudit": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/field-audit.json",
+    "sha256": "befa7206445ebd84468e05f3b6caa99ccbe8d5388b7f0764ac8b7f475b1705c7"
+  },
+  "exactHistoricalFilesToNativeReplay": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-transfer.json",
+    "sha256": "315ac6695aa21def53d65c359f4ddb15acd65d7fdbd1f27ba201ec284b5f0f3b"
+  },
+  "nativeRun": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/receipt.json",
+    "sha256": "5148ea5fadc68037ff8cf4b27be86c95ed815e16c869e27829b69ea4472fc58c"
+  },
+  "nativeLog": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native.log",
+    "sha256": "c36837982df674518eb39ec7a551b4073489e544df04b3636145dfc8357502f8"
+  },
+  "geometryFrames": 24,
+  "geometryPass": 24,
+  "pixelPass": 24,
+  "clearPass": 48,
+  "originalAndCloneSizes": [
+    [
+      400,
+      100
+    ],
+    [
+      200,
+      80
+    ],
+    [
+      100,
+      40
+    ],
+    [
+      400,
+      100
+    ]
+  ],
+  "driverCompileViewport": [
+    390,
+    160
+  ],
+  "exactHistoricalCompileViewport": [
+    400,
+    100
+  ],
+  "exactGeometryAndStreamTransfers": 24,
+  "observedNativeWidth": 100.71428680419922,
+  "chromeRectWidth": 100.703125,
+  "geometryTolerance": 0.1,
+  "widthDifference": 0.01116180419921875,
+  "historicalEvidence": {
+    "review": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/provenance-native-controls-review.md",
+      "sha256": "fdbec846a5e22cdb5ae33d3a1b5d624e44155c505e1f7afde7bc3affb5389cde"
+    },
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/provenance-native-controls-receipt.json",
+      "sha256": "0c1ccc053ef231d94e2f3991046f67a91f79a305599c9d6b2dfb2c3f8758080d"
+    },
+    "scope": "Native geometry only; historical files/measurements preserved, no PNG/Chrome review to transfer"
+  },
+  "visual": {
+    "evidence": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/visual-evidence.json",
+      "sha256": "f344e079f7bb74c68e562882b1f49d129f9aaf3dc8378a0a0adabcdc2c3dee1c"
+    },
+    "actuallyViewedPairs": 3,
+    "verifiedPairTransfers": 21,
+    "coveredPairs": 24,
+    "historicalTransfers": 0,
+    "limits": "All-white transparent-source images; no painted-width qualification."
+  },
+  "sources": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-regression-fixtures.py",
+      "sha256": "8ecc32f4bb59b6cfc5fc35938d2378e70e85cc62f6295a206b44599e7c362bd7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-regression-evidence.py",
+      "sha256": "8ddc95dbf9dbb7bfb6a398dd4f687b29b75ee0950d72a1321508a8c19ceacd7d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-regression-cases.json",
+      "sha256": "2eeb9809caaf697311777f49352b3677cee96061eab8bd762b20c0dc4271a44c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-numeric-regression-review.md",
+      "sha256": "fcaa4bd3eff22897d1e5cc972fb7af6c149d589a2cd727efbe252faca4f36829"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-wire.py",
+      "sha256": "5f78f2feb1404cd31bf784236ccd9ebd663b5c8ce27d86ab509426d60453ceb5"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-0.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-0.stream",
+      "sha256": "ce446953ea17ec48ba0f63f6912f27d9b44d4e349e38cb14500748800ce67c01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-1.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-1.stream",
+      "sha256": "a46873f8f3885c517ef467757c7e50918f9cb08afb066707ce96fdfb42aca7cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-2.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-2.stream",
+      "sha256": "f7418dc2d2d7025910ec04f63aba3d34a196f2cc6c8a81f87ada8fec4da60712"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-3.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-3.stream",
+      "sha256": "5d4d0e68bceef2180855bba86552d9057d7d018e71512cf7ed63298edee0d56e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-4.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-4.stream",
+      "sha256": "5bd96fe86f787903d38f48116ac1013e61d4b5a7ac30fb42937b8532fb24acc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-5.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-5.stream",
+      "sha256": "fdbc87f5e4fba4fb04694396499ce666b665a3a064369cd555826307ffac0b28"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-6.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-6.stream",
+      "sha256": "e52dca158b5a301abfe6879b5716d506668e80d92bf6ad4382cfae8d5dfb0a8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-7.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frame-7.stream",
+      "sha256": "3dc38a1f833d84dd153c6abbdacecc5e5599ed42c9165d83529b7065a6f28cf7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/frames.json",
+      "sha256": "8fb0d2415102e6630bb6f611103c6d8a11f9cb1af0cc3de6d336ca38ba1a8633"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct/scene.riv",
+      "sha256": "0f25ea91eeebab40e6d51c0d20e7a6beb21640753f897747910c22639fce674a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-direct.log",
+      "sha256": "15352636af4bdbae57eb565ab633f50c09a458bf7eb5ba222cf00db1b90a5b95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-0.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-0.stream",
+      "sha256": "ce446953ea17ec48ba0f63f6912f27d9b44d4e349e38cb14500748800ce67c01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-1.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-1.stream",
+      "sha256": "a46873f8f3885c517ef467757c7e50918f9cb08afb066707ce96fdfb42aca7cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-2.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-2.stream",
+      "sha256": "f7418dc2d2d7025910ec04f63aba3d34a196f2cc6c8a81f87ada8fec4da60712"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-3.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-3.stream",
+      "sha256": "5d4d0e68bceef2180855bba86552d9057d7d018e71512cf7ed63298edee0d56e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-4.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-4.stream",
+      "sha256": "5bd96fe86f787903d38f48116ac1013e61d4b5a7ac30fb42937b8532fb24acc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-5.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-5.stream",
+      "sha256": "fdbc87f5e4fba4fb04694396499ce666b665a3a064369cd555826307ffac0b28"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-6.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-6.stream",
+      "sha256": "e52dca158b5a301abfe6879b5716d506668e80d92bf6ad4382cfae8d5dfb0a8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-7.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frame-7.stream",
+      "sha256": "3dc38a1f833d84dd153c6abbdacecc5e5599ed42c9165d83529b7065a6f28cf7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/frames.json",
+      "sha256": "8fb0d2415102e6630bb6f611103c6d8a11f9cb1af0cc3de6d336ca38ba1a8633"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback/scene.riv",
+      "sha256": "0f25ea91eeebab40e6d51c0d20e7a6beb21640753f897747910c22639fce674a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-fallback.log",
+      "sha256": "15352636af4bdbae57eb565ab633f50c09a458bf7eb5ba222cf00db1b90a5b95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-transfer.json",
+      "sha256": "315ac6695aa21def53d65c359f4ddb15acd65d7fdbd1f27ba201ec284b5f0f3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-0.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-0.stream",
+      "sha256": "ce446953ea17ec48ba0f63f6912f27d9b44d4e349e38cb14500748800ce67c01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-1.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-1.stream",
+      "sha256": "a46873f8f3885c517ef467757c7e50918f9cb08afb066707ce96fdfb42aca7cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-2.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-2.stream",
+      "sha256": "f7418dc2d2d7025910ec04f63aba3d34a196f2cc6c8a81f87ada8fec4da60712"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-3.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-3.stream",
+      "sha256": "5d4d0e68bceef2180855bba86552d9057d7d018e71512cf7ed63298edee0d56e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-4.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-4.stream",
+      "sha256": "5bd96fe86f787903d38f48116ac1013e61d4b5a7ac30fb42937b8532fb24acc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-5.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-5.stream",
+      "sha256": "fdbc87f5e4fba4fb04694396499ce666b665a3a064369cd555826307ffac0b28"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-6.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-6.stream",
+      "sha256": "e52dca158b5a301abfe6879b5716d506668e80d92bf6ad4382cfae8d5dfb0a8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-7.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frame-7.stream",
+      "sha256": "3dc38a1f833d84dd153c6abbdacecc5e5599ed42c9165d83529b7065a6f28cf7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/frames.json",
+      "sha256": "8fb0d2415102e6630bb6f611103c6d8a11f9cb1af0cc3de6d336ca38ba1a8633"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable/scene.riv",
+      "sha256": "0f25ea91eeebab40e6d51c0d20e7a6beb21640753f897747910c22639fce674a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/exact-file-variable.log",
+      "sha256": "15352636af4bdbae57eb565ab633f50c09a458bf7eb5ba222cf00db1b90a5b95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/field-audit.json",
+      "sha256": "befa7206445ebd84468e05f3b6caa99ccbe8d5388b7f0764ac8b7f475b1705c7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/browser-reset.css",
+      "sha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/check-public-baseline.mjs",
+      "sha256": "fd0ef07baa805e078f458d7729c5b80516e6a49ee6d92dff17ded30357a13f92"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/gallery.html",
+      "sha256": "92cecc940659c7e8037ae0fbe77ec1ab8a7f20cd3eb7f6ed05d147245b3ed5e5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.clear-cyan.log",
+      "sha256": "ddabaade8cf9bb6ce1fb963974d0365b1b80de78bb919952bc95daeebea50405"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.clear-transparent.log",
+      "sha256": "deb0179d178245b70d5e8d1c316e0c626b701f1cc4d7c472770ce91071242831"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.native.log",
+      "sha256": "5a485976600a8988d2a304a1a409594dd2380b5ff43e9a1ecfc23f7512223593"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-0.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.chrome.png",
+      "sha256": "8178633cc63d427f0e5e33b35c2cebaff9c997fafdc74c40a9db25d7d6a40400"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.clear-cyan.log",
+      "sha256": "e2a6e499d8a98bcd11ce51aeec3849dee750cbe3d1c8aa837010d4c148321e6a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.clear-cyan.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.clear-transparent.log",
+      "sha256": "23b3f321d619f04d5453d8054af8ac618ed5f309598a7c58001b3470065a93a0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.clear-transparent.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.diff.png",
+      "sha256": "9aa680acbdb4a7d223c95cab7e4980eefde21745f50cf436cd5859f1d2a6d82f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.native.log",
+      "sha256": "a4e3a78f04efe3adc0c38df1a24d7d49f4831ff6678c71b85a150ed5b7fa8f09"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-1.native.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.chrome.png",
+      "sha256": "9a28ee4247a210502812969483e307afc370dd53663c6a3be059521d3c24e050"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.clear-cyan.log",
+      "sha256": "14655619375c98cfc99f6ef4addcb472c154d65c8934021821f539f249a69fc3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.clear-cyan.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.clear-transparent.log",
+      "sha256": "87ce90c4cd7a47352736280f6a14e8fbcbd61854d42f0c39a72e7334ae68a154"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.clear-transparent.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.diff.png",
+      "sha256": "a9084fecbabdf78cdd93d316464178342ea960b99e2a742654f2c803a05344d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.native.log",
+      "sha256": "18b71825a42d70567bca6295f23bea01fad1e489f6f7b9c2fc740018bf7d1659"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-2.native.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.clear-cyan.log",
+      "sha256": "f30aab6de3e2267876436d06800c20d09fbfa3bd8a607384ea255d4c9c6ffe2b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.clear-transparent.log",
+      "sha256": "58b529ebcaa24799179f43edc723f56271c0fc7a56bc26a637a3a5c0ec6a64f2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.native.log",
+      "sha256": "3eae2193db47ed489402fbc617a6cc1b0349f33439324faaf7990a03290dd60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-3.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.clear-cyan.log",
+      "sha256": "8044adde67e051c9fc6dffc1260f9d588bcdddb91f105bff8f299b74810ae506"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.clear-transparent.log",
+      "sha256": "6e7446610398c8a5cf1ef25b1aaf7d390e7cf207ea150aee1bfb9c448cd697a0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.native.log",
+      "sha256": "20e96e9d282117e30c4a5f288357188ca77f3f136a75c0e5bcef6a0e22eaa4e0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-4.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.chrome.png",
+      "sha256": "8178633cc63d427f0e5e33b35c2cebaff9c997fafdc74c40a9db25d7d6a40400"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.clear-cyan.log",
+      "sha256": "34c72e4ce808378427dc707ed27dfb88a96dfe0c57a0347dcc50017be0320c2a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.clear-cyan.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.clear-transparent.log",
+      "sha256": "c065e1762dc4c174c61e9e5ee398f9720bf4c600a9692ed7b6c629a393a9bd96"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.clear-transparent.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.diff.png",
+      "sha256": "9aa680acbdb4a7d223c95cab7e4980eefde21745f50cf436cd5859f1d2a6d82f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.native.log",
+      "sha256": "ebf038009ce1ae979b95a769b3a0ef492a2fc500af17a9c67d66b4fe9f9e1959"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-5.native.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.chrome.png",
+      "sha256": "9a28ee4247a210502812969483e307afc370dd53663c6a3be059521d3c24e050"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.clear-cyan.log",
+      "sha256": "86b229a7d4c1c0b64bf74ee23e004209d35fd4cb85d55dc324a6abca1faf4e27"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.clear-cyan.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.clear-transparent.log",
+      "sha256": "c0c0f472950c4c22caf5c6178bea9cf680f5bedbd0db27ac2c73bd848ea8b83a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.clear-transparent.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.diff.png",
+      "sha256": "a9084fecbabdf78cdd93d316464178342ea960b99e2a742654f2c803a05344d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.native.log",
+      "sha256": "265b0bd27b02ae4081c497f75c25e09624b5b0ed5820646d0c7e3e3dc68fc218"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-6.native.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.clear-cyan.log",
+      "sha256": "1272c8b5d72c11f4b5d5923c3289113aa44237d823115b43abe43316aba81d4a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.clear-transparent.log",
+      "sha256": "8b213b9de857cd304fc64cc141247521094a826afe1d068dfee345d4f1f63c48"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.native.log",
+      "sha256": "615600926381e86d3240aea012d960d47e6b202b33d8dac17139c8fcb8c537ae"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/frame-7.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-0.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-0.stream",
+      "sha256": "ce446953ea17ec48ba0f63f6912f27d9b44d4e349e38cb14500748800ce67c01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-1.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-1.stream",
+      "sha256": "a46873f8f3885c517ef467757c7e50918f9cb08afb066707ce96fdfb42aca7cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-2.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-2.stream",
+      "sha256": "f7418dc2d2d7025910ec04f63aba3d34a196f2cc6c8a81f87ada8fec4da60712"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-3.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-3.stream",
+      "sha256": "5d4d0e68bceef2180855bba86552d9057d7d018e71512cf7ed63298edee0d56e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-4.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-4.stream",
+      "sha256": "5bd96fe86f787903d38f48116ac1013e61d4b5a7ac30fb42937b8532fb24acc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-5.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-5.stream",
+      "sha256": "fdbc87f5e4fba4fb04694396499ce666b665a3a064369cd555826307ffac0b28"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-6.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-6.stream",
+      "sha256": "e52dca158b5a301abfe6879b5716d506668e80d92bf6ad4382cfae8d5dfb0a8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-7.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frame-7.stream",
+      "sha256": "3dc38a1f833d84dd153c6abbdacecc5e5599ed42c9165d83529b7065a6f28cf7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/frames.json",
+      "sha256": "8fb0d2415102e6630bb6f611103c6d8a11f9cb1af0cc3de6d336ca38ba1a8633"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe/scene.riv",
+      "sha256": "707e80661fb20b5551205f4bd56a28e77cfe976e2d4d5b6a68ef0decb5937d3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/probe.log",
+      "sha256": "15352636af4bdbae57eb565ab633f50c09a458bf7eb5ba222cf00db1b90a5b95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/reference.html",
+      "sha256": "b5f09f1f580eabe27e4f7254f218b2958f2a1ae242a59fa724d1b1d7e88beb22"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/request.json",
+      "sha256": "ea71f41ee12134cc5efb13b34b31d8711aa4d3b104657bb63e3c1639aba67697"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/scene.map.json",
+      "sha256": "e1159972c761ee21762235d3e49e1543303388e144b25ef582afc29d7e2f0815"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-direct/scene.riv",
+      "sha256": "707e80661fb20b5551205f4bd56a28e77cfe976e2d4d5b6a68ef0decb5937d3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.clear-cyan.log",
+      "sha256": "dbaa63749a2fc850228f13779c708594379098b26e9d20808214caaa672d1d00"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.clear-transparent.log",
+      "sha256": "16e5a27c1d4cbb78db5351d8910def3ac049f782ace6aa4c05c8508849734a15"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.native.log",
+      "sha256": "39258ae35de4437b4afa3ef7cd48a0d5b1959caef030c96a2dbb365f6d6d9d8b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-0.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.chrome.png",
+      "sha256": "8178633cc63d427f0e5e33b35c2cebaff9c997fafdc74c40a9db25d7d6a40400"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.clear-cyan.log",
+      "sha256": "62f6336be3d3b30e6c38cdf942f3992db5c22f5fd5ec6023cf3716817f0ca363"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.clear-cyan.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.clear-transparent.log",
+      "sha256": "2829f28aa8e05ca2b1eb1a63000ebb1dc0a9c758d596b645b9294f104d861cd6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.clear-transparent.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.diff.png",
+      "sha256": "9aa680acbdb4a7d223c95cab7e4980eefde21745f50cf436cd5859f1d2a6d82f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.native.log",
+      "sha256": "c3a9e973240db881a63c760f7f2c00d8dd2857e42a1c192962c2350fe69b1f43"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-1.native.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.chrome.png",
+      "sha256": "9a28ee4247a210502812969483e307afc370dd53663c6a3be059521d3c24e050"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.clear-cyan.log",
+      "sha256": "ec2578fc0dd5d7c47c920f3fcac354e3be1c871b8e87ae84d8b8d2afb2a2e90a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.clear-cyan.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.clear-transparent.log",
+      "sha256": "fef79f557fc03fb9d4da9a5269c9539bc857d9641f46df8434a7169e462b02c2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.clear-transparent.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.diff.png",
+      "sha256": "a9084fecbabdf78cdd93d316464178342ea960b99e2a742654f2c803a05344d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.native.log",
+      "sha256": "df6fac5310fe8dbdfcc6d7739ba38fedc5a6f7ff3af26b08741672e0314f8fe6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-2.native.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.clear-cyan.log",
+      "sha256": "dab1dd7ac07a606ae38a5c8709698a534253da1a905f95a1217816bc1557c3b8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.clear-transparent.log",
+      "sha256": "b91c0addb5affb04560876b23ff5b0f10c2d8d3196108a72f99b0b888dd5f65b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.native.log",
+      "sha256": "e6242672a8a29563b223c7f3a20dd5e1dbe14c76f5099eb9afcbb0c637e79856"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-3.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.clear-cyan.log",
+      "sha256": "43baf218fe0d31c06d91e3a0b56d99e8fca0dc22db8c40bda86fcd1a386ab4c6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.clear-transparent.log",
+      "sha256": "6e3924d58fe50e83402ddd8c8f74b51f937c31af51566d4303d84fc7c27a4e59"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.native.log",
+      "sha256": "0bd282cb26e4559bcadae49ede92d02183c04014ec7565aea78c1ae016e25dbd"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-4.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.chrome.png",
+      "sha256": "8178633cc63d427f0e5e33b35c2cebaff9c997fafdc74c40a9db25d7d6a40400"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.clear-cyan.log",
+      "sha256": "625e1b7cd751bba5345fb81201a5635bb39ec9ef7bc071b465f37c510590722c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.clear-cyan.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.clear-transparent.log",
+      "sha256": "15d5c644d5ba884d5e07c8a36abc9a13640296cbaad760a97d64fdec6350c23e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.clear-transparent.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.diff.png",
+      "sha256": "9aa680acbdb4a7d223c95cab7e4980eefde21745f50cf436cd5859f1d2a6d82f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.native.log",
+      "sha256": "ab8da22dba42532e1fec18f9c91322b3bf22b46763012f2a6f47e958f262c67b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-5.native.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.chrome.png",
+      "sha256": "9a28ee4247a210502812969483e307afc370dd53663c6a3be059521d3c24e050"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.clear-cyan.log",
+      "sha256": "0e68ab10c4dede7187222b491d1b6a1fa8019076a1f6cc1e7b968578d6d9193e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.clear-cyan.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.clear-transparent.log",
+      "sha256": "806d7703be4d870c28a4b5aa2cd54f5d67857b8bcf21e28b5cd77e9716d8e531"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.clear-transparent.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.diff.png",
+      "sha256": "a9084fecbabdf78cdd93d316464178342ea960b99e2a742654f2c803a05344d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.native.log",
+      "sha256": "17998388ec2e601f9caccf9967c743103556f6f46397d42c6ac037cbe3bf8a24"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-6.native.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.clear-cyan.log",
+      "sha256": "4e076bade6b9177afeeb7f579323a326ab669e910151575c6255433b8e22e99e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.clear-transparent.log",
+      "sha256": "7aa50a2794c43cec23733d698ad8e014eb7e5b1f42c433de9da06680ca0e03d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.native.log",
+      "sha256": "5e450f45a62dd43b30ae5630f790bb80c8e259a6c1e41cc2dbb970344702712c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/frame-7.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-0.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-0.stream",
+      "sha256": "ce446953ea17ec48ba0f63f6912f27d9b44d4e349e38cb14500748800ce67c01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-1.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-1.stream",
+      "sha256": "a46873f8f3885c517ef467757c7e50918f9cb08afb066707ce96fdfb42aca7cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-2.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-2.stream",
+      "sha256": "f7418dc2d2d7025910ec04f63aba3d34a196f2cc6c8a81f87ada8fec4da60712"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-3.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-3.stream",
+      "sha256": "5d4d0e68bceef2180855bba86552d9057d7d018e71512cf7ed63298edee0d56e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-4.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-4.stream",
+      "sha256": "5bd96fe86f787903d38f48116ac1013e61d4b5a7ac30fb42937b8532fb24acc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-5.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-5.stream",
+      "sha256": "fdbc87f5e4fba4fb04694396499ce666b665a3a064369cd555826307ffac0b28"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-6.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-6.stream",
+      "sha256": "e52dca158b5a301abfe6879b5716d506668e80d92bf6ad4382cfae8d5dfb0a8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-7.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frame-7.stream",
+      "sha256": "3dc38a1f833d84dd153c6abbdacecc5e5599ed42c9165d83529b7065a6f28cf7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/frames.json",
+      "sha256": "8fb0d2415102e6630bb6f611103c6d8a11f9cb1af0cc3de6d336ca38ba1a8633"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe/scene.riv",
+      "sha256": "707e80661fb20b5551205f4bd56a28e77cfe976e2d4d5b6a68ef0decb5937d3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/probe.log",
+      "sha256": "15352636af4bdbae57eb565ab633f50c09a458bf7eb5ba222cf00db1b90a5b95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/reference.html",
+      "sha256": "ec3dfa64dda06665e2bb7b38dbf727fefbbbe04b25e0113eabdb0973e47b5bab"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/request.json",
+      "sha256": "653c80ae5d7d2a88894fcc91d950b045bc7a96f9c7ca33754067cb10aa6b6cc5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/scene.map.json",
+      "sha256": "e1159972c761ee21762235d3e49e1543303388e144b25ef582afc29d7e2f0815"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-fallback/scene.riv",
+      "sha256": "707e80661fb20b5551205f4bd56a28e77cfe976e2d4d5b6a68ef0decb5937d3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.clear-cyan.log",
+      "sha256": "a5e7820125a39500a9227d59371232b1f32683ff6f5e39917d90d23adee2d4fb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.clear-transparent.log",
+      "sha256": "c15236951aa80f55829afada12a56af3b882b2ce190f133e0f199faebf298f01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.native.log",
+      "sha256": "6d597445b15fb94c6f846ad63a4af261c5a6ec3669997e803acda8f9f3835cea"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-0.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.chrome.png",
+      "sha256": "8178633cc63d427f0e5e33b35c2cebaff9c997fafdc74c40a9db25d7d6a40400"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.clear-cyan.log",
+      "sha256": "cb3a07f1d2f366439fe8674339886834efc593370218d5472da3856307c5441e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.clear-cyan.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.clear-transparent.log",
+      "sha256": "f4e468461397decc336580a81b20f8ad7ccd91733d5284d3f0c12dd38f9ec9b6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.clear-transparent.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.diff.png",
+      "sha256": "9aa680acbdb4a7d223c95cab7e4980eefde21745f50cf436cd5859f1d2a6d82f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.native.log",
+      "sha256": "0aed5ac712dfda6e03930d1d4dff081407d34a16db5c3957c78563a36cdd8daa"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-1.native.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.chrome.png",
+      "sha256": "9a28ee4247a210502812969483e307afc370dd53663c6a3be059521d3c24e050"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.clear-cyan.log",
+      "sha256": "55f71dc7f06ec7584a371529a33df2c0e491c7bf6bcc7c655109490baa184cb3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.clear-cyan.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.clear-transparent.log",
+      "sha256": "24d1fdd97c11cfbd72eefd30e5db516a8420b7ba8929fe7f8c313461128facfe"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.clear-transparent.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.diff.png",
+      "sha256": "a9084fecbabdf78cdd93d316464178342ea960b99e2a742654f2c803a05344d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.native.log",
+      "sha256": "15a734d637c618d6ba2ced6ead881297eb0bf65a4998cbebfdafdbb5759db35c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-2.native.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.clear-cyan.log",
+      "sha256": "06ea14b74ff4c604539193afbcbfcf921ca2d302ea4002f924d3906f257ae618"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.clear-transparent.log",
+      "sha256": "bcd7d33a3d0bec42b09a81fc47f1d493644974233557bb148fce980b79bee8a8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.native.log",
+      "sha256": "fdbcabca9b4068d40d52a89e283ea72b5955f8604fdaa298fedb0a7c9b20a56f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-3.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.clear-cyan.log",
+      "sha256": "182a8918f9d656e20f210a062c8ce474afc8463bb73d20861ccb3882f2084364"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.clear-transparent.log",
+      "sha256": "96255aab5c6540d836ac80b435e720cfb6b323489213f83eca22d574059f25ca"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.native.log",
+      "sha256": "c42366a3480e6e57bb93801166650b272a7d4aa4b9bf652873f51211299687d4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-4.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.chrome.png",
+      "sha256": "8178633cc63d427f0e5e33b35c2cebaff9c997fafdc74c40a9db25d7d6a40400"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.clear-cyan.log",
+      "sha256": "8a56336b201c4cc25e20316cab089522e63cab96a07f467b85e3559c89165c7a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.clear-cyan.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.clear-transparent.log",
+      "sha256": "9f681888c795eec3013295e7431bfef20d429256dc584810a4b4f99fc185e86e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.clear-transparent.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.diff.png",
+      "sha256": "9aa680acbdb4a7d223c95cab7e4980eefde21745f50cf436cd5859f1d2a6d82f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.native.log",
+      "sha256": "7b5ba76739e82421d454c1101cc0b6661d2b34c09fe87363ffbd045632b4b9ef"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-5.native.png",
+      "sha256": "077c9da994695edff95d770c78a1c2a60f2e8b7a49a45273144a19645104f60a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.chrome.png",
+      "sha256": "9a28ee4247a210502812969483e307afc370dd53663c6a3be059521d3c24e050"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.clear-cyan.log",
+      "sha256": "0141d28a20f95028589b981fe5133a19779e4e8fa9a16d208ad84358fb49bacd"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.clear-cyan.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.clear-transparent.log",
+      "sha256": "3d814bfcc5c4d650e5bd56ca27d73e8d9b01524f01f00054bb859757c5c8f4a8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.clear-transparent.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.diff.png",
+      "sha256": "a9084fecbabdf78cdd93d316464178342ea960b99e2a742654f2c803a05344d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.native.log",
+      "sha256": "7ff8acef4aba58964052bda78051c693e8b8a5bd141edbc8d95a9f1ec1f4bec5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-6.native.png",
+      "sha256": "34ea93d6cc5e36e2595b2869e2a5ca91d09048308f4b0e6e823964f8660460f6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.chrome.png",
+      "sha256": "61716b474456f04cdf017db9d2ac0b07b5063b5e168ddb7ca99ee332f5972f5e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.clear-cyan.log",
+      "sha256": "90e3a0341445009e52c9deba0234da75b4360b6a5d82fe13aef2018a3fe64fb6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.clear-cyan.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.clear-transparent.log",
+      "sha256": "38c297f73b300b1a2960e0b6b3dae1ea0fbe2bc3ae88d013750aa9d80ffef7d5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.clear-transparent.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.diff.png",
+      "sha256": "c5d6ac2f3b97cbddc5be985d72ce25db4b9107f82bbd50ff05092454d59d1878"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.native.log",
+      "sha256": "3b0dd2755056992ea4ed1766c3e78757197c1fe02a734b8efb8bfa41f79144ba"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/frame-7.native.png",
+      "sha256": "32000476a34f5e6e6d46618a3dcee6eed2d6cb7d0ad9ac55db69dc2ccb253706"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-0.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-0.stream",
+      "sha256": "ce446953ea17ec48ba0f63f6912f27d9b44d4e349e38cb14500748800ce67c01"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-1.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-1.stream",
+      "sha256": "a46873f8f3885c517ef467757c7e50918f9cb08afb066707ce96fdfb42aca7cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-2.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-2.stream",
+      "sha256": "f7418dc2d2d7025910ec04f63aba3d34a196f2cc6c8a81f87ada8fec4da60712"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-3.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-3.stream",
+      "sha256": "5d4d0e68bceef2180855bba86552d9057d7d018e71512cf7ed63298edee0d56e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-4.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-4.stream",
+      "sha256": "5bd96fe86f787903d38f48116ac1013e61d4b5a7ac30fb42937b8532fb24acc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-5.geometry.json",
+      "sha256": "41034993a89404e2dd20cb6544ebd58bf9ff9246185ef40218ce76167798252c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-5.stream",
+      "sha256": "fdbc87f5e4fba4fb04694396499ce666b665a3a064369cd555826307ffac0b28"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-6.geometry.json",
+      "sha256": "5f2f1b8db3c4179091e599bc069ff9c0d801710d5a1e7c4d72d4742ff1f91cd1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-6.stream",
+      "sha256": "e52dca158b5a301abfe6879b5716d506668e80d92bf6ad4382cfae8d5dfb0a8f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-7.geometry.json",
+      "sha256": "b7263fd06a4a251b05132a4b1ccf529843814b1d73ed2a82f659d5df45a80c46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frame-7.stream",
+      "sha256": "3dc38a1f833d84dd153c6abbdacecc5e5599ed42c9165d83529b7065a6f28cf7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/frames.json",
+      "sha256": "8fb0d2415102e6630bb6f611103c6d8a11f9cb1af0cc3de6d336ca38ba1a8633"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe/scene.riv",
+      "sha256": "707e80661fb20b5551205f4bd56a28e77cfe976e2d4d5b6a68ef0decb5937d3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/probe.log",
+      "sha256": "15352636af4bdbae57eb565ab633f50c09a458bf7eb5ba222cf00db1b90a5b95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/reference.html",
+      "sha256": "c50281e2839c214faa57609aa05ea30ee618ab1d5c175fe2b4a025749559493b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/request.json",
+      "sha256": "f53fce3bc204c11a313be6b546e0d84275a2f2f74bf4b0138e553334ce1c4dbe"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/scene.map.json",
+      "sha256": "e1159972c761ee21762235d3e49e1543303388e144b25ef582afc29d7e2f0815"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/numeric-regression-variable/scene.riv",
+      "sha256": "707e80661fb20b5551205f4bd56a28e77cfe976e2d4d5b6a68ef0decb5937d3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/pixels.mjs",
+      "sha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/receipt.json",
+      "sha256": "5148ea5fadc68037ff8cf4b27be86c95ed815e16c869e27829b69ea4472fc58c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native/source-cases.json",
+      "sha256": "2eeb9809caaf697311777f49352b3677cee96061eab8bd762b20c0dc4271a44c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/native.log",
+      "sha256": "c36837982df674518eb39ec7a551b4073489e544df04b3636145dfc8357502f8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/visual-evidence.json",
+      "sha256": "f344e079f7bb74c68e562882b1f49d129f9aaf3dc8378a0a0adabcdc2c3dee1c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/numeric-token-changed-outputs-r1/visual-pairs.png",
+      "sha256": "5bd2a4c1a1ba4b0d46cd2c5c1d3545c59e5466b5e791b91e4b2092f43417121d"
+    }
+  ],
+  "failures": [],
+  "notes": [
+    "The three historical request files each change only byte92 in width property7; every other byte and each source map remain exact.",
+    "The immutable driver was not modified. Exact historical-profile files were separately probed and share identical replay streams/geometry at all24frames.",
+    "No unsupported historical evidence was upgraded to exact browser or broad numeric-domain equivalence."
+  ]
+}

@@ -132,39 +132,7 @@ fn original_number(text: Option<&str>) -> Result<(String, Unit), Unresolved> {
         _ => return Err(Unresolved::OriginalSyntax),
     };
     let raw = parser.slice_from(start);
-    // The CSS tokenizer has already validated this numeric token. Extract its
-    // numeric prefix without depending on decoded/possibly escaped unit length.
-    let bytes = raw.as_bytes();
-    let mut end = 0;
-    if bytes.first().is_some_and(|b| matches!(b, b'+' | b'-')) {
-        end += 1;
-    }
-    while bytes.get(end).is_some_and(u8::is_ascii_digit) {
-        end += 1;
-    }
-    if bytes.get(end) == Some(&b'.') {
-        end += 1;
-        while bytes.get(end).is_some_and(u8::is_ascii_digit) {
-            end += 1;
-        }
-    }
-    if bytes.get(end).is_some_and(|b| matches!(b, b'e' | b'E')) {
-        let mut exponent = end + 1;
-        if bytes
-            .get(exponent)
-            .is_some_and(|b| matches!(b, b'+' | b'-'))
-        {
-            exponent += 1;
-        }
-        let digits = exponent;
-        while bytes.get(exponent).is_some_and(u8::is_ascii_digit) {
-            exponent += 1;
-        }
-        if exponent > digits {
-            end = exponent;
-        }
-    }
-    let number = raw[..end].to_owned();
+    let number = crate::numeric_tokens::number_prefix(raw).to_owned();
     parser
         .expect_exhausted()
         .map_err(|_| Unresolved::OriginalSyntax)?;
@@ -279,8 +247,9 @@ mod tests {
         );
         let width = pixels(&value.numeric.width);
         encloses(width, 100.71428680419922);
-        assert_eq!(width.native().to_bits(), 100.714f32.to_bits());
-        assert!(width.absolute_error_upper() > 0.0002);
+        assert_eq!(width.native().to_bits(), 100.71428680419922f32.to_bits());
+        assert!(width.absolute_error_upper() > 0. && width.absolute_error_upper() < 1e-10);
+        assert!(!width.proves_equal(&ScalarProvenance::exact_constant(width.native()).unwrap()));
         encloses(percent(&value.numeric.height), 2.34567890123);
     }
     #[test]

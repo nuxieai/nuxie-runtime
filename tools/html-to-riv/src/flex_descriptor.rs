@@ -340,7 +340,8 @@ mod tests {
         assert!(!grow.proves_equal(shrink));
         let b=&group.items.iter().find(|i|i.source_id=="b").unwrap().computed.numeric;
         let NumericSize::Pixels(Ok(width))=&b.main else {panic!("missing width metadata")};
-        assert!(width.absolute_error_upper()>0.0002);
+        assert_eq!(width.native().to_bits(),100.71428680419922f32.to_bits());
+        assert!(width.absolute_error_upper()>0. && width.absolute_error_upper()<1e-10);
         let NumericSize::Percent(Ok(percent))=&group.parent_numeric_main else {panic!("parent coefficient was lost")};
         assert!(percent.ideal_bounds().lower()<=33.333333333 && percent.ideal_bounds().upper()>=33.333333333);
         let json=serde_json::to_value(group).unwrap();

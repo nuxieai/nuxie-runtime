@@ -1,0 +1,72 @@
+[
+  {
+    "name": "content-large-rounded-outer",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-repro-cases.json"
+  },
+  {
+    "name": "rounded-minimal",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;padding:0 1000000px}#c{width:100%}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-repro-cases.json"
+  },
+  {
+    "name": "rounding-percent-both-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-fixed-both-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:999999.875px;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-auto-both-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:auto;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-percent-zero",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 0px 0 0px;background:#14233f}#c{width:100%;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-fixed-zero",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 0px 0 0px;background:#14233f}#c{width:999999.875px;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-percent-right-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 0px;background:#14233f}#c{width:100%;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-percent-left-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 0px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  },
+  {
+    "name": "rounding-percent-split-half-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 500000px 0 500000px;background:#14233f}#c{width:100%;height:1px;background:#669933}",
+    "classification": "retained-large-coordinate-diagnostic",
+    "originalFixture": "content-box-rounding-controls.json"
+  }
+]

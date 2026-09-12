@@ -2,6 +2,8 @@ use nuxie_html_to_riv::Diagnostic;
 use scraper::{Html, Selector};
 #[path = "../src/css.rs"]
 mod css;
+#[path = "../src/numeric_tokens.rs"]
+mod numeric_tokens;
 fn values(stylesheet: &str, html: &str) -> Vec<(String, String)> {
     let rules = css::stylesheet(stylesheet).unwrap();
     let doc = Html::parse_fragment(html);
@@ -81,7 +83,7 @@ fn declarations_keep_values_case_comments_and_precise_sources() {
     assert!(ds.iter().all(|d| d.source.starts_with("inline:1:")));
     assert_eq!(
         css::ordinary_value("RGB(255 /* red */ 0 0 / .5)").unwrap(),
-        "rgb(255   0 0 / 0.5)"
+        "rgb(255   0 0 / .5)"
     );
     let doc = Html::parse_fragment("<div id=target style='color:red'></div>");
     let el = doc.select(&Selector::parse("div").unwrap()).next().unwrap();

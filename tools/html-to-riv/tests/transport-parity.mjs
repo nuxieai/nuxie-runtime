@@ -319,3 +319,18 @@ test('padding zero admission and strict rejection match CLI/WASM',async()=>{
   }
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('public gaps preserve CLI/WASM bytes, computed inheritance and contextual diagnostics',async()=>{
+ const html='<div id="p"><div id="a"></div><div id="b"></div></div>';
+ const base='#p{width:180px;height:100px}#a,#b{width:20px;height:10px}';
+ await assertCorpusParity([
+  {name:'gap-points',html,css:base+'#p{gap:7px 11px}'},
+  {name:'gap-inheritance',html,css:base+'#p{--g:.5em 1rem;font-size:20px;gap:var(--g)}#a{font-size:10px;gap:inherit}'},
+  {name:'gap-percent',html,css:base+'#p{row-gap:10%;column-gap:5%}'},
+ ]);
+ const compiler=await createCompiler(wasm);
+ for(const css of [base+'#p{height:auto;row-gap:10%}',base+'#p{gap:5px;justify-content:space-around}']) {
+  const result=compiler.compile({languageVersion:LANGUAGE_VERSION,html,css,width:240,height:160});
+  assert.equal(result.ok,false,'unqualified gap context must diagnose');
+ }
+});

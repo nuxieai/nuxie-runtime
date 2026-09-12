@@ -258,9 +258,6 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
     if d.name.starts_with("--") {
         return variables::validate_value(&d.value, &d.source);
     }
-    if matches!(d.name.as_str(),"gap"|"row-gap"|"column-gap") && !candidate {
-        return Err(unsupported(&d.source,"Gap declarations await contextual and visual qualification"));
-    }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
              "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap"].contains(&d.name.as_str()) {
@@ -310,7 +307,6 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
             }
         }
         "gap" | "row-gap" | "column-gap" => {
-            if !candidate { return Err(unsupported(&d.source,"Gap declarations await contextual and visual qualification")); }
             let mut gap=gap::Gap::default();
             gap.apply(&d.name,&value,gap::Gap::default(),0.,&d.source)?;
         }
@@ -542,6 +538,12 @@ impl Emitter {
             let Some(element) = ElementRef::wrap(node) else { continue; };
             elements.push(element);
         }
+        if !self.candidate_flex && !parent_style.gap.is_zero() {
+            numeric_bounds.gap(parent_style.gap,elements.len(),path)?;
+            if !parent_style.padding.is_zero() || parent_style.spacing.distributes() {
+                return Err(unsupported(path,"Gaps with padding or distributed spacing require separate layout qualification"));
+            }
+        }
         if self.ids.len().saturating_add(elements.len()) > 8192 {
             return Err(Diagnostic::new("object-limit", path, "Document exceeds 8192 authored elements"));
         }
@@ -570,6 +572,9 @@ impl Emitter {
         let mut baseline_group = false;
         for (_, element, path, _, _) in &ordered_elements {
             let style = computed(*element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
+            if !self.candidate_flex && !parent_style.gap.is_zero() && (style.margins.any() || style.self_alignment.is_baseline() || style.self_alignment.is_center() || style.self_alignment.is_end() || !style.padding.is_zero()) {
+                return Err(unsupported(path,"Gapped groups with automatic margins, alignment helpers or padded children require separate qualification"));
+            }
             group.inspect(&style, parent_style, definite_chain, path)?;
             padded_group |= !style.padding.is_zero();
             baseline_group |= style.self_alignment.is_baseline() && !style.margins.cross(parent_style.direction);
@@ -602,6 +607,9 @@ impl Emitter {
                     else if start { AlignmentPosition::FlexEnd } else { AlignmentPosition::FlexStart },
                     overflow: OverflowAlignment::Safe }
             } else { style.self_alignment };
+            if !self.candidate_flex && !style.gap.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
+                return Err(unsupported(&path,"Gap containers inside alignment wrappers require separate qualification"));
+            }
             if !style.padding.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
                 return Err(unsupported(&path, "Padding on an alignment wrapper participant needs a separate padding-floor and percentage-containing-block proof"));
             }
@@ -788,13 +796,24 @@ mod gap_pipeline_tests {
     use super::*;
     fn request(css:&str)->CompileInput {CompileInput{html:"<div id=p><div id=a></div><div id=b></div></div>".into(),css:format!("#p{{width:200px;height:100px}}#a,#b{{width:20px;height:10px}}{css}"),width:400.,height:200.}}
     #[test]
-    fn candidate_gap_uses_computed_inheritance_and_preserves_public_rejection() {
+    fn public_gap_uses_computed_inheritance() {
         let css="#p{--g:.5em 1em;font-size:20px;gap:var(--g)}#a{font-size:10px;gap:inherit}";
         let actual=compile_profile(&request(css),FlexPolicy::Candidate).unwrap();
         let expected=compile_profile(&request("#p{gap:10px 20px}#a{gap:10px 20px}"),FlexPolicy::Candidate).unwrap();
         assert_eq!(actual,expected);
-        assert!(compile_profile(&request(css),FlexPolicy::Guarded).is_err());
-        assert!(compile_profile(&request("#unmatched{gap:0}"),FlexPolicy::Guarded).is_err());
+        assert_eq!(actual,compile_profile(&request(css),FlexPolicy::Guarded).unwrap());
+        assert!(compile_profile(&request("#unmatched{gap:0}"),FlexPolicy::Guarded).is_ok());
+    }
+    #[test]
+    fn public_gap_rejects_unqualified_contexts_and_keeps_intrinsic_points() {
+        for css in ["#p{height:auto;row-gap:5%}","#p{gap:4px;justify-content:space-around}","#p{gap:4px;padding:2px}","#p{gap:4px}#a{margin-left:auto}","#p{gap:4px}#a{align-self:center}","#p{gap:4px}#a{padding:1px}","#p{gap:4px;align-self:baseline}"] {
+            assert!(compile_profile(&request(css),FlexPolicy::Guarded).is_err(),"{css}");
+        }
+        assert!(compile_profile(&request("#p{width:auto;height:auto;gap:4px;align-self:flex-start}"),FlexPolicy::Guarded).is_ok());
+        assert!(compile_profile(&request("#p{row-gap:5%;column-gap:10%}"),FlexPolicy::Guarded).is_ok());
+        for css in ["#unmatched{gap:-1px}","#p{gap:1px 2px 3px;gap:0}","#p{gap:var(--missing)}"] {
+            assert!(compile_profile(&request(css),FlexPolicy::Guarded).is_err(),"{css}");
+        }
     }
     #[test]
     fn candidate_zero_gaps_preserve_bytes_and_nonzero_gaps_exclude_flex_proof() {

@@ -1,0 +1,107 @@
+{
+  "scope": "Public compiler gap interaction validation; ordinary immutable runtime files",
+  "status": "passed",
+  "frames": 128,
+  "scenes": 16,
+  "geometryPassed": 128,
+  "pixelsPassed": 128,
+  "clearPassed": 256,
+  "exactRivAndParsedMaps": 16,
+  "rejectedControls": 6,
+  "visual": {
+    "directPairs": 48,
+    "exactFullRGBAPairTransfers": 80,
+    "independentImageTransfers": 160,
+    "coveredFrames": 128,
+    "finding": "No visible divergence in all directly inspected sheets; reverse-overflow offscreen paints not visually qualified"
+  },
+  "preservedSetupFailure": "Initial align-items:flex-start fixture compilation rejected before native work; original cases and render/ retained",
+  "tools": {
+    "compiler": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-gap-checkpoint-r1/html-to-riv",
+    "probe": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+    "renderer": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay"
+  },
+  "toolHashes": {
+    "compiler": "e0514fdd65a29e877f0b2b37d1812583ab56fa47be071514a60d6d73835d7a97",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "sourceBindings": [
+    {
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/gap-public-contexts-r1/cases.json",
+      "snapshot": "source-cases.json",
+      "sha256": "d209b09f1dcea2fca32e59c78d2a26cad4346d22320aeeae5014d09f6650d3de"
+    },
+    {
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-public-baseline.mjs",
+      "snapshot": "check-public-baseline.mjs",
+      "sha256": "fd0ef07baa805e078f458d7729c5b80516e6a49ee6d92dff17ded30357a13f92"
+    },
+    {
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/pixels.mjs",
+      "snapshot": "pixels.mjs",
+      "sha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821"
+    },
+    {
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/reset.css",
+      "snapshot": "browser-reset.css",
+      "sha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a"
+    }
+  ],
+  "bindings": {
+    "tools/html-to-riv/output/gap-public-contexts-r1/cases.json": "d209b09f1dcea2fca32e59c78d2a26cad4346d22320aeeae5014d09f6650d3de",
+    "tools/html-to-riv/output/gap-public-contexts-r1/cases-initial.json": "d907562418bcb838da704ffac2ed335250bee1c5c855742f8884384c7b7fe079",
+    "tools/html-to-riv/output/gap-public-contexts-r1/rejected.json": "05e0f63b4385502ea3f36cfe50653fce65ea8d109efa680dda6a4410569d9db6",
+    "tools/html-to-riv/output/gap-public-contexts-r1/rejected-initial.json": "4c9ed7abc7e4cdc7b2562d8e933344c1bb1c8dfdf361baf89c585868bfee30b6",
+    "tools/html-to-riv/output/gap-public-contexts-r1/rejected-results.json": "a718187848ab2b2af3e61c67db2976b6e1b662aa2a9e405e13b50eb11a2cea56",
+    "tools/html-to-riv/output/gap-public-contexts-r1/preflight.json": "88658be14089d9eb89c9d021c76a9fb3ad94e0d829adc1cd1e6f3aeb6c5daf27",
+    "tools/html-to-riv/output/gap-public-contexts-r1/run.log": "fb34f70fdef6718d125dc65f77391af88b70a98c22893523a3a3531513a31f62",
+    "tools/html-to-riv/output/gap-public-contexts-r1/run-r2.log": "f47d065052adc186f6deb0c23b56712107c9c4b717f693f66b896cfa3d04e127",
+    "tools/html-to-riv/output/gap-public-contexts-r1/collect.py": "d87a428bf46af762ddb4f90c5d05c966124ed9272f98c53f167530dd8a370817",
+    "tools/html-to-riv/output/gap-public-contexts-r1/matrix.json": "534fe7c7395efacbabb93f259817f8217a25b61e8454f75d8303f592474a12bd",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-direct.json": "a804685f5782abc9902eb20e897ac2bf3dba838e0d7ddc57b3baddab0d36fd25",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-transfers.json": "3deb5ae69edb0d003898cb97eb6d75c0573539061503f561108fa4a739831cc0",
+    "tools/html-to-riv/output/gap-public-contexts-r1/reproductions.json": "986c379af5f091003fb2848546008ba09e320aff7f42f0d63e90581b17e437d5",
+    "tools/html-to-riv/output/gap-public-contexts-r1/render-r2/receipt.json": "ec01dd803500ae4cfdd2d9dd210591c0956ecc6ece01c895518d9778f647c7aa",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-16.png": "6c5f26f2475323dcc1f14d1f1cebbc8983e151016dd63feb44a94b709f1e912a",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-28.png": "37559c86b46f7b366e478c8689b23b0f5bcc4e92694561427b0c2bf497a9cc0c",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-8.png": "ffd05b9ffd9d7bc82309b7be9cd20c11c75435ad0d84dd595d08dc79bfc65cea",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-12.png": "0ce5437bc628a5d8dc93bb6eb5a77e649e033e149d97454e296c04aea31f79a1",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-40.png": "4d40e85ca472fea45c4f8781377293a3081059df17a8f6dbafe75f1cab1da9d5",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-44.png": "df3505fd2fed4bf491c43a408bef39a41d04423eae0571a660d31674db76bb17",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-36.png": "dcae09e180b6b7b0627f7c9534f792ad5c91315a4b7fa2a3b501d02e75ab10b1",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-20.png": "93689b6bdc222d071b5a139513555d90a26f1e0456bec80a5ab107b6547adca9",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-4.png": "7182a776f1e1d9e353cb94258f71d28c289a7209c0c1dc098f8350a1b526903c",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-0.png": "6c6e7cc7ac617d51a155ea63c9dbb89ba47861960c7af6e08688f5cbf75a3d3e",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-24.png": "1b16048b8a0b388c16d2cc26365247492e4266c662788ce6c7b31111d6455861",
+    "tools/html-to-riv/output/gap-public-contexts-r1/visual-32.png": "87b468e933731105b2053947b4b214117270b8bb3e97e8fdc7a4f6d617ac50f2",
+    "tools/html-to-riv/validation/public-gap-contexts-review.md": "03b0106e25ff57e9dc6472ab93c4e0c8e8551405123118c63990a0baaa3b7a0b",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/html-to-riv": "e0514fdd65a29e877f0b2b37d1812583ab56fa47be071514a60d6d73835d7a97",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/build-command.json": "a339f0041f3d637e71c563975ee9cf0500abd57dd8484b306313fe9363fbe3c4",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/build.log": "50dd8d371791c022cc39ba4fdc0b96ab5bbd1df0f295ee062589fbfa58e8755e",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/receipt.json": "b009057ca84cd8eaf20a988d138e387f8bb8c6c9551d63cf434e8496a00607c5",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/variables.rs": "d30d1e5ff14e89fce90531365c41ccf66236a90d8a4a11188d9f01beb4d3cd1f",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/computed_provenance.rs": "702754b214b429366273147aa0a56fc36deb9cf57c8ffde5d0c0c3db1d01509a",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/compiler.rs": "285d0c803c1a844cdba3562418c80a5eaee479d0aa4a19522baa4f2fa421ed18",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/baseline.rs": "bf4f42624b6eb1b60f9ef0b3333d0b3cb4842d63de88e52de106a7e7507ac9a5",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/flex_descriptor.rs": "e6410e31f6b4ec226abe71c603386f6365b3121fabf7b5f550b5f803e34f257a",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/gap.rs": "8b0848021dea9e2d1438e71ebf10ba2b7277a0ab10e41989ae14e7902686c67a",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/numeric.rs": "5098423575ecdf59ca264e72a9c9f6acfec4f906fc731a61d415a30646a626c8",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/flex_numeric.rs": "42f1969c6b7fbdefa039fa7ea48854d4148f52f8d6fc4febc1f7f8aa8c74412c",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "tools/html-to-riv/output/public-gap-checkpoint-r1/source/scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  }
+}

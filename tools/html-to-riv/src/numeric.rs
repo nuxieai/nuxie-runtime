@@ -14,6 +14,27 @@ pub(super) struct Bounds {
 impl Bounds {
     // This is the documented complete viewport domain, not the input viewport.
     pub const VIEWPORT: Self = Self { upper: [Some(16384.); 2], lower: [Some(0.); 2], witness: [Some(16384.); 2] };
+    pub fn gap(self, gap:super::gap::Gap, children:usize, source:&str)->Result<(),Diagnostic> {
+        if children<2 {return Ok(());}
+        // Physical row gap depends on own content height, column on width.
+        // Preserve native percent/100 then multiply operation order.
+        for (value,axis) in gap.values().into_iter().zip([1,0]) {
+            let upper=match value {
+                super::gap::GapValue::Normal=>0.,
+                super::gap::GapValue::Pixels(v)=>v,
+                super::gap::GapValue::Percent(0.)=>0.,
+                super::gap::GapValue::Percent(v)=> {
+                    let owner=self.upper[axis].ok_or_else(||unsupported(source,"Percentage gaps require a bounded corresponding content dimension; intrinsic percentage gaps remain unqualified"))?;
+                    multiply_upper(v/100.,owner)
+                }
+            };
+            // Bound the repeated nonnegative gap additions with upward rounding.
+            let mut total=0.;
+            for _ in 1..children {total=round_upper(f64::from(total)+f64::from(upper));}
+            if !total.is_finite() {return Err(unsupported(source,"Gap accumulation can overflow within the supported viewport range"));}
+        }
+        Ok(())
+    }
     pub fn child(self, style: &Style, parent: &Style, source: &str) -> Result<Self, Diagnostic> {
         if style.padding.has_percentage() && self.upper[0].is_none() {
             return Err(unsupported(source, "Percentage padding requires a bounded containing content width; intrinsic percentage-padding bases need separate qualification"));

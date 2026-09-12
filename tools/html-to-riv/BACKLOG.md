@@ -6,6 +6,8 @@ Keep all 99 original items and priority order. Existing parsing and browser refe
 
 Statuses: `pending` = implementation/proof remains; `qualified` = immutable-target evidence complete; `unsupported` = evidenced current-runtime limitation. Wrapper candidates remain pending until tested. Do not equate pending proof with impossibility. Historical results are preserved in validation/history/BACKLOG-mutated-runtime.md.
 
+Restored baseline capability outside the 99 incremental items: bounded public physical gaps now compile through ordinary runtime fields; see validation/public-gap-review.md. This does not change the 99-item counts or qualify helper/intrinsic-percentage combinations.
+
 Excluded: CSS Grid, editor integration, scripts, interactions, bindings and animation.
 
 | ID | Feature | Status | Evidence / next action |

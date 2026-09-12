@@ -1,0 +1,11 @@
+# Selected variable token provenance
+
+Variables now retain a ResolvedValue containing the unchanged native string and an optional original token stream. The shared resolver chooses both streams together through aliases, inheritance, selected fallbacks and cycle handling. The existing substitute API returns the native projection; substitute_with_provenance exposes both to future numeric computation. Original tokens are captured before serialization, not reconstructed by searching declarations or matching rounded numbers afterward.
+
+The winning-cascade regression preserves100.71428680419922px while the native normalized value remains100.714px. Additional tests cover inherited aliases despite local redefinition, cycle recovery through an outside dependent, unused fallback exclusion, empty valid fallback versus missing provenance, exponent/escaped-unit spelling, grouped values and Number/Ident boundaries. Existing boundary comments and native validation remain unchanged.
+
+Provenance has separate per-value65536-byte and environment1048576-byte limits. Exhaustion drops original to None while retaining a valid native value. It does not invalidate the custom property or select its fallback. Missing metadata must later yield an unresolved proof, never an assumption that the normalized value is exact. These limits bound retained metadata, not all parsing allocation or the whole compiler's resource use.
+
+Full160 Rust and35 Node tests pass, as do native/WASM builds, TypeScript and immutable-source checks. All482 prior public outputs,79 positive padding/numeric-provenance controls and48 private flex candidate files/maps remain exact. The source-mounted harness and frozen artifacts are bound in variables-provenance-receipt.json. These are implementation/output regression checks, not new browser/pixel evidence.
+
+This commit does not yet attach ideal-expression bounds to computed Style fields. Next integration pairs selected original numeric values with actual computed native bits through font-relative calculations, shorthand/longhand replacement and inheritance, using the scalar provenance carrier. Public nonlegacy flex remains diagnostic until structural and numeric premises are complete.

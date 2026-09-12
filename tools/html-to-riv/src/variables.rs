@@ -4,7 +4,18 @@ use crate::{Diagnostic, css::Declaration};
 use cssparser::{Parser, ParserInput, ToCss, Token};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub(crate) type Variables = BTreeMap<String, Option<String>>;
+pub(crate) type Variables = BTreeMap<String, Option<ResolvedValue>>;
+/// Selected token streams, not exact numeric arithmetic. Missing provenance is
+/// distinct from a valid empty stream and must never be treated as native ideal.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ResolvedValue {
+    pub native: String,
+    pub original: Option<String>,
+}
+impl ResolvedValue {
+    fn empty() -> Self {Self {native:String::new(),original:Some(String::new())}}
+    fn token(native:String,original:String)->Self {Self{native,original:Some(original)}}
+}
 const MAX_DEPTH: usize = 64;
 const MAX_ENTRIES: usize = 256;
 const MAX_VALUE: usize = 65_536;
@@ -12,8 +23,8 @@ const MAX_TOTAL: usize = 1_048_576;
 
 #[derive(Clone, Debug)]
 enum Node {
-    Token(String),
-    Group(String, Vec<Node>, char),
+    Token(ResolvedValue),
+    Group(ResolvedValue, Vec<Node>, char),
     Var(String, Option<Vec<Node>>),
 }
 fn syntax(source: &str, message: &str) -> Diagnostic {
@@ -66,6 +77,7 @@ fn parse_inner(
             _ => None,
         };
         if let Some((open, close, variable)) = group {
+            let open = ResolvedValue::token(open, p.slice_from(token_start).to_owned());
             let start = p.position();
             let node = p
                 .parse_nested_block(|p| {
@@ -107,14 +119,15 @@ fn parse_inner(
             }
             nodes.push(node);
         } else {
-            nodes.push(Node::Token(match token {
+            let original = p.slice_from(token_start).to_owned();
+            nodes.push(Node::Token(ResolvedValue::token(match token {
                 Token::Comment(_) | Token::WhiteSpace(_) => " ".into(),
                 // Keep numeric spelling: cssparser serializes its saturated integer
                 // field and rounded float, which can change order values or turn
                 // an invalid integer lexeme (1.0/1e2) into an admitted integer.
                 Token::Number { .. } => p.slice_from(token_start).to_owned(),
                 _ => token.to_css_string(),
-            }));
+            }, original)));
         }
     }
     Ok(nodes)
@@ -157,7 +170,7 @@ fn append(output: &mut String, piece: &str, source: &str) -> Result<(), Diagnost
     Ok(())
 }
 enum Lookup {
-    Value(Option<String>),
+    Value(Option<ResolvedValue>),
     InCycle,
 }
 fn expand(
@@ -165,17 +178,22 @@ fn expand(
     lookup: &mut impl FnMut(&str) -> Result<Lookup, Diagnostic>,
     source: &str,
     depth: usize,
-) -> Result<Option<String>, Diagnostic> {
+) -> Result<Option<ResolvedValue>, Diagnostic> {
     if depth > MAX_DEPTH {
         return Err(limit(source));
     }
-    let mut output = String::new();
+    let mut output = ResolvedValue::empty();
     let mut valid = true;
     for node in nodes {
         let piece = match node {
             Node::Token(s) => Some(s.clone()),
             Node::Group(open, body, close) => {
-                expand(body, lookup, source, depth + 1)?.map(|body| format!("{open}{body}{close}"))
+                expand(body, lookup, source, depth + 1)?.map(|body| ResolvedValue {
+                    native: format!("{}{}{close}",open.native,body.native),
+                    original: open.original.as_ref().zip(body.original.as_ref()).and_then(|(open,body)| {
+                        (open.len()+body.len()+close.len_utf8() <= MAX_VALUE).then(||format!("{open}{body}{close}"))
+                    }),
+                })
             }
             Node::Var(name, fallback) => match lookup(name)? {
                 Lookup::Value(Some(value)) => Some(value),
@@ -191,7 +209,11 @@ fn expand(
         // Chromium resolves subsequent sibling functions even after failure,
         // so overlapping cycles are discovered instead of depending on order.
         if let Some(piece) = piece {
-            append(&mut output, &piece, source)?;
+            append(&mut output.native, &piece.native, source)?;
+            output.original = match (output.original.take(), piece.original) {
+                (Some(mut output), Some(piece)) => append(&mut output, &piece, source).ok().map(|_| output),
+                _ => None,
+            };
         } else {
             valid = false;
         }
@@ -204,7 +226,7 @@ fn resolve(
     values: &mut Variables,
     stack: &mut Vec<String>,
     cyclic: &mut BTreeSet<String>,
-) -> Result<Option<String>, Diagnostic> {
+) -> Result<Option<ResolvedValue>, Diagnostic> {
     if let Some(start) = stack.iter().position(|entry| entry == name) {
         cyclic.extend(stack[start..].iter().cloned());
         return Ok(None);
@@ -237,22 +259,39 @@ fn resolve(
     let value = if cyclic.contains(name) { None } else { value };
     values.insert(name.into(), value.clone());
     check_environment(values, name)?;
-    Ok(value)
+    bound_provenance(values);
+    // Read back the possibly metadata-truncated cache, preserving native bytes.
+    Ok(values.get(name).cloned().unwrap_or(None))
 }
 fn check_environment(values: &Variables, source: &str) -> Result<(), Diagnostic> {
     if values.len() > MAX_ENTRIES
         || values
             .iter()
-            .any(|(k, v)| k.len() > MAX_VALUE || v.as_ref().is_some_and(|v| v.len() > MAX_VALUE))
+            .any(|(k, v)| k.len() > MAX_VALUE || v.as_ref().is_some_and(|v| v.native.len() > MAX_VALUE))
         || values
             .iter()
-            .map(|(k, v)| k.len() + v.as_ref().map_or(0, String::len))
+            .map(|(k, v)| k.len() + v.as_ref().map_or(0, |v|v.native.len()))
             .sum::<usize>()
             > MAX_TOTAL
     {
         return Err(limit(source));
     }
     Ok(())
+}
+
+// Metadata gets its own bounded envelope. Exceeding it drops original text,
+// never changes native acceptance, native diagnostics or native expansion.
+fn bound_provenance(values:&mut Variables) {
+    let mut total=0usize;
+    for (name,value) in values {
+        if let Some(value)=value {
+            if let Some(original)=&value.original {
+                let bytes=name.len().saturating_add(original.len());
+                if original.len()>MAX_VALUE || total.saturating_add(bytes)>MAX_TOTAL {value.original=None;}
+                else {total+=bytes;}
+            }
+        }
+    }
 }
 
 /// Declarations must arrive in ascending cascade order, with importance already
@@ -303,13 +342,19 @@ pub(crate) fn compute(
         resolve(name, &authored, &mut values, &mut Vec::new(), &mut cyclic)?;
     }
     check_environment(&values, "css")?;
+    bound_provenance(&mut values);
     Ok(values)
 }
-pub(crate) fn substitute(
+pub(crate) fn substitute(value:&str, vars:&Variables, source:&str) -> Result<Option<String>,Diagnostic> {
+    substitute_with_provenance(value,vars,source).map(|value|value.map(|value|value.native))
+}
+/// Follows the same selected-token expansion as substitute; never reconstructs
+/// provenance by searching declarations after substitution.
+pub(crate) fn substitute_with_provenance(
     value: &str,
     vars: &Variables,
     source: &str,
-) -> Result<Option<String>, Diagnostic> {
+) -> Result<Option<ResolvedValue>, Diagnostic> {
     check_environment(vars, source)?;
     expand(
         &parse(value, source)?,
@@ -536,11 +581,68 @@ mod tests {
             )
             .is_err()
         );
-        let vars = BTreeMap::from([("--x".into(), Some("x".repeat(MAX_VALUE / 2)))]);
+        let vars = BTreeMap::from([("--x".into(), Some(ResolvedValue::token("x".repeat(MAX_VALUE / 2), "x".repeat(MAX_VALUE / 2))))]);
         assert!(substitute("var(--x)var(--x)", &vars, "test").is_err());
         let parent = (0..=MAX_ENTRIES)
             .map(|n| (format!("--x{n}"), None))
             .collect();
         assert!(compute(&[], &parent).is_err());
+    }
+}
+
+#[cfg(test)]
+mod provenance_tests {
+    use super::*;
+    fn vars(text:&str,parent:&Variables)->Variables {compute(&crate::css::declarations(text,"test").unwrap(),parent).unwrap()}
+    fn resolved(text:&str,values:&Variables)->ResolvedValue {substitute_with_provenance(text,values,"test").unwrap().unwrap()}
+    #[test]
+    fn rounded_native_dimensions_keep_selected_original_spelling() {
+        let values=vars("--x:999.123456789px;--alias:var(--x);--x:100.71428680419922px",&Variables::new());
+        let value=resolved("var(--alias)",&values);
+        assert_eq!(crate::css::ordinary_value(&value.native).unwrap().trim(),"100.714px");
+        assert!(value.original.as_ref().unwrap().contains("100.71428680419922px"));
+        assert_eq!(substitute("var(--alias)",&values,"test").unwrap(),Some(value.native));
+    }
+    #[test]
+    fn inherited_alias_and_selected_fallback_keep_their_own_tokens() {
+        let parent=vars("--x:1.234567890123em;--alias:var(--x);--a:var(--b);--b:var(--a);--recover:var(--a,3.4567890123%)",&Variables::new());
+        let child=vars("--x:9rem;--alias:inherit;--recover:unset",&parent);
+        assert!(resolved("var(--alias)",&child).original.unwrap().contains("1.234567890123em"));
+        assert!(resolved("var(--x)",&child).original.unwrap().contains("9rem"));
+        let fallback=resolved("var(--missing,var(--recover,8.7654321px))",&child).original.unwrap();
+        assert!(fallback.contains("3.4567890123%"));assert!(!fallback.contains("8.7654321px"));
+        assert!(substitute_with_provenance("var(--a)",&child,"test").unwrap().is_none());
+        assert_eq!(resolved("var(--missing,)",&child).original,Some(String::new()));
+    }
+    #[test]
+    fn exponents_escaped_units_groups_and_boundaries_are_not_reserialized() {
+        let values=vars(r"--x:1.25e+2p\78;--n:-0;--m:2",&Variables::new());
+        let value=resolved("f(var(--x), var(--n)) var(--m)px",&values);
+        let original=value.original.unwrap();
+        assert!(original.contains(r"1.25e+2p\78"));assert!(original.contains("-0"));assert!(original.contains("2/**/px"));
+        // The native and original streams both retain a Number/Ident boundary.
+        for text in [&value.native,&original] {
+            let mut input=ParserInput::new(text);let mut p=Parser::new(&mut input);let mut pair=false;
+            while let Ok(token)=p.next() {if matches!(token,Token::Number{value,..} if *value==2.) {pair=matches!(p.next(),Ok(Token::Ident(unit)) if *unit=="px");break;}}
+            assert!(pair,"{text}");
+        }
+    }
+    #[test]
+    fn provenance_value_limit_does_not_change_valid_native_expansion_or_choose_fallback() {
+        let spelling=format!("0.{}1px","0".repeat(3000));
+        let values=vars(&format!("--x:{spelling};--many:{}", "var(--x) ".repeat(30)),&Variables::new());
+        let value=resolved("var(--many,7px)",&values);
+        assert!(value.original.is_none());assert!(!value.native.contains("7px"));
+        assert_eq!(substitute("var(--many,7px)",&values,"test").unwrap(),Some(value.native));
+    }
+    #[test]
+    fn provenance_environment_limit_does_not_invalidate_native_values() {
+        let mut declarations=format!("--base:0.{}1px;","0".repeat(59000));
+        for index in 0..20 {declarations.push_str(&format!("--v{index}:var(--base);"));}
+        let values=vars(&declarations,&Variables::new());
+        assert!(values.values().all(Option::is_some));
+        assert!(values.values().flatten().any(|value|value.original.is_none()));
+        assert!(values.iter().map(|(name,value)|value.as_ref().and_then(|v|v.original.as_ref()).map_or(0,|v|name.len()+v.len())).sum::<usize>()<=MAX_TOTAL);
+        for index in 0..20 {assert_eq!(crate::css::ordinary_value(&resolved(&format!("var(--v{index})"),&values).native).unwrap().trim(),"0.0px");}
     }
 }

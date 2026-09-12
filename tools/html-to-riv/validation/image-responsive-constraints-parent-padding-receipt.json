@@ -1,0 +1,144 @@
+{
+  "scope": "Private responsive ratio bounds in padded parent, no public admission; complete direct visual review recorded separately",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "runtimeOrCompilerModified": false,
+  "browserGeometryConsumed": false,
+  "requests": 12,
+  "frames": 96,
+  "geometryPass": 96,
+  "pixelPass": 84,
+  "presencePass": 96,
+  "pixelFailures": [
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-point-column-guard",
+      "frame": 0,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-point-column-guard",
+      "frame": 3,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-point-column-guard",
+      "frame": 4,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-point-column-guard",
+      "frame": 7,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-percent-column-guard",
+      "frame": 0,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-percent-column-guard",
+      "frame": 3,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-percent-column-guard",
+      "frame": 4,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-max-height-percent-column-guard",
+      "frame": 7,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-min-height-point-column-direct",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-min-height-point-column-direct",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-min-height-point-column-direct",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-responsive-constraints-parent-padding-width-min-height-point-column-direct",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/candidate-generator.py",
+      "sha256": "98a6ad58b2030dea79ce1fe94627721a02a5ac744fc2c4cbe9a0d3f3e742afcf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/all-source-cases.json",
+      "sha256": "4b996e9c064a5b6471c46d8ff9c2b290c94505cec5b71190feabde067f6abdad"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/ordinary-codec.py",
+      "sha256": "70019687001106baca7b0f82c2af76193bcc5c95b210ff4f560a3184b9181a15"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/authoring-bindings.json",
+      "sha256": "343d55f65c224a25902e525eece781f2a6fea57e4a1425ea60c9f0267b0fc7f4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/build-receipt.json",
+      "sha256": "e003e78a061c27ec11e78c8f9dc9b838ce4d14c6ea94707efc01b0a0328b7d8c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/compile-receipt.json",
+      "sha256": "842889a3c2ef54fa158d606617cbb30d0752460770c852bcddee305e7ce31a86"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/native-receipt.json",
+      "sha256": "0491bea5c64d842e5612160dc328545ee8008b04f85d863f7a20aeb86c00a1bf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/combined-receipt.json",
+      "sha256": "095cb4ae35ca4cc0435b3bfbde6700eb13ec630b233c5688db76be695ad70b7a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/visual-r1/review-receipt.json",
+      "sha256": "855d88a965a2e96ff58bf10b67bb28a138c0ff30debbfaf2d18823de7937c844"
+    }
+  ],
+  "visualReviewCompleted": true,
+  "visualReview": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-responsive-constraints-parent-padding-r1/visual-r1/review-receipt.json",
+    "sha256": "855d88a965a2e96ff58bf10b67bb28a138c0ff30debbfaf2d18823de7937c844",
+    "inspectedSheets": 12,
+    "representativePairs": 36,
+    "exactVisualTransfers": 60,
+    "frames": 96
+  }
+}

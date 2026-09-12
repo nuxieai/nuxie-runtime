@@ -1,0 +1,1586 @@
+[
+  {
+    "name": "derived-row-reverse0-wrap1-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap1-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap1-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap;align-content:center;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap1-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap;align-content:center;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap1-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap;align-content:flex-end;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap1-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap;align-content:flex-end;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap2-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap2-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap2-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap-reverse;align-content:center;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap2-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap-reverse;align-content:center;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap2-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse0-wrap2-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap1-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap;align-content:flex-start;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap1-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap;align-content:flex-start;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap1-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap;align-content:center;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap1-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap;align-content:center;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap1-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap;align-content:flex-end;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap1-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap;align-content:flex-end;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap2-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap2-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap2-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:center;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap2-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:center;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap2-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{width:60px;height:50px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-row-reverse1-wrap2-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:75%;height:60%;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{width:60px;height:50%;min-height:24px;max-height:72px;align-self:flex-start;flex-direction:column;justify-content:flex-end;align-items:flex-start;}#v0{width:60px;height:50%;min-height:12px;max-height:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{width:60px;height:30px;align-self:center;flex-direction:column;justify-content:center;align-items:flex-start;}#v1{width:80px;height:150%;min-height:12px;max-height:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{width:40px;height:70px;align-self:flex-end;flex-direction:column;justify-content:flex-start;align-items:flex-start;}#v2{width:40px;height:75%;min-height:12px;max-height:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      320,
+      200
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap1-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap;align-content:flex-start;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap1-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap;align-content:flex-start;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap1-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap;align-content:center;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap1-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap;align-content:center;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap1-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap;align-content:flex-end;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap1-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap;align-content:flex-end;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap2-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap2-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap2-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap-reverse;align-content:center;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap2-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap-reverse;align-content:center;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap2-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse0-wrap2-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap1-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap;align-content:flex-start;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap1-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap;align-content:flex-start;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap1-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap;align-content:center;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap1-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap;align-content:center;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap1-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap;align-content:flex-end;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap1-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap;align-content:flex-end;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap2-level0-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap2-level0-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:flex-start;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap2-level1-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:center;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap2-level1-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:center;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap2-level2-equal",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{height:60px;width:50px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:100%;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:100%;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:100%;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  },
+  {
+    "name": "derived-column-reverse1-wrap2-level2-responsive-visible",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:60%;height:75%;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:flex-end;}.s0{height:60px;width:50%;min-width:24px;max-width:72px;align-self:flex-start;flex-direction:column;align-items:flex-end;justify-content:flex-start;}#v0{height:60px;width:50%;min-width:12px;max-width:60px;background:rgba(255,255,0,0.7490196078431373);}.s1{height:60px;width:30px;align-self:center;flex-direction:column;align-items:center;justify-content:flex-start;}#v1{height:80px;width:150%;min-width:12px;max-width:80px;background:rgba(255,96,48,0.5019607843137255);}.s2{height:40px;width:70px;align-self:flex-end;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{height:40px;width:75%;min-width:12px;max-width:90px;background:rgba(0,187,160,0.7529411764705882);}",
+    "compileViewport": [
+      200,
+      320
+    ],
+    "viewports": [
+      [
+        200,
+        320
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        240,
+        96
+      ],
+      [
+        200,
+        320
+      ]
+    ],
+    "features": [
+      "private actual compose_with_bounds",
+      "derived epsilon over full viewport domain",
+      "anchored visible size",
+      "overlap and repeated original/clone resize"
+    ]
+  }
+]

@@ -97,7 +97,8 @@ fn sizes(r: &Record, s: &Record, id: u32) -> Result<Sizes, Unresolved> {
 /// `roles` is logical packing order, and must exactly match completed direct
 /// child order. Unknown objects, extra descendants, style sharing, native
 /// constraints, and intrinsic/scale overrides fail closed. Every slot has one
-/// definite visible child, whose own children may only be solid fills.
+/// definite visible child, whose own children may only be solid fills. One
+/// optional solid artboard background is render-only and remains unreplicated.
 ///
 /// The single wrapping parent is the artboard's only layout child. Its fixed
 /// scales and the artboard's top-left alignment establish a zero-origin base
@@ -172,7 +173,7 @@ pub(super) fn inspect<'a>(records: &'a [Record], parent: u32, roles: &[(u32, u32
             "Fill" => {
                 let owner = uint(r, "parentId").ok_or(Unresolved::Ownership)?;
                 if !r.has_only_properties(&["parentId"])
-                    || !roles.iter().any(|&(_, visible)| visible == owner)
+                    || !(owner == 0 || roles.iter().any(|&(_, visible)| visible == owner))
                     || owner >= id || fills.insert(id, owner).is_some() {
                     return Err(Unresolved::Ownership);
                 }
@@ -193,6 +194,7 @@ pub(super) fn inspect<'a>(records: &'a [Record], parent: u32, roles: &[(u32, u32
             r.kind == if id == 0 { "Artboard" } else { "LayoutComponent" }))
         || styles.len() != records.iter().filter(|r| r.kind == "LayoutComponentStyle").count()
         || fills.keys().any(|id| !colors.contains(id))
+        || fills.values().filter(|&&v|v==0).count()>1
         || roles.iter().any(|&(_, visible)| fills.values().filter(|&&v| v == visible).count() != 1) {
         return Err(Unresolved::Ownership);
     }

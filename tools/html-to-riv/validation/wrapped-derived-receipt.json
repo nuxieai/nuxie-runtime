@@ -1,0 +1,43 @@
+{
+  "scope": "Private actual Derived native/Chrome validation; public wrapping not admitted",
+  "status": "geometry-pass-pixel-failures-retained",
+  "counts": {
+    "cases": 48,
+    "geometryPass": 384,
+    "pixelPass": 336,
+    "pixelFail": 48,
+    "clearPass": 768,
+    "directVisualPairs": 144,
+    "exactVisualTransfers": 240
+  },
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-derived-verification-r1.json",
+      "sha256": "882a285cf593ec18a2c5f44d55bfbeb9d420e6613278244c787744a0da117095"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-derived-r2/receipt.json",
+      "sha256": "1e3b000d8b34b1ba082b9d7f90aa67db3258dfa7668381a56be01771c8dbcfc7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-derived-r2/visual/review-receipt.json",
+      "sha256": "bdd7f6277f1bcde10ba3c39d21f2ad7fd86bcf08259598bb8f9ac946a194272a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-derived-r2/clip-receipt.json",
+      "sha256": "d752203d3f8259931024b2fe0b341e6692cf9352c0a476f9a912cc764ee3fe56"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-derived-background-build-r2/summary.json",
+      "sha256": "33bf38c00497d749c1f5ff5f35a3c97eca38c470cda3481692b986ea26e179cb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-derived-background-build-r2/prior-public-identity.json",
+      "sha256": "38985b53f77a4be76742625f42e253a8fcbbf50d08f037eaa9b93fb4aa333ca0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-derived-constructor-r2/construction-receipt.json",
+      "sha256": "e05c08f191d0344ae93f242cf71a7c3df324f9d03b2737f0d91ecf0f238d7b39"
+    }
+  ]
+}

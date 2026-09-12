@@ -319,6 +319,29 @@ mod tests {
         }
     }
     #[test]
+    fn ordinary_artboard_background_is_preserved_without_replication() {
+        let (mut records,roles)=fixture(3,2,4,1);
+        let id=records.len() as u32-1;
+        let mut fill=Record::new("Fill");set(&mut fill,"parentId",Value::Uint(0));
+        let mut color=Record::new("SolidColor");set(&mut color,"parentId",Value::Uint(id));
+        set(&mut color,"colorValue",Value::Color(0xffffffff));records.extend([fill,color]);
+        let derived=compose_with_bounds(domains(&records,&roles),&[0.,0.5,1.],1000).unwrap();
+        assert_eq!(wire::encode(&derived.candidate().records()[id as usize+1..id as usize+3]).unwrap(),
+            wire::encode(&records[id as usize+1..id as usize+3]).unwrap());
+        assert_eq!(derived.paint().replicas,6);
+        assert_eq!(derived.candidate().records().iter().filter(|r|r.kind=="Fill"
+            && matches!(r.get("parentId"),Some(Value::Uint(0)))).count(),1);
+        let duplicate_id=records.len() as u32-1;
+        let extra=records[id as usize+1].clone();
+        let mut extra_color=records[id as usize+2].clone();
+        set(&mut extra_color,"parentId",Value::Uint(duplicate_id));
+        records.extend([extra,extra_color]);
+        let numeric=numeric();
+        assert!(wrapping_domains::resolve(&records,2,&roles,&numeric,
+            &roles.iter().map(|&(id,_)|(id,&numeric)).collect::<Vec<_>>(),
+            [MachineInterval::new(0.,16384.).unwrap();2]).is_err());
+    }
+    #[test]
     fn mask_domain_covers_initial_file_and_every_declared_resize() {
         for axis in 0..2 {
             let (mut records,roles)=fixture(2,2,0,1);

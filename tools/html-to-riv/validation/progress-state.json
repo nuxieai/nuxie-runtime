@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
-  "focus": "Wrapped sizing and admission proof",
-  "status": "Complete private paint records and mask viewport domain bound",
-  "current": "403Rust/56Node and builds/source guard pass;1076outputs reproduce exactly. Paint/default/operand/clip/draw binding and initial/resize mask bounds are attached to the candidate.384historical frames/4992clip commands checked; no new pixels or public wrapping.8306artifact bindings verify.",
-  "next": "Freeze and run the complete source-derived anchored and paint-bound candidate against native/Chrome: ordinary import, same original/clone resize, actual command streams, edge/overflow pixels and visual inspection.",
+  "focus": "Actual wrapping candidate rendered and visually reviewed",
+  "status": "Private candidate: geometry passes; fractional paint failures retained",
+  "current": "48 actual Derived cases:384/384 geometry,336/384 pixels,768/768 clear checks.144 full pairs directly reviewed with240 exact repeat/clone transfers.48 fractional-edge failures remain.404 Rust/56 Node tests; immutable runtime and public compiler output unchanged.",
+  "next": "Isolate ordinary fractional rectangle paint using LayoutComponent and Shape/Rectangle controls, including responsive edges. Then resolve or document paint limitations before public wrapping admission; continue all99 backlog items.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Actual Derived campaign and retained edge failures",
+      "path": "tools/html-to-riv/validation/wrapped-derived-review.md"
+    },
+    {
+      "label": "Current Chrome/native gallery",
+      "path": "tools/html-to-riv/output/playwright/wrapped-derived-r2/gallery.html"
+    },
     {
       "label": "Paint records, mask domain and historical clip stream checkpoint",
       "path": "tools/html-to-riv/validation/wrapped-paint-mask-review.md"

@@ -1,5 +1,7 @@
 # Current admission on the unchanged runtime
 
+Current private wrapping evidence: [actual Derived native/Chrome checkpoint](validation/wrapped-derived-review.md) records384/384geometry and336/384pixel passes,768clear controls, and complete144-pair visual review with240exact repeat transfers. All48fractional-edge pixel failures remain; public wrapping is unadmitted. The next experiment isolates ordinary fractional paint from wrapping; source/runtime immutability and all99items remain in force. Older next-step statements below are historical.
+
 The initial public compiler is implemented; a qualified release is not yet claimed. “Admitted” below means accepted by the current compiler, not that every combination has completed browser/native qualification. All earlier backlog items remain subject to immutable-target requalification.
 
 ## Admitted public profile

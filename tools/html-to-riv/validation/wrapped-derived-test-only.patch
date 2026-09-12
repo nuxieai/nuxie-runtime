@@ -1,0 +1,16 @@
+--- constructor-frozen/wrapping_composition.rs
++++ current/wrapping_composition.rs
+@@ -331,8 +331,11 @@
+         assert_eq!(derived.paint().replicas,6);
+         assert_eq!(derived.candidate().records().iter().filter(|r|r.kind=="Fill"
+             && matches!(r.get("parentId"),Some(Value::Uint(0)))).count(),1);
+-        let mut extra=records[id as usize+1].clone();set(&mut extra,"parentId",Value::Uint(0));
+-        records.push(extra);
++        let duplicate_id=records.len() as u32-1;
++        let extra=records[id as usize+1].clone();
++        let mut extra_color=records[id as usize+2].clone();
++        set(&mut extra_color,"parentId",Value::Uint(duplicate_id));
++        records.extend([extra,extra_color]);
+         let numeric=numeric();
+         assert!(wrapping_domains::resolve(&records,2,&roles,&numeric,
+             &roles.iter().map(|&(id,_)|(id,&numeric)).collect::<Vec<_>>(),

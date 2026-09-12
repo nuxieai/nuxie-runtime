@@ -1,0 +1,5042 @@
+{
+  "derived-row-reverse0-wrap1-level0-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap1-level0-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap1-level1-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap1-level1-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap1-level2-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap1-level2-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap2-level0-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap2-level0-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap2-level1-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap2-level1-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap2-level2-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse0-wrap2-level2-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap1-level0-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap1-level0-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap1-level1-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap1-level1-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap1-level2-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap1-level2-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap2-level0-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap2-level0-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap2-level1-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap2-level1-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap2-level2-equal": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-row-reverse1-wrap2-level2-responsive-visible": {
+    "initialViewport": [
+      320,
+      200
+    ],
+    "row": true,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 75,
+        "unit": "%"
+      },
+      "height": {
+        "value": 60,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap1-level0-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap1-level0-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap1-level1-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap1-level1-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap1-level2-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap1-level2-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap2-level0-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap2-level0-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap2-level1-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap2-level1-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap2-level2-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse0-wrap2-level2-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": false,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap1-level0-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap1-level0-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap1-level1-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap1-level1-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap1-level2-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap1-level2-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 1,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap2-level0-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap2-level0-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap2-level1-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap2-level1-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 0.5,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap2-level2-equal": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 100,
+          "unit": "%"
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  },
+  "derived-column-reverse1-wrap2-level2-responsive-visible": {
+    "initialViewport": [
+      200,
+      320
+    ],
+    "row": false,
+    "reverseMain": true,
+    "wrap": 2,
+    "lineFraction": 1,
+    "mainFraction": 0,
+    "parent": {
+      "width": {
+        "value": 60,
+        "unit": "%"
+      },
+      "height": {
+        "value": 75,
+        "unit": "%"
+      }
+    },
+    "slots": [
+      {
+        "name": "v0",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 24,
+            "unit": "px"
+          },
+          "max": {
+            "value": 72,
+            "unit": "px"
+          }
+        },
+        "visibleMain": {
+          "value": 60,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 50,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 60,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.0,
+        "color": 3221225216
+      },
+      {
+        "name": "v1",
+        "main": {
+          "value": 60,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 30,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 80,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 150,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 80,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 0.5,
+        "color": 2164219952
+      },
+      {
+        "name": "v2",
+        "main": {
+          "value": 40,
+          "unit": "px"
+        },
+        "cross": {
+          "value": 70,
+          "unit": "px"
+        },
+        "visibleMain": {
+          "value": 40,
+          "unit": "px"
+        },
+        "visibleCross": {
+          "value": 75,
+          "unit": "%",
+          "min": {
+            "value": 12,
+            "unit": "px"
+          },
+          "max": {
+            "value": 90,
+            "unit": "px"
+          }
+        },
+        "slotAlignment": 0,
+        "alignment": 1.0,
+        "color": 3221273504
+      }
+    ]
+  }
+}

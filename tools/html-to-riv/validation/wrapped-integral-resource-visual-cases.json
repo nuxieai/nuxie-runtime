@@ -1,0 +1,410 @@
+[
+  {
+    "name": "integral-resource-1",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "ordinary integral foreground or mixed rounded paint",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-1/recipe.json",
+        "sha256": "54d0c135a5b1a0adb91a1e4db223301dd10e540d3ea70011e0d13b6a53607bd3"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/candidate",
+        "sha256": "901143cf76522ecd44baa70261e6ac0dbc85671702937244a7f844a33a787f77"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/construction-receipt.json",
+        "sha256": "a45e20d52bd34abfbf4bf9555b0146be6247c9a9f91a6bf5877fa3ae069e9314"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-1/base.riv",
+          "sha256": "6674ddf8b3118ba5a1f355d1679f8ac08978b58b3d95419cb616beae07aeddc9"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-1/scene.riv",
+          "sha256": "4303427c4d1b3db1677aade34a6debd110b261f1e262e9c0d638773433728f59"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-1/scene.map.json",
+          "sha256": "29ce9bcacf49b063e611670aa018c67d3e7c13c6932bc38a45c2cca7bda9bf24"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-1/trace.json",
+          "sha256": "9b0ffe6e5aee6311525ad2ca67121ee3aeb7a261d71b1081d9095e4dbd50c04d"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-1/proof.json",
+          "sha256": "b5db71ba539d6b1998991c05797cb2fce82a30c08db769cb97c35c575b654cdb"
+        }
+      }
+    }
+  },
+  {
+    "name": "integral-resource-3",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:20px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "ordinary integral foreground or mixed rounded paint",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-3/recipe.json",
+        "sha256": "e631cd274497a8d2b15c335b2e8ac0b6bcf9e5dbdf4a9c682bdb0d5d02a34406"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/candidate",
+        "sha256": "901143cf76522ecd44baa70261e6ac0dbc85671702937244a7f844a33a787f77"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/construction-receipt.json",
+        "sha256": "a45e20d52bd34abfbf4bf9555b0146be6247c9a9f91a6bf5877fa3ae069e9314"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-3/base.riv",
+          "sha256": "8a7679b6aaf933fe9d532fed4016d8debf140c357874d9099ef4ac1c5196e644"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-3/scene.riv",
+          "sha256": "fa97acb9e528116aa85308e591624af61c9743f9714d6451886a364ead6663e6"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-3/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-3/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-3/proof.json",
+          "sha256": "a4a60b2b8bc66d361fc2a6e70949f59ac5f53656e4a8e558a8629d8e3f846716"
+        }
+      }
+    }
+  },
+  {
+    "name": "integral-resource-8",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div><div class=\"s3\"><div id=\"v3\"></div></div><div class=\"s4\"><div id=\"v4\"></div></div><div class=\"s5\"><div id=\"v5\"></div></div><div class=\"s6\"><div id=\"v6\"></div></div><div class=\"s7\"><div id=\"v7\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:20px;background:rgba(238,238,34,1);}.s3{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v3{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s4{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v4{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s5{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v5{width:20px;height:20px;background:rgba(238,238,34,1);}.s6{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v6{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s7{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v7{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "ordinary integral foreground or mixed rounded paint",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-8/recipe.json",
+        "sha256": "5883fe6c16addddea240a8ab8df4dcb9570943a1d8e5dc0931db86f4dad1f53e"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/candidate",
+        "sha256": "901143cf76522ecd44baa70261e6ac0dbc85671702937244a7f844a33a787f77"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/construction-receipt.json",
+        "sha256": "a45e20d52bd34abfbf4bf9555b0146be6247c9a9f91a6bf5877fa3ae069e9314"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-8/base.riv",
+          "sha256": "689db119228cb152d5b8f893fb5752917f6c1b24dc725184e9dd31b3f6303a41"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-8/scene.riv",
+          "sha256": "ecb8dc6977c712eea5c012f10cac4e2a0acd8d359f7b7afecfcffcc95b07e50b"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-8/scene.map.json",
+          "sha256": "814778abbf115b6569f34f6b038fada7ad673a3c555d37de025a4ba9717212ef"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-8/trace.json",
+          "sha256": "e07aa06e8e5908097d5a35515e185101c9f6ac29dddf9c53ed60d8b5865021ef"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-8/proof.json",
+          "sha256": "bf1d64926daf16ccab33ecede56e9fc3233ada667328ec70e75d020a988b2b24"
+        }
+      }
+    }
+  },
+  {
+    "name": "integral-resource-34",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div><div class=\"s3\"><div id=\"v3\"></div></div><div class=\"s4\"><div id=\"v4\"></div></div><div class=\"s5\"><div id=\"v5\"></div></div><div class=\"s6\"><div id=\"v6\"></div></div><div class=\"s7\"><div id=\"v7\"></div></div><div class=\"s8\"><div id=\"v8\"></div></div><div class=\"s9\"><div id=\"v9\"></div></div><div class=\"s10\"><div id=\"v10\"></div></div><div class=\"s11\"><div id=\"v11\"></div></div><div class=\"s12\"><div id=\"v12\"></div></div><div class=\"s13\"><div id=\"v13\"></div></div><div class=\"s14\"><div id=\"v14\"></div></div><div class=\"s15\"><div id=\"v15\"></div></div><div class=\"s16\"><div id=\"v16\"></div></div><div class=\"s17\"><div id=\"v17\"></div></div><div class=\"s18\"><div id=\"v18\"></div></div><div class=\"s19\"><div id=\"v19\"></div></div><div class=\"s20\"><div id=\"v20\"></div></div><div class=\"s21\"><div id=\"v21\"></div></div><div class=\"s22\"><div id=\"v22\"></div></div><div class=\"s23\"><div id=\"v23\"></div></div><div class=\"s24\"><div id=\"v24\"></div></div><div class=\"s25\"><div id=\"v25\"></div></div><div class=\"s26\"><div id=\"v26\"></div></div><div class=\"s27\"><div id=\"v27\"></div></div><div class=\"s28\"><div id=\"v28\"></div></div><div class=\"s29\"><div id=\"v29\"></div></div><div class=\"s30\"><div id=\"v30\"></div></div><div class=\"s31\"><div id=\"v31\"></div></div><div class=\"s32\"><div id=\"v32\"></div></div><div class=\"s33\"><div id=\"v33\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:20px;background:rgba(238,238,34,1);}.s3{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v3{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s4{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v4{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s5{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v5{width:20px;height:20px;background:rgba(238,238,34,1);}.s6{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v6{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s7{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v7{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s8{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v8{width:20px;height:20px;background:rgba(238,238,34,1);}.s9{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v9{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s10{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v10{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s11{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v11{width:20px;height:20px;background:rgba(238,238,34,1);}.s12{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v12{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s13{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v13{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s14{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v14{width:20px;height:20px;background:rgba(238,238,34,1);}.s15{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v15{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s16{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v16{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s17{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v17{width:20px;height:20px;background:rgba(238,238,34,1);}.s18{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v18{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s19{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v19{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s20{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v20{width:20px;height:20px;background:rgba(238,238,34,1);}.s21{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v21{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s22{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v22{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s23{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v23{width:20px;height:20px;background:rgba(238,238,34,1);}.s24{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v24{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s25{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v25{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s26{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v26{width:20px;height:20px;background:rgba(238,238,34,1);}.s27{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v27{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s28{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v28{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s29{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v29{width:20px;height:20px;background:rgba(238,238,34,1);}.s30{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v30{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s31{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v31{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s32{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v32{width:20px;height:20px;background:rgba(238,238,34,1);}.s33{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v33{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "ordinary integral foreground or mixed rounded paint",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-34/recipe.json",
+        "sha256": "1301bcbbfb25114c70a3df83802f0e38b34af8cfd46cd7fceff9ed860044d2d5"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/candidate",
+        "sha256": "901143cf76522ecd44baa70261e6ac0dbc85671702937244a7f844a33a787f77"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/construction-receipt.json",
+        "sha256": "a45e20d52bd34abfbf4bf9555b0146be6247c9a9f91a6bf5877fa3ae069e9314"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-34/base.riv",
+          "sha256": "f0bfc24d7730dc870bf4726b4b12f67af4e43247d39d615161cfc1b818f354e6"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-34/scene.riv",
+          "sha256": "9a765edc68bb153e148616bc4b4ca4f81c42b85f1223fab59d3441af6cafe6f3"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-34/scene.map.json",
+          "sha256": "167191fef586b90e070a2b49347eddbf5f2fe2b11209e28329e69135d7e7de8f"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-34/trace.json",
+          "sha256": "c1eec7bcc8b6a4a57110a511ec1a4cb61860478ba32d19098f87ca191a92677e"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-r1/cases/owners-34/proof.json",
+          "sha256": "6707bf10e238b45283c44ba5b70c392d83c8a7d4b020cc33c4e12004cb11953c"
+        }
+      }
+    }
+  },
+  {
+    "name": "integral-mixed-row",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:19.5px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:30px;height:20px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "ordinary integral foreground or mixed rounded paint",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-row/recipe.json",
+        "sha256": "156ebeea0abbc422f867f1ed14cd9e432a719dbfb5f565338e3ab8006769a662"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/candidate",
+        "sha256": "901143cf76522ecd44baa70261e6ac0dbc85671702937244a7f844a33a787f77"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/construction-receipt.json",
+        "sha256": "8cb96dc8985b76c468a0cb95dbee6e98370feaeb5c19004d673cfcab875d6e66"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-row/base.riv",
+          "sha256": "e3087ac6af87ec32450fc216800a2b853f64543ac0c04086943777615fabf06d"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-row/scene.riv",
+          "sha256": "697eb7b2bfc6f5d056a177130b8518b87664cb7e9ac16400dc3367d062c2060c"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-row/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-row/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-row/proof.json",
+          "sha256": "d4d402962a1859632f82f815c8f9009b4fcd71a0f7ee294581cb82b4d55c39e1"
+        }
+      }
+    }
+  },
+  {
+    "name": "integral-mixed-column",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:19.5px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:30px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "ordinary integral foreground or mixed rounded paint",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-column/recipe.json",
+        "sha256": "ec738554a4823a6d83ee30122b41bc85b5775471fd8a65bd5165a5ad09986cce"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/candidate",
+        "sha256": "901143cf76522ecd44baa70261e6ac0dbc85671702937244a7f844a33a787f77"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/construction-receipt.json",
+        "sha256": "8cb96dc8985b76c468a0cb95dbee6e98370feaeb5c19004d673cfcab875d6e66"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-column/base.riv",
+          "sha256": "1eb238ba297adbd24d2aea5c1a4280f371de0a5c47db560a98b9e4a1f0d50da2"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-column/scene.riv",
+          "sha256": "d9970a21ac62a7858124a6cc88e9f76f2404d1e907783dd00206cc7507ea1312"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-column/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-column/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-resource-visual-constructor-r1/integral-mixed-column/proof.json",
+          "sha256": "767abe050329f796047c588f75d83948565e9deb8a8bae0c09107d238d0377e0"
+        }
+      }
+    }
+  }
+]

@@ -6,7 +6,7 @@ use crate::{Diagnostic, wire::{Record, Value}};
 use std::collections::{BTreeMap, BTreeSet};
 use super::paint_box;
 #[derive(Debug)]
-pub(super) struct Trace { pub boxes: Vec<paint_box::Trace> }
+pub(super) struct Trace { pub boxes: Vec<paint_box::Trace>, pub integral: BTreeSet<u32> }
 const DISTANCE: f32 = 65_536.;
 
 #[derive(Clone, Copy)]
@@ -37,6 +37,27 @@ pub(super) fn paint_records_with_geometry(counts: &[usize], geometries: usize) -
         .checked_add(geometries.checked_mul(paint_box::RECORDS)?)?
         .checked_add(replicas.checked_sub(1)?.checked_mul(2)?)?.checked_add(clips)
 }
+/// Mixed exact cost. Integral decisions require a separate source certificate.
+/// Reject impossible cardinalities instead of accepting a fictitious discount.
+pub(super) fn paint_records_with_integral_geometry(
+    counts: &[usize], geometries: usize, integral_replicas: usize, integral_geometries: usize,
+) -> Option<usize> {
+    let paints=counts.iter().try_fold(0usize,|a,b|a.checked_add(*b))?;
+    let replicas=counts.iter().enumerate().try_fold(0usize,|a,(j,b)|a.checked_add(j.checked_add(1)?.checked_mul(*b)?))?;
+    if geometries>paints || integral_geometries>geometries || integral_replicas>replicas
+        || integral_replicas<integral_geometries
+        || (integral_geometries==0 && integral_replicas!=0)
+        || (paints!=0 && geometries==0)
+        || (integral_geometries==geometries && integral_replicas!=replicas) {return None;}
+    paint_records_with_geometry(counts,geometries)?
+        .checked_sub(paint_box::RECORDS.checked_mul(integral_geometries)?)?
+        .checked_sub(5usize.checked_mul(integral_replicas)?)
+}
+fn integral_replica_count(items: &[Item], integral: &BTreeSet<u32>) -> Option<usize> {
+    items.iter().enumerate().try_fold(0usize,|a,(j,item)| {
+        a.checked_add(j.checked_add(1)?.checked_mul(item.paints.iter().filter(|p|integral.contains(&p.geometry)).count())?)
+    })
+}
 fn record(records: &[Record], id: u32) -> Option<&Record> {
     (id as usize).checked_add(1).and_then(|index| records.get(index))
 }
@@ -63,16 +84,26 @@ pub(super) fn paint_items(
     records: &mut Vec<Record>, items: &[Item], row: bool, reverse_main: bool,
     reverse_cross: bool, line_fraction: f32, epsilon: f32,
 ) -> Result<Trace, Diagnostic> {
+    paint_items_with_integral(records,items,row,reverse_main,reverse_cross,line_fraction,epsilon,&BTreeSet::new())
+}
+/// Integral owner IDs are caller-certified, not inferred from sampled geometry.
+/// Unknown IDs reject; every failed mutation restores the original prefix.
+pub(super) fn paint_items_with_integral(
+    records: &mut Vec<Record>, items: &[Item], row: bool, reverse_main: bool,
+    reverse_cross: bool, line_fraction: f32, epsilon: f32, integral: &BTreeSet<u32>,
+) -> Result<Trace, Diagnostic> {
     let start = records.len();
     let geometries: BTreeSet<_> = items.iter().flat_map(|item| &item.paints).map(|p| p.geometry).collect();
-    let added=paint_records_with_geometry(&items.iter().map(|item|item.paints.len()).collect::<Vec<_>>(),geometries.len())
+    if !integral.is_subset(&geometries) {return Err(invalid("Integral paint IDs must identify planned paint geometry"));}
+    let integral_replicas=integral_replica_count(items,integral).ok_or_else(||invalid("Integral replica count overflow"))?;
+    let added=paint_records_with_integral_geometry(&items.iter().map(|item|item.paints.len()).collect::<Vec<_>>(),geometries.len(),integral_replicas,integral.len())
         .ok_or_else(||invalid("Paint expansion record count overflow"))?;
     records.len().checked_add(added).filter(|n|*n<=u32::MAX as usize)
         .ok_or_else(||invalid("Paint expansion exceeds ordinary object ID capacity"))?;
     // Restore only the prefix fields this emitter owns if a later schema error occurs.
     let originals: Vec<_> = items.iter().flat_map(|item| &item.paints).filter_map(|paint|
         record(records, paint.color).map(|r| (paint.color, r.clone()))).collect();
-    let result = emit_items(records, items, row, reverse_main, reverse_cross, line_fraction, epsilon);
+    let result = emit_items(records, items, row, reverse_main, reverse_cross, line_fraction, epsilon, integral);
     if result.is_err() {
         records.truncate(start);
         for (id, original) in originals { records[id as usize + 1] = original; }
@@ -81,8 +112,11 @@ pub(super) fn paint_items(
 }
 fn emit_items(
     records: &mut Vec<Record>, items: &[Item], row: bool, reverse_main: bool,
-    reverse_cross: bool, line_fraction: f32, epsilon: f32,
+    reverse_cross: bool, line_fraction: f32, epsilon: f32, integral: &BTreeSet<u32>,
 ) -> Result<Trace, Diagnostic> {
+    if records.first().map(|r|r.kind)!=Some("Backboard") || records.get(1).map(|r|r.kind)!=Some("Artboard") {
+        return Err(invalid("Paint plan requires ordinary Backboard and Artboard roots"));
+    }
     if ![0., 0.5, 1.].contains(&line_fraction) {
         return Err(invalid("Line fraction must be start, center or end"));
     }
@@ -90,7 +124,8 @@ fn emit_items(
         return Err(invalid("Line gate epsilon must be finite, nonnegative and below the reset distance"));
     }
     let geometries: BTreeSet<_> = items.iter().flat_map(|item| &item.paints).map(|p| p.geometry).collect();
-    let added = paint_records_with_geometry(&items.iter().map(|item| item.paints.len()).collect::<Vec<_>>(), geometries.len())
+    let integral_replicas=integral_replica_count(items,integral).ok_or_else(||invalid("Integral replica count overflow"))?;
+    let added = paint_records_with_integral_geometry(&items.iter().map(|item| item.paints.len()).collect::<Vec<_>>(), geometries.len(),integral_replicas,integral.len())
         .ok_or_else(|| invalid("Paint expansion record count overflow"))?;
     let end = records.len().checked_add(added).filter(|n| *n <= u32::MAX as usize)
         .ok_or_else(|| invalid("Paint expansion exceeds ordinary object ID capacity"))?;
@@ -119,16 +154,17 @@ fn emit_items(
             }
         }
     }
-    if added == 0 { return Ok(Trace { boxes: Vec::new() }); }
+    if added == 0 { return Ok(Trace { boxes: Vec::new(), integral: integral.clone() }); }
     let originals: Vec<Vec<_>> = items.iter().map(|item| item.paints.iter().map(|paint| {
         (record(records, paint.fill).unwrap().clone(), record(records, paint.color).unwrap().clone())
     }).collect()).collect();
     for item in items { for paint in &item.paints {
         records[paint.color as usize + 1].set("colorValue", Value::Color(0))?;
     }}
-    let mut boxes = Vec::with_capacity(geometries.len());
+    let mut boxes = Vec::with_capacity(geometries.len()-integral.len());
     let mut cached = BTreeMap::new();
     for paint in items.iter().flat_map(|item| &item.paints) {
+        if integral.contains(&paint.geometry) {continue;}
         if let std::collections::btree_map::Entry::Vacant(entry) = cached.entry(paint.geometry) {
             let trace = paint_box::emit(records, paint.geometry)?;
             entry.insert(trace.masks); boxes.push(trace);
@@ -167,11 +203,16 @@ fn emit_items(
                 Some(graph.mask(gate)?)
             };
             for (paint, (original_fill, original_color)) in items[j].paints.iter().zip(&originals[j]) {
-                let foreground = graph.add("Shape", 0)?;
-                let rect = graph.add("Rectangle", foreground)?;
-                for (name,value) in [("x",16384.),("y",16384.),("width",32768.),("height",32768.)] {
-                    graph.set(rect, name, Value::Float(value))?;
-                }
+                let foreground = if integral.contains(&paint.geometry) {
+                    graph.add("ForegroundLayoutDrawable",paint.geometry)?
+                } else {
+                    let shape=graph.add("Shape",0)?;
+                    let rect=graph.add("Rectangle",shape)?;
+                    for (name,value) in [("x",16384.),("y",16384.),("width",32768.),("height",32768.)] {
+                        graph.set(rect,name,Value::Float(value))?;
+                    }
+                    shape
+                };
                 let fill = graph.records.len() as u32 - 1;
                 let mut cloned_fill = original_fill.clone();
                 cloned_fill.set("parentId", Value::Uint(foreground))?;
@@ -179,7 +220,7 @@ fn emit_items(
                 let mut cloned_color = original_color.clone();
                 cloned_color.set("parentId", Value::Uint(fill))?;
                 graph.records.push(cloned_color);
-                for mask in cached[&paint.geometry].into_iter().chain([leader, membership].into_iter().flatten()) {
+                for mask in cached.get(&paint.geometry).into_iter().flat_map(|masks|masks.iter().copied()).chain([leader, membership].into_iter().flatten()) {
                     let clip = graph.add("ClippingShape", foreground)?;
                     graph.set(clip, "sourceId", Value::Uint(mask))?;
                 }
@@ -195,7 +236,7 @@ fn emit_items(
         graph.set(target, "placementValue", Value::Uint(1))?;
     }
     if graph.records.len() != end { return Err(invalid("Paint emission disagrees with preflight count")); }
-    Ok(Trace { boxes })
+    Ok(Trace { boxes, integral: integral.clone() })
 }
 struct Graph<'a> {
     records: &'a mut Vec<Record>, row: bool, epsilon: f32,
@@ -326,6 +367,57 @@ mod tests {
         assert_eq!(paint_records(&[0,usize::MAX]),None);
     }
     #[test]
+    fn integral_and_mixed_owners_keep_exact_cost_and_one_ordered_chain() {
+        for mask in 0u32..8 {
+            let (mut records,items)=fixture(&[1,1,1]);let start=records.len();
+            let integral:BTreeSet<_>=items.iter().enumerate().filter(|(j,_)|mask&(1u32<<*j)!=0).map(|(_,i)|i.paints[0].geometry).collect();
+            let replicas=integral_replica_count(&items,&integral).unwrap();
+            let trace=paint_items_with_integral(&mut records,&items,true,true,true,0.,0.015625,&integral).unwrap();
+            assert_eq!(trace.integral,integral);assert_eq!(trace.boxes.len(),3-integral.len());
+            assert!(trace.boxes.iter().all(|b|!integral.contains(&b.geometry)));
+            assert_eq!(records.len()-start,paint_records_with_integral_geometry(&[1,1,1],3,replicas,integral.len()).unwrap());
+            assert_eq!(records[start..].iter().filter(|r|r.kind=="ForegroundLayoutDrawable").count(),replicas);
+            let owners:Vec<_>=records[start..].iter().filter(|r|r.kind=="Fill").map(|fill| {
+                let drawable=parent(fill).unwrap();let d=record(&records,drawable).unwrap();
+                if d.kind=="ForegroundLayoutDrawable" {parent(d).unwrap()} else {
+                    assert_eq!(d.kind,"Shape");
+                    let clip=records[start..].iter().find(|r|r.kind=="ClippingShape"&&parent(r)==Some(drawable)).unwrap();
+                    let Some(Value::Uint(source))=clip.get("sourceId")else{panic!("clip source")};
+                    trace.boxes.iter().find(|b|b.masks[0]==*source).unwrap().geometry
+                }
+            }).collect();
+            let g:Vec<_>=items.iter().map(|i|i.paints[0].geometry).collect();
+            assert_eq!(owners,[g[2],g[2],g[1],g[2],g[1],g[0]]);
+            assert_eq!(records[start..].iter().filter(|r|r.kind=="DrawRules").count(),5);
+            crate::wire::encode(&records).unwrap();
+        }
+        assert_eq!(paint_records_with_integral_geometry(&[1,1,1],3,6,3),Some(113));
+        for args in [(3,7,3),(3,1,2),(3,1,0),(2,6,3),(0,0,0),(3,5,3)] {
+            assert_eq!(paint_records_with_integral_geometry(&[1,1,1],args.0,args.1,args.2),None);
+        }
+        assert_eq!(paint_records_with_integral_geometry(&[],0,0,0),Some(0));
+        assert_eq!(paint_records_with_integral_geometry(&[usize::MAX],1,usize::MAX,1),None);
+    }
+    #[test]
+    fn integral_shared_geometry_uses_no_box_and_unknown_ids_roll_back() {
+        let (mut records,mut items)=fixture(&[1]);let geometry=items[0].paints[0].geometry;
+        let fill=add(&mut records,"Fill",geometry);let color=add(&mut records,"SolidColor",fill);
+        records[color as usize+1].set("colorValue",Value::Color(0x8000ff00)).unwrap();
+        items[0].paints.push(Paint{geometry,fill,color});let start=records.len();
+        let trace=paint_items_with_integral(&mut records,&items,false,false,false,0.,0.015625,&BTreeSet::from([geometry])).unwrap();
+        assert!(trace.boxes.is_empty());assert_eq!(records.len()-start,paint_records_with_integral_geometry(&[2],1,2,1).unwrap());
+        for bad in [items[0].slot,u32::MAX] {
+            let before=crate::wire::encode(&records).unwrap();
+            assert!(paint_items_with_integral(&mut records,&items,true,false,false,0.,0.015625,&BTreeSet::from([bad])).is_err());
+            assert_eq!(crate::wire::encode(&records).unwrap(),before);
+        }
+        // Invalid roots are rejected for mixed plans without changing colors.
+        let (mut records,items)=fixture(&[1,1]);records[1]=Record::new("Node");
+        let before=crate::wire::encode(&records).unwrap();
+        assert!(paint_items_with_integral(&mut records,&items,true,false,false,0.,0.015625,&BTreeSet::from([items[0].paints[0].geometry])).is_err());
+        assert_eq!(crate::wire::encode(&records).unwrap(),before);
+    }
+    #[test]
     fn shared_geometry_emits_one_box_and_keeps_both_paints() {
         let (mut records, mut items)=fixture(&[1]);
         let geometry=items[0].paints[0].geometry;
@@ -339,7 +431,7 @@ mod tests {
         crate::wire::encode(&records).unwrap();
     }
     #[test]
-    fn failed_box_precondition_restores_hidden_colors_and_appended_records() {
+    fn invalid_root_preserves_colors_and_records() {
         let (mut records,items)=fixture(&[1]); records[1]=Record::new("Node");
         let before=crate::wire::encode(&records).unwrap();
         assert!(paint_items(&mut records,&items,true,false,false,0.,0.015625).is_err());

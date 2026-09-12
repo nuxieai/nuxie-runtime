@@ -1,5 +1,7 @@
 # Source-certified integral paint fast path
 
+Implementation correction: the historical34-owner table below contains an arithmetic error. Actual emitted total is17732, matching its stated formula. See wrapped-integral-review.md for measured results.
+
 Read-only audit at compiler checkpoint `1b5322dc552d42c77143a67f859dacfba746d375`, 2026-09-12. No implementation, build, capture or new performance qualification was performed. The fixed-length optimization being developed concurrently has not been assumed in this argument. Counts below refer to the currently inspected 2,310-record rounded-box emitter.
 
 The resource fixtures admit a useful source-based optimization: their parent stays at the origin, fixed integer slots pack from physical top/left, and visible children also align at physical top/left. For every fractional or integral viewport in the existing [0,16384]² domain, the viewport changes **which slots share a line**, but contributes no fractional translation to a box edge. An integral-paint certificate can therefore select ordinary ForegroundLayoutDrawable paint replicas without four rounding graphs per owner. Failed certification must select the current rounded path, preserving existing accepted input semantics and viewport domains.

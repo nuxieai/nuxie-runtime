@@ -1018,3 +1018,7 @@ mod paint_box_binding;
 #[allow(dead_code)]
 #[path = "paint_box_domains.rs"]
 mod paint_box_domains;
+
+#[allow(dead_code)] // Private source-certified paint optimization.
+#[path = "wrapping_integral.rs"]
+mod wrapping_integral;

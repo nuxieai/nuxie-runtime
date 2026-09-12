@@ -1,5 +1,7 @@
 # Standalone compiler backlog — immutable runtime target
 
+Latest private checkpoint: source-certified integral paint reduces34-owner graphs from99247to17732records;688native/Chrome geometry+pixel frames pass. Public wrapping remains unadmitted; all99backlog items retain their evidence states. See [integral optimization review](validation/wrapped-integral-review.md).
+
 Latest private checkpoint: fixed layout normalization repairs all28boundary pixel failures;32boundary and48regression scenes pass640geometry/pixel frames. Public wrapping remains unadmitted and backlog counts remain13qualified/23partial/4investigating/59pending. See [normalization review](validation/wrapped-normalized-review.md).
 
 The target is the unchanged repository tree at `6c7ac16617835b5f581784ff08a9e779bb52faf3`, restored on main by PR #629 (`9738049372ffd45639de39c2217c1f548963340a`). This supersedes the compiler-specific runtime profile from PR #628. Runtime, renderer, format/schema, dependency forks and host behavior are fixed inputs.

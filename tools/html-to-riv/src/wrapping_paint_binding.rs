@@ -6,7 +6,7 @@ const D:f32=65536.;
 #[derive(Debug,PartialEq,Eq)]
 pub(super) struct Unresolved { pub position:usize }
 #[derive(Debug)]
-pub(super) struct Binding { pub signals:usize, pub masks:usize, pub replicas:usize, pub boxes:Vec<super::paint_box_binding::Binding> }
+pub(super) struct Binding { pub signals:usize, pub masks:usize, pub replicas:usize, pub boxes:Vec<super::paint_box_binding::Binding>, pub integral:BTreeSet<u32> }
 struct Reader<'a>{ records:&'a[Record], next:usize, end:usize, row:bool, epsilon:f32,
     sources:BTreeMap<u32,u32>, signals:BTreeMap<(u32,u32),u32>, masks:usize }
 fn same(actual:Option<&Value>,v:&Value)->bool {match(actual,v){
@@ -79,9 +79,17 @@ impl Reader<'_>{
 /// All absent generated fields stay absent, enforcing native defaults fail-closed.
 pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:&[(u32,u32)],
     row:bool,reverse_main:bool,reverse_cross:bool,line_fraction:f32,epsilon:f32)->Result<Binding,Unresolved>{
+    bind_with_integral(base,records,start,end,roles,row,reverse_main,reverse_cross,line_fraction,epsilon,&BTreeSet::new())
+}
+/// The caller independently certifies integral painted edges. This reader binds
+/// the selected ordinary foreground route, not the numerical certificate.
+pub(super) fn bind_with_integral(base:&[Record],records:&[Record],start:usize,end:usize,roles:&[(u32,u32)],
+    row:bool,reverse_main:bool,reverse_cross:bool,line_fraction:f32,epsilon:f32,
+    integral:&BTreeSet<u32>)->Result<Binding,Unresolved>{
     let mut r=Reader{records,next:start,end,row,epsilon,sources:BTreeMap::new(),signals:BTreeMap::new(),masks:0};
     if base.len()<2 || base[0].kind!="Backboard" || base[1].kind!="Artboard" || start<base.len() || start>end || end!=records.len() || roles.is_empty()
         || ![0.,0.5,1.].contains(&line_fraction) || !epsilon.is_finite() || !(0. ..D).contains(&epsilon){return Err(r.fail());}
+    if integral.iter().any(|id|!roles.iter().any(|(_,visible)|visible==id)){return Err(r.fail());}
     let mut owned=BTreeSet::new();let mut originals=Vec::new();
     for &(slot,visible) in roles {
         let si=usize::try_from(slot).ok().and_then(|i|i.checked_add(1)).ok_or_else(||r.fail())?;
@@ -103,7 +111,7 @@ pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:
         originals.push(*value);
     }
     let mut boxes=Vec::new();let mut box_masks=BTreeMap::new();
-    for &(_,visible) in roles {if !box_masks.contains_key(&visible){
+    for &(_,visible) in roles {if !integral.contains(&visible)&&!box_masks.contains_key(&visible){
         let b=super::paint_box_binding::consume(records,r.next,end,visible).map_err(|e|Unresolved{position:e.position})?;
         r.next=b.next;box_masks.insert(visible,b.masks);boxes.push(b);
     }}
@@ -119,11 +127,15 @@ pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:
             let inverse=r.node(0,Some(D))?;r.translation(inverse,signal,false,true)?;Some(r.mask(inverse)?)};
         for &j in &members {if j<i{continue;}
             let member=if i==j{None}else{let signal=r.signal(anchors[i],anchors[j],origin)?;Some(r.mask(signal)?)};
-            let foreground=r.take("Shape",&[("parentId",Value::Uint(0))])?;
-            r.take("Rectangle",&[("parentId",Value::Uint(foreground)),("width",Value::Float(32768.)),("height",Value::Float(32768.)),("x",Value::Float(16384.)),("y",Value::Float(16384.))])?;
+            let foreground=if integral.contains(&roles[j].1){
+                r.take("ForegroundLayoutDrawable",&[("parentId",Value::Uint(roles[j].1))])?
+            }else{
+                let shape=r.take("Shape",&[("parentId",Value::Uint(0))])?;
+                r.take("Rectangle",&[("parentId",Value::Uint(shape)),("width",Value::Float(32768.)),("height",Value::Float(32768.)),("x",Value::Float(16384.)),("y",Value::Float(16384.))])?;shape
+            };
             let fill=r.take("Fill",&[("parentId",Value::Uint(foreground))])?;
             r.take("SolidColor",&[("parentId",Value::Uint(fill)),("colorValue",Value::Color(originals[j]))])?;
-            for mask in box_masks[&roles[j].1] {r.take("ClippingShape",&[("parentId",Value::Uint(foreground)),("sourceId",Value::Uint(mask))])?;}
+            if !integral.contains(&roles[j].1){for mask in box_masks[&roles[j].1] {r.take("ClippingShape",&[("parentId",Value::Uint(foreground)),("sourceId",Value::Uint(mask))])?;}}
             for mask in [leader,member].into_iter().flatten(){r.take("ClippingShape",&[("parentId",Value::Uint(foreground)),("sourceId",Value::Uint(mask))])?;}
             replicas.push(foreground);
         }
@@ -133,7 +145,7 @@ pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:
         r.take("DrawTarget",&[("parentId",Value::Uint(rule)),("drawableId",Value::Uint(pair[1])),("placementValue",Value::Uint(1))])?;
     }
     if r.next!=end{return Err(r.fail());}
-    Ok(Binding{signals:r.signals.len(),masks:r.masks,replicas:replicas.len(),boxes})
+    Ok(Binding{signals:r.signals.len(),masks:r.masks,replicas:replicas.len(),boxes,integral:integral.clone()})
 }
 
 #[cfg(test)]
@@ -219,6 +231,33 @@ mod tests {
         trace.boxes.swap(0,1);assert!(!b.matches_trace(&trace));
     }
     #[test]
+    fn mixed_and_all_integral_routes_bind_all_orders_and_trace(){
+        for row in [false,true]{for main in [false,true]{for cross in [false,true]{for fraction in [0.,0.5,1.]{for selection in [0u8,1,2,5,7]{
+            let (base,items,roles)=scene(3);let mut records=base.clone();let start=records.len();
+            let integral:BTreeSet<_>=roles.iter().enumerate().filter_map(|(i,r)|(selection&(1<<i)!=0).then_some(r.1)).collect();
+            let trace=wrapping_paint::paint_items_with_integral(&mut records,&items,row,main,cross,fraction,0.03125,&integral).unwrap();
+            let b=bind_with_integral(&base,&records,start,records.len(),&roles,row,main,cross,fraction,0.03125,&integral).unwrap();
+            assert!(b.matches_trace(&trace));assert_eq!(b.boxes.len(),3-integral.len());assert_eq!(b.integral,integral);assert_eq!(b.replicas,6);
+            if !integral.is_empty(){assert!(bind(&base,&records,start,records.len(),&roles,row,main,cross,fraction,0.03125).is_err());}
+        }}}}}
+    }
+    #[test]
+    fn mixed_routes_reject_wrong_owner_default_clip_cache_and_certificate(){
+        let (base,items,roles)=scene(3);let mut records=base.clone();let start=records.len();let integral=BTreeSet::from([roles[1].1]);
+        let mut trace=wrapping_paint::paint_items_with_integral(&mut records,&items,true,true,true,0.5,0.03125,&integral).unwrap();
+        let b=bind_with_integral(&base,&records,start,records.len(),&roles,true,true,true,0.5,0.03125,&integral).unwrap();
+        for wrong in [BTreeSet::from([0]),BTreeSet::from([roles[1].0]),BTreeSet::from([roles[0].1]),BTreeSet::from([roles[0].1,roles[1].1])]{assert!(bind_with_integral(&base,&records,start,records.len(),&roles,true,true,true,0.5,0.03125,&wrong).is_err());}
+        let foreground=(start..records.len()).find(|&i|records[i].kind=="ForegroundLayoutDrawable").unwrap();
+        let fg_id=(foreground-1)as u32;
+        let clip=(start..records.len()).find(|&i|records[i].kind=="ClippingShape"&&same(records[i].get("parentId"),&Value::Uint(fg_id))).unwrap();
+        for (index,key,value)in [(foreground,"parentId",Value::Uint(roles[0].1)),(foreground,"blendModeValue",Value::Uint(3)),(foreground+1,"parentId",Value::Uint(roles[1].1)),(foreground+2,"colorValue",Value::Color(0)),(clip,"sourceId",Value::Uint(b.boxes[0].masks[0]))]{
+            let mut changed=records.clone();changed[index].set(key,value).unwrap();assert!(bind_with_integral(&base,&changed,start,changed.len(),&roles,true,true,true,0.5,0.03125,&integral).is_err(),"{index}.{key}");
+        }
+        let mut changed=records.clone();let first=b.boxes[0].corners[0]as usize+2;changed[first].set("targetId",Value::Uint(roles[1].1)).unwrap();assert!(bind_with_integral(&base,&changed,start,changed.len(),&roles,true,true,true,0.5,0.03125,&integral).is_err());
+        trace.integral.insert(roles[0].1);assert!(!b.matches_trace(&trace));
+        let mut changed=records.clone();changed[items[1].paints[0].color as usize+1].set("colorValue",Value::Color(0xff000000)).unwrap();assert!(bind_with_integral(&base,&changed,start,changed.len(),&roles,true,true,true,0.5,0.03125,&integral).is_err());
+    }
+    #[test]
     fn rejects_original_paint_and_role_mismatches(){
         let (base,items,roles)=scene(2);let mut records=base.clone();let start=records.len();
         wrapping_paint::paint_items(&mut records,&items,false,false,false,0.,0.03125).unwrap();
@@ -233,4 +272,4 @@ mod tests {
     }
 }
 
-impl Binding {pub(super) fn matches_trace(&self,t:&super::wrapping_paint::Trace)->bool{self.boxes.len()==t.boxes.len()&&self.boxes.iter().zip(&t.boxes).all(|(a,b)|a.matches_trace(b))}}
+impl Binding {pub(super) fn matches_trace(&self,t:&super::wrapping_paint::Trace)->bool{self.integral==t.integral&&self.boxes.len()==t.boxes.len()&&self.boxes.iter().zip(&t.boxes).all(|(a,b)|a.matches_trace(b))}}

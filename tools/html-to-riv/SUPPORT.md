@@ -1,5 +1,7 @@
 # Current admission on the unchanged runtime
 
+Latest private checkpoint: source-certified integral paint reduces34-owner graphs from99247to17732records;688native/Chrome geometry+pixel frames pass. Public wrapping remains unadmitted; all99backlog items retain their evidence states. See [integral optimization review](validation/wrapped-integral-review.md).
+
 Latest private checkpoint: fixed layout normalization repairs all28boundary pixel failures;32boundary and48regression scenes pass640geometry/pixel frames. Public wrapping remains unadmitted and backlog counts remain13qualified/23partial/4investigating/59pending. See [normalization review](validation/wrapped-normalized-review.md).
 
 The new [boundary campaign](validation/wrapped-boundary-review.md) retains 28 pixel failures across 256 frames (all geometry checks pass). Saturated edges preserve clipped coverage and the tested translucent overlaps pass. The failing cases expose fixed layout-length quantization: Chrome converts a width just above1/16px to1/16px, and quantizes separate decimal operands before accumulating them. Native-f32 paint rounding alone cannot reproduce those inputs. See the [pinned-source and capture analysis](validation/wrapped-boundary-quantization-review.md). Fixed-length normalization is next; responsive resolution is a separate obligation. Public wrapping remains unadmitted.

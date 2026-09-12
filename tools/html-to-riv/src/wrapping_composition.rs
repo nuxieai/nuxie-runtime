@@ -33,6 +33,7 @@ impl From<Diagnostic> for Unresolved {
 pub(super) struct Candidate {
     records: Vec<Record>,
     layout_authored: Option<super::wrapping_domains::LayoutAuthored>,
+    integral: super::wrapping_integral::Proof,
     trace: wrapping::Trace,
     paint_trace: wrapping_paint::Trace,
     viewport: [MachineInterval; 2],
@@ -46,6 +47,7 @@ pub(super) struct Candidate {
     paint_records: usize,
 }
 impl Candidate {
+    pub(super) fn integral(&self) -> &super::wrapping_integral::Proof { &self.integral }
     pub(super) fn layout_authored(&self) -> Option<&super::wrapping_domains::LayoutAuthored> { self.layout_authored.as_ref() }
     pub(super) fn records(&self) -> &[Record] { &self.records }
     pub(super) fn trace(&self) -> &wrapping::Trace { &self.trace }
@@ -82,6 +84,14 @@ impl Derived {
     pub(super) fn paint_box_domains(&self)->&super::paint_box_domains::Proof {&self.paint_box_domains}
 }
 pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
+    compose_bounds(domains,alignments,record_budget,false)
+}
+/// Keep the same admission proofs and rounded fallback while selecting cheaper
+/// paint only for source-certified integer geometry.
+pub(super) fn compose_integral_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
+    compose_bounds(domains,alignments,record_budget,true)
+}
+fn compose_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize,optimize:bool)->Result<Derived,Unresolved> {
     let masks=super::wrapping_masks::prove(&domains).map_err(Unresolved::Masks)?;
     let arithmetic=super::wrapping_coordinates::prove(&domains).map_err(Unresolved::Arithmetic)?;
     let row=domains.base().row;
@@ -94,12 +104,13 @@ pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_b
     let paint_box_domains=super::paint_box_domains::prove(&arithmetic,&position,domains.slots(),domains.viewport(),row)
         .map_err(Unresolved::PaintBoxDomains)?;
     let base=domains.base().records();
-    let candidate=compose(domains,alignments,arithmetic.epsilon(),record_budget)?;
+    let integral=if optimize { super::wrapping_integral::select(&domains,alignments) } else { Default::default() };
+    let candidate=compose_planned(domains,alignments,arithmetic.epsilon(),record_budget,integral)?;
     let (start,sizing,_)=candidate.record_costs();
     let scalar=super::wrapping_scalar::bind(candidate.records(),start,start+sizing,&roles,alignments,
         row,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.trace()).map_err(Unresolved::Scalar)?;
-    let paint=super::wrapping_paint_binding::bind(base,candidate.records(),start+sizing,candidate.records().len(),
-        &roles,row,reverse_main,reverse_cross,line_fraction,arithmetic.epsilon()).map_err(Unresolved::PaintBinding)?;
+    let paint=super::wrapping_paint_binding::bind_with_integral(base,candidate.records(),start+sizing,candidate.records().len(),
+        &roles,row,reverse_main,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.integral().geometries()).map_err(Unresolved::PaintBinding)?;
     if !paint.matches_trace(candidate.paint_trace()) {
         return Err(Unresolved::PaintBinding(super::wrapping_paint_binding::Unresolved{position:start+sizing}));
     }
@@ -142,21 +153,24 @@ fn preserved(
             .is_some_and(|index| index >= span_start && index < span_end);
         let allowed = if paint_span {
             matches!(record.kind,"Node"|"TranslationConstraint"|"TransformConstraint"|"DistanceConstraint"
-                |"Shape"|"Rectangle"|"Fill"|"SolidColor"|"ClippingShape"|"DrawRules"|"DrawTarget")
+                |"Shape"|"ForegroundLayoutDrawable"|"Rectangle"|"Fill"|"SolidColor"|"ClippingShape"|"DrawRules"|"DrawTarget")
         } else {
             matches!(record.kind,"Node"|"TranslationConstraint"|"TransformConstraint"|"DistanceConstraint"|"ComponentOrigin")
         };
         if !allowed { return Err(Unresolved::GeneratedRole { object }); }
         let owner = parent(record).ok_or(Unresolved::GeneratedRole { object })?;
         let root_attachment = owner == 0 && (record.kind == "Node" || paint_span && record.kind == "Shape");
-        let visible_attachment = !paint_span && visible.contains(&owner)
-            && matches!(record.kind,"TranslationConstraint"|"ComponentOrigin");
+        let visible_attachment = visible.contains(&owner) &&
+            ((!paint_span && matches!(record.kind,"TranslationConstraint"|"ComponentOrigin"))
+                || paint_span && record.kind=="ForegroundLayoutDrawable");
         let expected_owner = match record.kind {
             "Node"|"TranslationConstraint"|"TransformConstraint"|"DistanceConstraint"|"Shape" => "Node",
             "Rectangle"|"Fill"|"ClippingShape"|"DrawRules" => "Shape",
             "SolidColor" => "Fill", "DrawTarget" => "DrawRules", _ => "",
         };
-        let helper_attachment = in_span(owner) && owner < object && kind(owner)==Some(expected_owner);
+        let helper_attachment = in_span(owner) && owner < object && (kind(owner)==Some(expected_owner)
+            || paint_span && expected_owner=="Shape" && kind(owner)==Some("ForegroundLayoutDrawable")
+                && matches!(record.kind,"Fill"|"ClippingShape"|"DrawRules"));
         if !(root_attachment || visible_attachment || helper_attachment) {
             return Err(Unresolved::GeneratedRole { object });
         }
@@ -177,7 +191,7 @@ fn preserved(
             "DrawRules" => reference(record,"drawTargetId").is_some_and(|id|
                 in_span(id) && kind(id)==Some("DrawTarget") && final_records.get(id as usize+1).and_then(parent)==Some(object)),
             "DrawTarget" => reference(record,"drawableId").is_some_and(|id|
-                in_span(id) && kind(id)==Some("Shape") && id < object),
+                in_span(id) && matches!(kind(id),Some("Shape"|"ForegroundLayoutDrawable")) && id < object),
             _ => true,
         };
         if !valid_reference { return Err(Unresolved::GeneratedRole { object }); }
@@ -193,6 +207,10 @@ fn preserved(
 pub(super) fn compose(
     domains: Domains<'_>, alignments: &[f32], epsilon: f32, record_budget: usize,
 ) -> Result<Candidate, Unresolved> {
+    compose_planned(domains,alignments,epsilon,record_budget,Default::default())
+}
+fn compose_planned(domains: Domains<'_>, alignments: &[f32], epsilon:f32,record_budget:usize,
+    integral:super::wrapping_integral::Proof)->Result<Candidate,Unresolved> {
     if alignments.len() != domains.base().slots.len()
         || alignments.iter().any(|v| ![0., 0.5, 1.].contains(v)) {
         return Err(Unresolved::Alignment);
@@ -201,7 +219,9 @@ pub(super) fn compose(
     let base = domains.base().records();
     let count = domains.base().slots.len();
     let sizing_records = wrapping::alignment_records(count).ok_or(Unresolved::ResourceBudget)?;
-    let paint_records = wrapping_paint::paint_records(&vec![1;count]).ok_or(Unresolved::ResourceBudget)?;
+    let integral_replicas=domains.slots().iter().enumerate().filter(|(_,s)|integral.geometries().contains(&s.visible))
+        .try_fold(0usize,|sum,(i,_)|sum.checked_add(i+1)).ok_or(Unresolved::ResourceBudget)?;
+    let paint_records = wrapping_paint::paint_records_with_integral_geometry(&vec![1;count],count,integral_replicas,integral.geometries().len()).ok_or(Unresolved::ResourceBudget)?;
     let end = base.len().checked_add(sizing_records).and_then(|v| v.checked_add(paint_records))
         .filter(|v| *v <= record_budget && *v <= u32::MAX as usize).ok_or(Unresolved::ResourceBudget)?;
     let mut fills = BTreeMap::new();
@@ -221,12 +241,12 @@ pub(super) fn compose(
     let mut records = base.to_vec();
     let trace = wrapping::align_items(&mut records, &items, domains.base().row,
         domains.base().reverse_cross, domains.base().line_fraction, epsilon)?;
-    let paint_trace=wrapping_paint::paint_items(&mut records, &paints, domains.base().row, domains.base().reverse_main,
-        domains.base().reverse_cross, domains.base().line_fraction, epsilon)?;
+    let paint_trace=wrapping_paint::paint_items_with_integral(&mut records, &paints, domains.base().row, domains.base().reverse_main,
+        domains.base().reverse_cross, domains.base().line_fraction, epsilon,integral.geometries())?;
     if records.len() != end { return Err(Unresolved::ResourceBudget); }
     preserved(base, &records, &paints.iter().map(|p|p.paints[0].color).collect::<Vec<_>>(),
         &items.iter().map(|i|i.visible).collect(),base.len()+sizing_records)?;
-    Ok(Candidate { records, layout_authored: domains.layout_authored().cloned(), trace, paint_trace, viewport:domains.viewport(), parent_axes:domains.parent_axes(),
+    Ok(Candidate { records, integral, layout_authored: domains.layout_authored().cloned(), trace, paint_trace, viewport:domains.viewport(), parent_axes:domains.parent_axes(),
         slots:domains.slots().to_vec(), cross_extents:domains.cross_extents(), epsilon, alignments:alignments.to_vec(),
         base_records:base.len(), sizing_records, paint_records })
 }
@@ -270,6 +290,28 @@ mod tests {
     fn domains<'a>(records:&'a[Record],roles:&[(u32,u32)])->Domains<'a> {
         let n=numeric();let values=roles.iter().map(|&(id,_)|(id,&n)).collect::<Vec<_>>();
         wrapping_domains::resolve(records,2,roles,&n,&values,[MachineInterval::new(0.,16384.).unwrap();2]).unwrap()
+    }
+    #[test]
+    fn certified_integral_composition_saves_exact_records_and_preserves_fallback() {
+        let (records,roles)=fixture(3,2,0,1);
+        let layout=super::super::fixed_layout::LayoutStyle::from_numeric(&numeric()).unwrap();
+        let authored=roles.iter().flat_map(|&(s,v)|[(s,&layout),(v,&layout)]).collect::<Vec<_>>();
+        let resolve=||wrapping_domains::resolve_layout(&records,2,&roles,&layout,&authored,
+            [MachineInterval::new(0.,16384.).unwrap();2]).unwrap();
+        let rounded=compose_with_bounds(resolve(),&[0.;3],100_000).unwrap();
+        let optimized=compose_integral_with_bounds(resolve(),&[0.;3],100_000).unwrap();
+        assert_eq!(optimized.candidate().integral().geometries().len(),3);
+        assert!(optimized.candidate().paint_trace().boxes.is_empty());
+        assert_eq!(rounded.candidate().records().len()-optimized.candidate().records().len(),6960);
+        let count=optimized.candidate().records().len();
+        assert!(compose_integral_with_bounds(resolve(),&[0.;3],count).is_ok());
+        assert!(matches!(compose_integral_with_bounds(resolve(),&[0.;3],count-1),Err(Unresolved::ResourceBudget)));
+        let mixed=compose_integral_with_bounds(resolve(),&[0.,0.5,0.],100_000).unwrap();
+        assert_eq!(mixed.candidate().integral().geometries().len(),2);
+        assert_eq!(mixed.candidate().paint_trace().boxes.len(),1);
+        let fallback=compose_integral_with_bounds(domains(&records,&roles),&[0.;3],100_000).unwrap();
+        assert!(fallback.candidate().integral().geometries().is_empty());
+        assert_eq!(wire::encode(fallback.candidate().records()).unwrap(),wire::encode(rounded.candidate().records()).unwrap());
     }
     #[test]
     fn normalized_candidate_retains_authored_sources_after_domain_consumption() {

@@ -1,0 +1,546 @@
+{
+  "status": "verified-matched-integral-lifecycle-comparison",
+  "publicCostQualification": false,
+  "scope": "Same optimized immutable native probe, runner, hardware, numeric recipes and resize schedule; scene graphs differ intentionally. CPU recording only; RSS is process high-water, not retained memory.",
+  "cases": 4,
+  "trials": 88,
+  "measuredTrials": 72,
+  "resizeDrawSamples": 704,
+  "comparison": [
+    {
+      "name": "owners-1",
+      "roundedRecords": 2359,
+      "integralRecords": 44,
+      "roundedBytes": 38849,
+      "integralBytes": 597,
+      "roundedPeakRssBytes": 19693568,
+      "integralPeakRssBytes": 10944512,
+      "stages": {
+        "factorySetupNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 250,
+            "medianNs": 333,
+            "p95Ns": 500,
+            "maxNs": 500
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 84,
+            "medianNs": 125,
+            "p95Ns": 1583,
+            "maxNs": 1583
+          },
+          "medianSpeedRatio": 2.664
+        },
+        "importNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1409542,
+            "medianNs": 1506917,
+            "p95Ns": 1560166,
+            "maxNs": 1560166
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 20917,
+            "medianNs": 23708,
+            "p95Ns": 28084,
+            "maxNs": 28084
+          },
+          "medianSpeedRatio": 63.56154040830099
+        },
+        "initialSettleNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1401250,
+            "medianNs": 1527708,
+            "p95Ns": 1734125,
+            "maxNs": 1734125
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 27583,
+            "medianNs": 28750,
+            "p95Ns": 36375,
+            "maxNs": 36375
+          },
+          "medianSpeedRatio": 53.137669565217394
+        },
+        "cloneNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1076667,
+            "medianNs": 1162208,
+            "p95Ns": 1275750,
+            "maxNs": 1275750
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 14834,
+            "medianNs": 15250,
+            "p95Ns": 16875,
+            "maxNs": 16875
+          },
+          "medianSpeedRatio": 76.2103606557377
+        },
+        "releaseNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 370708,
+            "medianNs": 410042,
+            "p95Ns": 435167,
+            "maxNs": 435167
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 10583,
+            "medianNs": 10875,
+            "p95Ns": 13541,
+            "maxNs": 13541
+          },
+          "medianSpeedRatio": 37.70501149425287
+        },
+        "resizeUpdateNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 316959,
+            "medianNs": 373542.0,
+            "p95Ns": 496375,
+            "maxNs": 615000
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 6750,
+            "medianNs": 7417.0,
+            "p95Ns": 12375,
+            "maxNs": 13250
+          },
+          "medianSpeedRatio": 50.36294997977619
+        },
+        "drawRecordingNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 12541,
+            "medianNs": 15250.0,
+            "p95Ns": 23125,
+            "maxNs": 25208
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 5916,
+            "medianNs": 6500.0,
+            "p95Ns": 7541,
+            "maxNs": 9417
+          },
+          "medianSpeedRatio": 2.3461538461538463
+        }
+      }
+    },
+    {
+      "name": "owners-3",
+      "roundedRecords": 7239,
+      "integralRecords": 279,
+      "roundedBytes": 118956,
+      "integralBytes": 3714,
+      "roundedPeakRssBytes": 36438016,
+      "integralPeakRssBytes": 12500992,
+      "stages": {
+        "factorySetupNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 291,
+            "medianNs": 375,
+            "p95Ns": 6584,
+            "maxNs": 6584
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 166,
+            "medianNs": 167,
+            "p95Ns": 250,
+            "maxNs": 250
+          },
+          "medianSpeedRatio": 2.245508982035928
+        },
+        "importNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 7692542,
+            "medianNs": 7809292,
+            "p95Ns": 8190208,
+            "maxNs": 8190208
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 126916,
+            "medianNs": 134750,
+            "p95Ns": 199459,
+            "maxNs": 199459
+          },
+          "medianSpeedRatio": 57.95392949907236
+        },
+        "initialSettleNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 8296334,
+            "medianNs": 8471500,
+            "p95Ns": 8971166,
+            "maxNs": 8971166
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 150708,
+            "medianNs": 157334,
+            "p95Ns": 268417,
+            "maxNs": 268417
+          },
+          "medianSpeedRatio": 53.84405150825632
+        },
+        "cloneNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 7025708,
+            "medianNs": 7119250,
+            "p95Ns": 7494375,
+            "maxNs": 7494375
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 96625,
+            "medianNs": 100416,
+            "p95Ns": 200208,
+            "maxNs": 200208
+          },
+          "medianSpeedRatio": 70.89756612492033
+        },
+        "releaseNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1224708,
+            "medianNs": 1279708,
+            "p95Ns": 1355500,
+            "maxNs": 1355500
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 56291,
+            "medianNs": 59875,
+            "p95Ns": 78333,
+            "maxNs": 78333
+          },
+          "medianSpeedRatio": 21.372993736951983
+        },
+        "resizeUpdateNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 1042292,
+            "medianNs": 1142771.0,
+            "p95Ns": 1509042,
+            "maxNs": 1606417
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 36125,
+            "medianNs": 40104.5,
+            "p95Ns": 57708,
+            "maxNs": 70750
+          },
+          "medianSpeedRatio": 28.494832250744928
+        },
+        "drawRecordingNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 60083,
+            "medianNs": 66666.5,
+            "p95Ns": 81917,
+            "maxNs": 113625
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 24792,
+            "medianNs": 27458.5,
+            "p95Ns": 31542,
+            "maxNs": 50708
+          },
+          "medianSpeedRatio": 2.4279002858859733
+        }
+      }
+    },
+    {
+      "name": "owners-8",
+      "roundedRecords": 19999,
+      "integralRecords": 1339,
+      "roundedBytes": 330171,
+      "integralBytes": 17666,
+      "roundedPeakRssBytes": 85753856,
+      "integralPeakRssBytes": 19333120,
+      "stages": {
+        "factorySetupNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 417,
+            "medianNs": 791,
+            "p95Ns": 1208,
+            "maxNs": 1208
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 250,
+            "medianNs": 417,
+            "p95Ns": 833,
+            "maxNs": 833
+          },
+          "medianSpeedRatio": 1.8968824940047961
+        },
+        "importNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 53121000,
+            "medianNs": 54854959,
+            "p95Ns": 56542291,
+            "maxNs": 56542291
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 780125,
+            "medianNs": 814125,
+            "p95Ns": 856208,
+            "maxNs": 856208
+          },
+          "medianSpeedRatio": 67.37903761707355
+        },
+        "initialSettleNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 56176375,
+            "medianNs": 58015667,
+            "p95Ns": 58871125,
+            "maxNs": 58871125
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 899875,
+            "medianNs": 937584,
+            "p95Ns": 1156042,
+            "maxNs": 1156042
+          },
+          "medianSpeedRatio": 61.877833879417736
+        },
+        "cloneNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 51890833,
+            "medianNs": 53416750,
+            "p95Ns": 56902375,
+            "maxNs": 56902375
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 656167,
+            "medianNs": 675833,
+            "p95Ns": 792833,
+            "maxNs": 792833
+          },
+          "medianSpeedRatio": 79.0383867020403
+        },
+        "releaseNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 3555959,
+            "medianNs": 3690083,
+            "p95Ns": 3945542,
+            "maxNs": 3945542
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 290792,
+            "medianNs": 334334,
+            "p95Ns": 483125,
+            "maxNs": 483125
+          },
+          "medianSpeedRatio": 11.037115579031747
+        },
+        "resizeUpdateNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 3372458,
+            "medianNs": 4163646.0,
+            "p95Ns": 5554041,
+            "maxNs": 7032292
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 173625,
+            "medianNs": 188250.0,
+            "p95Ns": 370250,
+            "maxNs": 407125
+          },
+          "medianSpeedRatio": 22.11764143426295
+        },
+        "drawRecordingNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 390083,
+            "medianNs": 431000.0,
+            "p95Ns": 595541,
+            "maxNs": 676916
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 162500,
+            "medianNs": 171187.0,
+            "p95Ns": 192125,
+            "maxNs": 309917
+          },
+          "medianSpeedRatio": 2.5177145460811863
+        }
+      }
+    },
+    {
+      "name": "owners-34",
+      "roundedRecords": 99247,
+      "integralRecords": 17732,
+      "roundedBytes": 1658530,
+      "integralBytes": 229490,
+      "roundedPeakRssBytes": 424902656,
+      "integralPeakRssBytes": 171933696,
+      "stages": {
+        "factorySetupNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1833,
+            "medianNs": 1959,
+            "p95Ns": 4292,
+            "maxNs": 4292
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 1208,
+            "medianNs": 1625,
+            "p95Ns": 2333,
+            "maxNs": 2333
+          },
+          "medianSpeedRatio": 1.2055384615384614
+        },
+        "importNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1332370500,
+            "medianNs": 1385639875,
+            "p95Ns": 1555849875,
+            "maxNs": 1555849875
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 69602542,
+            "medianNs": 71163333,
+            "p95Ns": 73698917,
+            "maxNs": 73698917
+          },
+          "medianSpeedRatio": 19.471261625702663
+        },
+        "initialSettleNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1350037333,
+            "medianNs": 1396171667,
+            "p95Ns": 1457199333,
+            "maxNs": 1457199333
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 73407208,
+            "medianNs": 74682291,
+            "p95Ns": 78239500,
+            "maxNs": 78239500
+          },
+          "medianSpeedRatio": 18.694815709389527
+        },
+        "cloneNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 1327643958,
+            "medianNs": 1370399125,
+            "p95Ns": 1440163125,
+            "maxNs": 1440163125
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 68177583,
+            "medianNs": 69571834,
+            "p95Ns": 70964791,
+            "maxNs": 70964791
+          },
+          "medianSpeedRatio": 19.697613907950164
+        },
+        "releaseNs": {
+          "rounded": {
+            "samples": 9,
+            "minNs": 22216000,
+            "medianNs": 23722042,
+            "p95Ns": 31121959,
+            "maxNs": 31121959
+          },
+          "integral": {
+            "samples": 9,
+            "minNs": 5887667,
+            "medianNs": 6108042,
+            "p95Ns": 6564625,
+            "maxNs": 6564625
+          },
+          "medianSpeedRatio": 3.8837391753363844
+        },
+        "resizeUpdateNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 26800000,
+            "medianNs": 29234167.0,
+            "p95Ns": 34811250,
+            "maxNs": 35620375
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 3817917,
+            "medianNs": 4506375.5,
+            "p95Ns": 5664750,
+            "maxNs": 6331791
+          },
+          "medianSpeedRatio": 6.487290506527918
+        },
+        "drawRecordingNs": {
+          "rounded": {
+            "samples": 72,
+            "minNs": 7310416,
+            "medianNs": 7842083.0,
+            "p95Ns": 8280375,
+            "maxNs": 8692209
+          },
+          "integral": {
+            "samples": 72,
+            "minNs": 3188875,
+            "medianNs": 3500792.0,
+            "p95Ns": 3926292,
+            "maxNs": 4663000
+          },
+          "medianSpeedRatio": 2.240088242889038
+        }
+      }
+    }
+  ],
+  "artifactBindings": 317,
+  "evidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-integral-lifecycle-verification-r1.json",
+      "sha256": "fb38aa3e841c2400522e630c598a18509de10b4fefece38975ee9d0ea23db409"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-integral-lifecycle-evidence.py",
+      "sha256": "c63edbb0976a20121fd0822f431763939ecef8c768429d9593561ffb98769c34"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-integral-lifecycle-review.md",
+      "sha256": "d14c56f7a677c68b8652d423a02737cb258fbd7dc8396420862a54937e3ad6aa"
+    }
+  ]
+}

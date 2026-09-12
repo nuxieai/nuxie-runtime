@@ -12,20 +12,28 @@ pub(super) struct Seed {
     pub(super) size: [f32; 2],
     pub(super) world: [f32; 6],
 }
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(super) struct Binding {
     base: Vec<u8>,
+    base_record_count: usize,
     source: LayoutAuthored,
     seeds: BTreeMap<u32, Seed>,
 }
 impl Binding {
+    pub(super) fn base_record_count(&self) -> usize { self.base_record_count }
     pub(super) fn seeds(&self) -> &BTreeMap<u32, Seed> { &self.seeds }
     pub(super) fn source(&self) -> &LayoutAuthored { &self.source }
+    pub(super) fn matches_source(&self, source: &LayoutAuthored) -> bool {
+        same_sources(&self.source, source)
+    }
     /// Rebind actual records and compare every source field's ideal identity,
     /// computed bits and derived encoding, including inactive bounds.
     pub(super) fn matches_domains(&self, domains: &Domains<'_>) -> bool {
         let Ok(other)=bind(domains) else{return false;};
-        self.base==other.base && same_sources(&self.source,&other.source)
+        self.same_binding(&other)
+    }
+    pub(super) fn same_binding(&self, other: &Self) -> bool {
+        self.base_record_count==other.base_record_count && self.base==other.base && same_sources(&self.source,&other.source)
             && self.seeds.len()==other.seeds.len() && self.seeds.iter().all(|(id,a)|other.seeds.get(id).is_some_and(|b|
                 a.local.map(f32::to_bits)==b.local.map(f32::to_bits)
                 && a.size.map(f32::to_bits)==b.size.map(f32::to_bits)
@@ -145,7 +153,7 @@ pub(super) fn bind(domains:&Domains<'_>)->Result<Binding,Unresolved>{
         let visible_seed=seed([0.,0.],visible[i],slot_seed.world);
         seeds.insert(slot.object,slot_seed);seeds.insert(slot.visible,visible_seed);
     }
-    Ok(Binding{base:wire::encode(base.records()).map_err(|_|Unresolved::Encoding)?,source:source.clone(),seeds})
+    Ok(Binding{base:wire::encode(base.records()).map_err(|_|Unresolved::Encoding)?,base_record_count:base.records().len(),source:source.clone(),seeds})
 }
 
 #[cfg(test)]

@@ -1,0 +1,222 @@
+[
+  {
+    "name": "fixed-fold-row-r0-w1-original",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-row-r0-w1/first/original.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-row-r0-w1-folded",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-row-r0-w1/first/scene.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-row-r1-w2-original",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-row-r1-w2/first/original.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-row-r1-w2-folded",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-row-r1-w2/first/scene.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-column-r1-w1-original",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-column-r1-w1/first/original.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-column-r1-w1-folded",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-column-r1-w1/first/scene.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-column-r0-w2-original",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-column-r0-w2/first/original.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-column-r0-w2-folded",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-column-r0-w2/first/scene.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-private-overlap-original",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-private-overlap/first/original.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  },
+  {
+    "name": "fixed-fold-private-overlap-folded",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/fixed-fold-private-overlap/first/scene.riv",
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ]
+  }
+]

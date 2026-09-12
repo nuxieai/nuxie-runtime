@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-12",
-  "focus": "Live paint rounding: scalar building block verified",
-  "status": "Ordinary positive predicate works across subnormal and resize controls",
-  "current": "Standalone paint isolation is complete:160geometry/136pixel passes,24failures preserved. Ordinary gain/clamp predicate adds22cases/352frames/1760bit-exact scalar observations, with live zero crossings and clone/repeat checks. No runtime or product changes; public wrapping unadmitted.",
-  "next": "Implement the bounded signed binary rounding graph, then test a live vector/clip paint-only composition against Chrome. Preserve thin-box/quantization obligations and all99backlog items.",
+  "focus": "Constant helpers removed while preserving paint geometry",
+  "status": "Private preserved-paint candidate passes exact native comparison",
+  "current": "Five three-owner fixtures shrink from 7,239 to 264 records. 503 Rust tests, 972,400 numeric checks and all40 exact original/replacement native frames pass; Chrome gates, direct visual review and lifecycle measurements complete. Public support remains13 qualified/25 partial/4 investigating/57 pending.",
+  "next": "Integrate the proven private pass through the public compiler with parity/resource validation, then continue exact centered layout and broader responsive/nested/typography work across all99 items. Runtime stays immutable.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Preserved paint graph checkpoint",
+      "path": "tools/html-to-riv/validation/public-fixed-paint-graph-review.md"
+    },
+    {
+      "label": "Current private Chrome/native gallery",
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/folded-capture/gallery.html"
+    },
+    {
+      "label": "Retained compact-candidate mismatch",
+      "path": "tools/html-to-riv/validation/public-fixed-folding-diagnosis.md"
+    },
     {
       "label": "Positive predicate native evidence",
       "path": "tools/html-to-riv/validation/positive-clamp-review.md"

@@ -2,13 +2,17 @@
 
 Reviewed 2026-09-12. This brief supersedes historical next-step instructions and the saved objective's stale public-interface restoration step. The goal remains active and unlimited.
 
-## Authoritative restart checkpoint — private folding foundations
+## Authoritative restart checkpoint — preserved paint graph validated privately
 
-This section supersedes historical next-step statements below. The public interface and fixed wrapping/remainder allocation are already implemented. The latest work adds registered private `fixed_scalar`, `fixed_geometry` and `fixed_paint` modules; read `validation/public-fixed-foundations-review.md` and its unit receipt. Full compiler tests:493 pass. Source guard passes. Scalar native comparison:60 scenes/480 frames/140096 exact coordinates. Initial geometry:30 scenes/240 frames/12928 exact comparisons, confirmed by a sign-preserving offline recheck. Direct rectangle primitives:48 Chrome/native pixel passes,96 clear checks,48 strict ordered streams;all six sheets directly reviewed. These are separate foundation tests, not a connected/public folding path.
+This section supersedes historical next-step statements below and the saved goal's stale public-interface restoration step. The public interface, fixed wrapping and remainder allocation are implemented. Public support remains13 qualified/25 partial/4 investigating/57 pending across all99items.
 
-Next connect certified initial geometry to evaluation of the actual sizing/position/paint constraints (TransformConstraint and DistanceConstraint remain unresolved), then perform the bounded three-leaf fractional/reverse paint-folding experiment. Preserve source IDs and the existing geometry graph. Never substitute native/browser observations for compiler inputs. Do not rerun unchanged foundation campaigns merely for bookkeeping.
+Read `validation/public-fixed-paint-graph-review.md` and its receipt. The current private fixed_paint_graph pass replaces source-proven constant helpers with literal placements while retaining all original paint paths, clips and order. It checks all six Shape/Rectangle matrix bits under native recomposition, preserves base/sizing records and source IDs, and rejects unknown domains. The earlier compact rectangle candidate had8/40 tiny native image mismatches; deterministic replay isolates a rectangle-extent/clip interaction, with exact renderer arithmetic cause unproved. Its failures remain in debug-r1/r2 and the diagnosis review. No runtime repair or tolerance relaxation was made.
 
-The 99-item goal remains active and unlimited:13 qualified/25 partial/4 investigating/57 pending. No additional public support is claimed. Known public geometry differences reach approximately0.007815px despite passing pixel gates; retain and address them. Continue broader responsive/nested/typography/painting work beyond this optimization. Keep runtime/renderer/schema/shared dependencies/root build immutable; no editor integration or pushing unfinished work.
+The replacement constructs five recipes twice exactly, reducing7,239records to264. Fresh original/folded captures each pass40geometry/40Chrome pixel gates/80clear controls. Corrected complete mapping/evaluator verification passes972,400numeric checks and40/40 exact old/new native images. Six full-size sheets directly reviewed (15representatives/25exact repeats). Full compiler503tests pass and source guard passes. New frozen constructor source bindings remain exact. An initial copied-crate unit attempt lacked fixtures; full workspace suite passes. An initial verifier failed on omitted schema field189; the local decoder is corrected, negative controls pass, and old failure remains. All builds/captures/tests/probes completed.
+
+Matched release lifecycle: five original/replacement pairs,2warmups+9trials each. Median import7.734–8.189ms→0.138–0.141ms; clone7.051–7.512ms→0.110–0.112ms; resize1.092–1.203ms→0.040–0.042ms. Three-owner fixture results only; CPU recording is not GPU timing. Construction still creates the expensive original graph first; no compile-time budget expansion follows.
+
+Next connect this private pass to the existing public fixed-wrapping route with exact source/domain binding and fallback to existing behavior on rejection. Validate changed public CLI/WASM/JS output, original/clone native/Chrome comparisons, deterministic output and resource boundaries. Keep the rejected compact experiment out of public dispatch. Do not repeat unchanged private foundation/native campaigns. Then continue exact centered quantization and broader responsive/nested layout, typography, painting and assets; this optimization is not the full99-item goal. Existing public geometry differences reach0.007815px despite passing pixel gates.
 
 ## Workspace and immutable contract
 
@@ -95,12 +99,11 @@ Next investigate the concrete paint constant-folding experiment in public-fixed-
 
 ## Immediate next work
 
-1. Read the completed private foundation review and source audits. Connect typed source-bound initial geometry to evaluation of the actual emitted constraints; model required TransformConstraint/DistanceConstraint operations independently and test final native coordinates. Unknown operations must retain the existing path. Initial layout seeds are not final constrained corners.
-2. Complete the three-leaf fractional/reverse paint-only folding experiment in `validation/public-fixed-folding-plan.md`. Preserve geometry/source IDs and compare old/new geometry, paint order and Chrome/native pixels through original/clone resizing. Qualify and benchmark only after equivalence and direct review.
-3. Address exact center quantization and broader admission; continue all99 items, especially responsive/nested layout, typography, painting and assets. Fixed-root clipping tests do not prove responsive reflow. A proof rejection is not runtime impossibility.
-4. Maintain support/evidence/progress at meaningful tested milestones, commit reviewed compiler-only work locally, and keep unfinished replacement isolated. Preserve failures and avoid repeating unchanged builds/captures.
-
-Historical design/restart instructions are preserved under validation/history and checkpoint reviews. Current boundary/cost campaigns are complete; do not repeat them before implementing a changed behavior.
+1. Review the private preserved-paint checkpoint and receipt; inspect current git status/log and preserve newer work. All current processes are terminal.
+2. Integrate the source-bound preserved-paint optimization through public fixed wrapping, preserving geometry IDs and fallback behavior. Validate the actual public path and its CLI/WASM/JS parity; expand boundary/resource evidence only for changed behavior.
+3. Keep old compact-rectangle failures as historical evidence, outside public dispatch. No runtime change, observed geometry input or threshold relaxation.
+4. Address exact centered quantization and continue all99items. Fixed-root clipping tests do not establish responsive reflow. Proof rejection is not runtime impossibility.
+5. Maintain support/evidence/progress at tested milestones; commit reviewed compiler-only checkpoints locally. Do not push unfinished replacement work.
 
 ## Validation and finish boundary
 
@@ -114,4 +117,4 @@ Completion requires every scoped item qualified or documented with an evidenced 
 
 ## Restart prompt
 
-> Resume the full99-item standalone compiler goal in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`. Read `tools/html-to-riv/GOAL-RESTART.md` and `validation/public-fixed-foundations-review.md`. The public interface/fixed wrapping and private geometry/scalar/paint foundations are tested. Next connect source-bound geometry to actual constraint evaluation, qualify the bounded paint-folding experiment, then continue the entire backlog. Keep the baseline runtime immutable, preserve failures and source IDs, and validate ordinary files against native rendering and pinned Chrome through same-file original/clone resizing. No editor integration, CSS Grid or pushing unfinished work.
+> Resume the full99-item standalone compiler goal in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`. Read TARGET.md, BACKLOG.md and the authoritative checkpoint in tools/html-to-riv/GOAL-RESTART.md. The private preserved-paint graph optimization now has exact native geometry/pixel, Chrome, visual and lifecycle evidence. Next integrate it through the public fixed-wrapping path with source/domain checks, fallback, public API parity and resource validation; then continue the entire backlog. Keep runtime/renderer/schema/shared dependencies/root build immutable. Emit ordinary self-contained .riv files, preserve failures and source IDs, and test same-file original/clone resizing. Use parallel agents for independent work. No editor integration, CSS Grid or pushing unfinished work. Complete only when every scoped item is qualified or has an evidenced limitation/external dependency and no independent implementation work remains.

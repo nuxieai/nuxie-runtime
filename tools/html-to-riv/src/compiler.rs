@@ -18,6 +18,12 @@ mod fixed_paint;
 #[allow(dead_code)] // Initial fixed layout only; native and final constraint equivalence remain separate.
 #[path = "fixed_geometry.rs"]
 mod fixed_geometry;
+#[allow(dead_code)] // Private full-graph paint folding; public admission follows native equivalence.
+#[path = "fixed_folding.rs"]
+mod fixed_folding;
+#[allow(dead_code)] // Private constant graph lowering; qualification remains separate.
+#[path = "fixed_paint_graph.rs"]
+mod fixed_paint_graph;
 #[path = "public_wrapping.rs"]
 mod public_wrapping;
 #[path = "baseline.rs"]

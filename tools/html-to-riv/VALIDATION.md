@@ -1,5 +1,7 @@
 # Immutable-target validation
 
+Current private checkpoint: [preserved paint graph folding](validation/public-fixed-paint-graph-review.md) reduces five three-owner scenes from7,239to264records while preserving40/40 old/new native images exactly. Full503Rust tests and972,400numeric checks pass; native/Chrome gates, visual review and matched lifecycle measurements are complete. Public integration and broader qualification remain; support counts stay13qualified/25partial/4investigating/57pending. The earlier compact rectangle candidate retains eight pixel failures. Earlier checkpoint statements below are historical where superseded.
+
 Latest private checkpoint: proven nonoverlap retains original paints and removes their helper suffix. The 34-owner scene now uses 2,150 records; 72 fresh native/Chrome frames pass. Public wrapping remains unadmitted and backlog counts are unchanged. See [original-paint review](validation/wrapped-original-review.md).
 
 Latest private checkpoint: source-certified integral paint reduces34-owner graphs from99247to17732records;688native/Chrome geometry+pixel frames pass. Public wrapping remains unadmitted; all99backlog items retain their evidence states. See [integral optimization review](validation/wrapped-integral-review.md).

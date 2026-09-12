@@ -1,0 +1,75 @@
+{
+  "scope": "Private preserved-paint helper folding; no public integration or new support admission",
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-fixed-paint-graph-review.md",
+      "sha256": "5cc49b5826abc93f633e428073c9717413ad74c28a4ab440bf046352d19eaed3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-fixed-paint-graph-visual-root.md",
+      "sha256": "3be68ffb4e3f543bdc46f8d700451c90019725ff14729df8a1118bd74b40f584"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-fixed-folding-diagnosis.md",
+      "sha256": "e4e4e99807b61953de30961805f4c1c278baf94f89067fa33205abc56f45c66e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/construction.json",
+      "sha256": "c0fd83eff9b36aec2b295841105c2bee9fc7e553401d08012cd719b9529f40a6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/capture-invocations.json",
+      "sha256": "80d8db5643bf039dd3b45246a350fb2caf4c30b6581d76a89f33e09b880c7720"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/verification.json",
+      "sha256": "2733c2b958db2f3ea940c16bc29f97a0aa396164e149ab43967e0508b51370be"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-r1/verification-setup-r1.log",
+      "sha256": "eff0727325dc37dfdf30b5da53c0523929166cef7c8254b0eab9afbad2ba66e3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-fixed-paint-graph-constructor-r1/receipt.json",
+      "sha256": "1fa69ca675f914c562c6ce73d1c9477b6c44f35595b9c3817dab5b30abe98d4f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/fixed-paint-graph-all-r1.log",
+      "sha256": "6fa4e573d5801c585747dac0c536a762c7d65232b4dbe14a8db211846c388457"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/fixed-paint-graph-unit-r1.log",
+      "sha256": "d9d48724c7b0bad252dd2556430893f3582d00aadc2d20aa57675361e7d6c8a0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/fixed-paint-graph-target-r1.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-fixed-paint-graph-lifecycle-r1/receipt.json",
+      "sha256": "ba9b590dad073d964341ef69fbcd51fb01c7d97679746e72c7828ab2009d3c0e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-fixed-paint-graph-verifier-controls-r1/receipt.json",
+      "sha256": "ed4e5bf20d1a8716ff02ecc356f5141f67729b1acd7c9facde80ceb67b9807a2"
+    }
+  ],
+  "source": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/fixed_paint_graph.rs",
+      "sha256": "dd69de057a228fb3e1ddc8386708537f4ad7f38274a87ca4b72dff846d36c558"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/fixed_scalar.rs",
+      "sha256": "8666b9f898456a229f4ce8bb8c097a46b87aa87ba9d202e1264d089520b8382a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/fixed_geometry.rs",
+      "sha256": "efd6bd52e517c4780f8c52a4c5982beab22cf9e149939a143d64db8a266495a7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/compiler.rs",
+      "sha256": "8af9337fbc98f2e3d5e6e350374a3189550c432af646652976dd745935ce126d"
+    }
+  ]
+}

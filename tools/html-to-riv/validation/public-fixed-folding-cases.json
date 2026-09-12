@@ -1,0 +1,825 @@
+[
+  {
+    "name": "fixed-fold-row-r0-w1",
+    "recipe": {
+      "initialViewport": [
+        320,
+        240
+      ],
+      "row": true,
+      "reverseMain": false,
+      "wrap": 1,
+      "lineFraction": 0.5,
+      "mainFraction": 0,
+      "parent": {
+        "width": {
+          "value": 40.5,
+          "unit": "px",
+          "source": "40.5",
+          "min": null,
+          "max": null
+        },
+        "height": {
+          "value": 37.25,
+          "unit": "px",
+          "source": "37.25",
+          "min": null,
+          "max": null
+        }
+      },
+      "slots": [
+        {
+          "name": "v0",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2163103027
+        },
+        {
+          "name": "v1",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0.5,
+          "color": 2149672881
+        },
+        {
+          "name": "v2",
+          "main": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 1,
+          "color": 2969553954
+        }
+      ]
+    },
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:40.5px;height:37.25px;flex-direction:row;flex-wrap:wrap;align-content:center}#v0{width:20.25px;height:19.5px;align-self:flex-start;background:rgba(238,85,51,0.50196078431372548)}#v1{width:20.25px;height:50.25px;align-self:center;background:rgba(33,103,177,0.50196078431372548)}#v2{width:30.5px;height:13.25px;align-self:flex-end;background:rgba(255,204,34,0.69019607843137254)}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ],
+    "features": [
+      "fractional direct fixed leaves",
+      "coupled positional content and self alignment",
+      "cross overflow",
+      "alpha over white; no sibling overlap",
+      "original/clone repeated clipping"
+    ]
+  },
+  {
+    "name": "fixed-fold-row-r1-w2",
+    "recipe": {
+      "initialViewport": [
+        320,
+        240
+      ],
+      "row": true,
+      "reverseMain": true,
+      "wrap": 2,
+      "lineFraction": 0.5,
+      "mainFraction": 0,
+      "parent": {
+        "width": {
+          "value": 40.5,
+          "unit": "px",
+          "source": "40.5",
+          "min": null,
+          "max": null
+        },
+        "height": {
+          "value": 37.25,
+          "unit": "px",
+          "source": "37.25",
+          "min": null,
+          "max": null
+        }
+      },
+      "slots": [
+        {
+          "name": "v0",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2163103027
+        },
+        {
+          "name": "v1",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0.5,
+          "color": 2149672881
+        },
+        {
+          "name": "v2",
+          "main": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 1,
+          "color": 2969553954
+        }
+      ]
+    },
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:40.5px;height:37.25px;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:center}#v0{width:20.25px;height:19.5px;align-self:flex-start;background:rgba(238,85,51,0.50196078431372548)}#v1{width:20.25px;height:50.25px;align-self:center;background:rgba(33,103,177,0.50196078431372548)}#v2{width:30.5px;height:13.25px;align-self:flex-end;background:rgba(255,204,34,0.69019607843137254)}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ],
+    "features": [
+      "fractional direct fixed leaves",
+      "coupled positional content and self alignment",
+      "cross overflow",
+      "alpha over white; no sibling overlap",
+      "original/clone repeated clipping"
+    ]
+  },
+  {
+    "name": "fixed-fold-column-r1-w1",
+    "recipe": {
+      "initialViewport": [
+        320,
+        240
+      ],
+      "row": false,
+      "reverseMain": true,
+      "wrap": 1,
+      "lineFraction": 0.5,
+      "mainFraction": 0,
+      "parent": {
+        "width": {
+          "value": 37.25,
+          "unit": "px",
+          "source": "37.25",
+          "min": null,
+          "max": null
+        },
+        "height": {
+          "value": 40.5,
+          "unit": "px",
+          "source": "40.5",
+          "min": null,
+          "max": null
+        }
+      },
+      "slots": [
+        {
+          "name": "v0",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2163103027
+        },
+        {
+          "name": "v1",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0.5,
+          "color": 2149672881
+        },
+        {
+          "name": "v2",
+          "main": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 1,
+          "color": 2969553954
+        }
+      ]
+    },
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:37.25px;height:40.5px;flex-direction:column-reverse;flex-wrap:wrap;align-content:center}#v0{width:19.5px;height:20.25px;align-self:flex-start;background:rgba(238,85,51,0.50196078431372548)}#v1{width:50.25px;height:20.25px;align-self:center;background:rgba(33,103,177,0.50196078431372548)}#v2{width:13.25px;height:30.5px;align-self:flex-end;background:rgba(255,204,34,0.69019607843137254)}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ],
+    "features": [
+      "fractional direct fixed leaves",
+      "coupled positional content and self alignment",
+      "cross overflow",
+      "alpha over white; no sibling overlap",
+      "original/clone repeated clipping"
+    ]
+  },
+  {
+    "name": "fixed-fold-column-r0-w2",
+    "recipe": {
+      "initialViewport": [
+        320,
+        240
+      ],
+      "row": false,
+      "reverseMain": false,
+      "wrap": 2,
+      "lineFraction": 0.5,
+      "mainFraction": 0,
+      "parent": {
+        "width": {
+          "value": 37.25,
+          "unit": "px",
+          "source": "37.25",
+          "min": null,
+          "max": null
+        },
+        "height": {
+          "value": 40.5,
+          "unit": "px",
+          "source": "40.5",
+          "min": null,
+          "max": null
+        }
+      },
+      "slots": [
+        {
+          "name": "v0",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 19.5,
+            "unit": "px",
+            "source": "19.5",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2163103027
+        },
+        {
+          "name": "v1",
+          "main": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 20.25,
+            "unit": "px",
+            "source": "20.25",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 50.25,
+            "unit": "px",
+            "source": "50.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0.5,
+          "color": 2149672881
+        },
+        {
+          "name": "v2",
+          "main": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 30.5,
+            "unit": "px",
+            "source": "30.5",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 13.25,
+            "unit": "px",
+            "source": "13.25",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 1,
+          "color": 2969553954
+        }
+      ]
+    },
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:37.25px;height:40.5px;flex-direction:column;flex-wrap:wrap-reverse;align-content:center}#v0{width:19.5px;height:20.25px;align-self:flex-start;background:rgba(238,85,51,0.50196078431372548)}#v1{width:50.25px;height:20.25px;align-self:center;background:rgba(33,103,177,0.50196078431372548)}#v2{width:13.25px;height:30.5px;align-self:flex-end;background:rgba(255,204,34,0.69019607843137254)}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ],
+    "features": [
+      "fractional direct fixed leaves",
+      "coupled positional content and self alignment",
+      "cross overflow",
+      "alpha over white; no sibling overlap",
+      "original/clone repeated clipping"
+    ]
+  },
+  {
+    "name": "fixed-fold-private-overlap",
+    "recipe": {
+      "initialViewport": [
+        320,
+        240
+      ],
+      "row": true,
+      "reverseMain": false,
+      "wrap": 1,
+      "lineFraction": 0,
+      "mainFraction": 0,
+      "parent": {
+        "width": {
+          "value": 40,
+          "unit": "px",
+          "source": "40",
+          "min": null,
+          "max": null
+        },
+        "height": {
+          "value": 80,
+          "unit": "px",
+          "source": "80",
+          "min": null,
+          "max": null
+        }
+      },
+      "slots": [
+        {
+          "name": "v0",
+          "main": {
+            "value": 21,
+            "unit": "px",
+            "source": "21",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 20,
+            "unit": "px",
+            "source": "20",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 21,
+            "unit": "px",
+            "source": "21",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 30,
+            "unit": "px",
+            "source": "30",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2163103027
+        },
+        {
+          "name": "v1",
+          "main": {
+            "value": 21,
+            "unit": "px",
+            "source": "21",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 20,
+            "unit": "px",
+            "source": "20",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 21,
+            "unit": "px",
+            "source": "21",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 30,
+            "unit": "px",
+            "source": "30",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2149672881
+        },
+        {
+          "name": "v2",
+          "main": {
+            "value": 21,
+            "unit": "px",
+            "source": "21",
+            "min": null,
+            "max": null
+          },
+          "cross": {
+            "value": 20,
+            "unit": "px",
+            "source": "20",
+            "min": null,
+            "max": null
+          },
+          "visibleMain": {
+            "value": 21,
+            "unit": "px",
+            "source": "21",
+            "min": null,
+            "max": null
+          },
+          "visibleCross": {
+            "value": 30,
+            "unit": "px",
+            "source": "30",
+            "min": null,
+            "max": null
+          },
+          "slotAlignment": 0,
+          "alignment": 0,
+          "color": 2969553954
+        }
+      ]
+    },
+    "html": "<div id=\"p\"><div class=\"s\"><div id=\"v0\"></div></div><div class=\"s\"><div id=\"v1\"></div></div><div class=\"s\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:40px;height:80px;flex-direction:row;flex-wrap:wrap;align-content:flex-start}#v0{width:21px;height:30px;background:rgba(238,85,51,0.50196078431372548)}#v1{width:21px;height:30px;background:rgba(33,103,177,0.50196078431372548)}#v2{width:21px;height:30px;background:rgba(255,204,34,0.69019607843137254)}.s{width:21px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        240
+      ],
+      [
+        19,
+        31
+      ],
+      [
+        96,
+        47
+      ],
+      [
+        320,
+        240
+      ]
+    ],
+    "features": [
+      "private distinct slot/visible profile; not direct public admission",
+      "genuine 10px cross-axis alpha overlap",
+      "three fixed source lines"
+    ]
+  }
+]

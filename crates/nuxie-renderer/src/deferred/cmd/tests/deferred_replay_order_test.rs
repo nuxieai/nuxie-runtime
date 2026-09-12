@@ -212,6 +212,92 @@ fn interleaved_ranges_split_per_renderer() {
     assert_eq!(replayer.dropped_draws(), 0);
 }
 #[test]
+fn repeated_image_import_reuses_only_live_resources() {
+    let bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/renderer/image_paint/batdude.png"
+    ));
+    let mut factory = DeferredFactory::new();
+    let first = factory.decode_image(bytes).unwrap();
+    factory.reset_frame();
+    let second = factory.decode_image(bytes).unwrap();
+    assert_eq!(first.image_identity(), second.image_identity());
+    assert!(factory.buffer.lock().unwrap().command_bytes().is_empty());
+    drop(first);
+    factory.reset_frame();
+    assert!(factory.buffer.lock().unwrap().command_bytes().is_empty());
+    drop(second);
+    factory.reset_frame();
+    assert!(!factory.buffer.lock().unwrap().command_bytes().is_empty());
+    factory.reset_frame();
+    let _third = factory.decode_image(bytes).unwrap();
+    assert!(!factory.buffer.lock().unwrap().command_bytes().is_empty());
+}
+
+#[test]
+fn image_reuse_is_scoped_to_its_factory_and_exact_bytes() {
+    let bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/renderer/image_paint/batdude.png"
+    ));
+    let mut first_factory = DeferredFactory::new();
+    let first = first_factory.decode_image(bytes).unwrap();
+    first_factory.reset_frame();
+    let mut second_factory = DeferredFactory::new();
+    let _second = second_factory.decode_image(bytes).unwrap();
+    // Each replay stream must receive its own image creation command.
+    assert!(!second_factory
+        .buffer
+        .lock()
+        .unwrap()
+        .command_bytes()
+        .is_empty());
+    assert!(first_factory
+        .buffer
+        .lock()
+        .unwrap()
+        .command_bytes()
+        .is_empty());
+
+    // A valid PNG may carry trailing bytes; dimensions alone are not an identity.
+    let mut different_bytes = bytes.to_vec();
+    different_bytes.push(0);
+    let different = first_factory.decode_image(&different_bytes).unwrap();
+    assert_eq!(
+        (first.width(), first.height()),
+        (different.width(), different.height())
+    );
+    assert_ne!(first.image_identity(), different.image_identity());
+    assert!(!first_factory
+        .buffer
+        .lock()
+        .unwrap()
+        .command_bytes()
+        .is_empty());
+}
+
+#[test]
+fn image_recording_preserves_dimensions_and_encoded_payload() {
+    use super::super::render_command_buffer::RenderCommandReader;
+    let bytes = include_bytes!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../fixtures/renderer/image_paint/batdude.png"
+    ));
+    let mut factory = DeferredFactory::new();
+    let image = factory.decode_image(bytes).expect("PNG records");
+    assert_eq!((image.width(), image.height()), (442, 412));
+    let buffer = factory.buffer.lock().unwrap();
+    let mut reader = RenderCommandReader::new(buffer.command_bytes(), buffer.blob_bytes());
+    assert_eq!(reader.next_u8(), Some(RenderCmd::DecodeImage as u8));
+    let command = reader.read::<DecodeImagePod>();
+    assert_eq!((command.width, command.height), (442, 412));
+    let start = command.blob_offset as usize;
+    let end = start + command.byte_count as usize;
+    assert_eq!(&buffer.blob_bytes()[start..end], bytes);
+    assert!(reader.next_u8().is_none());
+}
+
+#[test]
 fn decoded_image_view_records_image_view_wrap() {
     use nuxie_ore_metal::context::ContextApi;
     use nuxie_ore_metal::ore_cmd::{

@@ -1,0 +1,13 @@
+# Flex redistribution at clamp boundaries
+
+A source-derived iterative binary32 model now matches2592 main sizes and2592 main world positions from864 native original/clone frames. The unchanged16 files cover equal-basic, equal-clamped, zero-partial and zero-minimum in all four directions. Each file is resized through27 viewport values:1,1024,16384 and the adjacent binary32 values around80,180,200,220,240,280,320,400. Parent main size is50% of viewport; the model consumes the actual native parent size, so this experiment does not prove parent conversion bounds.
+
+The simulator preserves file-order accumulation, grow/shrink selection, initial freezes, remaining-space recalculation, the initial-free-space below-one rule, linked native factors, scaled shrink products, per-item clamping and total-violation freeze selection. Placement independently sums final targets in file order and follows native reverse traversal and first-offset behavior. All source/scene/probe/geometry/check identities are bound in flex-freeze-boundaries-receipt.json.
+
+At parent40 in equal-basic, the first source-model pass computes A=-0.000003814697265625 and B=0 from bases60/40 plus fixed40. Only A has a positive minimum violation, so it freezes; B needs another pass. The native final result is0/0. At the next representable parent above40, B becomes0.000003814697265625 on the second pass. This is a concrete reason a proof that assumes a single pass misses an actual boundary. Equal-clamped and zero-partial also reach two simulated passes; zero-minimum reaches one in this sample set.
+
+Pass counts and intermediate traces are inferred from the source-derived model, not measured by runtime instrumentation. Agreement of final outputs validates those observations but does not uniquely establish every internal trace. The model explicitly uses serialized native factors; it does not claim CSS independently authored shrink factors are available when the runtime links them to grow.
+
+This is geometry-only evidence. It adds no Chrome/pixel qualification, continuous-domain error bound, general pass/resource bound or public flex admission. Existing visual failures remain unchanged. Next work is a sound error envelope across changes in the active set, including rounded violation-sign decisions; repeatedly sampling thresholds cannot replace that proof. The completed source model and retained native boundary corpus provide a regression target for that work.
+
+Reproduce from repository root using the retained run.py in a fresh output directory; it refuses to overwrite existing per-case directories. check-placement.py reads the retained native geometry independently without rerunning the renderer. No runtime source was modified.

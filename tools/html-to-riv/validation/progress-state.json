@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Public padding checkpoint; flex numeric admission next",
+  "focus": "Flex literal/descriptor qualification and redistribution boundaries",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
   "current": "Public padding implemented:152Rust/35Node tests;53 controls pass,482 public and48 private flex outputs remain exact. Native padding and interaction evidence retains ten fractional pixel failures.",
-  "next": "Continue flex numeric admission and wrapping; broaden padding contexts from evidence and work through the remaining backlog.",
+  "next": "Complete mechanical production descriptors and corrected parent/literal errors; extend numerical bounds across clamp redistribution. Continue wrapping and remaining backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Native clamp-boundary redistribution model",
+      "path": "tools/html-to-riv/validation/flex-freeze-boundaries-receipt.json"
+    },
     {
       "label": "Public padding checkpoint and retained limitations",
       "path": "tools/html-to-riv/validation/public-padding-receipt.json"

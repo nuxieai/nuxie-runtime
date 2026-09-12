@@ -10,6 +10,8 @@ Current paint diagnosis: [fixed-box controls](validation/flex-fixed-controls-rev
 
 Current private flex native/visual evidence: [flex-proof-bridge-review.md](validation/flex-proof-bridge-review.md) records 4,392 passing native bound checks, 96/96 Chrome geometry passes and 70/96 pixel passes. The complete visual review includes all failed frames; the reproducible command exits nonzero for those failures. [Solid border candidate evidence](validation/solid-border-candidate-review.md) records the independent ordinary-file experiment and retained fractional-edge failures.
 
+Current content-box candidate: [ordinary-file sizing translation](validation/content-box-review.md) records 64 passing frames for fixed-padding translations and eight for a same-axis percentage candidate. Two unlowered controls fail geometry/pixels, and the fractional-edge control preserves six pixel failures. All 36 distinct viewport pairs were reviewed. The finite adapter proves selected constructions; public box-sizing admission and whole-domain numeric qualification remain pending.
+
 Current gap checkpoint: [public-gap-review.md](validation/public-gap-review.md) binds direct public compilation, a Chrome/native interaction matrix, retained intrinsic-percentage failures, overflow controls and exact regressions.
 
 Current padding checkpoint: [public-padding-review.md](validation/public-padding-review.md) binds public native reproduction, independently rerendered inheritance cases, numeric controls and regression evidence. Known pixel failures remain preserved.

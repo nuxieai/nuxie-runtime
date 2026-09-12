@@ -24,8 +24,8 @@ Recognition of CSS syntax is separate from admission. Unsupported computed conte
 
 1. Revert the coupled PR completely. **Done:** PR #629 and full-tree equality.
 2. Inventory every mutation and policy, preserving historical evidence as historical. **Source audit done:** validation/reverted-mutations.json and the three immutable audit documents. Replacement experiments remain open.
-3. Establish an executable source/dependency identity check and a bytes-only baseline importer/renderer test path. Use baseline-owned build resolution, not a compiler workspace patch that changes runtime dependencies.
-4. Restore compiler-owned parsing/cascade/assets/wire code selectively in an isolated module. Delete policy transport and host mutation routes. Do not cherry-pick the broad feature commit.
+3. Establish an executable source/dependency identity check and a bytes-only baseline importer/renderer test path. **Done:** `validation/check-target-runtime.py`, `validation/build-baseline.py` and the public native receipts use baseline-owned build resolution. Source identity and effective build identity remain separate checks; see `VALIDATION.md`.
+4. Restore compiler-owned parsing/cascade/assets/wire code selectively in an isolated module. **Public interface restoration done:** Rust/CLI/WASM/JavaScript compile ordinary files, with no policy transport or host mutation routes. Current admission and evidence are in `SUPPORT.md` and `VALIDATION.md`; assets and broader authoring features remain backlog work. Historical code is selectively audited rather than broadly cherry-picked.
 5. Work through all 99 backlog items in their original priority order. Test ordinary Rive capabilities and composition candidates; qualify or diagnose from evidence. Preserve original/clone resizing and visual inspection. No new radial renderer work.
 
 Historical native receipts from PR #628 do not certify this target. Chrome references may be reused only after exact source/reset/font/image/viewport identity checks. Regenerate native artifacts with the immutable build.

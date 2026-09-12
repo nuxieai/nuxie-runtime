@@ -19,6 +19,10 @@
       "path": "tools/html-to-riv/validation/solid-border-alternatives-review.md"
     },
     {
+      "label": "Content-box ordinary sizing translation and integration plan",
+      "path": "tools/html-to-riv/validation/content-box-review.md"
+    },
+    {
       "label": "Private flex native bounds and complete Chrome/native visual review",
       "path": "tools/html-to-riv/validation/flex-proof-bridge-review.md"
     },
@@ -406,7 +410,7 @@
     },
     {
       "name": "Content-box sizing",
-      "work": "Audit existing native capabilities and responsive file compositions; no public admission yet."
+      "work": "Eight fixed-padding translations pass 64 native/Chrome frames; no ordinary box-sizing property exists. Public lowering must preserve authored inheritance and adjust native numeric/provenance views. Mixed-unit compositions remain open."
     },
     {
       "name": "Flex and painting",

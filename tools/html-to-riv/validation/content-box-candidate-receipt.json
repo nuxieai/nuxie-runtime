@@ -1,0 +1,227 @@
+{
+  "status": "private-composition-candidate-with-preserved-negative-controls",
+  "scope": "Finite authored arithmetic translated to existing public border-box fields. Not public content-box admission, exhaustive numeric proof, or runtime enhancement.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "frames": 96,
+  "geometryPass": 80,
+  "pixelPass": 74,
+  "clearPass": 192,
+  "cases": [
+    {
+      "name": "point-dimensions-asymmetric",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "unlowered-property-control",
+      "kind": "unlowered-negative-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "clearPass": 16
+    },
+    {
+      "name": "point-minmax-clamps",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "point-min-wins-max",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "auto-main-intrinsic",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "auto-cross-responsive",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "nested-row-reverse-order",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "font-relative-arithmetic",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "auto-with-point-max",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "same-axis-percentage-add",
+      "kind": "percentage-algebra-candidate",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "clearPass": 16
+    },
+    {
+      "name": "mixed-percent-point-unlowered",
+      "kind": "unlowered-negative-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "clearPass": 16
+    },
+    {
+      "name": "point-fractional-paint-control",
+      "kind": "point-lowering",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 2,
+      "clearPass": 16
+    }
+  ],
+  "sourceFiles": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-candidate.py",
+      "sha256": "c7257780e0b4c721286e1c265baf0c0303c5c4e0061f54d85ec66f058e629db1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-candidate-cases.json",
+      "sha256": "aaee0a3ce9f582df5cbd2c58776ec3e7b3b5bd703489f31ef9a250f21380f964"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-visual.py",
+      "sha256": "f42cd6b817efb018430ba4b1ade37242ea64b2adef4e6d87defabca6a5d4e1cf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-receipt.py",
+      "sha256": "ef8217afee747add70ead013769b185e1ffd8e2fc2af12b5d86a9fddf34abc51"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-review.md",
+      "sha256": "cfdc7d42e034b05370d01e0b3f99443b4faf250d94cb2285858611d7f995f083"
+    }
+  ],
+  "sourceAudit": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-candidate-r2/source-audit.json",
+    "sha256": "94654d43db91c70020497aeb746d3644238dca4349ee4dd74083dae03e9133be"
+  },
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-checkpoint-r2/html-to-riv",
+    "sha256": "9ba14a0d3ecd1cf4d17d1c19a0f2cef3e77237d0de464008f41cae2eff093b6d"
+  },
+  "compilerPriorBinding": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-checkpoint-r2/controls.json",
+    "sha256": "71c7d76e7ca4d692d310d7d714c6c82d291ce73f8caef206914e6fe763cf3af4"
+  },
+  "nativeRun": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-candidate-r2/render/receipt.json",
+    "sha256": "4fc8296963839bf72bc3913b92e0f9ab75b382b791b1c406c00ef97098702c6b"
+  },
+  "visualEvidence": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-candidate-r2/visual-evidence.json",
+    "sha256": "c8bd7a84baeab12d279d849011e75e97641027d4fede75e36481fcaed23adf19"
+  },
+  "reproduced": [
+    {
+      "name": "point-dimensions-asymmetric",
+      "rivSha256": "4da4f89cebbbf5c4b3ed2719f5fb562b5749c8f2db0fcd15d052a892895eb1f7",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "unlowered-property-control",
+      "rivSha256": "3466cfa4d0baa2cb3fd2ff857db78b3ce04ec69ab2e2065413f5a88bbc1d72b0",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "point-minmax-clamps",
+      "rivSha256": "1170d702b3982ba2af75fe582086dc98503255b640d8846505612a7ec6a17334",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "point-min-wins-max",
+      "rivSha256": "22eafb324ba333bc72f6dc04a0a1a083a9592881b2c9ac109a1053ee1143b627",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "auto-main-intrinsic",
+      "rivSha256": "311ad073787468cc67327baa5b520b6c9f7f975de4f61c4d9be5bd0b1ec21976",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "auto-cross-responsive",
+      "rivSha256": "8d2af5c00caaea0f64ba4e06cfefa3d570159f8f6247501432b5b0b26b3629be",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "nested-row-reverse-order",
+      "rivSha256": "f25764b28024ceb473c04c36f4eb948eb0fd689807a86585bbca36b668b1034d",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "font-relative-arithmetic",
+      "rivSha256": "24addee5cf6842041ac7d1975040a4100b4b59b0e79cc2a1bc6d8b0cdaaebe00",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "auto-with-point-max",
+      "rivSha256": "2b1f3986843ff70eb16bfb91ac20cabb1602ab9c4606677b55646644781da428",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "same-axis-percentage-add",
+      "rivSha256": "59665a3dbe2fb426b7ff9ef3a6d36c8305db3d662ba03562b564b9649bbb772f",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "mixed-percent-point-unlowered",
+      "rivSha256": "c0876a62c6f8ec7c60e213488ae2b492ad98f0038625d97ba0af2d4e269c00de",
+      "mapSha256": "c822cef4587908e0ab6338260a5a94c5b2e343c6c6e4810cfc68ab4c2674f0ec"
+    },
+    {
+      "name": "point-fractional-paint-control",
+      "rivSha256": "0431e450e41cb0179428ee82371a2d6df1f8ffecbef75fb44d39be35dd51c610",
+      "mapSha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    }
+  ],
+  "directVisualPairs": 36,
+  "exactRepeatedPairTransfers": 60,
+  "initialSetupFailure": "output/content-box-candidate-r1/render/point-dimensions-asymmetric/compile.log: two fixtures initially had the same authored HTML/CSS identity. Unique inert CSS comments disambiguate candidate selection; no comparison frames existed in the failed setup.",
+  "command": [
+    "node",
+    "tools/html-to-riv/validation/check-public-baseline.mjs",
+    "tools/html-to-riv/validation/content-box-candidate-cases.json",
+    "tools/html-to-riv/validation/content-box-candidate.py",
+    "tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+    "tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay",
+    "tools/html-to-riv/output/content-box-candidate-r2/render"
+  ],
+  "commandExitStatus": 1
+}

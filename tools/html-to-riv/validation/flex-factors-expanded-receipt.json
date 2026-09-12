@@ -1,0 +1,915 @@
+{
+  "status": "passed-experimental-expanded-flex-controls",
+  "publicAdmission": false,
+  "scope": "New24scene bounded point-zero/auto-basis/ordered-wrapper experiment; overrides raw driver public labels.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-factors-expanded-r1",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "f57983e01355cad03ee7fc2e5659723400f39825c246e30d363ee39d152b154d",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-factors-expanded-r1/src/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-factors-expanded-r1/augment"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345"
+  },
+  "hashes": {
+    "review.md": "7ab0e4d65dd8b6517aa62540acf7043a77dae55b60cead98069ad4fe4b55f8a8",
+    "src/main.rs": "1d42b7c2dc66377909fc4e5fa00df68b04628a5edb6c6bc7c21a6037ac6ee6db",
+    "src/wire.rs": "36844c680f7bc761fb056f71037b19ec68b16f2f06f85271302e043fd1d3c687",
+    "augment": "7315c0588dd4cf1ff1ca5c70e49bd1008df49c934dea579e69f677d38410a74d",
+    "adapter.py": "f57983e01355cad03ee7fc2e5659723400f39825c246e30d363ee39d152b154d",
+    "build-command.json": "15ccf89e1c7266eca385b6bc2797c43ed24a9c463904e247dbbed22d6920bfb4",
+    "cases.json": "99d2ddf3d92869f252638fe76478155f12aa9f776ac5fcde402e81df91407e39",
+    "collect.py": "9ea24ef59d30204c2000ddf0114bab500d264f0fdf430099a7bec9ce24a61098",
+    "matrix.json": "07acb85581b5e17091cd578e36818f055afa010e5fc990dac3cf1f3d09c42f32",
+    "reproductions.json": "225971de9d5368111fef389eb72422e6d9d6c049971af1dafc54c9208d1a913b",
+    "visual-direct.json": "57a6663d83586f6504fe8d1d4fc3a00ebb6af7ee19b89907ba32cc21c4c09cac",
+    "visual-transfers.json": "013f8e3e5d19f2c2247b59e8c762fea9ee4620efb4a28a4f7137d914ddd4cb84",
+    "participants.json": "b6967189ee56b5fc8619fdab88cc7ffbabdd33c54f7e2f47223da96cabbd3ec4",
+    "render/receipt.json": "52c84f64bf59c9e59e13df7a1536fb75aa86ff5dd679e03518f2e4b8121d6882",
+    "visual-0.png": "9b2300266836fd935cfd7b2cc56629279ad8471e00258757244399c0cb070c7c",
+    "visual-4.png": "8611b7d0a0f2e5ca1d11aedabe24146687818c9f94ef915e58e5a7f3a3de2a26",
+    "visual-8.png": "36dd4b786ee2ceb5312c9503364d5bfceee9f106ce8a4f33fd352992c9d589e0",
+    "visual-12.png": "599ed8a48a2f500b14ba44cca0ca6fe5df36025826a2748e6b9282c82f08454b",
+    "visual-16.png": "ca6a6a33f3f456c79da356504a27f607ce5fc53aa751dde69f96ec3a41484f19",
+    "visual-20.png": "694bea1adc068ec6ff8b2495a806637fd200ab39ac7483a9b6d70fc37622d34b",
+    "visual-24.png": "c68be7692531b6e0a16fc39e89afb698d019a6fa5e0841ba551c27cac1b72a3e",
+    "visual-28.png": "6adbd222f9c545c2728fb6f935eea5c74c5cf3363d7401d602025dafdcd3b44d",
+    "visual-32.png": "00136bacda0014d55961a9dfbac519e839c8c74f0fd29e0b1357cb8dfa07f29b",
+    "visual-36.png": "44864ff4c27c68892aeab9ea6cc129dd00b7d5d8eafcf02a38da2542826b10b0",
+    "visual-40.png": "22cbff1a343a92e3d786b94d62b1ba85b0af4193b0a71ab721b16a6bf099bddf",
+    "visual-44.png": "4296c2b14568867f01fa3793295f4ee993b618132f52c95aa69610f2011172ca",
+    "visual-48.png": "97136fb9b81716a4b76a7a7d6bb6db5d517ae45a80fe23da586ca86d51d98788",
+    "visual-52.png": "8c4c9fb5d1de0ac293a6a003b053bb1730b6c27fdc3a1672e6d0e046202cf925",
+    "visual-56.png": "5dbb2970e67a973f0533a17ef1aa3d954bf85578db2f17c16f02ef91773fc852",
+    "visual-60.png": "ea0cc00fb64bc94000ed31f3120853b9adb87482ef2bd4bb8677e7a7e4d08f4e",
+    "visual-64.png": "04495eb55e03e91a6ed5035e4dd1aed58840ed0d6ac2ce4d22891b9d4ad826da",
+    "visual-68.png": "f1937bc029e82764ba5cfd44b71ab651e13084296f9463abd4879a13b9e11753"
+  },
+  "externalBindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/manifest.json": "37e4c78de5e36684a2f798b66965002f9ee43863b0e222930eb63d5684df5ce9",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/flex-factors-native-receipt.json": "b2b458008caf721661bdea3b491cae2da0d481f896e0a37f45808e0a956e13dd"
+  },
+  "totals": {
+    "scenes": 24,
+    "frames": 192,
+    "geometryPassed": 192,
+    "pixelsPassed": 192,
+    "clearPassed": 384,
+    "exactRivAndParsedMapReproductions": 24
+  },
+  "matrix": [
+    {
+      "name": "flex-expanded-row-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-auto-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-auto-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-wrapper-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-wrapper-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-wrapper-auto",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-reverse-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-reverse-auto-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-reverse-auto-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-auto",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-auto-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-auto-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-wrapper-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-wrapper-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-wrapper-auto",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-reverse-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-reverse-auto-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-reverse-auto-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-zero-point",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-auto",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    }
+  ],
+  "participants": [
+    {
+      "name": "flex-expanded-row-zero-point",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "20",
+          "participant": "20",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "12",
+          "participant": "12",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "30b34146b640cf7e2052211bebf4b941222a2ee75b7b1db619d63f570e6b9f20"
+    },
+    {
+      "name": "flex-expanded-row-auto-basic",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "20",
+          "participant": "20",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "12",
+          "participant": "12",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "57081897e3fd6fef36039731c2fa1d89b4ba2bddb3bf9e215d2933e568d8e2c4"
+    },
+    {
+      "name": "flex-expanded-row-auto-partial",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "20",
+          "participant": "20",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "12",
+          "participant": "12",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "510b382d6f3b03e735c1fb388e3f5137a745d07c3ca014eeab13360d01df96af"
+    },
+    {
+      "name": "flex-expanded-row-wrapper-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "d0bc10647396d94df6e7038131ca02df8dd35befaa3f7b15027420e130d33b05"
+    },
+    {
+      "name": "flex-expanded-row-wrapper-zero-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "50d2f344d1753acca8e41313af0e4cafe4b00094e3f7da8db36d2ae56f6054bc"
+    },
+    {
+      "name": "flex-expanded-row-wrapper-auto",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "095dab04c57b12cb78c1a53faac3b951810d98007c51e699cd3846a539da425c"
+    },
+    {
+      "name": "flex-expanded-row-reverse-zero-point",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "8",
+          "participant": "8",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "16",
+          "participant": "16",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "d12f9289f36bd74cb62096a1e78ffe64cc18892738fdd789189739726c79ad30"
+    },
+    {
+      "name": "flex-expanded-row-reverse-auto-basic",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "8",
+          "participant": "8",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "16",
+          "participant": "16",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "0f4ac9a1f47634029626cf2daff94993f30264da73d759896c4a069c8c1ce74d"
+    },
+    {
+      "name": "flex-expanded-row-reverse-auto-partial",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "8",
+          "participant": "8",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "16",
+          "participant": "16",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "5d0ce60955c9380e8d6c7d334672b17f276d86f9c03cc8d22121a7cfb5c78c4d"
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "5ddbd5b02090b62d5f7a4d92294c24419278ff2d008c602c0b0ddc01e2cc6b7b"
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-zero-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "136d056d861c636a9deac8d7675c9389a941b9c38547f6194b6bfbedf0dfa1bf"
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-auto",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "3942dd55da21a51ae63bacc06cde65742d2ae470479bb24bd4d4a9603aeab09e"
+    },
+    {
+      "name": "flex-expanded-column-zero-point",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "20",
+          "participant": "20",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "12",
+          "participant": "12",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "30b34146b640cf7e2052211bebf4b941222a2ee75b7b1db619d63f570e6b9f20"
+    },
+    {
+      "name": "flex-expanded-column-auto-basic",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "20",
+          "participant": "20",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "12",
+          "participant": "12",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "57081897e3fd6fef36039731c2fa1d89b4ba2bddb3bf9e215d2933e568d8e2c4"
+    },
+    {
+      "name": "flex-expanded-column-auto-partial",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "20",
+          "participant": "20",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "12",
+          "participant": "12",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "510b382d6f3b03e735c1fb388e3f5137a745d07c3ca014eeab13360d01df96af"
+    },
+    {
+      "name": "flex-expanded-column-wrapper-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "d0bc10647396d94df6e7038131ca02df8dd35befaa3f7b15027420e130d33b05"
+    },
+    {
+      "name": "flex-expanded-column-wrapper-zero-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "50d2f344d1753acca8e41313af0e4cafe4b00094e3f7da8db36d2ae56f6054bc"
+    },
+    {
+      "name": "flex-expanded-column-wrapper-auto",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "095dab04c57b12cb78c1a53faac3b951810d98007c51e699cd3846a539da425c"
+    },
+    {
+      "name": "flex-expanded-column-reverse-zero-point",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "8",
+          "participant": "8",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "16",
+          "participant": "16",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "d12f9289f36bd74cb62096a1e78ffe64cc18892738fdd789189739726c79ad30"
+    },
+    {
+      "name": "flex-expanded-column-reverse-auto-basic",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "8",
+          "participant": "8",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "16",
+          "participant": "16",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "0f4ac9a1f47634029626cf2daff94993f30264da73d759896c4a069c8c1ce74d"
+    },
+    {
+      "name": "flex-expanded-column-reverse-auto-partial",
+      "wrappers": false,
+      "facts": [
+        {
+          "authored": "8",
+          "participant": "8",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "16",
+          "participant": "16",
+          "factor": "0.25",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "5d0ce60955c9380e8d6c7d334672b17f276d86f9c03cc8d22121a7cfb5c78c4d"
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "5ddbd5b02090b62d5f7a4d92294c24419278ff2d008c602c0b0ddc01e2cc6b7b"
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-zero-point",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "0",
+          "basis": "60",
+          "units": "1"
+        },
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "0",
+          "basis": "40",
+          "units": "1"
+        }
+      ],
+      "logSha256": "136d056d861c636a9deac8d7675c9389a941b9c38547f6194b6bfbedf0dfa1bf"
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-auto",
+      "wrappers": true,
+      "facts": [
+        {
+          "authored": "24",
+          "participant": "22",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        },
+        {
+          "authored": "10",
+          "participant": "8",
+          "factor": "1",
+          "basis": "0",
+          "units": "3"
+        }
+      ],
+      "logSha256": "3942dd55da21a51ae63bacc06cde65742d2ae470479bb24bd4d4a9603aeab09e"
+    }
+  ],
+  "reproductions": [
+    {
+      "name": "flex-expanded-row-zero-point",
+      "rivSha256": "a7ae482e005aa89acb673a35bb2cee84b09898d07f526993ddfea7a577a9ee74",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-auto-basic",
+      "rivSha256": "4f182fa46544eaca31731e499bc3e6248c15eeac2449d4ed58e910ceb5c3cc6b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-auto-partial",
+      "rivSha256": "846b4e01fdedbd49ce46748482be668bf28e741e48ccf51a66363c8f258e7ee3",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-wrapper-point",
+      "rivSha256": "55b428bf02ba9905603f9117b9d53c4bca9628405dc0a025174d7ad7b4312d79",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-wrapper-zero-point",
+      "rivSha256": "56e1ebdeda7ec0617033119a057b00a45cc51e046595f410f3158db28be91b8b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-wrapper-auto",
+      "rivSha256": "4ce90a25dea87e1f3f4e34498fc640c1e1ded7b98cd9d2721a2b5153a29ca2c5",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-reverse-zero-point",
+      "rivSha256": "6ca669960e19e656672d7fe2f8afc14bfd108046b3e59bb099daf5818a8fe32b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-reverse-auto-basic",
+      "rivSha256": "e39347af6a4e7212fe961728dbf7aecf2a427a7734454d746fbc86274af02b0b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-reverse-auto-partial",
+      "rivSha256": "df98aa3945d82d7850583d5585318346638b18fbded831d3f7e8e3d12211d548",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-point",
+      "rivSha256": "8400a4e955c0241b55bc03f92e7825ff53b711c9fc42916c2c226ef74e614597",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-zero-point",
+      "rivSha256": "1e507e5bb52989a4cd12563ef0ce5ca65d1a128ade15d05308cd5b2cda710166",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-row-reverse-wrapper-auto",
+      "rivSha256": "5e5baadc35f869cf4de690f83f91d857ae7e4b75a84b26a4571fc218d062e568",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-zero-point",
+      "rivSha256": "fa36b781fccb380439c1bbc407b9e7859c728447aba7fadd6becba52630a22af",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-auto-basic",
+      "rivSha256": "d4adb3c007f11ef9d45594d44293aea16a5956ba66062b004c7641d7ec8a23c6",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-auto-partial",
+      "rivSha256": "b14657135257147aed11065c47b929feb6cf16d438620e3c1b42a9b55023ef1b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-wrapper-point",
+      "rivSha256": "d3d1e78ac48b53f64f11d349b63eb823117e636009c4ff0088b563b2c49cf081",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-wrapper-zero-point",
+      "rivSha256": "9d0700fef44b192c4742f58e9a89f1d797bf78782cd5397bacb19bccdfc04e81",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-wrapper-auto",
+      "rivSha256": "8ab30f21f4f8ea28cc7ad5fe81d98fd77797c4cd4ab0b21c50362a4296f0c37b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-reverse-zero-point",
+      "rivSha256": "0e8b766b695aa5a59e217874f307f05b71597b430b04237f89dad762fa34ac66",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-reverse-auto-basic",
+      "rivSha256": "b31e7beb3497b6b660e01b29f9a2e2e3fd69cf245ce779e307e204c9ab592b43",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-reverse-auto-partial",
+      "rivSha256": "fb5c46a55c15f025efc055e40e82e8b9a73c69121ce56ff1a6f89d4e34d1bf3f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-point",
+      "rivSha256": "b58b6e574765a1a622bc12c38c5e7a0fdf8e594221450e300983748c765c8102",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-zero-point",
+      "rivSha256": "afda46a20483660780da76ab06fb402557b454fd5c78662a6a92d225a1600f18",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-expanded-column-reverse-wrapper-auto",
+      "rivSha256": "dc62af5bdd7c84f01f8ab8bdb37f86ba4eb571dce4aeba703433256a6654f21f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    }
+  ],
+  "visual": {
+    "directPairs": 72,
+    "transferredPairs": 120,
+    "independentImageTransfers": 240,
+    "completePairs": 192,
+    "directSheets": [
+      "visual-0.png",
+      "visual-4.png",
+      "visual-8.png",
+      "visual-12.png",
+      "visual-16.png",
+      "visual-20.png",
+      "visual-24.png",
+      "visual-28.png",
+      "visual-32.png",
+      "visual-36.png",
+      "visual-40.png",
+      "visual-44.png",
+      "visual-48.png",
+      "visual-52.png",
+      "visual-56.png",
+      "visual-60.png",
+      "visual-64.png",
+      "visual-68.png"
+    ],
+    "observation": "No visible divergence in all72 directly inspected pairs.",
+    "rule": "Independent exact decoded fullRGBA equality for each Chrome/native repeated frame."
+  },
+  "preservedPriorFailures": "Eight thin fractional alpha local pixel failures remain in hash-bound flex-factors-native receipt; no reinterpretation or removal.",
+  "limitations": [
+    "Auto basis only tested with fixed nested content, preferred main auto and definite parent.",
+    "No public integration qualification, baseline/helper interaction or arbitrary intrinsic sizing claim."
+  ]
+}

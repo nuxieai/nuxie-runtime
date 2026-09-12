@@ -6,6 +6,9 @@ use std::collections::BTreeSet;
 mod value_grammar;
 #[path = "wrapping_style.rs"]
 mod wrapping_style;
+#[allow(dead_code)] // Fixed line-stretch certificate; public integration and visual qualification follow.
+#[path = "wrapping_stretch.rs"]
+mod wrapping_stretch;
 #[path = "public_wrapping.rs"]
 mod public_wrapping;
 #[path = "baseline.rs"]

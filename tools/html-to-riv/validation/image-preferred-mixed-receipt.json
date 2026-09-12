@@ -1,0 +1,122 @@
+{
+  "scope": "Private mixed preferred-bound and both-axis source compositions; no public admission; complete direct visual review;8 tail pixel failures retained",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "runtimeOrCompilerModified": false,
+  "browserGeometryConsumed": false,
+  "requests": 16,
+  "frames": 128,
+  "geometryPass": 128,
+  "pixelPass": 120,
+  "presencePass": 128,
+  "pixelFailures": [
+    {
+      "name": "image-preferred-mixed-width-preferred-percent-auto-point-max-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-preferred-percent-auto-point-max-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-preferred-percent-auto-percent-min-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-preferred-percent-auto-percent-min-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/candidate-generator.py",
+      "sha256": "88f280d3bb0e0d6d54831f74f99c41f356a4a7e2417dec12e2c1324e59611906"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/all-source-cases.json",
+      "sha256": "67ef09b39ea495e8aa1973583a40ac2e33e0dc6ec55a8e11da7aa03d02398ec3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/ordinary-codec.py",
+      "sha256": "70019687001106baca7b0f82c2af76193bcc5c95b210ff4f560a3184b9181a15"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/authoring-bindings.json",
+      "sha256": "fe178b5f4c2259893bdc0da6fe71237c29dcf1358cb535688d5547dd907021c0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/build-receipt.json",
+      "sha256": "b2f713c6a092f72535a4a5e5645a6a55191e6c87b131d31ce93175acd96057c5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/compile-receipt.json",
+      "sha256": "8d587d1db787b964d531a1da2ff97a6c56f45b8fe37581fea7354fbff8de31f7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/native-receipt.json",
+      "sha256": "f2c69acdc468e401e8175c60b4745e8ac8969e6d7795371b08d73fe1c76ed016"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/combined-receipt.json",
+      "sha256": "b0ae6b4dfae1f9dea3eecbe401c300205835deae71402eb4f51a6669b11d9a7c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/visual-r1/coverage.json",
+      "sha256": "3decebe7b523fb144faac95a8569853b80b9433a3d486e9287f3be69db9e4e91"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/visual-r1/inspection-notes.json",
+      "sha256": "c16e46aa7d7a134805c0a73eb16fd1f5394ed364dfb8ae88f4c5ee3326770924"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-mixed-candidate-r1/visual-r1/review-receipt.json",
+      "sha256": "f622f7cb34009eac41dd00d83d8900d2a6500bb4ffb1c35f731bc6c266511cb7"
+    }
+  ],
+  "visualReview": {
+    "completed": true,
+    "inspectedSheets": 16,
+    "representativePairs": 48,
+    "exactWithinCaseTransfers": 80,
+    "totalFrames": 128
+  }
+}

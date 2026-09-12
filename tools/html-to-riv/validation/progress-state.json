@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
   "focus": "Preferred-axis image constraints",
-  "status": "Public preferred-axis checkpoint verified; mixed/both-axis experiment captured",
+  "status": "Preferred-axis public checkpoint committed; mixed/both-axis candidates visually reviewed",
   "current": "Homogeneous point bounds propagate ratio limits; same-parent percentage bounds clamp source coefficients.53requests/106interface observations;264geometry/presence and222pixel passes.42fractional tail failures retained.223older image files/maps and794historical outputs exact.",
-  "next": "Review the new16-file mixed/both-axis private gallery (128geometry/presence,120pixel passes; eight tail failures), then carry viable compositions through provenance, numeric checks and public APIs. Keep diagnostics until integrated.",
+  "next": "Integrate the reviewed16-file mixed/both-axis candidates with provenance and numeric checks, then public APIs and exact evidence transfer.128geometry/presence and120pixel passes retain eight tail failures. Reverse mixed ordering remains unresolved.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Next mixed and both-axis candidates, reviewed private evidence",
+      "path": "tools/html-to-riv/validation/image-preferred-mixed-investigation.md"
+    },
     {
       "label": "Preferred-axis public bounds and retained failures",
       "path": "tools/html-to-riv/validation/public-image-preferred-constraints-review.md"

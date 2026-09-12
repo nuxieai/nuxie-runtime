@@ -13,6 +13,8 @@ mod numeric;
 #[allow(dead_code)] // Numeric proof carrier; typed field integration follows.
 #[path = "scalar_provenance.rs"]
 mod scalar_provenance;
+#[path = "computed_provenance.rs"]
+mod computed_provenance;
 #[path = "padding.rs"]
 mod padding;
 #[allow(dead_code)]
@@ -148,9 +150,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { numeric: computed_provenance::NumericStyle, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { numeric: computed_provenance::NumericStyle::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -325,8 +327,7 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
 /// value. Original selected tokens may be unavailable, never inferred from it.
 struct ResolvedDeclaration {
     native: css::Declaration,
-    #[allow(dead_code)] // consumed by the next typed-provenance integration step
-    original: Option<String>,
+    original: Option<std::sync::Arc<String>>,
 }
 impl std::ops::Deref for ResolvedDeclaration {
     type Target = css::Declaration;
@@ -347,7 +348,7 @@ fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style
             // that loses the cascade. Keep the compiler's strict diagnostics.
             validate(&d, candidate, padding_candidate, parent.flex, parent.padding)?;
             selected.original
-        } else { Some(d.value.clone()) };
+        } else { Some(std::sync::Arc::new(d.value.clone())) };
         if d.name != "order" { d.value = css::ordinary_value(&d.value)?; }
         resolved.push(ResolvedDeclaration {native:d, original});
     }
@@ -355,11 +356,12 @@ fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style
 }
 fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool, padding_candidate: bool) -> Result<Style, Diagnostic> {
     let (declarations, variable_values) = resolved_declarations(css::cascade(rules, element)?, parent, candidate, padding_candidate)?;
-    let mut style = Style { variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
+    let mut style = Style { numeric: computed_provenance::NumericStyle {font:parent.numeric.font.clone(),..computed_provenance::NumericStyle::default()}, variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
     // Font-size-relative units use the parent for font-size itself, but the final
     // computed element font size for other lengths, regardless of source order.
     for d in declarations.iter().filter(|d| d.name == "font-size") {
         style.font_size = computed_font_size(&d.value, parent.font_size, &d.source)?;
+        style.numeric.font = computed_provenance::font(d,style.font_size,&parent.numeric.font);
     }
     // Resolve currentColor against the final computed color, irrespective of
     // declaration order. A background currentColor stays a computed keyword
@@ -381,12 +383,12 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
             "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => style.flex.apply(&d.name, &d.value, parent.flex, style.font_size, &d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
-            "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
-            "height" => style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?,
-            "min-width" => style.min_width = computed_bound(&d.value, parent.min_width, style.font_size, true, &d.source)?,
-            "min-height" => style.min_height = computed_bound(&d.value, parent.min_height, style.font_size, true, &d.source)?,
-            "max-width" => style.max_width = computed_bound(&d.value, parent.max_width, style.font_size, false, &d.source)?,
-            "max-height" => style.max_height = computed_bound(&d.value, parent.max_height, style.font_size, false, &d.source)?,
+            "width" => { style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?; style.numeric.width = computed_provenance::dimension(d,style.width,&parent.numeric.width,&style.numeric.font); },
+            "height" => { style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?; style.numeric.height = computed_provenance::dimension(d,style.height,&parent.numeric.height,&style.numeric.font); },
+            "min-width" => { style.min_width = computed_bound(&d.value, parent.min_width, style.font_size, true, &d.source)?; style.numeric.min_width = computed_provenance::dimension(d,style.min_width,&parent.numeric.min_width,&style.numeric.font); },
+            "min-height" => { style.min_height = computed_bound(&d.value, parent.min_height, style.font_size, true, &d.source)?; style.numeric.min_height = computed_provenance::dimension(d,style.min_height,&parent.numeric.min_height,&style.numeric.font); },
+            "max-width" => { style.max_width = computed_bound(&d.value, parent.max_width, style.font_size, false, &d.source)?; style.numeric.max_width = computed_provenance::dimension(d,style.max_width,&parent.numeric.max_width,&style.numeric.font); },
+            "max-height" => { style.max_height = computed_bound(&d.value, parent.max_height, style.font_size, false, &d.source)?; style.numeric.max_height = computed_provenance::dimension(d,style.max_height,&parent.numeric.max_height,&style.numeric.font); },
             "background" => apply_background_shorthand(&mut style, parent, &d.value, &d.source)?,
             "background-color" => {
                 style.background = match d.value.trim().to_ascii_lowercase().as_str() {
@@ -457,7 +459,7 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     records.push(host_paint);
     let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), descriptor_capture: capture, descriptors: Vec::new() };
     // Match the fixed host body in reset.css for inherited computed values.
-    let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
+    let host_style = Style { numeric: computed_provenance::NumericStyle::host(), width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
     output.children(body, 0, &host_style, &rules, "", 0, [true; 2], numeric::Bounds::VIEWPORT)?;
     // File object order serves native drawing; public identities stay in DOM

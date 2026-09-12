@@ -3,6 +3,7 @@
 use crate::{Diagnostic, css::Declaration};
 use cssparser::{Parser, ParserInput, ToCss, Token};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 pub(crate) type Variables = BTreeMap<String, Option<ResolvedValue>>;
 /// Selected token streams, not exact numeric arithmetic. Missing provenance is
@@ -10,11 +11,11 @@ pub(crate) type Variables = BTreeMap<String, Option<ResolvedValue>>;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct ResolvedValue {
     pub native: String,
-    pub original: Option<String>,
+    pub original: Option<Arc<String>>,
 }
 impl ResolvedValue {
-    fn empty() -> Self {Self {native:String::new(),original:Some(String::new())}}
-    fn token(native:String,original:String)->Self {Self{native,original:Some(original)}}
+    fn empty() -> Self {Self {native:String::new(),original:Some(Arc::new(String::new()))}}
+    fn token(native:String,original:String)->Self {Self{native,original:Some(Arc::new(original))}}
 }
 const MAX_DEPTH: usize = 64;
 const MAX_ENTRIES: usize = 256;
@@ -191,7 +192,7 @@ fn expand(
                 expand(body, lookup, source, depth + 1)?.map(|body| ResolvedValue {
                     native: format!("{}{}{close}",open.native,body.native),
                     original: open.original.as_ref().zip(body.original.as_ref()).and_then(|(open,body)| {
-                        (open.len()+body.len()+close.len_utf8() <= MAX_VALUE).then(||format!("{open}{body}{close}"))
+                        (open.len()+body.len()+close.len_utf8() <= MAX_VALUE).then(||Arc::new(format!("{open}{body}{close}")))
                     }),
                 })
             }
@@ -211,7 +212,8 @@ fn expand(
         if let Some(piece) = piece {
             append(&mut output.native, &piece.native, source)?;
             output.original = match (output.original.take(), piece.original) {
-                (Some(mut output), Some(piece)) => append(&mut output, &piece, source).ok().map(|_| output),
+                (Some(output), Some(piece)) if output.is_empty() => (piece.len() <= MAX_VALUE).then_some(piece),
+                (Some(mut output), Some(piece)) => append(Arc::make_mut(&mut output), &piece, source).ok().map(|_| output),
                 _ => None,
             };
         } else {
@@ -604,6 +606,17 @@ mod provenance_tests {
         assert_eq!(substitute("var(--alias)",&values,"test").unwrap(),Some(value.native));
     }
     #[test]
+    fn inherited_original_tokens_share_immutable_storage() {
+        let parent=vars("--x:100.71428680419922px;--alias:var(--x)",&Variables::new());
+        let child=vars("",&parent);
+        let original=parent["--x"].as_ref().unwrap().original.as_ref().unwrap();
+        assert!(Arc::ptr_eq(original,parent["--alias"].as_ref().unwrap().original.as_ref().unwrap()));
+        assert!(Arc::ptr_eq(original,child["--x"].as_ref().unwrap().original.as_ref().unwrap()));
+        let extended=resolved("var(--x) 2px",&child);
+        assert!(extended.original.unwrap().contains("2px"));
+        assert_eq!(original.as_str(),"100.71428680419922px");
+    }
+    #[test]
     fn inherited_alias_and_selected_fallback_keep_their_own_tokens() {
         let parent=vars("--x:1.234567890123em;--alias:var(--x);--a:var(--b);--b:var(--a);--recover:var(--a,3.4567890123%)",&Variables::new());
         let child=vars("--x:9rem;--alias:inherit;--recover:unset",&parent);
@@ -612,7 +625,7 @@ mod provenance_tests {
         let fallback=resolved("var(--missing,var(--recover,8.7654321px))",&child).original.unwrap();
         assert!(fallback.contains("3.4567890123%"));assert!(!fallback.contains("8.7654321px"));
         assert!(substitute_with_provenance("var(--a)",&child,"test").unwrap().is_none());
-        assert_eq!(resolved("var(--missing,)",&child).original,Some(String::new()));
+        assert_eq!(resolved("var(--missing,)",&child).original,Some(Arc::new(String::new())));
     }
     #[test]
     fn exponents_escaped_units_groups_and_boundaries_are_not_reserialized() {

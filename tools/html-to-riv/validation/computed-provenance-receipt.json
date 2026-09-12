@@ -1,0 +1,42 @@
+{
+  "sourceHashes": {
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "d30d1e5ff14e89fce90531365c41ccf66236a90d8a4a11188d9f01beb4d3cd1f",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "computed_provenance.rs": "58289a76251ac5a40d0e8d537be1cdd235648be26da2b89ebe02968e71b3755e",
+    "compiler.rs": "4b71a63afc11a7ef464477feb918ddd4d4add6b70d81b9e6f3beca286ed4cd5c",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "74901f508eddfd778f7660b5482ae32764db547a357964a371881b2b201224f6",
+    "flex_descriptor.rs": "9ba775b03f92b25a51edba80201904c15cefae0ba396d02bde6843918e7f5ea3",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "70c12ac308d4b833d20e39f7e8cc68cb8e29931be68caba58f08b8d63774cb06",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  },
+  "artifactHashes": {
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/receipt.json": "1b07781d8e808f58a77ca82061fda1db3d9f8e22e2765a93ff953e4ed0ff4071",
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/public-controls.json": "1140df9a0927c0971b7a3587b7cbd8520e149b42a3f0ba541d2d522e4ed352a6",
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/tests.log": "e199f7f77c46dc3b8b9e52c8327ded386cc00bbb7eac4b69069e12ff98ce4255",
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/wasm-build.log": "a3b5505a21de0f13495b2b5358ae548938e1f16d46bb5e1fefbae0aad16fa998",
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/transport.log": "f8f459ba5f69978e7848b10732322657a2f5d658cec9223cc84bd7ef6ca0e0a6",
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/public-regression.log": "33a6fa22dba8a4875f0351d09b0ae3c9b398e25de6961d6c29e22272d87124f2",
+    "tools/html-to-riv/output/computed-provenance-checkpoint-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/provenance-sharing-r1/request.json": "578616161cbbc82611e76ec12f691d6a9c710f4f45bdfe14f86cc0e988247016",
+    "tools/html-to-riv/output/provenance-sharing-r1/before.log": "16bd22d985ca3237efc613961f5c942c9db8656ae69074956b1208286c93a04f",
+    "tools/html-to-riv/output/provenance-sharing-r1/after.log": "8577ea65465872bf64c2b26503add7362af02ca79b21ed1706cc97182eaba3aa",
+    "tools/html-to-riv/output/provenance-sharing-r1/before.riv": "e10fcfb86bcb1de08abab20178c2004a5f19db5284f04d1aa9490d753a7a55ca",
+    "tools/html-to-riv/output/provenance-sharing-r1/after.riv": "e10fcfb86bcb1de08abab20178c2004a5f19db5284f04d1aa9490d753a7a55ca"
+  },
+  "rustTests": 177,
+  "nodeTests": 35,
+  "publicRegression": 482,
+  "scope": "Computed metadata and token sharing only; no expanded public admission or new visual qualification."
+}

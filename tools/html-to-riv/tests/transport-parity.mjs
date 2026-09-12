@@ -69,6 +69,37 @@ test('raw ABI version2 rejects old language and unknown assets without stale out
  assert.equal(w.html_compiler_request_alloc(0),0);assert.equal(w.html_compiler_request_alloc(0xffffffff),0);w.html_compiler_reset();assert.equal(w.html_compiler_metadata_len(),0);assert.equal(w.html_compiler_riv_len(),0);
 });
 
+test('raw ABI requires named request and input objects and recovers after positional arrays',async()=>{
+ const {instance}=await WebAssembly.instantiate(wasm,{}),w=instance.exports;
+ const raw=request=>{
+  const bytes=new TextEncoder().encode(JSON.stringify(request)),ptr=w.html_compiler_request_alloc(bytes.length)>>>0;
+  assert(ptr);new Uint8Array(w.memory.buffer,ptr,bytes.length).set(bytes);
+  const status=w.html_compiler_compile();
+  const metadata=JSON.parse(new TextDecoder().decode(new Uint8Array(w.memory.buffer,w.html_compiler_metadata_ptr()>>>0,w.html_compiler_metadata_len()>>>0)));
+  const riv=new Uint8Array(w.memory.buffer,w.html_compiler_riv_ptr()>>>0,w.html_compiler_riv_len()>>>0).slice();
+  return {status,metadata,riv};
+ };
+ const good={languageVersion:LANGUAGE_VERSION,input},expected=raw(good);assert.equal(expected.status,0);
+ for(const request of [{languageVersion:LANGUAGE_VERSION,input:Object.values(input)},[LANGUAGE_VERSION,input],[LANGUAGE_VERSION,Object.values(input)]]){
+  const rejected=raw(request);assert.equal(rejected.status,1,'positional arrays must not be requests');
+  assert.equal(rejected.metadata.diagnostics[0].code,'invalid-request');assert.equal(rejected.riv.length,0);
+  assert.deepEqual(raw(request),rejected,'deterministic rejection');assert.deepEqual(raw(good),expected,'ordinary object recovery');
+ }
+});
+
+test('JS request normalization keeps structured failures when thrown values cannot stringify',async()=>{
+ const compiler=await createCompiler(wasm),first=compiler.compile(document);assert.equal(first.ok,true);
+ const bytes=first.riv.slice(),map=structuredClone(first.sourceMap);
+ const badString={toString(){throw new Error('secondary conversion failed');}};
+ for(const [value,message] of [[new Error('getter failed'),'Error: getter failed'],['getter failed','getter failed'],[Object.create(null),'Cannot read or serialize design document'],[badString,'Cannot read or serialize design document']]){
+  const request=Object.defineProperty({...document},'html',{enumerable:true,get(){throw value;}});
+  const result=compiler.compile(request);assert.equal(result.ok,false);
+  assert.deepEqual(result.diagnostics,[{code:'invalid-request',source:'request',message}]);
+  assert.deepEqual(compiler.compile(request),result,'deterministic normalization failure');
+  assert.deepEqual(compiler.compile(document).riv,bytes);assert.deepEqual(first.riv,bytes);assert.deepEqual(first.sourceMap,map);
+ }
+});
+
 async function assertCorpusParity(fixtures) {
  const compiler=await createCompiler(wasm);
  assert.equal(new Set(fixtures.map(f=>f.name)).size,fixtures.length,'unique fixture identities');

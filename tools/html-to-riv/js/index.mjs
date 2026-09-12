@@ -3,6 +3,10 @@ const decoder = new TextDecoder('utf-8', {fatal:true});
 const MAX_REQUEST_BYTES = 192 * 1024 * 1024;
 export const LANGUAGE_VERSION = 'nuxie-html-immutable-v1';
 const failure = (code, message, source='request') => ({ok:false, diagnostics:[{code,source,message}]});
+const requestError = error => {
+  try { return String(error); }
+  catch { return 'Cannot read or serialize design document'; }
+};
 
 /** Instantiate an isolated compiler. Output contains ordinary Rive bytes only. */
 export async function createCompiler(bytesOrModule) {
@@ -28,7 +32,7 @@ export async function createCompiler(bytesOrModule) {
         if (Object.keys(input).some(k => !['html','css','width','height'].includes(k))) return failure('invalid-request','Unknown input field; assets and runtime policies are not supported');
         if (typeof input.html !== 'string' || typeof input.css !== 'string' || typeof input.width !== 'number' || typeof input.height !== 'number' || !Number.isFinite(input.width) || !Number.isFinite(input.height)) return failure('invalid-request','Expected html/css strings and finite width/height numbers');
         request = encoder.encode(JSON.stringify({languageVersion,input}));
-      } catch (error) { return failure('invalid-request',String(error)); }
+      } catch (error) { return failure('invalid-request',requestError(error)); }
       if (request.byteLength > MAX_REQUEST_BYTES) return failure('input-limit','Serialized request exceeds 192 MiB');
       try {
         const ptr = wasm.html_compiler_request_alloc(request.length) >>> 0;

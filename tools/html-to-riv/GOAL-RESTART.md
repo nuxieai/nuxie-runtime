@@ -32,11 +32,11 @@ The public Rust/CLI/WASM/JavaScript compiler exists. Its current profile covers 
 | `fcedc9e8ff` — line-height investigation | Eight private cases, 64 original/clone frames: 16 metric passes, eight pixel passes, four passing both. Responsive/inherited-factor wrappers provide useful geometry evidence; baseline and paint failures are preserved. A08 is investigating; no public text admission. [Review](validation/unitless-line-height-review.md). |
 | `ba538dcd1d` — malformed-source and recovery campaign | 1,000 cases, 929 distinct requests: 174 accepted, 826 structured rejections. CLI/WASM parity, determinism, ownership, recovery and deliberate worker replacement pass. This is finite source mutation, not complete fuzzing or transport/resource qualification. Q05 is partial. [Review](validation/public-malformed-mutations-review.md). |
 
-The latest implementation checkpoint at review time is `ba538dcd1d`. Existing artifacts and failed controls must be preserved. Documentation commits may follow it without changing implementation.
+The public content-owner/source-mutation checkpoints above are preserved. The source-backed line-height checkpoint is committed as `a27c4993f0`; the subsequent public request repair is documented below. Existing artifacts and failed controls must be preserved.
 
-Frozen public CLI SHA-256: `746caad8f78f251acbf188f75d10bdc9340c6cd7d48a994a844e6b0898b30ad5`.
+Current frozen public CLI SHA-256: `ca8f561f470dffa80a287aa5cb4d0d6866e7e77475d1cce8631136386fa6061a` (`output/public-transport-malformed-build-r1/frozen`).
 
-Frozen public WASM SHA-256: `c475d543a5f9a4ffcf5f629ef05db5b970b102e2b7682be44419f4b200ed977e`.
+Current frozen public WASM SHA-256: `1383b476e655423130f3450a4f3803593ca4f80bef0fe97c9dd2ac12637681f9`.
 
 Browser reference: Chrome `153.0.8010.12`. Native renderer: Rust Metal, RasterOrdering. The historical CLI mode token `clockwise-atomic` does not change that recorded effective mode. Firefox is not a qualification target.
 
@@ -46,14 +46,14 @@ The private line-height arithmetic checkpoint is complete. [Quantized line-heigh
 
 The [signed reduced/zero line-height experiment](validation/reduced-line-height-review.md), [source arithmetic audit](validation/line-height-quantization-source-review.md), [independent source/evidence review](validation/quantized-line-height-source-review.md), frozen builds, failures, exact browser-reference joins and galleries are preserved. The new candidate reads source/font data only; the runtime and renderer are unchanged. Do not repeat this completed geometry investigation without a new change or concrete hypothesis.
 
-Independent compiler quality work has found and preserved two request-boundary defects in a253-case malformed-transport campaign: serde accepts positional arrays despite the named-field object contract, and a JavaScript getter can throw a value whose stringification also throws. Compiler-only repairs and regression validation are in progress. Inspect current source, tests and `output/public-transport-malformed-*` before proceeding; do not discard that work or infer qualification from the initial red receipt.
+Independent compiler quality work repaired two request-boundary defects: positional arrays bypassing the named-field object contract, and JavaScript getters throwing values whose stringification also throws. All253 malformed-transport cases now pass, with old failures and diagnostic changes preserved. Full271 Rust/48 Node tests, strict TypeScript and native/WASM builds pass;794 prior valid outputs/maps remain exact. See [the request checkpoint review](validation/public-transport-malformed-review.md). Q05 remains partial; this is finite transport coverage, not complete fuzzing or resource qualification.
 
 ## First work after restart
 
 1. Read this brief, TARGET.md, SUPPORT.md and current git state. Recheck the immutable source guard. Preserve unfinished work; do not restore the already completed public interface or repeat the content-owner/line-height checkpoints.
-2. Finish the current request-boundary repair review and frozen public validation. Preserve old failures, test deterministic rejection/recovery, and establish exact file/source-map preservation for valid inputs. Native evidence can transfer where source/file/reset/asset/tool identities justify it.
+2. Read the completed request-boundary review and current commit state. Preserve old failures, frozen public binaries and the794 exact valid-output references. Rebuild or repeat validation only when new changes or an unresolved concern require it.
 3. Advance independent backlog implementation and public asset/text prerequisites. Keep repaired line-box geometry separate from unresolved glyph paint. A08 still needs public font provision, broader metrics/text contexts, numeric/resource admission and paint qualification. No new discriminating paint hypothesis means that item stays unresolved while other work proceeds.
-4. Keep Q05/Q06 broader fuzzing, request/resource limits and lifecycle work moving; assets, painting, positioning, responsive expressions and all other scoped items remain in the99-item goal.
+4. Keep Q05/Q06 broader fuzzing, request/resource limits and lifecycle work moving; assets, painting, positioning, responsive expressions and all other scoped items remain in the99-item goal. A concrete independent next area is authored image assets: the immutable `assets/image_asset.rs` already decodes embedded bytes and `shapes/image.rs` implements layout participation. Verify codec/paint fidelity and intrinsic-versus-declared sizing before admission; `Image::measure_layout` chooses exact or intrinsic dimensions per axis, so CSS aspect-ratio behavior must be demonstrated rather than assumed. This concerns authored images, not rasterizing HTML/CSS as a fallback.
 5. Reconcile evidence/progress docs, run checks justified by actual changes, and commit completed compiler-only checkpoints. Continue until the actual completion condition is met; upstream the finished reviewed replacement under existing authorization.
 
 Resume the existing goal using this file as the current checkpoint. The public-interface restoration instruction in the saved goal is already satisfied.

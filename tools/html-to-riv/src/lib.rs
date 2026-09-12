@@ -4,6 +4,7 @@ mod color;
 mod css;
 mod css_whitespace;
 mod numeric_tokens;
+mod request;
 mod compiler;
 mod variables;
 #[allow(dead_code)]
@@ -16,13 +17,22 @@ pub const BROWSER_RESET_CSS: &str = include_str!("reset.css");
 
 pub const LANGUAGE_VERSION: &str = "nuxie-html-immutable-v1";
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Serialize)]
 pub struct CompileInput {
     pub html: String,
     pub css: String,
     pub width: f32,
     pub height: f32,
+}
+
+impl<'de> Deserialize<'de> for CompileInput {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Fields { html: String, css: String, width: f32, height: f32 }
+        let Fields { html, css, width, height } = request::object(deserializer, "struct CompileInput")?;
+        Ok(Self { html, css, width, height })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

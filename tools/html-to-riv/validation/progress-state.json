@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
-  "focus": "Source-backed line-height geometry; text paint remains unresolved",
-  "status": "344 candidate metric frames pass; public typography remains unadmitted",
-  "current": "Ordinary signed-padding owners and pinned Chromium source arithmetic repair the retained16px baseline discrepancy. All344 candidate metric frames pass;16 zero-height frames compare boxes only. Full360-frame evidence retains two old failing encodings:290 original pixel gates pass, but only16 supplemental ink-region gates pass. Every frame has direct visual review or an exact source/metric/full-image transfer. The independent253-case malformed-transport campaign has preserved request-boundary defects for compiler-only repair.",
-  "next": "Repair and validate malformed request handling, then advance independent backlog work and public asset/text prerequisites. The completed line-height arithmetic experiment does not need repeating without new changes or a concrete hypothesis.",
+  "focus": "Request contracts repaired; line-height geometry validated",
+  "status": "Compiler-only fixes pass253 transport cases; runtime remains unchanged",
+  "current": "Named-field CLI/WASM requests now reject positional arrays, and JavaScript normalization preserves structured failures for unprintable thrown values. All253 transport cases,271 Rust/48 Node tests and strict TypeScript pass;794 prior valid Rive files/maps remain exact. The private line-height candidate passes344 metric frames plus16 source-precision controls, while local glyph-paint failures remain explicit in the complete Chrome/native gallery. Public typography remains unadmitted.",
+  "next": "Advance independent compiler quality/resource and asset/text groundwork. Keep line-height geometry separate from unresolved paint, preserve diagnostics and complete the remaining99-item scope without repeating unchanged evidence.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Named request contracts, malformed transport fixes and exact output regression",
+      "path": "tools/html-to-riv/validation/public-transport-malformed-review.md"
+    },
     {
       "label": "Line-height source arithmetic, ordinary composition and remaining paint failures",
       "path": "tools/html-to-riv/validation/quantized-line-height-review.md"
@@ -509,12 +513,12 @@
   ],
   "activeWork": [
     {
-      "name": "Compiler request boundaries",
-      "work": "Malformed JSON, positional-array admission and JavaScript exception recovery; frozen old failures preserved."
+      "name": "Completed compiler request checkpoint",
+      "work": "253-case transport campaign and794 exact valid outputs; broader fuzzing/resource coverage remains open."
     },
     {
-      "name": "Line-height evidence",
-      "work": "Source arithmetic and visual comparison complete; a targeted number-precision control is being recorded. Public typography remains unadmitted."
+      "name": "Typography prerequisites",
+      "work": "Source-derived line-height geometry validated, including precision/reduced/zero controls; glyph paint and public font/text admission remain unresolved."
     }
   ],
   "publication": {

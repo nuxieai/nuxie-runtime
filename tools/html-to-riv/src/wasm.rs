@@ -15,11 +15,19 @@ struct Bridge {
 
 thread_local! { static BRIDGE: RefCell<Bridge> = RefCell::new(Bridge::default()); }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Request {
     language_version: String,
     input: CompileInput,
+}
+
+impl<'de> Deserialize<'de> for Request {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct Fields { language_version: String, input: CompileInput }
+        let Fields { language_version, input } = crate::request::object(deserializer, "struct Request")?;
+        Ok(Self { language_version, input })
+    }
 }
 
 // Serialize the typed fields directly: an intermediate serde_json::Value

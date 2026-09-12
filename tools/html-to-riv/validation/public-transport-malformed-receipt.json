@@ -1,0 +1,113 @@
+{
+  "status": "compiler-request-boundaries-repaired-and-validated",
+  "scope": "Named request object deserialization and stable JS input-normalization errors; immutable runtime unchanged",
+  "changes": [
+    "Reject positional input and ABI-envelope arrays while retaining typed field parsing",
+    "Guard error-string conversion for unprintable thrown JS values"
+  ],
+  "validation": {
+    "rustTests": 271,
+    "nodeTests": 48,
+    "typescript": true,
+    "nativeBuild": true,
+    "wasmBuild": true,
+    "runtimeGuard": true,
+    "transportCases": 253,
+    "boundaryObservations": 526,
+    "transportContractMismatches": 0,
+    "unexpectedTerminationFailures": 0,
+    "priorExactOutputPairs": 794,
+    "diagnosticAndBehaviorResponseDeltas": 7,
+    "otherBoundaryResponsesExact": 519,
+    "caseArtifactHashesVerified": 2527,
+    "sourceAndBinaryBindingsVerified": 134
+  },
+  "compilerSha256": "ca8f561f470dffa80a287aa5cb4d0d6866e7e77475d1cce8631136386fa6061a",
+  "wasmSha256": "1383b476e655423130f3450a4f3803593ca4f80bef0fe97c9dd2ac12637681f9",
+  "evidence": {
+    "redCampaign": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-r1/receipt.json",
+      "sha256": "9d7c4fd81f9b1cc7dd4bf220cc3973d2a5065d8753cce35ae0e5db55137182ed"
+    },
+    "greenCampaign": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-r2/receipt.json",
+      "sha256": "986db9a24125861eb8b2cfcd0d3eb43e87fe6b1fbe45109442c37c7d50e2e4c4"
+    },
+    "fullBuild": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-build-r1/summary.json",
+      "sha256": "169cc19768d909e7969540587fd73a5de6d67aa6ee0ed7983cc885023567837c"
+    },
+    "sourceBindings": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-build-r1/frozen/source-bindings.json",
+      "sha256": "1a45b65ec2c79e98f86cdbe3147d4b902a3da935cf1b5ebf20e82031c384efdd"
+    },
+    "outputRegression": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-regression-r1/receipt.json",
+      "sha256": "5ff348c42fd5ccaffead0972d47327c2f98006fe67e6b33201dc87357a165554"
+    },
+    "independentVerification": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-r2/independent-verification.json",
+      "sha256": "f1ca8815f67845d26eb1f57094f2e792163ae11108c4332387a3936539dce218"
+    },
+    "targetedRed": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-red-tests-r1/commands.json",
+      "sha256": "f4e29ac300eb505b79c80875aa228f9bdee8b750ebfda63bcc80128428128dd7"
+    },
+    "targetedGreen": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-green-tests-r1/commands.json",
+      "sha256": "f510ff30603544bfcf97cb22c72d2d40385c18c9cdcd14c534f5f855af1622f3"
+    },
+    "review": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-transport-malformed-review.md",
+      "sha256": "ff1abeb3affb0a32a457e9cb8d30d328737877c3a079056273598f1580d2929c"
+    }
+  },
+  "changedAndAddedImplementationFiles": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/lib.rs",
+      "sha256": "6bb7ed2ae8f7a1380c562ed9a8c250003e8ae8eb3de160659786dc4b026ee3d7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/wasm.rs",
+      "sha256": "08fe43883a27624fa23c0bf61217c918420dfcde1a42e713dbfc93f09fa3e2b9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/request.rs",
+      "sha256": "494b3cce747b8608dd4e60f8bb319ed0617be850a1de9db547baf8afca357228"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/js/index.mjs",
+      "sha256": "5ef3739cdfc787f7713726af2885c440a167c56b4268877760097fe07f45893d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/transport.rs",
+      "sha256": "e7fc648069cab19570c91d97d2cd30f65ad0147fb86a880d80e8c1e479bd989a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/transport-parity.mjs",
+      "sha256": "83d5b02cce4e0c1ecfe8e54b6388ee398cf3812ed065f4a0c891e3aef90c7502"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-transport-malformed-campaign.mjs",
+      "sha256": "b449fcd240c0ede720836c804c76d5c6cca6eea52f3c32ec47e0d94d191418ca"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-transport-malformed-cases.mjs",
+      "sha256": "7393e63138ec408b273138dfa99ce34cbc514b21e38794d90de4edec9270618c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-transport-malformed-worker.mjs",
+      "sha256": "fc5c2d76b6cb10b7b99a18e554d530272f9937a34ded6e784d502f83b9220dc0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-transport-malformed-regression.py",
+      "sha256": "dfa0bbdd65f651b5fbbb2e6ba3c72d84efa934e62ac3d570445238093f091699"
+    }
+  ],
+  "limitations": [
+    "Finite 253-case transport campaign, not coverage-guided fuzzing",
+    "No allocation-exhaustion, arbitrary-pointer, or arbitrary host-callback proof",
+    "No native/browser rerender; 794 identical files/maps preserve existing qualified evidence and its limits",
+    "The earlier 1000 malformed-source campaign was not rerun for this request-only fix"
+  ]
+}

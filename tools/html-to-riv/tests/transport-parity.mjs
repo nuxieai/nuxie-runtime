@@ -672,7 +672,7 @@ test('public content owner handles substantial inherited custom-value context at
 });
 
 test('public wrapping corpus has deterministic CLI and JavaScript/WASM parity',async()=>{
- const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-wrapping-cases.json',import.meta.url)));
+ const fixtures=['public-wrapping-cases.json','public-wrapping-stretch-cases.json'].flatMap(name=>JSON.parse(fs.readFileSync(new URL('../validation/'+name,import.meta.url))));
  const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'public-wrapping-parity-'));
  try{
   for(const fixture of fixtures){
@@ -692,7 +692,7 @@ test('public wrapping corpus has deterministic CLI and JavaScript/WASM parity',a
   }
   const base={languageVersion:LANGUAGE_VERSION,html:'<div id="p"><div id="c"></div></div>',width:240,height:160,
    css:'#p{width:120px;height:80px;flex-wrap:wrap;align-content:flex-start}#c{width:40px;height:20px;background:red}'};
-  for(const extra of ['#p{width:100%}','#p{align-content:stretch}','#p{background:red}','#c{width:0.1px}','#c{flex-wrap:wrap}']){
+  for(const extra of ['#p{width:100%}','#p{background:red}','#c{width:0.1px}','#c{flex-wrap:wrap}']){
    const document={...base,css:base.css+extra};
    const result=compiler.compile(document);assert.equal(result.ok,false,extra);
    const prefix=path.join(dir,'rejected');fs.writeFileSync(prefix+'.json',JSON.stringify({...document,languageVersion:undefined}));

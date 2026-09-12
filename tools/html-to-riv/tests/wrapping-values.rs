@@ -14,7 +14,7 @@ fn wrapping_substitutions_preserve_valid_values_and_invalid_values_reset() {
     }
     // Valid unsupported distributions must not recover to normal as invalid CSS.
     assert!(compile(&request("#p{--a:space-between;align-content:var(--a)}")).is_err());
-    assert!(compile(&request("#p{flex-wrap:wrap;--a:bogus;align-content:var(--a)}")).unwrap_err()[0].message.contains("normal/stretch"));
+    assert_eq!(compile(&request("#p{flex-wrap:wrap;--a:bogus;align-content:var(--a)}")).unwrap(), compile(&request("#p{flex-wrap:wrap;align-content:normal}")).unwrap());
 }
 #[test]
 fn explicit_inheritance_and_noninherited_resets_reach_contextual_guards() {

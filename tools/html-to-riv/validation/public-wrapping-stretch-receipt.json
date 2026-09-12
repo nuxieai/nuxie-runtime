@@ -1,0 +1,62 @@
+{
+  "status": "public-fixed-exact-stretch-campaign-pass",
+  "scope": "474Rust/57Node;192 public CLI geometry/pixel frames,384clear controls;72direct representative pairs/120exact repeats;1092previous scenes exact through newly executedCLI/rawWASM. Source review separately limits exact distribution and odd-unit centers. No new lifecycle measurement or native stream observer claim.",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-stretch-product-build-r1/summary.json",
+      "sha256": "5f426eb312305ebdbde822fdcfbbf442b49b97ccf0d0cbe1942e2f84baa9767b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-stretch-product-build-r1/frozen/source-bindings.json",
+      "sha256": "3a856f1f3902554d99eba907110301a9be6cd85ec80a7219217ec73e98cfc686"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-stretch-regression-r1/receipt.json",
+      "sha256": "a498146982fac17add297842fe2f74443ba5c3d3ad497eb142a481c8a88de82c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-stretch-r1/receipt.json",
+      "sha256": "4ec69101193b49559c1bbc5c0eeb86b672dde7d9d9d9546642c5bbb0a27aa0b0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-stretch-r1/public-visual/coverage.json",
+      "sha256": "4634054b4fd4a7c99324f7effad704702cf2d286db37f9f3852453c802be9561"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-stretch-r1/twin-identity.json",
+      "sha256": "d0456302d8e0a8cf25a3c96c0913776455693be4b3d15785611964d3c7f6ce2f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-stretch-review.md",
+      "sha256": "95640049505c75341c785e999aaef240462d0e2d6dbaac719a64e7887bbf3330"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-stretch-source-review.md",
+      "sha256": "e6e66b60e8cfccdfe50d8fa14b0aa6a10e0ed0f659a40cb21a9b9c3f44ad9429"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-stretch-visual-root.md",
+      "sha256": "f7264acec0fdab1aff229a03d92a9a021d157caeb853366f7522b9bcd77f3a05"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-stretch-visual-agent.md",
+      "sha256": "9b15f6112a538459e52bee8db961ae5a07fb1e329b38c752317b7eee228af27d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-target-review.md",
+      "sha256": "f5150660cd215c5c25d02e0d99a529d13273c1a782c3ec84d1f0f0bd455e1955"
+    }
+  ],
+  "nativeToolHashes": {
+    "probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "visual": {
+    "frames": 192,
+    "representatives": 72,
+    "transfers": 120,
+    "sheets": 18,
+    "geometryPass": 192,
+    "pixelPass": 192
+  }
+}

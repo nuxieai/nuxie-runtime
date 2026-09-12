@@ -133,7 +133,7 @@ pub(super) fn compile(body: ElementRef<'_>, rules: &[css::Rule], input: &Compile
         return Err(unsupported("/0", "Wrapping root self alignment currently requires auto, normal, stretch or start"));
     }
     let reverse_cross = matches!(style.wrap, Wrap::Reverse);
-    let line = style.line_alignment.fraction(reverse_cross).ok_or_else(|| unsupported("/0", "Wrapping align-content normal/stretch requires stretch-line qualification; specify a positional value"))?;
+    let line = style.line_alignment.fraction(reverse_cross);
     let pnum = layout(&style.numeric, "/0")?;
     let children = element.child_elements().collect::<Vec<_>>();
     if children.len() + 1 > 8192 { return Err(Diagnostic::new("object-limit", "/0", "Document exceeds 8192 authored elements")); }
@@ -152,6 +152,19 @@ pub(super) fn compile(body: ElementRef<'_>, rules: &[css::Rule], input: &Compile
         ordered.push((s.order, index, id, path, dims, fraction, s.background.used(s.foreground)));
     }
     ordered.sort_by_key(|(order, index, ..)| (*order, *index));
+    let row = style.direction.is_row();
+    let source_children = ordered.iter().map(|item| item.4.clone()).collect::<Vec<_>>();
+    let stretch = if line.is_none() {
+        Some(super::wrapping_stretch::Plan::new(&pnum, &source_children, row)
+            .map_err(|e| unsupported("/0", format!("Wrapping stretch-line source proof is unresolved: {e:?}")))?)
+    } else { None };
+    if let Some(plan) = &stretch {
+        plan.validate().map_err(|e| unsupported("/0", format!("Wrapping stretch-line binding is unresolved: {e:?}")))?;
+        if !plan.matches_sources(&pnum, &source_children, row) {
+            return Err(unsupported("/0", "Wrapping stretch-line authored sources do not match"));
+        }
+    }
+    let line = line.unwrap_or(0.);
     let mut records = vec![Record::new("Backboard"), Record::new("Artboard"), Record::new("LayoutComponentStyle")];
     records[1].set("name", Value::String("HTML".into()))?;
     records[1].set("styleId", Value::Uint(1))?;
@@ -159,18 +172,18 @@ pub(super) fn compile(body: ElementRef<'_>, rules: &[css::Rule], input: &Compile
     records[1].set("height", Value::Float(input.height))?;
     paint(&mut records, 0, 0xffffffff)?;
     let parent = node(&mut records, 0, &pnum)?;
-    let row = style.direction.is_row();
     let reverse_main = matches!(style.direction, Direction::RowReverse | Direction::ColumnReverse);
     records[parent as usize + 2].set("flexWrapValue", Value::Uint(style.wrap.wire()))?;
     records[parent as usize + 2].set("flexDirectionValue", Value::Uint((if row { 2 } else { 0 }) + u32::from(reverse_main)))?;
     records[parent as usize + 2].set("layoutAlignmentType", Value::Uint((line * 2.) as u32 * if row { 3 } else { 1 }))?;
     let mut map = vec![SourceNode { id: parent_id, path: "/0".into(), object_id: parent }];
     let mut roles = Vec::new(); let mut authored = Vec::new(); let mut alignments = Vec::new();
-    for (_, _, id, path, dims, fraction, color) in ordered {
-        let slot = node(&mut records, parent, &dims)?;
+    for (index, (_, _, id, path, dims, fraction, color)) in ordered.into_iter().enumerate() {
+        let slot_dims = stretch.as_ref().map_or(&dims, |plan| &plan.slots()[index]);
+        let slot = node(&mut records, parent, slot_dims)?;
         let visible = node(&mut records, slot, &dims)?;
         paint(&mut records, visible, color)?;
-        roles.push((slot, visible)); authored.push((slot, dims.clone())); authored.push((visible, dims));
+        roles.push((slot, visible)); authored.push((slot, slot_dims.clone())); authored.push((visible, dims));
         alignments.push(fraction); map.push(SourceNode { id, path, object_id: visible });
     }
     let references = authored.iter().map(|(id, n)| (*id, n)).collect::<Vec<_>>();
@@ -271,8 +284,6 @@ mod tests {
             ("#a{width:auto}", "definite fixed width"),
             ("#a{min-width:auto}", "definite fixed min-width"),
             ("#a{width:0.1px}", "provably equal"),
-            ("#p{align-content:stretch}", "stretch-line"),
-            ("#p{align-content:normal}", "stretch-line"),
         ] { reject(&request(extra), message); }
     }
     #[test]

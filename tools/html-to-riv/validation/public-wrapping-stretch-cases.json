@@ -1,0 +1,1314 @@
+[
+  {
+    "name": "public-stretch-row-wrap-three-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:80px;height:180px;flex-direction:row;flex-wrap:wrap;background:transparent;color:#2167b1;width:60px;min-width:80px;max-width:70px;align-content:normal;}#v0{width:40px;height:20px;align-self:flex-start;order:0;background:#ffcc22;width:20px;min-width:40px;max-width:30px;}#v1{width:40px;height:30px;align-self:center;order:0;background:#ee553380;height:60px;max-height:30px;}#v2{width:44px;height:40px;align-self:flex-end;order:0;background:currentColor;}#v3{width:36px;height:24px;align-self:start;order:0;background:#1f9d76;}#v4{width:48px;height:50px;align-self:end;order:0;background:transparent;}#v5{width:32px;height:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "row",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-wrap-three-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:80px;height:180px;flex-direction:row;flex-wrap:wrap;background:transparent;color:#2167b1;width:60px;min-width:80px;max-width:70px;align-content:stretch;}#v0{width:40px;height:20px;align-self:flex-start;order:0;background:#ffcc22;width:20px;min-width:40px;max-width:30px;}#v1{width:40px;height:30px;align-self:center;order:0;background:#ee553380;height:60px;max-height:30px;}#v2{width:44px;height:40px;align-self:flex-end;order:0;background:currentColor;}#v3{width:36px;height:24px;align-self:start;order:0;background:#1f9d76;}#v4{width:48px;height:50px;align-self:end;order:0;background:transparent;}#v5{width:32px;height:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "row",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-wrap-three-omitted",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:80px;height:180px;flex-direction:row;flex-wrap:wrap;background:transparent;color:#2167b1;width:60px;min-width:80px;max-width:70px;}#v0{width:40px;height:20px;align-self:flex-start;order:0;background:#ffcc22;width:20px;min-width:40px;max-width:30px;}#v1{width:40px;height:30px;align-self:center;order:0;background:#ee553380;height:60px;max-height:30px;}#v2{width:44px;height:40px;align-self:flex-end;order:0;background:currentColor;}#v3{width:36px;height:24px;align-self:start;order:0;background:#1f9d76;}#v4{width:48px;height:50px;align-self:end;order:0;background:transparent;}#v5{width:32px;height:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "omitted align-content (normal)",
+      "row",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-four-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:80px;height:220px;flex-direction:row;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:normal;}#v0{width:60px;height:20px;align-self:flex-start;order:0;background:#ffcc22;}#v1{width:60px;height:30px;align-self:center;order:0;background:#ee553380;}#v2{width:60px;height:40px;align-self:flex-end;order:0;background:currentColor;}#v3{width:60px;height:50px;align-self:start;order:0;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "row",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-four-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:80px;height:220px;flex-direction:row;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:stretch;}#v0{width:60px;height:20px;align-self:flex-start;order:0;background:#ffcc22;}#v1{width:60px;height:30px;align-self:center;order:0;background:#ee553380;}#v2{width:60px;height:40px;align-self:flex-end;order:0;background:currentColor;}#v3{width:60px;height:50px;align-self:start;order:0;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "row",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-wrap-three-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:80px;height:180px;flex-direction:row-reverse;flex-wrap:wrap;background:transparent;color:#2167b1;width:60px;min-width:80px;max-width:70px;align-content:normal;}#v0{width:40px;height:20px;align-self:flex-start;order:2;background:#ffcc22;width:20px;min-width:40px;max-width:30px;}#v1{width:40px;height:30px;align-self:center;order:2;background:#ee553380;height:60px;max-height:30px;}#v2{width:44px;height:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{width:36px;height:24px;align-self:start;order:-1;background:#1f9d76;}#v4{width:48px;height:50px;align-self:end;order:0;background:transparent;}#v5{width:32px;height:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "row-reverse",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-wrap-three-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:80px;height:180px;flex-direction:row-reverse;flex-wrap:wrap;background:transparent;color:#2167b1;width:60px;min-width:80px;max-width:70px;align-content:stretch;}#v0{width:40px;height:20px;align-self:flex-start;order:2;background:#ffcc22;width:20px;min-width:40px;max-width:30px;}#v1{width:40px;height:30px;align-self:center;order:2;background:#ee553380;height:60px;max-height:30px;}#v2{width:44px;height:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{width:36px;height:24px;align-self:start;order:-1;background:#1f9d76;}#v4{width:48px;height:50px;align-self:end;order:0;background:transparent;}#v5{width:32px;height:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "row-reverse",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-wrap-three-omitted",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:80px;height:180px;flex-direction:row-reverse;flex-wrap:wrap;background:transparent;color:#2167b1;width:60px;min-width:80px;max-width:70px;}#v0{width:40px;height:20px;align-self:flex-start;order:2;background:#ffcc22;width:20px;min-width:40px;max-width:30px;}#v1{width:40px;height:30px;align-self:center;order:2;background:#ee553380;height:60px;max-height:30px;}#v2{width:44px;height:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{width:36px;height:24px;align-self:start;order:-1;background:#1f9d76;}#v4{width:48px;height:50px;align-self:end;order:0;background:transparent;}#v5{width:32px;height:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "omitted align-content (normal)",
+      "row-reverse",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-reverse-four-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:80px;height:220px;flex-direction:row-reverse;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:normal;}#v0{width:60px;height:20px;align-self:flex-start;order:2;background:#ffcc22;}#v1{width:60px;height:30px;align-self:center;order:2;background:#ee553380;}#v2{width:60px;height:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{width:60px;height:50px;align-self:start;order:-1;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "row-reverse",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-reverse-four-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:80px;height:220px;flex-direction:row-reverse;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:stretch;}#v0{width:60px;height:20px;align-self:flex-start;order:2;background:#ffcc22;}#v1{width:60px;height:30px;align-self:center;order:2;background:#ee553380;}#v2{width:60px;height:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{width:60px;height:50px;align-self:start;order:-1;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "row-reverse",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-wrap-three-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:80px;width:180px;flex-direction:column;flex-wrap:wrap;background:transparent;color:#2167b1;height:60px;min-height:80px;max-height:70px;align-content:normal;}#v0{height:40px;width:20px;align-self:flex-start;order:0;background:#ffcc22;height:20px;min-height:40px;max-height:30px;}#v1{height:40px;width:30px;align-self:center;order:0;background:#ee553380;width:60px;max-width:30px;}#v2{height:44px;width:40px;align-self:flex-end;order:0;background:currentColor;}#v3{height:36px;width:24px;align-self:start;order:0;background:#1f9d76;}#v4{height:48px;width:50px;align-self:end;order:0;background:transparent;}#v5{height:32px;width:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "column",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-wrap-three-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:80px;width:180px;flex-direction:column;flex-wrap:wrap;background:transparent;color:#2167b1;height:60px;min-height:80px;max-height:70px;align-content:stretch;}#v0{height:40px;width:20px;align-self:flex-start;order:0;background:#ffcc22;height:20px;min-height:40px;max-height:30px;}#v1{height:40px;width:30px;align-self:center;order:0;background:#ee553380;width:60px;max-width:30px;}#v2{height:44px;width:40px;align-self:flex-end;order:0;background:currentColor;}#v3{height:36px;width:24px;align-self:start;order:0;background:#1f9d76;}#v4{height:48px;width:50px;align-self:end;order:0;background:transparent;}#v5{height:32px;width:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "column",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-wrap-three-omitted",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:80px;width:180px;flex-direction:column;flex-wrap:wrap;background:transparent;color:#2167b1;height:60px;min-height:80px;max-height:70px;}#v0{height:40px;width:20px;align-self:flex-start;order:0;background:#ffcc22;height:20px;min-height:40px;max-height:30px;}#v1{height:40px;width:30px;align-self:center;order:0;background:#ee553380;width:60px;max-width:30px;}#v2{height:44px;width:40px;align-self:flex-end;order:0;background:currentColor;}#v3{height:36px;width:24px;align-self:start;order:0;background:#1f9d76;}#v4{height:48px;width:50px;align-self:end;order:0;background:transparent;}#v5{height:32px;width:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "omitted align-content (normal)",
+      "column",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-four-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:80px;width:220px;flex-direction:column;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:normal;}#v0{height:60px;width:20px;align-self:flex-start;order:0;background:#ffcc22;}#v1{height:60px;width:30px;align-self:center;order:0;background:#ee553380;}#v2{height:60px;width:40px;align-self:flex-end;order:0;background:currentColor;}#v3{height:60px;width:50px;align-self:start;order:0;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "column",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-four-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:80px;width:220px;flex-direction:column;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:stretch;}#v0{height:60px;width:20px;align-self:flex-start;order:0;background:#ffcc22;}#v1{height:60px;width:30px;align-self:center;order:0;background:#ee553380;}#v2{height:60px;width:40px;align-self:flex-end;order:0;background:currentColor;}#v3{height:60px;width:50px;align-self:start;order:0;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "column",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-wrap-three-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:80px;width:180px;flex-direction:column-reverse;flex-wrap:wrap;background:transparent;color:#2167b1;height:60px;min-height:80px;max-height:70px;align-content:normal;}#v0{height:40px;width:20px;align-self:flex-start;order:2;background:#ffcc22;height:20px;min-height:40px;max-height:30px;}#v1{height:40px;width:30px;align-self:center;order:2;background:#ee553380;width:60px;max-width:30px;}#v2{height:44px;width:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{height:36px;width:24px;align-self:start;order:-1;background:#1f9d76;}#v4{height:48px;width:50px;align-self:end;order:0;background:transparent;}#v5{height:32px;width:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "column-reverse",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-wrap-three-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:80px;width:180px;flex-direction:column-reverse;flex-wrap:wrap;background:transparent;color:#2167b1;height:60px;min-height:80px;max-height:70px;align-content:stretch;}#v0{height:40px;width:20px;align-self:flex-start;order:2;background:#ffcc22;height:20px;min-height:40px;max-height:30px;}#v1{height:40px;width:30px;align-self:center;order:2;background:#ee553380;width:60px;max-width:30px;}#v2{height:44px;width:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{height:36px;width:24px;align-self:start;order:-1;background:#1f9d76;}#v4{height:48px;width:50px;align-self:end;order:0;background:transparent;}#v5{height:32px;width:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "column-reverse",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-wrap-three-omitted",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:80px;width:180px;flex-direction:column-reverse;flex-wrap:wrap;background:transparent;color:#2167b1;height:60px;min-height:80px;max-height:70px;}#v0{height:40px;width:20px;align-self:flex-start;order:2;background:#ffcc22;height:20px;min-height:40px;max-height:30px;}#v1{height:40px;width:30px;align-self:center;order:2;background:#ee553380;width:60px;max-width:30px;}#v2{height:44px;width:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{height:36px;width:24px;align-self:start;order:-1;background:#1f9d76;}#v4{height:48px;width:50px;align-self:end;order:0;background:transparent;}#v5{height:32px;width:32px;align-self:center;order:0;background:#9b4dc4;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgba(0, 0, 0, 0)",
+      "v5": "rgb(155, 77, 196)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start",
+      "v4": "end",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "omitted align-content (normal)",
+      "column-reverse",
+      "wrap",
+      "three line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "parent and child conflicting minimum wins; child cross maximum clamp",
+      "currentColor, partial alpha, transparent leaf",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-reverse-four-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:80px;width:220px;flex-direction:column-reverse;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:normal;}#v0{height:60px;width:20px;align-self:flex-start;order:2;background:#ffcc22;}#v1{height:60px;width:30px;align-self:center;order:2;background:#ee553380;}#v2{height:60px;width:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{height:60px;width:50px;align-self:start;order:-1;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "column-reverse",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-reverse-four-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:80px;width:220px;flex-direction:column-reverse;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:stretch;}#v0{height:60px;width:20px;align-self:flex-start;order:2;background:#ffcc22;}#v1{height:60px;width:30px;align-self:center;order:2;background:#ee553380;}#v2{height:60px;width:40px;align-self:flex-end;order:-1;background:currentColor;}#v3{height:60px;width:50px;align-self:start;order:-1;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "column-reverse",
+      "wrap-reverse",
+      "four line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-wrap-single-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:120px;height:80px;flex-direction:row;flex-wrap:wrap;background:transparent;color:#2167b1;align-content:normal;}#v0{width:30px;height:20px;align-self:flex-start;order:0;background:#ffcc22;}#v1{width:40px;height:60px;align-self:center;order:0;background:#ee553380;}#v2{width:20px;height:40px;align-self:flex-end;order:0;background:currentColor;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "row",
+      "wrap",
+      "single line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-reverse-reverse-single-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{height:120px;width:80px;flex-direction:column-reverse;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:stretch;}#v0{height:30px;width:20px;align-self:flex-start;order:2;background:#ffcc22;}#v1{height:40px;width:60px;align-self:center;order:2;background:#ee553380;}#v2{height:20px;width:40px;align-self:flex-end;order:-1;background:currentColor;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "column-reverse",
+      "wrap-reverse",
+      "single line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-row-reverse-reverse-overflow-normal",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:80px;height:60px;flex-direction:row-reverse;flex-wrap:wrap-reverse;background:transparent;color:#2167b1;align-content:normal;}#v0{width:90px;height:30px;align-self:flex-start;order:2;background:#ffcc22;}#v1{width:60px;height:40px;align-self:center;order:2;background:#ee553380;}#v2{width:60px;height:50px;align-self:flex-end;order:-1;background:currentColor;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:normal",
+      "row-reverse",
+      "wrap-reverse",
+      "overflow line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "signed order and stable DOM-order ties",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  },
+  {
+    "name": "public-stretch-column-wrap-overflow-stretch",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{height:80px;width:60px;flex-direction:column;flex-wrap:wrap;background:transparent;color:#2167b1;align-content:stretch;}#v0{height:90px;width:30px;align-self:flex-start;order:0;background:#ffcc22;}#v1{height:60px;width:40px;align-self:center;order:0;background:#ee553380;}#v2{height:60px;width:50px;align-self:flex-end;order:0;background:currentColor;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "align-content:stretch",
+      "column",
+      "wrap",
+      "overflow line distribution",
+      "fixed source cross free space has exact LayoutUnit division",
+      "positional child alignment with definite cross sizes",
+      "default DOM order",
+      "fixed integer sizes",
+      "currentColor, partial alpha",
+      "compiler reset supplies zero spacing, zero minima and flex:0 0 auto",
+      "four viewport steps clip fixed root and return, original plus clone"
+    ]
+  }
+]

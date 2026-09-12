@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-12",
-  "focus": "Public content-box composition preserves authored content sizing",
-  "status": "Public integration validated; six existing pixel failures retained",
-  "current": "Public content-owner integration is committed with 270 Rust/46 Node tests and 75 changed-reference native comparisons: 600 geometry passes, 594 pixel passes and six retained failures. The next line-height investigation covers 64 frames with responsive geometry candidates and preserved baseline/paint failures. A 1,000-case malformed-source campaign passes exact CLI/WASM checks, including ownership, recovery and worker replacement.",
-  "next": "Investigate the source-backed baseline quantization rule for line-height, then advance ordinary text/font admission and independent backlog work. Coverage-guided fuzzing, percentage content-owner mixtures and fractional painting remain open.",
+  "focus": "Source-backed line-height geometry; text paint remains unresolved",
+  "status": "344 candidate metric frames pass; public typography remains unadmitted",
+  "current": "Ordinary signed-padding owners and pinned Chromium source arithmetic repair the retained16px baseline discrepancy. All344 candidate metric frames pass;16 zero-height frames compare boxes only. Full360-frame evidence retains two old failing encodings:290 original pixel gates pass, but only16 supplemental ink-region gates pass. Every frame has direct visual review or an exact source/metric/full-image transfer. The independent253-case malformed-transport campaign has preserved request-boundary defects for compiler-only repair.",
+  "next": "Repair and validate malformed request handling, then advance independent backlog work and public asset/text prerequisites. The completed line-height arithmetic experiment does not need repeating without new changes or a concrete hypothesis.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Line-height source arithmetic, ordinary composition and remaining paint failures",
+      "path": "tools/html-to-riv/validation/quantized-line-height-review.md"
+    },
+    {
+      "label": "Complete line-height Chrome/native gallery with separate local paint gates",
+      "path": "tools/html-to-riv/output/quantized-line-height-r1/visual/gallery.html"
+    },
+    {
+      "label": "Signed reduced/zero line-height evidence and limitations",
+      "path": "tools/html-to-riv/validation/reduced-line-height-review.md"
+    },
     {
       "label": "Deterministic source mutations, transport parity and recovery",
       "path": "tools/html-to-riv/validation/public-malformed-mutations-review.md"
@@ -497,12 +509,12 @@
   ],
   "activeWork": [
     {
-      "name": "Next typography step",
-      "work": "Resolve the 16px baseline quantization hypothesis from source and independent controls; preserve reduced-leading and paint limitations."
+      "name": "Compiler request boundaries",
+      "work": "Malformed JSON, positional-array admission and JavaScript exception recovery; frozen old failures preserved."
     },
     {
-      "name": "Robustness checkpoint complete",
-      "work": "1,000 cases/929 distinct requests passed; larger and coverage-guided campaigns remain future work."
+      "name": "Line-height evidence",
+      "work": "Source arithmetic and visual comparison complete; a targeted number-precision control is being recorded. Public typography remains unadmitted."
     }
   ],
   "publication": {

@@ -1,0 +1,767 @@
+[
+  {
+    "name": "size-12-factor-1",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 12,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1}#text{font-size:12px;white-space:pre}"
+  },
+  {
+    "name": "size-12-factor-1.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 12,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.25
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.25}#text{font-size:12px;white-space:pre}"
+  },
+  {
+    "name": "size-12-factor-1.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 12,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:12px;white-space:pre}"
+  },
+  {
+    "name": "size-12-factor-2",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 12,
+      "lineHeight": {
+        "kind": "number",
+        "value": 2
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:2}#text{font-size:12px;white-space:pre}"
+  },
+  {
+    "name": "size-15-factor-1",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 15,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1}#text{font-size:15px;white-space:pre}"
+  },
+  {
+    "name": "size-15-factor-1.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 15,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.25
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.25}#text{font-size:15px;white-space:pre}"
+  },
+  {
+    "name": "size-15-factor-1.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 15,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:15px;white-space:pre}"
+  },
+  {
+    "name": "size-15-factor-2",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 15,
+      "lineHeight": {
+        "kind": "number",
+        "value": 2
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:2}#text{font-size:15px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.25
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.25}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-2",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 2
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:2}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-17-factor-1",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 17,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1}#text{font-size:17px;white-space:pre}"
+  },
+  {
+    "name": "size-17-factor-1.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 17,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.25
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.25}#text{font-size:17px;white-space:pre}"
+  },
+  {
+    "name": "size-17-factor-1.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 17,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:17px;white-space:pre}"
+  },
+  {
+    "name": "size-17-factor-2",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 17,
+      "lineHeight": {
+        "kind": "number",
+        "value": 2
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:2}#text{font-size:17px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-1",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-1.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.25
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.25}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-1.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-2",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 2
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:2}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-32-factor-1",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "size-32-factor-1.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.25
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.25}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "size-32-factor-1.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "size-32-factor-2",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 2
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:2}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1.1-y-20",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.1}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1.333-y-20",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.333
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.333}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1.5-y-20.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20.25,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-16-factor-1.5-y-20.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20.5,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-1.1-y-20",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.1
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.1}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-1.333-y-20",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.333
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.333}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-24-factor-1.5-y-20.25",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20.25,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:24px;white-space:pre}"
+  },
+  {
+    "name": "size-32-factor-1.5-y-20.5",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20.5,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "negative-odd-raw-number",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.0615234375
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.0615234375}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "negative-odd-raw-fixed",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "px",
+        "value": 16.984375
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:16.984375px}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "fractional-font-16.01",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16.01,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.333
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.333}#text{font-size:16.01px;white-space:pre}"
+  },
+  {
+    "name": "fractional-font-24.125",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24.125,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.333
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.333}#text{font-size:24.125px;white-space:pre}"
+  },
+  {
+    "name": "responsive-factor-24",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 24,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi",
+      "wrap": true,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:24px;white-space:pre-wrap}"
+  },
+  {
+    "name": "responsive-fractional-16",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.333
+      },
+      "y": 20,
+      "text": "Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi",
+      "wrap": true,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.333}#text{font-size:16px;white-space:pre-wrap}"
+  },
+  {
+    "name": "responsive-reduced-fixed-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "px",
+        "value": 24
+      },
+      "y": 20,
+      "text": "Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi",
+      "wrap": true,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:24px}#text{font-size:32px;white-space:pre-wrap}"
+  },
+  {
+    "name": "inherited-factor-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "inherited-fixed-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "px",
+        "value": 24
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:24px}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "zero-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 0
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:0}#text{font-size:32px;white-space:pre}"
+  },
+  {
+    "name": "zero-responsive-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "lineHeight": {
+        "kind": "number",
+        "value": 0
+      },
+      "y": 20,
+      "text": "Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi",
+      "wrap": true,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:0}#text{font-size:32px;white-space:pre-wrap}"
+  },
+  {
+    "name": "old-symmetric-16-control",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "rounded-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "old-direct-16-control",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": {
+        "kind": "number",
+        "value": 1.5
+      },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "direct"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.5}#text{font-size:16px;white-space:pre}"
+  }
+]

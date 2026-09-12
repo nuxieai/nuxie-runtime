@@ -1,0 +1,107 @@
+[
+  {
+    "name": "direct-inherited-length-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "multiplier": 1.5,
+      "inheritedLength": true,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "direct"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre}",
+    "literalControlCss": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre}#text{line-height:24.0px}"
+  },
+  {
+    "name": "signed-inherited-length-32",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "multiplier": 1.5,
+      "inheritedLength": true,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "signed-padding"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre}",
+    "literalControlCss": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre}#text{line-height:24.0px}"
+  },
+  {
+    "name": "signed-inherited-length-32-responsive",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "multiplier": 1.5,
+      "inheritedLength": true,
+      "text": "Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi",
+      "wrap": true,
+      "mode": "signed-padding"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre-wrap}",
+    "literalControlCss": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre-wrap}#text{line-height:24.0px}"
+  },
+  {
+    "name": "direct-zero-32",
+    "request": {
+      "parentFontSize": 32,
+      "childFontSize": 32,
+      "multiplier": 0,
+      "inheritedLength": false,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "direct"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:32px;line-height:0;}#text{font-size:32px;white-space:pre}",
+    "literalControlCss": "#parent{font-size:32px;line-height:0;}#text{font-size:32px;white-space:pre}#text{line-height:0px}"
+  },
+  {
+    "name": "signed-zero-32",
+    "request": {
+      "parentFontSize": 32,
+      "childFontSize": 32,
+      "multiplier": 0,
+      "inheritedLength": false,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "signed-padding"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:32px;line-height:0;}#text{font-size:32px;white-space:pre}",
+    "literalControlCss": "#parent{font-size:32px;line-height:0;}#text{font-size:32px;white-space:pre}#text{line-height:0px}"
+  },
+  {
+    "name": "signed-zero-32-responsive",
+    "request": {
+      "parentFontSize": 32,
+      "childFontSize": 32,
+      "multiplier": 0,
+      "inheritedLength": false,
+      "text": "Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi Agjp AV fi",
+      "wrap": true,
+      "mode": "signed-padding"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:32px;line-height:0;}#text{font-size:32px;white-space:pre-wrap}",
+    "literalControlCss": "#parent{font-size:32px;line-height:0;}#text{font-size:32px;white-space:pre-wrap}#text{line-height:0px}"
+  },
+  {
+    "name": "signed-inherited-length-32-single",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 32,
+      "multiplier": 1.5,
+      "inheritedLength": true,
+      "text": "Agjp AV fi",
+      "wrap": false,
+      "mode": "signed-padding"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre}",
+    "literalControlCss": "#parent{font-size:16px;line-height:24.0px;}#text{font-size:32px;white-space:pre}#text{line-height:24.0px}"
+  }
+]

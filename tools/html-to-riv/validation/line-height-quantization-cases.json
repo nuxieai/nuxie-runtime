@@ -1,0 +1,226 @@
+[
+  {
+    "name": "size-12-factor-1",
+    "fontSize": 12,
+    "factor": 1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-12-factor-1.25",
+    "fontSize": 12,
+    "factor": 1.25,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-12-factor-1.5",
+    "fontSize": 12,
+    "factor": 1.5,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-12-factor-2",
+    "fontSize": 12,
+    "factor": 2,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-15-factor-1",
+    "fontSize": 15,
+    "factor": 1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-15-factor-1.25",
+    "fontSize": 15,
+    "factor": 1.25,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-15-factor-1.5",
+    "fontSize": 15,
+    "factor": 1.5,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-15-factor-2",
+    "fontSize": 15,
+    "factor": 2,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1",
+    "fontSize": 16,
+    "factor": 1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1.25",
+    "fontSize": 16,
+    "factor": 1.25,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1.5",
+    "fontSize": 16,
+    "factor": 1.5,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-2",
+    "fontSize": 16,
+    "factor": 2,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-17-factor-1",
+    "fontSize": 17,
+    "factor": 1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-17-factor-1.25",
+    "fontSize": 17,
+    "factor": 1.25,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-17-factor-1.5",
+    "fontSize": 17,
+    "factor": 1.5,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-17-factor-2",
+    "fontSize": 17,
+    "factor": 2,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-1",
+    "fontSize": 24,
+    "factor": 1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-1.25",
+    "fontSize": 24,
+    "factor": 1.25,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-1.5",
+    "fontSize": 24,
+    "factor": 1.5,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-2",
+    "fontSize": 24,
+    "factor": 2,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-32-factor-1",
+    "fontSize": 32,
+    "factor": 1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-32-factor-1.25",
+    "fontSize": 32,
+    "factor": 1.25,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-32-factor-1.5",
+    "fontSize": 32,
+    "factor": 1.5,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-32-factor-2",
+    "fontSize": 32,
+    "factor": 2,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1.1-y-20",
+    "fontSize": 16,
+    "factor": 1.1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1.333-y-20",
+    "fontSize": 16,
+    "factor": 1.333,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1.5-y-20.25",
+    "fontSize": 16,
+    "factor": 1.5,
+    "y": 20.25,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-16-factor-1.5-y-20.5",
+    "fontSize": 16,
+    "factor": 1.5,
+    "y": 20.5,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-1.1-y-20",
+    "fontSize": 24,
+    "factor": 1.1,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-1.333-y-20",
+    "fontSize": 24,
+    "factor": 1.333,
+    "y": 20,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-24-factor-1.5-y-20.25",
+    "fontSize": 24,
+    "factor": 1.5,
+    "y": 20.25,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  },
+  {
+    "name": "size-32-factor-1.5-y-20.5",
+    "fontSize": 32,
+    "factor": 1.5,
+    "y": 20.5,
+    "text": "Agjp AV fi\nAgjp AV fi"
+  }
+]

@@ -1,0 +1,122 @@
+{
+  "scope": "Private reduced/zero line-height signed-padding composition, not public support or blanket text qualification",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "counts": {
+    "scenes": 7,
+    "frames": 56,
+    "signedCandidateFrames": 40,
+    "signedCandidateMetricPass": 40,
+    "directControlFrames": 16,
+    "directControlMetricPass": 0,
+    "originalPixelPass": 22,
+    "supplementalInkRegionPass": 10,
+    "sourceVsLiteralControlCompleteRgbaEqual": 56,
+    "distinctPairsReviewed": 21,
+    "exactSameSourceTransferredPairs": 35
+  },
+  "visualReviewCompleted": true,
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/examples/reduced-line-height.rs",
+      "sha256": "558e25ac9e4ec21408e02e1ab8ff4b89d44d5641bbb288f22dde253faf919464"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/src/wire.rs",
+      "sha256": "15c303837344c7649b9691dbce049e8ab4d77caae34ae5845a89c73828c18a29"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/Cargo.toml",
+      "sha256": "577bb750bac546ebfcdfddc6929222701c09358930d3bd71b58c6a138be02608"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/Cargo.lock",
+      "sha256": "4200335ae9550c820154791c97184fcd0a9a51e05dd9cdc65bbbd59cd663343c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/fonts/roboto-regular.ttf",
+      "sha256": "4e147ab64b9fdf6d89d01f6b8c3ca0b3cddc59d608a8e2218f9a2504b5c98e14"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/generator",
+      "sha256": "a06d109ce34fcc33f3afffc492b6da597eed0dc9565e6b5d95fe5770202cd27c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/text-probe",
+      "sha256": "190dd09ce6c3b23fcda10af86859ebc3fb5c4fb4e9803e059248a5d9fd1e6059"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/example-source.rs",
+      "sha256": "558e25ac9e4ec21408e02e1ab8ff4b89d44d5641bbb288f22dde253faf919464"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/cases.json",
+      "sha256": "86c80760da64da90fbddcfcc6e7cf4a12118a10d6fc3ff967ca3bb273eac2a4d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/driver.mjs",
+      "sha256": "155a1d7c1222d56c06c6c9125cd4c301f325c280a5ae4dc29f16b09706228c83"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/build.log",
+      "sha256": "0784a82171c22f9c08aec61d4d6ead98c9d2e5f7a686ca90004e23de5129a2c6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/generation-commands.json",
+      "sha256": "b9ffa6208976ad479a283ec9ab508fafada307111d8dcd20ce6361b2a065d596"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/native.log",
+      "sha256": "f1bb52af2ea6801aa709fcde4991ca57f1f4a4cb7a8c9da3c19f6900a05b06cf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/ink-region.log",
+      "sha256": "310af06e4c6c99ee20964dd84f0aa4b0f484838e8bd832dd737be36bcd560062"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/runtime-source-bindings.json",
+      "sha256": "cff03100a82fd89c9367cde8a83ce44c539ab92c908438fa6b881e8bf7a3fd3a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/native-receipt.json",
+      "sha256": "a09a0d5000c0a598599778377ff63b5a2b4870d38502c093c65aafab2ec0c6de"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/ink-region-receipt.json",
+      "sha256": "e7a8b1f1728eb5c79cdc339eed5bae8d1075c9eb38a447e34d27615a6ef3298d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/visual/coverage.json",
+      "sha256": "f505273cdbc2928a6a83dc7db013712e20fbba7c5a5f6b65d6988331b30c3b0b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/reduced-line-height-cases.json",
+      "sha256": "86c80760da64da90fbddcfcc6e7cf4a12118a10d6fc3ff967ca3bb273eac2a4d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/reduced-line-height-ink.mjs",
+      "sha256": "9e105366b61606cfaa734300e2d80035159128e000393385d42156e0804e2671"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/reduced-line-height-native.mjs",
+      "sha256": "155a1d7c1222d56c06c6c9125cd4c301f325c280a5ae4dc29f16b09706228c83"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/reduced-line-height-review.md",
+      "sha256": "fbbb17639a82641e292dfd09ed48202f5f7c2d04002602cdd39fb7f4396e333a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/reduced-line-height-visual.py",
+      "sha256": "f28e88befb82b1f393c8da2da7ad0457a5f7d958fbc6753c1e5887d3ad17a7d3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/reduced-line-height-r1/receipt.json",
+      "sha256": "cfff9664ab235d77a95f45e7d1f33965bdd11f4bbe446a0edf642ab23893abc3"
+    }
+  ],
+  "caveats": [
+    "Zero-height baseline and line-count comparisons skipped; owner box and painted overlap retained.",
+    "Original zero local region is empty; supplemental measured-ink-region gate is separate and unchanged thresholds.",
+    "Source/font-derived baseline rounding remains a finite candidate and fails elsewhere in preserved prior evidence.",
+    "No public admission, runtime changes, font changes, host layout or browser-derived shipping dimensions."
+  ]
+}

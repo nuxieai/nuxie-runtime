@@ -1,0 +1,30 @@
+[
+  {
+    "name": "double-number-before-percent",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": { "kind": "number", "value": 1.499999939 },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.499999939}#text{font-size:16px;white-space:pre}"
+  },
+  {
+    "name": "premature-float-number-control",
+    "request": {
+      "parentFontSize": 16,
+      "childFontSize": 16,
+      "lineHeight": { "kind": "number", "value": 1.4999998807907104 },
+      "y": 20,
+      "text": "Agjp AV fi\nAgjp AV fi",
+      "wrap": false,
+      "mode": "chromium-leading"
+    },
+    "html": "<div id=\"parent\"><div id=\"text\"></div></div>",
+    "css": "#parent{font-size:16px;line-height:1.4999998807907104}#text{font-size:16px;white-space:pre}"
+  }
+]

@@ -1,0 +1,1139 @@
+{
+  "status": "experimental-padding-native-candidates-with-preserved-failures",
+  "publicAdmission": false,
+  "scope": "Border-box px/percentage padding investigation with intentional content-box negative controls; overrides raw public driver scope.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-native-r1",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "5748f9a6f6199b97a9f16b9a47e252003e36bd37f776231e1b4a5fa94274e3d1",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-native-r1/src/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-native-r1/augment"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345"
+  },
+  "hashes": {
+    "review.md": "b05c61b963a15c9c50df86a57eee487d6dfcefbf9c0e2b47364af7e61359e9ab",
+    "src/main.rs": "604eb2c3c132e0579d9414f5ca6036189e4fae0b681a64314a40a81684f2b5aa",
+    "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "augment": "a17079762545432fa1751c329e6d707e718cbb6216070ae4bb55d291057fe042",
+    "adapter.py": "5748f9a6f6199b97a9f16b9a47e252003e36bd37f776231e1b4a5fa94274e3d1",
+    "build-command.json": "9bc09daa7a7668c401031ada1544f4be024f3b82b1f415670aa05b2df9ac508e",
+    "cases.json": "3c1fe90b4b5663cfbf3d112fb066af7a911b7bd267a18ea0a24a06e92ece2f4e",
+    "collect.py": "9ea24ef59d30204c2000ddf0114bab500d264f0fdf430099a7bec9ce24a61098",
+    "matrix.json": "b07faf03afc4ec8b6424ff4db2407fac7a43d00fe36adcd0c08edb2338bf5f7f",
+    "reproductions.json": "a6dc75fd47aa4c11dacb432ebf2a38926e256d63cde7193502df214cd8aeec62",
+    "visual-direct.json": "58833603d8195ffc28fb91e21e8f88dcf6509664d1bc14a6ab94f921ee5d579f",
+    "visual-transfers.json": "6be741e8824668b2d4baec4cc7c1142dfd7cd6706ad36f35faf399fa12b3880f",
+    "source-audit.json": "d23732c84f032c6bc9fd15182a519362be1a930f5f86a43db8cc9f6c4dac0ba8",
+    "examples.json": "dffa422d76262536fd01a5e374a8d34c7863bd60e740fce1f14998cd55478028",
+    "render/receipt.json": "e4f1cb28c9637ec4522e817e87405db47b951fbe15290bc92616650c40e4b070",
+    "visual-0.png": "2c0663703cddd2b3c1f673d0c554261c6d2395fbeeffdc127ee62e51d46bf408",
+    "visual-4.png": "85e40fe6749000b35fa508a0d68bded9c1b82e9172c362f7f52d9646c1d84aa1",
+    "visual-8.png": "bed274c09b62fc15e818b1561122e77f4ceb4316ea1b97a3d69e569ee868471e",
+    "visual-12.png": "205ce2901980c1d81ab3018e5491dd587ab01bc1d5687286c2237535c4a6a396",
+    "visual-16.png": "05d57c8d8154ff67f489b8f66a95afdd7f4100ebe0b5a666df2b8e61879829d8",
+    "visual-20.png": "165e34027d187713659901023ae0186b9827d590eff3bbff78f833cc8b8c01fc",
+    "visual-24.png": "2f6da4a614822e47e610d75526477cbf7a64eca5d3a3d7956925914630b90c9c",
+    "visual-28.png": "a6532033dc49528a9a0e5603c3e27adc3a43e4c39b398df907469c2e653cff4a",
+    "visual-32.png": "026d2d8d32ffae83a7fc1958e6b823f95e67a4ef5a09c03151db3e15baa37afc",
+    "visual-36.png": "41a0013d1d1d5d038714abaccf8e29b6947ef70b5a586ed11ff349e50003b955",
+    "visual-40.png": "aab0043a70bc319358843eccfa160fb9ae7afb88b35f2740d60dbb2db205c0bb",
+    "visual-44.png": "807f4b679f7757484ca903cf3a4edeecadf2cb1fc16dc6bfb9e3f66ee12fb0bc",
+    "visual-48.png": "a804b66abe08da3e6eb2cb6e008449118d432bce30e655f2d2af864339aa4913",
+    "visual-52.png": "96a20723ef976a470f98b16c7e124ddb0e2bd45eea33393f0aa84bf4d66d9b19",
+    "visual-56.png": "550582c471cc2c289fe10b605561587f8a8742550c32fec89d9f7e5277f643ba",
+    "visual-60.png": "7c097d6e629310e1ee8f37012096c1fdb46e784c49283ed05044a51f2e387cbf",
+    "visual-64.png": "065e6e5cd28788d72090e2b9b8a8ba1eeee4af41ffc53ff18bd3ece14130a402",
+    "visual-68.png": "cb612c5542f68f5c5c021de54874b72e02bdf9ad77a50cb872bf1f3477c8531e"
+  },
+  "externalBindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/manifest.json": "37e4c78de5e36684a2f798b66965002f9ee43863b0e222930eb63d5684df5ce9",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72"
+  },
+  "immutableSourceAudit": [
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/layout/layout_component_style.rs",
+      "sha256": "46b8b93aa0ee7cd97063716a64730e8174410de8d1fb44f1f8ad96310f5f1335",
+      "exactImmutableSource": true
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/layout/layout_style_applier.rs",
+      "sha256": "233d9061c9fdeca344f1ab4e35c25c1413a4a2e06fbc2880beaad26aa47cb9f0",
+      "exactImmutableSource": true
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/layout_component.rs",
+      "sha256": "5154d46f471e2497886b2dbd420d5a0532baf8521f6cfe655a432c60d05122c3",
+      "exactImmutableSource": true
+    },
+    {
+      "path": "vendor/taffy-0.12.1-rive-yoga-order/src/compute/flexbox.rs",
+      "sha256": "75f7a79993712f3f115762291819bf3aab530e79002746c63ad9ad500cc728c2",
+      "exactImmutableSource": true
+    },
+    {
+      "path": "vendor/taffy-0.12.1-rive-yoga-order/src/style/mod.rs",
+      "sha256": "0d0cf04bcf4e83d94765deaae2a1aec3e9aee3cb81dadf0d5cf0b3a82ce39e15",
+      "exactImmutableSource": true
+    }
+  ],
+  "totals": {
+    "scenes": 24,
+    "frames": 192,
+    "geometryPassed": 160,
+    "pixelsPassed": 158,
+    "clearPassed": 384,
+    "exactRivAndParsedMapReproductions": 24
+  },
+  "candidateTotals": {
+    "scenes": 20,
+    "frames": 160,
+    "geometryPassed": 160,
+    "pixelsPassed": 158
+  },
+  "negativeControls": {
+    "scenes": 4,
+    "frames": 32,
+    "geometryFailed": 32,
+    "pixelsFailed": 32
+  },
+  "matrix": [
+    {
+      "name": "padding-row-px-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-px-floor",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-px-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-percent-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-content-box-control",
+      "geometryPassed": 0,
+      "pixelsPassed": 0,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 93 vs 107"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.x: 53 vs 67"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.x: 43 vs 57"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 93 vs 107"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 93 vs 107"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.x: 53 vs 67"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.x: 43 vs 57"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 93 vs 107"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "padding-row-reverse-px-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-reverse-px-floor",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-reverse-px-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-reverse-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-reverse-percent-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-row-reverse-content-box-control",
+      "geometryPassed": 0,
+      "pixelsPassed": 0,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.x: 93 vs 107",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.x: 97 vs 111",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 63 vs 77"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.x: 53 vs 67",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.x: 57 vs 71",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.x: 23 vs 37"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.x: 43 vs 57",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.x: 47 vs 61",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.x: 13 vs 27"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.x: 93 vs 107",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.x: 97 vs 111",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 63 vs 77"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.x: 93 vs 107",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.x: 97 vs 111",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 63 vs 77"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.x: 53 vs 67",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.x: 57 vs 71",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.x: 23 vs 37"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.x: 43 vs 57",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.x: 47 vs 61",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.x: 13 vs 27"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.x: 93 vs 107",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.x: 97 vs 111",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.x: 63 vs 77"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "padding-column-px-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-px-floor",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-px-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-percent-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-content-box-control",
+      "geometryPassed": 0,
+      "pixelsPassed": 0,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 31 vs 37"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.y: 19 vs 25"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.y: 13 vs 19"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 31 vs 37"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 31 vs 37"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.y: 19 vs 25"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.y: 13 vs 19"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 31 vs 37"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "padding-column-reverse-px-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-reverse-px-floor",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-reverse-px-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-reverse-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "leaf: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "leaf: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "padding-column-reverse-percent-intrinsic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-column-reverse-content-box-control",
+      "geometryPassed": 0,
+      "pixelsPassed": 0,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.y: 63 vs 77",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.y: 64 vs 78",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 48 vs 62"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 1,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.y: 35 vs 49",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.y: 36 vs 50",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.y: 20 vs 34"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 2,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.y: 21 vs 35",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.y: 22 vs 36",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.y: 6 vs 20"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.y: 63 vs 77",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.y: 64 vs 78",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 48 vs 62"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.y: 63 vs 77",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.y: 64 vs 78",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 48 vs 62"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 5,
+          "geometry": [
+            "p.width: 100 vs 128",
+            "p.height: 60 vs 80",
+            "a.y: 35 vs 49",
+            "a.width: 36 vs 50",
+            "a.height: 12 vs 18",
+            "leaf.y: 36 vs 50",
+            "leaf.width: 15 vs 22",
+            "leaf.height: 4 vs 7",
+            "b.y: 20 vs 34"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [
+            "p.width: 80 vs 108",
+            "p.height: 40 vs 60",
+            "a.y: 21 vs 35",
+            "a.width: 26 vs 40",
+            "a.height: 6 vs 12",
+            "leaf.y: 22 vs 36",
+            "leaf.width: 10 vs 17",
+            "leaf.height: 1 vs 4",
+            "b.y: 6 vs 20"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [
+            "p.width: 180 vs 208",
+            "p.height: 100 vs 120",
+            "a.y: 63 vs 77",
+            "a.width: 76 vs 90",
+            "a.height: 24 vs 30",
+            "leaf.y: 64 vs 78",
+            "leaf.width: 35 vs 42",
+            "leaf.height: 10 vs 13",
+            "b.y: 48 vs 62"
+          ],
+          "pixels": [
+            "mismatch ratio",
+            "mean channel error",
+            "p: local RGB error",
+            "a: local RGB error",
+            "leaf: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    }
+  ],
+  "reproductions": [
+    {
+      "name": "padding-row-px-definite",
+      "rivSha256": "2d3a49cecfae00272547e4795de509ed31a87b576ef1c4c833ea5dfd35a71f77",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-px-floor",
+      "rivSha256": "30c063f02a40997295ac5a523e34ecd190925d5031e95c312afc7a783fda9e3a",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-px-intrinsic",
+      "rivSha256": "6d03bcc02a4ce83049e67f725f79fedf8dc2a7ee32225c493c75183d94369256",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-percent-definite",
+      "rivSha256": "ec7aaf585a9c94146ec86fb00dfe1a3f9e2517c1ff870919a69f771b49f2b865",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-percent-intrinsic",
+      "rivSha256": "14a5e0235af9489ec652155ac778f41ae1417b97f45834cd77b770b01932f52b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-content-box-control",
+      "rivSha256": "2d3a49cecfae00272547e4795de509ed31a87b576ef1c4c833ea5dfd35a71f77",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-reverse-px-definite",
+      "rivSha256": "737d3ccc236ab1b74a98cb29d0078cd9d6d5a1a8df68e869aad8864592f06f8a",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-reverse-px-floor",
+      "rivSha256": "9baf951e7b81c5b57df8708db0bc6e30cd79932fce05be81cf04abecedd6bc79",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-reverse-px-intrinsic",
+      "rivSha256": "7a48e3376e5027f5fccf5435e2e081f4d30a9e58985627b14ff68f8ef80fe479",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-reverse-percent-definite",
+      "rivSha256": "4f660ede1de24205ea03161677ef3f42742b2b1cf1cd6838126e29f7c875ea77",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-reverse-percent-intrinsic",
+      "rivSha256": "1eed64c89db57ba8174f3adf94f74d4a084dd9913e277ba5b43c363f50fea13f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-row-reverse-content-box-control",
+      "rivSha256": "737d3ccc236ab1b74a98cb29d0078cd9d6d5a1a8df68e869aad8864592f06f8a",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-px-definite",
+      "rivSha256": "7815991dca8233b2961b66d988db1e6664d1bf3975da6076b1848d3e2aa0aa76",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-px-floor",
+      "rivSha256": "737c26f8713a84bf676e050947311152241b360da94d13985ff4758a85d16c1b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-px-intrinsic",
+      "rivSha256": "70121cca503d44a096136cfa2aa5ba2474b330f2fb6a6594f69059790723848f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-percent-definite",
+      "rivSha256": "73a715eab1c671e4d0e3ef533845e5fc4ab4d23e2dc54c93ded0d4dda394bb45",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-percent-intrinsic",
+      "rivSha256": "44e80d6324373e63e0b809b9cfeb8f92eb9c55bcd173133587459176c92628f9",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-content-box-control",
+      "rivSha256": "7815991dca8233b2961b66d988db1e6664d1bf3975da6076b1848d3e2aa0aa76",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-reverse-px-definite",
+      "rivSha256": "39a6bf1d9e48309f6f3b9a05022859c059690aa39e5ee766ff681115b2aa9411",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-reverse-px-floor",
+      "rivSha256": "b8fba75780e7c81dd60588da46a5b9ad7e012b3a0fe35ee99e220858c8e39a3c",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-reverse-px-intrinsic",
+      "rivSha256": "359fd2f7fb581483a36c66a7bbb0e14ad34bcac03c8641b795a04bf8198baf9f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-reverse-percent-definite",
+      "rivSha256": "e1374d4383f96e045884978168120e19ecd5faedd806e44ed59b2674061a7695",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-reverse-percent-intrinsic",
+      "rivSha256": "5228bcf9d6ab91d64ff7c0f1a0ba9e18bf5d9221eeb254144a87eb63581bd19d",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-column-reverse-content-box-control",
+      "rivSha256": "39a6bf1d9e48309f6f3b9a05022859c059690aa39e5ee766ff681115b2aa9411",
+      "exactRiv": true,
+      "exactParsedMap": true
+    }
+  ],
+  "visual": {
+    "directPairs": 72,
+    "transferredPairs": 120,
+    "independentImageTransfers": 240,
+    "completePairs": 192,
+    "directSheets": [
+      "visual-0.png",
+      "visual-4.png",
+      "visual-8.png",
+      "visual-12.png",
+      "visual-16.png",
+      "visual-20.png",
+      "visual-24.png",
+      "visual-28.png",
+      "visual-32.png",
+      "visual-36.png",
+      "visual-40.png",
+      "visual-44.png",
+      "visual-48.png",
+      "visual-52.png",
+      "visual-56.png",
+      "visual-60.png",
+      "visual-64.png",
+      "visual-68.png"
+    ],
+    "observations": "Content-box structural size mismatch visible. Two fractional leaf local pixel failures retained. No other visible divergence in passing pairs."
+  },
+  "limitations": [
+    "Investigation only; no public compiler/runtime source changes.",
+    "Percentage intrinsic controls have definite containing width, not cyclic indefinite percentage qualification.",
+    "Content-box direct mapping fails; no impossibility claim about ordinary compositions.",
+    "Padded baseline/wrapper/flex/helper integration requires independent proof."
+  ]
+}

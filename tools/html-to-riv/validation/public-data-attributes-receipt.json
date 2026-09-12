@@ -1,0 +1,106 @@
+{
+  "scope": "S01 static data-* attribute selectors in admitted box HTML and existing layout/paint profile; no dynamic data, dataset API or runtime metadata.",
+  "status": "qualified-bounded-static-data-attributes",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "cases": 16,
+  "frames": 128,
+  "geometryPass": 128,
+  "pixelPass": 128,
+  "clearPass": 256,
+  "expectedPaintAssertions": 632,
+  "everyAuthoredBoxEntirelyInsideEveryViewport": true,
+  "directVisualPairs": 18,
+  "exactFullRgbaTransferredPairs": 110,
+  "rustTests": 219,
+  "nodeTests": 37,
+  "newRustTests": 6,
+  "newNodeTests": 1,
+  "newCorpusParityComparisons": 48,
+  "newCliWasmDiagnosticPairs": 7,
+  "priorExactPublicOutputs": 589,
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "a9a2601b6def75b674a769ca443ac51ad04eb1aa19fd65fe0fcd8a622107536a",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "fixturesSha256": "bafdf327b485d27412a583ae38b4b1426659b5dd79868bddc69ef14751fc0b22",
+  "resetSha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+  "pixelGateSha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/source-bindings-r2.json",
+      "sha256": "f4cd2aa7b42e59139ba077453c390b25ebd6ccd6081170209c48d34285d27429"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/render-r2/receipt.json",
+      "sha256": "888a59e8baece754d9b0128bcd1dbc0931615e92e0af7ebde79130eafc2a8dda"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/visual-coverage-r2.json",
+      "sha256": "3d9b68e59e6bdc5cc323f99f16eb49e3666dc5b49d64c0fbf81927933462a81c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/browser-selector-support.json",
+      "sha256": "0f220a208dd98cc1f39bdd1503741fa2d868dd3fd8aa0f58b07dd63fc9cd0c92"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/rust-tests-r2.log",
+      "sha256": "c57d27a1bde143f0569846cec031fe5e588dde87dda4daaf50ce95093fc8fad1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/node-tests-r2.log",
+      "sha256": "e8affcbca6e683b371ec23d884ed8ccb6e79ec4e5b8fa846df54319e07416efe"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/native-build.log",
+      "sha256": "a22fc4ac0fed77fa53489c19fdc051899cd7e332a7234734a7e772eb902a8d57"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/wasm-build.log",
+      "sha256": "e75ced2fed8d70b8fd57076af68071e632a64b2107543a8cd2ffbf3bc71c1c3a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/immutable-target.log",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/regression/manifest.json",
+      "sha256": "b98665fb96a67dc3e70ea039b94b55be21a30f54f41caac36d098240dae307a4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/additional-regression/manifest.json",
+      "sha256": "740b6589e0bc6e43b60593b7ab6a910639b24b86cfd8da441efddf64b9797875"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/initial-test-failures.json",
+      "sha256": "e10e43850227cd1cf27861f7352d2090e88cd0bd63f727975c9f1012162dcf80"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/coverage-refinement.json",
+      "sha256": "33f033d719d36e40791df56a733b7c1668c0d58e6934e6b02991a96ead09512a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/html-to-riv",
+      "sha256": "a9a2601b6def75b674a769ca443ac51ad04eb1aa19fd65fe0fcd8a622107536a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-data-attributes-r1/nuxie_html_to_riv.wasm",
+      "sha256": "210db1133a432c08588ab25c07a9418af44ffb90978eb3a6b4fc0a446592c82f"
+    }
+  ],
+  "limits": [
+    "Existing admitted box tags and static id/class/style/data-* source attributes only; data- suffix must be nonempty.",
+    "HTML ASCII name normalization; non-ASCII code points retained without Unicode case folding or normalization.",
+    "All seven attribute operators, default sensitive data values and ASCII i matching; explicit s remains rejected because pinned Chrome reports unsupported.",
+    "CSS attribute namespaces, dynamic states, scripts, bindings, interactions, CSS attr() and runtime data mutation remain excluded.",
+    "Strict HTML error rejection includes duplicate attributes; input limits and unsupported declaration validation remain unchanged.",
+    "Evidence is the bounded corpus; admitting source selection does not qualify additional layout or paint semantics."
+  ]
+}

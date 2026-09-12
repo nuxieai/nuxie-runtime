@@ -334,3 +334,29 @@ test('public gaps preserve CLI/WASM bytes, computed inheritance and contextual d
   assert.equal(result.ok,false,'unqualified gap context must diagnose');
  }
 });
+
+test('static data attributes preserve CLI/WASM output and strict diagnostics',async()=>{
+ const fixtures=JSON.parse(fs.readFileSync(new URL('../validation/public-data-attributes-cases.json',import.meta.url)));
+ assert.equal(fixtures.length,16);
+ await assertCorpusParity(fixtures);
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-data-attributes-'));
+ try {
+  for(const [index,[html,css]] of [
+   ['<div data-state=ready onclick="run()"></div>',''],
+   ['<div data-state=ready src="image.png"></div>',''],
+   ['<div data-="empty-name"></div>',''],
+   ['<div data-state=ready></div>','[data-state=ready s]{background:red}'],
+   ['<div data-state=ready></div>','[ns|data-state]{background:red}'],
+   ['<div data-state=ready></div>','[data-state=absent]{display:grid}'],
+   ['<div data-state=first DATA-STATE=second></div>',''],
+  ].entries()) {
+   const request={html,css,width:240,height:160},prefix=path.join(dir,String(index));
+   fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'});
+   const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.equal(cli.status,1);assert.equal(result.ok,false);
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

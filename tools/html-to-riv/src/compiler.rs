@@ -567,7 +567,10 @@ impl Emitter {
                 return Err(unsupported(&path, format!("Element {} is not admitted", element.value().name())));
             }
             for (name, _) in element.value().attrs() {
-                if !["id", "class", "style"].contains(&name) { return Err(unsupported(&path, format!("Attribute {name} is not admitted"))); }
+                // HTML parsing has normalized ASCII attribute names. Custom data
+                // remains on the source DOM for selectors; it adds no file state.
+                let static_data = name.strip_prefix("data-").is_some_and(|suffix| !suffix.is_empty());
+                if !["id", "class", "style"].contains(&name) && !static_data { return Err(unsupported(&path, format!("Attribute {name} is not admitted"))); }
             }
             if self.map.len() >= 8192 { return Err(Diagnostic::new("object-limit", &path, "Document exceeds 8192 authored elements")); }
             let id = element.attr("id").map(str::to_owned).unwrap_or_else(|| format!("node{path}"));

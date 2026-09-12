@@ -1,0 +1,310 @@
+[
+  {
+    "name": "data-existence-empty",
+    "html": "<section id=\"root\"><div id=\"r1\" ></div><div id=\"r2\" data-state></div><div id=\"r3\" data-state=\"\"></div><div id=\"r4\" data-state=\"ready\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state]{background:teal;}#root [data-state=\"\"]{background:coral;width:80px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r2{background:teal;}#root>#r3{background:teal;}#root>#r4{background:teal;}#root>#r2{background:coral;width:80px}#root>#r3{background:coral;width:80px}",
+    "features": [
+      "S01",
+      "absence versus presence",
+      "valueless and explicitly empty equality"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(0, 128, 128)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-exact-case",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"alpha\"></div><div id=\"r2\" data-state=\"Alpha\"></div><div id=\"r3\" data-state=\"alpha beta\"></div><div id=\"r4\" data-state=\"alphabet\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state=alpha]{background:teal;width:96px}#root [data-state=\"ALPHA\" i]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r2{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "identifier equality",
+      "default case sensitive and ASCII i flag",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(192, 192, 192)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-prefix-case",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"pre-one\"></div><div id=\"r2\" data-state=\"one-pre\"></div><div id=\"r3\" data-state=\"prefix\"></div><div id=\"r4\" data-state=\"PRE-one\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state^=pre]{background:teal;width:96px}#root [data-state^=\"PRE\" I]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r3{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r3{background:coral;height:20px}#root>#r4{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "prefix",
+      "uppercase I flag",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(255, 127, 80)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-suffix-case",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"one-end\"></div><div id=\"r2\" data-state=\"end-one\"></div><div id=\"r3\" data-state=\"weekend\"></div><div id=\"r4\" data-state=\"one-END\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state$=end]{background:teal;width:96px}#root [data-state$=\"END\" i]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r3{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r3{background:coral;height:20px}#root>#r4{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "suffix",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(255, 127, 80)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-substring-case",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"xmidy\"></div><div id=\"r2\" data-state=\"middle\"></div><div id=\"r3\" data-state=\"miss\"></div><div id=\"r4\" data-state=\"xMIDy\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state*=mid]{background:teal;width:96px}#root [data-state*=\"MID\" i]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r2{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r2{background:coral;height:20px}#root>#r4{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "substring",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(255, 127, 80)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-token-whitespace",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"beta&#9;alpha&#10;gamma\"></div><div id=\"r2\" data-state=\"alphabet\"></div><div id=\"r3\" data-state=\"alpha-beta\"></div><div id=\"r4\" data-state=\" ALPHA  beta \"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state~=alpha]{background:teal;width:96px}#root [data-state~=\"ALPHA\" i]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r4{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "token uses CSS whitespace",
+      "decoded numeric entities",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(255, 127, 80)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-hyphen-case",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"en\"></div><div id=\"r2\" data-state=\"en-GB\"></div><div id=\"r3\" data-state=\"english\"></div><div id=\"r4\" data-state=\"EN-gb\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state|=en]{background:teal;width:96px}#root [data-state|=\"EN\" i]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r2{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r2{background:coral;height:20px}#root>#r4{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "exact or hyphen prefix",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(255, 127, 80)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-empty-search",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state></div><div id=\"r2\" data-state=\"\"></div><div id=\"r3\" data-state=\"nonempty\"></div><div id=\"r4\" ></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state^=\"\"]{background:coral;}#root [data-state$=\"\"]{background:coral;}#root [data-state*=\"\"]{background:coral;}#root [data-state~=\"\"]{background:coral;}#root [data-state|=\"\"]{background:teal;width:80px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:80px}#root>#r2{background:teal;width:80px}",
+    "features": [
+      "S01",
+      "empty prefix/suffix/substring/token never match",
+      "empty hyphen exact match"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(0, 128, 128)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(192, 192, 192)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-name-normalization",
+    "html": "<section id=\"root\"><div id=\"r1\" DATA-STATE=\"ready\"></div><div id=\"r2\" DaTa-StAtE=\"READY\"></div><div id=\"r3\" data-state=\"later\"></div><div id=\"r4\" data-other=\"ready\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [DATA-STATE=ready]{background:teal;width:96px}#root [data-\\73 tate=\"READY\" i]{background:coral;height:20px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;width:96px}#root>#r1{background:coral;height:20px}#root>#r2{background:coral;height:20px}",
+    "features": [
+      "S01",
+      "HTML ASCII name normalization",
+      "uppercase and escaped CSS name",
+      "default and i predicates remain independently observable in width and height"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(255, 127, 80)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(192, 192, 192)",
+      "r4": "rgb(192, 192, 192)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-punctuation-names",
+    "html": "<section id=\"root\"><div id=\"r1\" data-0=\"a\"></div><div id=\"r2\" data--state=\"a\"></div><div id=\"r3\" data-state.part=\"a\"></div><div id=\"r4\" data-state:part=\"a\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-0=a]{background:teal;}#root [data--state=a]{background:coral;width:80px}#root [data-state\\.part=a]{background:navy;width:96px}#root [data-state\\:part=a]{background:teal;width:64px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;}#root>#r2{background:coral;width:80px}#root>#r3{background:navy;width:96px}#root>#r4{background:teal;width:64px}",
+    "features": [
+      "S01",
+      "nonempty suffix permits numbers and punctuation",
+      "escaped selector names"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(0, 128, 128)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-unicode-values",
+    "html": "<section id=\"root\"><div id=\"r1\" data-state=\"CAFÉ\"></div><div id=\"r2\" data-state=\"café\"></div><div id=\"r3\" data-state=\"Café\"></div><div id=\"r4\" data-state=\"cafe\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-state=\"café\"]{background:teal;}#root [data-state=\"café\" i]{background:coral;width:80px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r2{background:teal;}#root>#r2{background:coral;width:80px}#root>#r3{background:coral;width:80px}",
+    "features": [
+      "S01",
+      "Unicode values retained",
+      "i folds ASCII only"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(255, 127, 80)",
+      "r4": "rgb(192, 192, 192)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-entity-values",
+    "html": "<section id=\"root\"><div id=\"r1\" data-label=\"Tom &amp; Ada\"></div><div id=\"r2\" data-label=\"Tom &quot;Ada&quot;\"></div><div id=\"r3\" data-label=\"line\r\nnext\"></div><div id=\"r4\" data-label=\"var(--x)\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-label=\"Tom & Ada\"]{background:teal;}#root [data-label=\"Tom \\\"Ada\\\" \"]{background:coral;}#root [data-label=\"Tom \\\"Ada\\\"\"]{background:coral;width:80px}#root [data-label=\"line\\a next\"]{background:navy;width:96px}#root [data-label=\"var(--x)\"]{background:teal;width:64px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;}#root>#r2{background:coral;width:80px}#root>#r3{background:navy;width:96px}#root>#r4{background:teal;width:64px}",
+    "features": [
+      "S01",
+      "entities and line ending normalization",
+      "attribute values are not CSS variable expressions"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(0, 128, 128)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-filtered-selectors",
+    "html": "<section id=\"root\"><div id=\"r1\" data-role=\"tile\"></div><div id=\"r2\" data-role=\"other\"></div><div id=\"r3\" data-role=\"tile\"></div><div id=\"r4\" data-role=\"tile\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root >div:nth-child(2 of [data-role=tile]){background:coral;width:80px}#root >div:is([data-role=tile]):not(:first-child){background:teal;}#root >div[data-role=other]+[data-role=tile]{background:navy;}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r3{background:coral;width:80px}#root>#r3{background:teal;}#root>#r4{background:teal;}#root>#r3{background:navy;}",
+    "features": [
+      "S01",
+      "filtered nth child",
+      "logical and adjacent sibling selectors"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(192, 192, 192)",
+      "r2": "rgb(192, 192, 192)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(0, 128, 128)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-inert-values",
+    "html": "<section id=\"root\"><div id=\"r1\" data-onclick=\"throw()\"></div><div id=\"r2\" data-src=\"https://example.invalid/image.png\"></div><div id=\"r3\" data-style=\"display:grid\"></div><div id=\"r4\" data-雪=\"opaque\" data-state=\"ready\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-onclick]{background:teal;}#root [data-src]{background:coral;width:80px}#root [data-style]{background:navy;width:96px}#root [data-state=ready]{background:teal;width:64px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal;}#root>#r2{background:coral;width:80px}#root>#r3{background:navy;width:96px}#root>#r4{background:teal;width:64px}",
+    "features": [
+      "S01",
+      "inert behavior/resource-like values",
+      "non-ASCII attribute name retained but not selected"
+    ],
+    "expectedPaint": {
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(0, 128, 128)",
+      "root": "rgb(255, 255, 255)"
+    }
+  },
+  {
+    "name": "data-responsive-cascade-order",
+    "html": "<section id=\"root\" data-theme=\"cool\"><div id=\"r1\" data-size=\"half\" data-order=\"last\"></div><div id=\"r2\" data-size=\"quarter\"></div><div id=\"r3\" data-size=\"half\"></div></section>",
+    "css": "#root{width:100%;height:100%;flex-direction:row;background:white}#root[data-theme=cool]{--paint:teal}#root>div{height:40px;background:var(--paint)}#root>[data-size=half]{width:40%;max-width:160px}#root>[data-size=quarter]{width:20%;max-width:80px;background:coral}#root>[data-order=last]{order:2}#root>:where([data-size=half]){background:navy}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div></section>",
+    "controlCss": "#root{width:100%;height:100%;flex-direction:row;background:white}#root>div{height:40px;background:teal}#root>#r1,#root>#r3{width:40%;max-width:160px}#root>#r2{width:20%;max-width:80px;background:coral}#root>#r1{order:2}",
+    "features": [
+      "S01",
+      "variable context selected by static data",
+      "responsive dimensions and order",
+      "where specificity control"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 128, 128)"
+    }
+  },
+  {
+    "name": "data-unicode-names",
+    "html": "<section id=\"root\"><div id=\"r1\" data-café=\"one\"></div><div id=\"r2\" DATA-CAFé=\"two\"></div><div id=\"r3\" data-cafÉ=\"three\"></div><div id=\"r4\" data-雪=\"four\"></div></section>",
+    "css": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root [data-café]{background:teal}#root [DATA-CAF\\e9 =two]{background:coral;width:80px}#root [data-cafÉ]{background:navy;width:96px}#root [data-\\96ea ]{background:teal;width:64px}",
+    "controlHtml": "<section id=\"root\"><div id=\"r1\"></div><div id=\"r2\"></div><div id=\"r3\"></div><div id=\"r4\"></div></section>",
+    "controlCss": "#root{width:100%;height:112px;background:white}#root>div{width:120px;height:16px;background:silver}#root>#r1{background:teal}#root>#r2{background:coral;width:80px}#root>#r3{background:navy;width:96px}#root>#r4{background:teal;width:64px}",
+    "features": [
+      "S01",
+      "Unicode names literal and CSS escapes",
+      "ASCII name folding preserves non-ASCII case distinctions"
+    ],
+    "expectedPaint": {
+      "root": "rgb(255, 255, 255)",
+      "r1": "rgb(0, 128, 128)",
+      "r2": "rgb(255, 127, 80)",
+      "r3": "rgb(0, 0, 128)",
+      "r4": "rgb(0, 128, 128)"
+    }
+  }
+]

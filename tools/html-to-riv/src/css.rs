@@ -249,12 +249,8 @@ fn parse_declarations(
 
 fn attribute_selector(p: &mut Parser<'_, '_>) -> Result<String, Diagnostic> {
     let start = p.position();
-    let name = p
-        .expect_ident()
+    p.expect_ident()
         .map_err(|_| error("css", "Expected attribute name"))?;
-    if !name.is_ascii() {
-        return Err(error("css", "Attribute names must decode to ASCII"));
-    }
     if !p.is_exhausted() {
         match p
             .next()

@@ -1,0 +1,816 @@
+{
+  "reductions": [
+    {
+      "name": "original",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "diagnostic reduction; fixed viewport, not responsive qualification"
+      ]
+    },
+    {
+      "name": "remove-a",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "diagnostic reduction; fixed viewport, not responsive qualification"
+      ]
+    },
+    {
+      "name": "remove-b",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "diagnostic reduction; fixed viewport, not responsive qualification"
+      ]
+    },
+    {
+      "name": "remove-fixed",
+      "html": "<div id=outer><div id=lead></div><div id=p></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "diagnostic reduction; fixed viewport, not responsive qualification"
+      ]
+    },
+    {
+      "name": "remove-lead",
+      "html": "<div id=outer><div id=p></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "diagnostic reduction; fixed viewport, not responsive qualification"
+      ]
+    },
+    {
+      "name": "single-box",
+      "html": "<div id=p></div>",
+      "css": "#p{width:75%;height:25.5px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ]
+    },
+    {
+      "name": "minimal-height",
+      "html": "<div id=p></div>",
+      "css": "#p{height:25.5px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ]
+    },
+    {
+      "name": "minimal-no-height",
+      "html": "<div id=p></div>",
+      "css": "#p{background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ]
+    },
+    {
+      "name": "minimal-no-paint",
+      "html": "<div id=p></div>",
+      "css": "#p{height:25.5px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "name": "height-25",
+      "html": "<div id=p></div>",
+      "css": "#p{height:25px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-25p25",
+      "html": "<div id=p></div>",
+      "css": "#p{height:25.25px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-25p5",
+      "html": "<div id=p></div>",
+      "css": "#p{height:25.5px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-25p75",
+      "html": "<div id=p></div>",
+      "css": "#p{height:25.75px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-26",
+      "html": "<div id=p></div>",
+      "css": "#p{height:26px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-0p03125",
+      "html": "<div id=p></div>",
+      "css": "#p{height:.03125px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-0p25",
+      "html": "<div id=p></div>",
+      "css": "#p{height:.25px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-0p5",
+      "html": "<div id=p></div>",
+      "css": "#p{height:.5px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-0p75",
+      "html": "<div id=p></div>",
+      "css": "#p{height:.75px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-1",
+      "html": "<div id=p></div>",
+      "css": "#p{height:1px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    },
+    {
+      "name": "height-1p25",
+      "html": "<div id=p></div>",
+      "css": "#p{height:1.25px;background:#14233f}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "single fixed fractional rectangle control"
+      ]
+    }
+  ],
+  "fixed": [
+    {
+      "name": "row-subunit-point-fixed-native",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:100.0px;height:80.0px}#lead{flex:none;width:13.25px;height:9.0px}#p{flex:none;width:75.0px;height:25.5px}#a{flex:none;width:22.625px;height:40.125px}#b{flex:none;width:34.25px;height:40.125px}#fixed{flex:none;width:13.125px;height:19.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "row-subunit-point-fixed-chrome",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:100px;height:80px}#lead{flex:none;width:13.25px;height:9px}#p{flex:none;width:75px;height:25.5px}#a{flex:none;width:22.625px;height:40.125px}#b{flex:none;width:34.25px;height:40.125px}#fixed{flex:none;width:13.125px;height:19.75px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "row-reverse-subunit-point-fixed-native",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:400.0px;height:200.0px}#lead{flex:none;width:13.25px;height:9.0px}#p{flex:none;width:300.0px;height:25.5px}#a{flex:none;width:78.875px;height:40.125px}#b{flex:none;width:90.5px;height:40.125px}#fixed{flex:none;width:13.125px;height:19.75px}",
+      "viewports": [
+        [
+          400,
+          200
+        ],
+        [
+          400,
+          200
+        ],
+        [
+          400,
+          200
+        ],
+        [
+          400,
+          200
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "row-reverse-subunit-point-fixed-chrome",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:400px;height:200px}#lead{flex:none;width:13.25px;height:9px}#p{flex:none;width:300px;height:25.5px}#a{flex:none;width:78.875px;height:40.125px}#b{flex:none;width:90.5px;height:40.125px}#fixed{flex:none;width:13.125px;height:19.75px}",
+      "viewports": [
+        [
+          400,
+          200
+        ],
+        [
+          400,
+          200
+        ],
+        [
+          400,
+          200
+        ],
+        [
+          400,
+          200
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "column-decimal-point-fixed-native",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:100.0px;height:80.0px}#lead{flex:none;width:13.25px;height:9.0px}#p{flex:none;width:25.5px;height:50.0px}#a{flex:none;width:40.125px;height:1.4031251668930054px}#b{flex:none;width:40.125px;height:25.868749618530273px}#fixed{flex:none;width:19.75px;height:13.125px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "column-decimal-point-fixed-chrome",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:100px;height:80px}#lead{flex:none;width:13.25px;height:9px}#p{flex:none;width:25.5px;height:50px}#a{flex:none;width:40.125px;height:1.40625px}#b{flex:none;width:40.125px;height:25.859375px}#fixed{flex:none;width:19.75px;height:13.125px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "column-reverse-decimal-point-fixed-native",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:100.0px;height:80.0px}#lead{flex:none;width:13.25px;height:9.0px}#p{flex:none;width:25.5px;height:50.0px}#a{flex:none;width:40.125px;height:1.4031251668930054px}#b{flex:none;width:40.125px;height:25.868749618530273px}#fixed{flex:none;width:19.75px;height:13.125px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    },
+    {
+      "name": "column-reverse-decimal-point-fixed-chrome",
+      "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+      "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{}#b{}#outer{flex:none;width:100px;height:80px}#lead{flex:none;width:13.25px;height:9px}#p{flex:none;width:25.5px;height:50px}#a{flex:none;width:40.125px;height:1.40625px}#b{flex:none;width:40.125px;height:25.859375px}#fixed{flex:none;width:19.75px;height:13.125px}",
+      "viewports": [
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ],
+        [
+          100,
+          80
+        ]
+      ],
+      "features": [
+        "explicit diagnostic fixed-size control at one viewport; not a responsive compiler output profile"
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "control": "row-subunit-point-fixed-native",
+      "mode": "native",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-row-subunit-point",
+      "sourceFrame": 1,
+      "originalRequestSha256": "33e2212be52e8e8bf74df0914723d7dfddf5d4432ed6d501cd900ac459e4dedc",
+      "originalRivSha256": "e600e556a7dda4e944da60f5d4bf0f205b1f78ca9c55fcf1da617d1d9ccff5c5",
+      "originalChromeSha256": "cf2c41eb5652f9329ade1307d88d9b606e382c915c367f0aa0e67095ac0f224c",
+      "originalNativeSha256": "ea67fa6318ef0170ebe741170c45c9db9fe5b9bd4e057269ec1a1e3393dc8e9f"
+    },
+    {
+      "control": "row-subunit-point-fixed-chrome",
+      "mode": "chrome",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-row-subunit-point",
+      "sourceFrame": 1,
+      "originalRequestSha256": "33e2212be52e8e8bf74df0914723d7dfddf5d4432ed6d501cd900ac459e4dedc",
+      "originalRivSha256": "e600e556a7dda4e944da60f5d4bf0f205b1f78ca9c55fcf1da617d1d9ccff5c5",
+      "originalChromeSha256": "cf2c41eb5652f9329ade1307d88d9b606e382c915c367f0aa0e67095ac0f224c",
+      "originalNativeSha256": "ea67fa6318ef0170ebe741170c45c9db9fe5b9bd4e057269ec1a1e3393dc8e9f"
+    },
+    {
+      "control": "row-reverse-subunit-point-fixed-native",
+      "mode": "native",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-row-reverse-subunit-point",
+      "sourceFrame": 0,
+      "originalRequestSha256": "96033274a9edf13cbe70b0f0702ec3c725cbfb9d776bfd8fde9687d48a2eaf61",
+      "originalRivSha256": "f084103b070e6d2857ee9fab2b1ec95be14da4f2dd2751bd2683a070b1b6a415",
+      "originalChromeSha256": "53ea031b48c55d0b3e3459cfc19cb49794e95ac3183b8a8ac937f9dbf82360f4",
+      "originalNativeSha256": "76617a48b4199daed71c48467432c079ac83ae69884b544d551b808b1e616c13"
+    },
+    {
+      "control": "row-reverse-subunit-point-fixed-chrome",
+      "mode": "chrome",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-row-reverse-subunit-point",
+      "sourceFrame": 0,
+      "originalRequestSha256": "96033274a9edf13cbe70b0f0702ec3c725cbfb9d776bfd8fde9687d48a2eaf61",
+      "originalRivSha256": "f084103b070e6d2857ee9fab2b1ec95be14da4f2dd2751bd2683a070b1b6a415",
+      "originalChromeSha256": "53ea031b48c55d0b3e3459cfc19cb49794e95ac3183b8a8ac937f9dbf82360f4",
+      "originalNativeSha256": "76617a48b4199daed71c48467432c079ac83ae69884b544d551b808b1e616c13"
+    },
+    {
+      "control": "column-decimal-point-fixed-native",
+      "mode": "native",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-column-decimal-point",
+      "sourceFrame": 1,
+      "originalRequestSha256": "caa2feff3ac3c74eaa71a452d44050127f23069d67464381f24dcc7e280c04a1",
+      "originalRivSha256": "fddaeeef6ebc4542325144947212a4f560a8970bda0cf011a6b1b9ba0564b4f2",
+      "originalChromeSha256": "e2c4393d8f22925222e1b9bafaaee298fa619fa3264cc865868fa2d375ce56a2",
+      "originalNativeSha256": "e663ccc0b96ea43c1506ba034ab2958259971625a75cb6680b7c258d662d9af5"
+    },
+    {
+      "control": "column-decimal-point-fixed-chrome",
+      "mode": "chrome",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-column-decimal-point",
+      "sourceFrame": 1,
+      "originalRequestSha256": "caa2feff3ac3c74eaa71a452d44050127f23069d67464381f24dcc7e280c04a1",
+      "originalRivSha256": "fddaeeef6ebc4542325144947212a4f560a8970bda0cf011a6b1b9ba0564b4f2",
+      "originalChromeSha256": "e2c4393d8f22925222e1b9bafaaee298fa619fa3264cc865868fa2d375ce56a2",
+      "originalNativeSha256": "e663ccc0b96ea43c1506ba034ab2958259971625a75cb6680b7c258d662d9af5"
+    },
+    {
+      "control": "column-reverse-decimal-point-fixed-native",
+      "mode": "native",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-column-reverse-decimal-point",
+      "sourceFrame": 1,
+      "originalRequestSha256": "4a6e7a9ec77d4f8769c3ad5e690f68c17c965b8460fb6bf56224a5785d013338",
+      "originalRivSha256": "7aac1e9beb1e12850ee1cc6d4c1b00c2d74874890a0e35ea9fceb759011ed299",
+      "originalChromeSha256": "f56a85e6999add38d58b4dde6bf5875abb54ec0eb7ea469f3048ad97ec0b720f",
+      "originalNativeSha256": "10aa72a81a2ad103295cd893a77475637eed09b6b07cdec72fc238e41668fb9f"
+    },
+    {
+      "control": "column-reverse-decimal-point-fixed-chrome",
+      "mode": "chrome",
+      "source": "output/flex-proof-bridge-r2/render/receipt.json",
+      "sourceName": "bridge-column-reverse-decimal-point",
+      "sourceFrame": 1,
+      "originalRequestSha256": "4a6e7a9ec77d4f8769c3ad5e690f68c17c965b8460fb6bf56224a5785d013338",
+      "originalRivSha256": "7aac1e9beb1e12850ee1cc6d4c1b00c2d74874890a0e35ea9fceb759011ed299",
+      "originalChromeSha256": "f56a85e6999add38d58b4dde6bf5875abb54ec0eb7ea469f3048ad97ec0b720f",
+      "originalNativeSha256": "10aa72a81a2ad103295cd893a77475637eed09b6b07cdec72fc238e41668fb9f"
+    }
+  ],
+  "originalReceiptSha256": "feae9b0181fee024e3901e3aed5898f1f6e0e4c1b2c7b8c8c5d1fa3f1bdf82a7",
+  "scope": "Diagnostic reductions and fixed-size controls at selected viewports. These explicitly fixed controls are not a responsive compiler output profile."
+}

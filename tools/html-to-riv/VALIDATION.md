@@ -2,7 +2,11 @@
 
 The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.
 
-Current private flex prerequisite: [flex-scene-review.md](validation/flex-scene-review.md) documents the final record/ownership/ancestry certificate and its connection to size, world and flex analysis. The complete public checkpoint passes 213 Rust and 36 Node tests, strict TypeScript, 482 bound output regressions and 107 additional public controls; public grow/shrink admission remains unchanged.
+Current public checkpoint: [data-attribute qualification](validation/public-data-attributes-review.md) records 219 Rust and 37 Node tests, strict TypeScript, 482 bound output regressions and 107 additional public controls. The 16-scene extension passes 128/128 geometry and pixel frames, 256 clear controls and complete visual coverage. Public grow/shrink admission remains unchanged.
+
+Current private flex prerequisite: [flex-scene-review.md](validation/flex-scene-review.md) documents the final record/ownership/ancestry certificate and its connection to size, world and flex analysis.
+
+Current paint diagnosis: [fixed-box controls](validation/flex-fixed-controls-review.md) preserve 224/224 geometry passes and 184/224 pixel failures, with all 28 distinct pairs reviewed. Four fixed native-size controls exactly reproduce selected flex failures; the minimal fractional-height box fails with both ordinary layout and Shape/Rectangle painting. [Border alternatives](validation/solid-border-alternatives-review.md) test two strokes and a responsive compound ring, retaining 60/216 pixel failures. These are diagnostic experiments, not public admission. The fixed-box corpora repeat selected viewports deliberately; they do not claim responsive qualification.
 
 Current private flex native/visual evidence: [flex-proof-bridge-review.md](validation/flex-proof-bridge-review.md) records 4,392 passing native bound checks, 96/96 Chrome geometry passes and 70/96 pixel passes. The complete visual review includes all failed frames; the reproducible command exits nonzero for those failures. [Solid border candidate evidence](validation/solid-border-candidate-review.md) records the independent ordinary-file experiment and retained fractional-edge failures.
 
@@ -38,7 +42,7 @@ python3 tools/html-to-riv/validation/check-target-runtime.py
 
 Transport tests default to `tools/html-to-riv/target/debug/html-to-riv` and `tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm`; override with `HTML_TO_RIV_BIN` and `HTML_TO_RIV_WASM` to test frozen artifacts. They require `public-baseline-cases.json`, `public-color-palettes.json` `public-inheritance-cases.json` `public-css-wide-cases.json` and `public-background-cases.json`; missing fixtures fail rather than skip.
 
-The 36 Node tests cover exact Rive bytes/source maps across CLI/WASM for the public color, sizing, selector, variable, layout, padding and gap corpora. They also check diagnostic parity for unsupported contexts, output ownership across failures/reuse, and direct ABI 2 buffer behavior. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
+The 37 Node tests cover exact Rive bytes/source maps across CLI/WASM for the public color, sizing, selector (including static data attributes), variable, layout, padding and gap corpora. They also check diagnostic parity for unsupported contexts, output ownership across failures/reuse, and direct ABI 2 buffer behavior. The TypeScript test checks success/failure narrowing, source-map types and compile-time rejection of incompatible versions/assets/viewport types. These are transport tests; they do not render pixels.
 
 ## Immutable native/browser run
 

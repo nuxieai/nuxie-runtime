@@ -1,0 +1,451 @@
+{
+  "status": "private ordinary-file candidates; fractional-edge profile unresolved; no public admission",
+  "target": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "dpr": 1,
+  "backend": "rust-metal RasterOrdering",
+  "sourceHashes": {
+    "validation/solid-border-alternatives-emitter.rs": "74263c52f629361e7a98ef38fa7465761f9f9f4892fcfe7d135472c8ef99ef88",
+    "validation/solid-border-alternatives-build.py": "48f5d8dd25bf44f99cde9fbd0cba1689e1f33f143898e70c834186deacc28350",
+    "validation/solid-border-alternatives-cases.json": "d7eb30b747b223931f129e5c0001854b7e1bf4259cefa708d9636f568893ac51",
+    "validation/solid-border-alternatives-visual.py": "413df2b5a5771a7d16c1feec2132548d47eb17d800a4aea87fe0f3d8ec580a5e",
+    "validation/solid-border-alternatives-receipt.py": "c6f7a1f4c37dbc1777256ea65a183d188a772d145b17c37c07c887661c40ea98",
+    "validation/solid-border-alternatives-review.md": "b6a872ef41b5924d0a6bba5ae485854d6a8feb4d5a599e2ade116048b04b1bfb",
+    "validation/solid-border-alternatives-primitive.py": "b569d80a38da46dac358a2e8d06cd47f4e61e3b36a2c7a51ae3c574c0892bf6f"
+  },
+  "runs": [
+    {
+      "path": "output/solid-border-alternatives-r1/render/receipt.json",
+      "sha256": "8380e116d02a5d105c3a21713adafd52054a7a91e6e9b2ab46ee9f2bfcd5cca9",
+      "cases": [
+        {
+          "name": "clipped-double-integer-background-content",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-translucent-border-background",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-visible-content-overflow",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-border-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-border-padding-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-fractional-origin-border-only",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-fractional-origin-alpha-border",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-fractional-edges",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "clipped-double-nested-borders",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 4,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-integer-background-content",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-translucent-border-background",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-visible-content-overflow",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-border-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-border-padding-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-fractional-origin-border-only",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-fractional-origin-alpha-border",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-fractional-edges",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "inset-stroke-nested-borders",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 4,
+          "clearPass": 16
+        }
+      ]
+    },
+    {
+      "path": "output/solid-border-alternatives-r1/r2/render/receipt.json",
+      "sha256": "b04706205d6544047814356def5da0ec994e4d79fe6b1883635f35aad6dd3d77",
+      "cases": [
+        {
+          "name": "sliced-ring-integer-background-content",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-translucent-border-background",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-visible-content-overflow",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-border-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-border-padding-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-fractional-origin-border-only",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-fractional-origin-alpha-border",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-fractional-edges",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "sliced-ring-nested-borders",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 4,
+          "clearPass": 16
+        }
+      ]
+    }
+  ],
+  "reproductions": [
+    {
+      "name": "clipped-double-integer-background-content",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-integer-background-content.riv",
+      "bytes": 464,
+      "rivSha256": "e56130987fc6c23c106563ec6f1a3410b27dcb148a8ad3bacc7a0725d9f1317e",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "clipped-double-translucent-border-background",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-translucent-border-background.riv",
+      "bytes": 558,
+      "rivSha256": "df6a0ee694136be4f23f47c9ce040b0561575db8b01e57ae4e3396052b14e069",
+      "mapSha256": "9ad031dcd5f17ac1e9f4e2fe4ce37763aa4b671caad2ae62c26935bbe433ce6d"
+    },
+    {
+      "name": "clipped-double-visible-content-overflow",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-visible-content-overflow.riv",
+      "bytes": 464,
+      "rivSha256": "82fc3f50895dcb09bbe1a75d013110709ab3df1daebc493bdcd943427d10a28b",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "clipped-double-border-floor",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-border-floor.riv",
+      "bytes": 404,
+      "rivSha256": "e53b6cb38d1d14b2448eedbff7bf045fc65662d4a501a664e77069f3c2c124b0",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "clipped-double-border-padding-floor",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-border-padding-floor.riv",
+      "bytes": 464,
+      "rivSha256": "7b78a39f881015dd6dde6c96f6ff21bffcc0c33d70967b2168c7f6f05bcb6627",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "clipped-double-fractional-origin-border-only",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-fractional-origin-border-only.riv",
+      "bytes": 441,
+      "rivSha256": "d904bff5ea5024b1794d296abedaecb2a7a782af742e19a615e49bec135bfc92",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959"
+    },
+    {
+      "name": "clipped-double-fractional-origin-alpha-border",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-fractional-origin-alpha-border.riv",
+      "bytes": 441,
+      "rivSha256": "d0fbdde4a5717199ac53a4c2e663b4ef59f78d7e517fdaa288b68656ba4d5be5",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959"
+    },
+    {
+      "name": "clipped-double-fractional-edges",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-fractional-edges.riv",
+      "bytes": 545,
+      "rivSha256": "457776193a15c1770e2bca5435c827cccb55884caeabd45d06d0efa3cc8ac09d",
+      "mapSha256": "470e60c113704538bf48e6251f31e9a7112e82eab55e1691523f6bd7da537353"
+    },
+    {
+      "name": "clipped-double-nested-borders",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/clipped-double-nested-borders.riv",
+      "bytes": 711,
+      "rivSha256": "e7704e97e3085eb26d78ceea37e55901b840a829346457490d9b3c3e24673787",
+      "mapSha256": "8f3b824a8f5cf62bde3d93e92a723a3c141b205fe523c0804c27f4c2b98af281"
+    },
+    {
+      "name": "inset-stroke-integer-background-content",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-integer-background-content.riv",
+      "bytes": 462,
+      "rivSha256": "be3b970a9a51fba6cb7e4a9b317d8d48efee7efae78973cf2f8306135358e40c",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "inset-stroke-translucent-border-background",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-translucent-border-background.riv",
+      "bytes": 556,
+      "rivSha256": "ee8c1a526265a4bad97a3fa2d5f7087b70e643197d958e9db6f32daf4f750599",
+      "mapSha256": "9ad031dcd5f17ac1e9f4e2fe4ce37763aa4b671caad2ae62c26935bbe433ce6d"
+    },
+    {
+      "name": "inset-stroke-visible-content-overflow",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-visible-content-overflow.riv",
+      "bytes": 462,
+      "rivSha256": "6d5a9095ecd5225be6ba878d53168fb99df30fea86575d75feaddde3e9a895eb",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "inset-stroke-border-floor",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-border-floor.riv",
+      "bytes": 402,
+      "rivSha256": "4155da217687bf1b1f873d150071ff835a3f28acc64412a8a3290bb8a4bd53a8",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "inset-stroke-border-padding-floor",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-border-padding-floor.riv",
+      "bytes": 462,
+      "rivSha256": "9b37a6e2db381bcb47f425f7dbf72db89d2d7ff750564bd54d93b3a123b06a77",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "inset-stroke-fractional-origin-border-only",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-fractional-origin-border-only.riv",
+      "bytes": 439,
+      "rivSha256": "91ca8e2f8151d37c2a7be0f3cf1a32bc723398bbde5c2ec92bae3e370c3199eb",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959"
+    },
+    {
+      "name": "inset-stroke-fractional-origin-alpha-border",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-fractional-origin-alpha-border.riv",
+      "bytes": 439,
+      "rivSha256": "7cf37d43cd8e11037c084da0b56f2962b1ec8fc4f4320595e773c8916e0d8b2b",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959"
+    },
+    {
+      "name": "inset-stroke-fractional-edges",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-fractional-edges.riv",
+      "bytes": 543,
+      "rivSha256": "41e61b4b4131b7b5836418efdb24aa5cb711ea0184f0ab20317ca9a81f606180",
+      "mapSha256": "470e60c113704538bf48e6251f31e9a7112e82eab55e1691523f6bd7da537353"
+    },
+    {
+      "name": "inset-stroke-nested-borders",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/inset-stroke-nested-borders.riv",
+      "bytes": 707,
+      "rivSha256": "16671898be674ff0059a913781e7d9596cee599320ad0d60e90ba8d68ff2dcbc",
+      "mapSha256": "8f3b824a8f5cf62bde3d93e92a723a3c141b205fe523c0804c27f4c2b98af281"
+    },
+    {
+      "name": "sliced-ring-integer-background-content",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-integer-background-content.riv",
+      "bytes": 635,
+      "rivSha256": "9121346929347554a2eea34d4067bca1c7d1cd079199048e4cc132af27152e74",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "sliced-ring-translucent-border-background",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-translucent-border-background.riv",
+      "bytes": 729,
+      "rivSha256": "c53f59733e90e35faeb87dc3cd35670437d352f8ed472a4294740fceff3c40c6",
+      "mapSha256": "9ad031dcd5f17ac1e9f4e2fe4ce37763aa4b671caad2ae62c26935bbe433ce6d"
+    },
+    {
+      "name": "sliced-ring-visible-content-overflow",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-visible-content-overflow.riv",
+      "bytes": 635,
+      "rivSha256": "4b51c20080dea6cfc81c1d4928961bf5d47898100716f923d5660d99583516d1",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "sliced-ring-border-floor",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-border-floor.riv",
+      "bytes": 575,
+      "rivSha256": "59ba5f22a495de44c4dd168779a31e5db1661c9d02c4a3579f162bf8dda4175f",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "sliced-ring-border-padding-floor",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-border-padding-floor.riv",
+      "bytes": 635,
+      "rivSha256": "3465509afaa4f48118d6163be6ddb2c8cf6fb5a4ce83fa92d8b6e05c9e6896a9",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "name": "sliced-ring-fractional-origin-border-only",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-fractional-origin-border-only.riv",
+      "bytes": 612,
+      "rivSha256": "cc9461df0476a8ad62aad774b97c6354722a33937d1a234505aed37558b38f81",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959"
+    },
+    {
+      "name": "sliced-ring-fractional-origin-alpha-border",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-fractional-origin-alpha-border.riv",
+      "bytes": 612,
+      "rivSha256": "01cd81e59644d882732dcfef908c6469fc1e1e11b4cf07a3e57cb30029dcd92c",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959"
+    },
+    {
+      "name": "sliced-ring-fractional-edges",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-fractional-edges.riv",
+      "bytes": 716,
+      "rivSha256": "240e9bbcca50052ecd92a9eb1b59e0fcdda3fd8888fc9cd19f40d613f136df6f",
+      "mapSha256": "470e60c113704538bf48e6251f31e9a7112e82eab55e1691523f6bd7da537353"
+    },
+    {
+      "name": "sliced-ring-nested-borders",
+      "path": "output/solid-border-alternatives-r1/reproduction-r2/sliced-ring-nested-borders.riv",
+      "bytes": 1027,
+      "rivSha256": "9c5d11f58f7f1f097b2f1c35d664c722b77ca06bf4e93cebb31ae6220ddf2b92",
+      "mapSha256": "8f3b824a8f5cf62bde3d93e92a723a3c141b205fe523c0804c27f4c2b98af281"
+    }
+  ],
+  "buildReceipts": {
+    "output/solid-border-alternatives-r1/build-receipt.json": "510b7679a2de2ee7ad726fb193680beda0584725eeea7a415a8546503fa40af1",
+    "output/solid-border-alternatives-r1/r2/build-receipt.json": "e94f08cc2170a166923596c0af2fe775ba7befa714b61ca8f2f08ba6846c405f",
+    "output/solid-border-alternatives-r1/r3/build-receipt.json": "cabcf2950025564f46d4e274a899152f388fae1678da3c0fbc666bd822b70e26"
+  },
+  "sourceAudit": {
+    "path": "output/solid-border-alternatives-r1/source-audit.json",
+    "sha256": "417801e0b8613277e78555932258f5c5250bd009ca502d0fabb6c906883e799a"
+  },
+  "runtimeGuard": {
+    "path": "output/solid-border-alternatives-r1/runtime-guard.json",
+    "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+  },
+  "priorReceipts": {
+    "output/solid-border-candidate-r1/r2/render/receipt.json": "55ea35ba7666f5b0cc0eae0c00eb3c6818b97095d69fc3dbe7137f36941856b4",
+    "output/solid-border-candidate-r1/r3/render/receipt.json": "3c59095a5608910d7c4edd3ada0017f66bec4c2da5df97309c2dc356f93438e6"
+  },
+  "visualCoverage": {
+    "path": "output/solid-border-alternatives-r1/visual-coverage.json",
+    "sha256": "9449659501eb7f281f8efb72f286dd34145a1cf5af6765f05edf904f2300b066",
+    "frames": 216,
+    "distinctPairs": 48,
+    "newDirectPairs": 32,
+    "priorExactFrameTransfers": 116,
+    "newExactFrameTransfers": 68
+  },
+  "topologyComparison": {
+    "path": "output/solid-border-alternatives-r1/topology-comparison.json",
+    "sha256": "d659c206b9b0bc88f566b568c0c18129fa92f5422ce5d104a63a81cf33e8e7b1"
+  },
+  "primitiveControl": {
+    "path": "output/solid-border-alternatives-r1/primitive-receipt.json",
+    "sha256": "2c0c0b9d7c20c6b4b569694076fd4c3baf2d6f8a5e0c10c5c1257d8e08fc75ce",
+    "cases": 4,
+    "frames": 32,
+    "geometryPass": 32,
+    "pixelPass": 16,
+    "clearPass": 64,
+    "directPairs": 2,
+    "exactReproductions": 4
+  }
+}

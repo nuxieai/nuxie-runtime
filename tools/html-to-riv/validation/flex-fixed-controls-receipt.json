@@ -1,0 +1,156 @@
+{
+  "status": "diagnostic evidence; no public flex admission; paint composition remains unresolved",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Diagnostic reductions and fixed-size controls at selected viewports. These explicitly fixed controls are not a responsive compiler output profile.",
+  "totals": {
+    "reductions": {
+      "cases": 9,
+      "frames": 72,
+      "geometryPass": 72,
+      "pixelPass": 16,
+      "clearPass": 144
+    },
+    "edges": {
+      "cases": 11,
+      "frames": 88,
+      "geometryPass": 88,
+      "pixelPass": 24,
+      "clearPass": 176
+    },
+    "fixed": {
+      "cases": 8,
+      "frames": 64,
+      "geometryPass": 64,
+      "pixelPass": 0,
+      "clearPass": 128
+    }
+  },
+  "geometryPass": 224,
+  "pixelPass": 40,
+  "pixelFail": 184,
+  "clearPass": 448,
+  "directVisualPairs": 28,
+  "reviewedRerunRoleComparisons": 448,
+  "fixedControlNativeImageReproductions": 4,
+  "fixedControlChromeImageReproductions": 8,
+  "originalReplayExactNativeRepeat": true,
+  "findings": [
+    "Four selected flex failures reproduce without growth or shrink in fixed native-size controls.",
+    "Minimal height 25.5px opaque box has equal measured geometry and different boundary coverage.",
+    "Ordinary LayoutComponent Fill and Shape/Rectangle Fill have identical native pixels in the minimal control.",
+    "These findings constrain tested paint encodings; they do not prove every ordinary-file composition impossible."
+  ],
+  "bindings": [
+    {
+      "path": "output/flex-fixed-controls-r2/receipt.json",
+      "sha256": "39fa4680169b945c32ae6ee0dd62657750fd340a57dd1377387d85d14e5b4c37"
+    },
+    {
+      "path": "output/flex-fixed-controls-r2/visual-transfers.json",
+      "sha256": "8dacad990a047cf165c63cf5d98a865a59b9080c45b2050816b362045849d6ef"
+    },
+    {
+      "path": "output/flex-fixed-controls-r2/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "output/flex-fixed-controls-r1/original-replay/receipt.json",
+      "sha256": "e7a27dc853f2b9881f22634d2537c97c034448bfa49922edc4e965bf490206d4"
+    },
+    {
+      "path": "output/flex-fixed-controls-r1/visual-evidence.json",
+      "sha256": "591f77241cfe4d76c6b1ae59962b36bd60d0540538a6dc2cc1ec826b841b3a82"
+    },
+    {
+      "path": "output/flex-fixed-controls-r1/visual-review.py",
+      "sha256": "bbfc62efdefd03ab0ba4f33877611d18c7b48251da3582b7bc37e9095a1d30fe"
+    },
+    {
+      "path": "validation/flex-fixed-controls-review.md",
+      "sha256": "619a83a3c84202c21879fa34d188b6d383bfd90e2ee880970ed9344629ab7071"
+    },
+    {
+      "path": "validation/flex-fixed-visual-review.md",
+      "sha256": "86bcc7a7bc624acf037662c17a9860a6c7a1d53d8ed2a3eda5484e6ac41da8a5"
+    },
+    {
+      "path": "validation/check-flex-fixed-controls.mjs",
+      "sha256": "78e72586a37004467591a212fbe9350976bc21e31d71efd780aee6084aefd549"
+    },
+    {
+      "path": "validation/flex-fixed-controls-cases.json",
+      "sha256": "c29847aad02b7dd576098c1a88b95a3a14af1c188190d12047214f5dd1da5d54"
+    },
+    {
+      "path": "validation/replay-pixel-case.mjs",
+      "sha256": "3865bcbb1549e6579da49dbf52d56b7be548a78c89b1740dc02a2c8ce444d86a"
+    },
+    {
+      "path": "validation/solid-border-alternatives-receipt.json",
+      "sha256": "e85944b1ca9ffcdfb0ffb8a8f42c26538d9010bb4d77b20f7a32850179e150e6"
+    },
+    {
+      "path": "output/solid-border-alternatives-r1/primitive-receipt.json",
+      "sha256": "2c0c0b9d7c20c6b4b569694076fd4c3baf2d6f8a5e0c10c5c1257d8e08fc75ce"
+    },
+    {
+      "path": "output/flex-fixed-controls-r2/reductions-render/receipt.json",
+      "sha256": "f90a702b408b4292700e05df3c618cf957f6884542ed204d2967aac3277ed0bb"
+    },
+    {
+      "path": "output/flex-fixed-controls-r2/edges-render/receipt.json",
+      "sha256": "a59956891708709ff80eba40e516c5df12651f7a96b4cbc2da257712cac324b5"
+    },
+    {
+      "path": "output/flex-fixed-controls-r2/fixed-render/receipt.json",
+      "sha256": "4963986ddc9f5fda29322798ae0f99cd4ecc72acd9489452ba2332b869f8c110"
+    }
+  ],
+  "binaryHashes": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-checkpoint-r2/html-to-riv": "9ba14a0d3ecd1cf4d17d1c19a0f2cef3e77237d0de464008f41cae2eff093b6d",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-bridge-r2/aggregate-driver-check/harness": "5be36f553d38d594e4f3e89dc681268eea4279662116e47bc5f9fdc46ca0fb53",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "runs": {
+    "reductions": {
+      "command": [
+        "node",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-public-baseline.mjs",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/reductions.json",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-bridge-r2/aggregate-driver-check/harness",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/reductions-render"
+      ],
+      "exitCode": 1,
+      "receiptSha256": "f90a702b408b4292700e05df3c618cf957f6884542ed204d2967aac3277ed0bb"
+    },
+    "edges": {
+      "command": [
+        "node",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-public-baseline.mjs",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/edges.json",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-checkpoint-r2/html-to-riv",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/edges-render"
+      ],
+      "exitCode": 1,
+      "receiptSha256": "a59956891708709ff80eba40e516c5df12651f7a96b4cbc2da257712cac324b5"
+    },
+    "fixed": {
+      "command": [
+        "node",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-public-baseline.mjs",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/fixed.json",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-checkpoint-r2/html-to-riv",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-fixed-controls-r2/fixed-render"
+      ],
+      "exitCode": 1,
+      "receiptSha256": "4963986ddc9f5fda29322798ae0f99cd4ecc72acd9489452ba2332b869f8c110"
+    }
+  }
+}

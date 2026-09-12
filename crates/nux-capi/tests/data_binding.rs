@@ -175,6 +175,10 @@ fn scalar_fixture() -> Vec<u8> {
 }
 
 fn shared_nested_list_fixture() -> Vec<u8> {
+    shared_nested_list_fixture_with_item_artboard(true)
+}
+
+fn shared_nested_list_fixture_with_item_artboard(item_artboard: bool) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 0x554e_4956, 0] {
         push_var_uint(&mut bytes, value);
@@ -237,11 +241,11 @@ fn shared_nested_list_fixture() -> Vec<u8> {
     object(&mut bytes, "Artboard", |bytes| {
         uint(bytes, "Artboard", "viewModelId", 0)
     });
-    // Exact File::viewModelInstanceListItem resolves the list item's implicit
-    // artboard by the inserted instance's view-model id.
-    object(&mut bytes, "Artboard", |bytes| {
-        uint(bytes, "Artboard", "viewModelId", 1)
-    });
+    if item_artboard {
+        object(&mut bytes, "Artboard", |bytes| {
+            uint(bytes, "Artboard", "viewModelId", 1)
+        });
+    }
     bytes
 }
 
@@ -1089,8 +1093,8 @@ fn linked_child_and_list_item_mutations_invalidate_the_bound_root_occurrence() {
     );
     assert_eq!(
         unsafe { nux_player_acknowledge_presented(player, after_replace) },
-        NuxStatus::Ok,
-        "exact C++ parent bookkeeping deduplicates equal parents, then removing either edge removes that parent even while another edge remains"
+        NuxStatus::HandleMismatch,
+        "removing one reference must preserve invalidation through the remaining list reference"
     );
 
     let before_detach = step_and_ack(player);
@@ -1249,7 +1253,265 @@ fn flattened_snapshot_preserves_shared_nested_and_list_identity() {
 
 #[test]
 fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology() {
-    let bytes = shared_nested_list_fixture();
+    qualify_structural_mutations(shared_nested_list_fixture());
+}
+
+#[test]
+fn data_only_list_items_support_atomic_structural_mutations_without_an_artboard() {
+    qualify_structural_mutations(shared_nested_list_fixture_with_item_artboard(false));
+}
+
+#[test]
+fn cumulative_list_growth_preserves_snapshot_limits_and_allows_retry() {
+    let file = import_bytes(&shared_nested_list_fixture_with_item_artboard(false));
+    let mut root = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    let children = (0..1050)
+        .map(|_| {
+            let mut child = std::ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_view_model_instance_new(file, 1, &mut child) },
+                NuxStatus::Ok
+            );
+            child
+        })
+        .collect::<Vec<_>>();
+    let append = |start: usize, end: usize, index: usize| {
+        let mutations = children[start..end]
+            .iter()
+            .enumerate()
+            .map(|(offset, child)| NuxViewModelMutation {
+                kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+                instance: root,
+                related_instance: *child,
+                path: NuxStringView {
+                    data: b"items".as_ptr().cast(),
+                    len: 5,
+                },
+                index: index + offset,
+                ..NuxViewModelMutation::default()
+            })
+            .collect::<Vec<_>>();
+        let batch = NuxViewModelMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        let status = unsafe { nux_view_model_mutate(&batch, &mut result) };
+        let mut info = NuxViewModelMutationResultInfo::default();
+        assert_eq!(
+            unsafe { nux_view_model_mutation_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.status, status);
+        if status != NuxStatus::Ok {
+            assert_eq!(info.change_count, 0);
+        }
+        unsafe { nux_view_model_mutation_result_free(result) };
+        status
+    };
+
+    assert_eq!(append(0, 600, 1), NuxStatus::Ok);
+    let before = snapshot(root);
+    let before_edges = snapshot_edges(before);
+    assert_eq!(nested_and_list_ids(before).1.len(), 601);
+    assert_eq!(append(600, 1050, 601), NuxStatus::LimitExceeded);
+    let after = snapshot(root);
+    assert_eq!(snapshot_edges(after), before_edges);
+    assert_eq!(append(600, 700, 601), NuxStatus::Ok);
+    let retry = snapshot(root);
+    assert_eq!(nested_and_list_ids(retry).1.len(), 701);
+    unsafe {
+        nux_view_model_snapshot_free(before);
+        nux_view_model_snapshot_free(after);
+        nux_view_model_snapshot_free(retry);
+        for child in children {
+            nux_view_model_instance_free(child);
+        }
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn retained_child_writes_preserve_the_shared_root_snapshot_budget() {
+    qualify_shared_owner_snapshot_budget(false, false);
+}
+
+#[test]
+fn nested_path_writes_validate_every_shared_child_owner() {
+    qualify_shared_owner_snapshot_budget(true, false);
+}
+
+#[test]
+fn removing_one_duplicate_list_reference_preserves_child_ownership() {
+    qualify_shared_owner_snapshot_budget(false, true);
+}
+
+fn qualify_shared_owner_snapshot_budget(nested_path: bool, remove_duplicate: bool) {
+    let file = import_bytes(&shared_nested_list_fixture_with_item_artboard(false));
+    let mut root = std::ptr::null_mut();
+    assert_eq!(
+        unsafe { nux_view_model_instance_new_authored(file, 0, 0, &mut root) },
+        NuxStatus::Ok
+    );
+    let children = (0..5)
+        .map(|_| {
+            let mut child = std::ptr::null_mut();
+            assert_eq!(
+                unsafe { nux_view_model_instance_new(file, 1, &mut child) },
+                NuxStatus::Ok
+            );
+            child
+        })
+        .collect::<Vec<_>>();
+    let mutate = |mutations: &[NuxViewModelMutation]| {
+        let batch = NuxViewModelMutationBatch {
+            mutations: mutations.as_ptr(),
+            mutation_count: mutations.len(),
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut result = std::ptr::null_mut();
+        let status = unsafe { nux_view_model_mutate(&batch, &mut result) };
+        unsafe { nux_view_model_mutation_result_free(result) };
+        status
+    };
+    let insertions = children
+        .iter()
+        .enumerate()
+        .map(|(index, child)| NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: root,
+            related_instance: *child,
+            path: NuxStringView {
+                data: b"items".as_ptr().cast(),
+                len: 5,
+            },
+            index: index + 1,
+            ..NuxViewModelMutation::default()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(mutate(&insertions), NuxStatus::Ok);
+    let mut sibling = std::ptr::null_mut();
+    if nested_path {
+        assert_eq!(unsafe { nux_view_model_instance_new(file, 0, &mut sibling) }, NuxStatus::Ok);
+        assert_eq!(mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_VIEW_MODEL,
+            instance: sibling,
+            related_instance: children[4],
+            path: NuxStringView { data: b"child".as_ptr().cast(), len: 5 },
+            ..NuxViewModelMutation::default()
+        }]), NuxStatus::Ok);
+    }
+    if remove_duplicate {
+        assert_eq!(mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_INSERT,
+            instance: root,
+            related_instance: children[4],
+            path: NuxStringView { data: b"items".as_ptr().cast(), len: 5 },
+            index: 6,
+            ..NuxViewModelMutation::default()
+        }]), NuxStatus::Ok);
+        assert_eq!(mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_LIST_REMOVE,
+            instance: root,
+            path: NuxStringView { data: b"items".as_ptr().cast(), len: 5 },
+            index: 6,
+            ..NuxViewModelMutation::default()
+        }]), NuxStatus::Ok);
+    }
+    let write = |child, bytes: &[u8]| {
+        let (instance, path): (_, &[u8]) = if nested_path && child == children[4] {
+            (sibling, b"child/label")
+        } else {
+            (child, b"label")
+        };
+        mutate(&[NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+            instance,
+            path: NuxStringView {
+                data: path.as_ptr().cast(),
+                len: path.len(),
+            },
+            bytes_value: NuxByteView {
+                data: bytes.as_ptr(),
+                len: bytes.len(),
+            },
+            ..NuxViewModelMutation::default()
+        }])
+    };
+    let large = vec![b'x'; 900_000];
+    for child in &children[..4] {
+        assert_eq!(write(*child, &large), NuxStatus::Ok);
+    }
+    assert_eq!(write(children[4], &large), NuxStatus::LimitExceeded);
+    let preserved = snapshot(root);
+    let preserved_child = snapshot(children[4]);
+    let mut label = NuxViewModelSnapshotValueView::default();
+    assert_eq!(
+        unsafe { nux_view_model_snapshot_value(preserved_child, 0, &mut label) },
+        NuxStatus::Ok
+    );
+    assert_eq!(label.bytes_value.len, 0);
+    assert_eq!(write(children[0], b""), NuxStatus::Ok);
+    assert_eq!(write(children[4], &large), NuxStatus::Ok);
+    let retry = snapshot(root);
+    unsafe {
+        nux_view_model_snapshot_free(preserved);
+        nux_view_model_snapshot_free(preserved_child);
+        nux_view_model_snapshot_free(retry);
+        for child in children {
+            nux_view_model_instance_free(child);
+        }
+        if !sibling.is_null() {
+            nux_view_model_instance_free(sibling);
+        }
+        nux_view_model_instance_free(root);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn authored_shared_child_keeps_each_imported_parent_reference() {
+    use nuxie_render_api::{PersistentFactory, RecordingFactory};
+    use nuxie_runtime::{File, RuntimeFactoryHandle, RuntimeOwnedViewModelHandle, RuntimeOwnedViewModelInstance};
+
+    for clear_list_first in [true, false] {
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let file = File::import(&shared_nested_list_fixture(), retained, None, None, None).unwrap();
+        let root = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::from_instance(file.clone(), 0, 0).unwrap(),
+        );
+        let child = root.linked_view_model_by_property_name_path("child").unwrap();
+        let listed = root.list_items_by_property_name_path("items").unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(child.ptr_eq(&listed[0]));
+        let replacement = RuntimeOwnedViewModelHandle::new(
+            RuntimeOwnedViewModelInstance::new(file, 1).unwrap(),
+        );
+        if clear_list_first {
+            assert!(root.clear_list_items_by_property_name_path("items"));
+        } else {
+            assert!(root.link_view_model_by_property_name_path("child", &replacement).unwrap());
+        }
+        let owners = child.parent_instances().unwrap();
+        assert_eq!(owners.len(), 1, "the remaining authored reference owns its child");
+        assert!(owners[0].ptr_eq(&root));
+        if clear_list_first {
+            assert!(root.link_view_model_by_property_name_path("child", &replacement).unwrap());
+        } else {
+            assert!(root.clear_list_items_by_property_name_path("items"));
+        }
+        assert!(child.parent_instances().unwrap().is_empty(), "the last unlink releases its owner");
+    }
+}
+
+fn qualify_structural_mutations(bytes: Vec<u8>) {
     let file = import_bytes(&bytes);
     let mut root = std::ptr::null_mut();
     let mut replacement = std::ptr::null_mut();

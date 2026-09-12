@@ -1,0 +1,1818 @@
+[
+  {
+    "name": "public-remainder-k2-r1-row-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:34.046875px;flex-direction:row;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "2 unequal cross-size lines",
+      "free cross space 259 raw LayoutUnits, remainder 1 modulo 2",
+      "source-authored exact dyadic lengths",
+      "row",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k2-r1-row-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:34.046875px;flex-direction:row;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "2 unequal cross-size lines",
+      "free cross space 259 raw LayoutUnits, remainder 1 modulo 2",
+      "source-authored exact dyadic lengths",
+      "row",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k3-r1-column-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:57.0625px;flex-direction:column;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "3 unequal cross-size lines",
+      "free cross space 388 raw LayoutUnits, remainder 1 modulo 3",
+      "source-authored exact dyadic lengths",
+      "column",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k3-r1-column-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:57.0625px;flex-direction:column;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "3 unequal cross-size lines",
+      "free cross space 388 raw LayoutUnits, remainder 1 modulo 3",
+      "source-authored exact dyadic lengths",
+      "column",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k3-r2-row-reverse-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:57.078125px;flex-direction:row-reverse;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "3 unequal cross-size lines",
+      "free cross space 389 raw LayoutUnits, remainder 2 modulo 3",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k3-r2-row-reverse-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:57.078125px;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "3 unequal cross-size lines",
+      "free cross space 389 raw LayoutUnits, remainder 2 modulo 3",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r1-column-reverse-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:84.078125px;flex-direction:column-reverse;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 517 raw LayoutUnits, remainder 1 modulo 4",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r1-column-reverse-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:84.078125px;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 517 raw LayoutUnits, remainder 1 modulo 4",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r2-row-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:84.09375px;flex-direction:row;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 518 raw LayoutUnits, remainder 2 modulo 4",
+      "source-authored exact dyadic lengths",
+      "row",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r2-row-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:84.09375px;flex-direction:row;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 518 raw LayoutUnits, remainder 2 modulo 4",
+      "source-authored exact dyadic lengths",
+      "row",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r3-column-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:84.109375px;flex-direction:column;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 519 raw LayoutUnits, remainder 3 modulo 4",
+      "source-authored exact dyadic lengths",
+      "column",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r3-column-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:84.109375px;flex-direction:column;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 519 raw LayoutUnits, remainder 3 modulo 4",
+      "source-authored exact dyadic lengths",
+      "column",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r1-row-reverse-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.125px;flex-direction:row-reverse;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}#v4{width:60px;height:29px;align-self:center;background:#9b4dc4;}#v5{width:60px;height:33px;align-self:flex-end;background:#cf3484;}#v6{width:60px;height:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 904 raw LayoutUnits, remainder 1 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r1-row-reverse-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.125px;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}#v4{width:60px;height:29px;align-self:center;background:#9b4dc4;}#v5{width:60px;height:33px;align-self:flex-end;background:#cf3484;}#v6{width:60px;height:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 904 raw LayoutUnits, remainder 1 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r2-column-reverse-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.140625px;flex-direction:column-reverse;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}#v4{height:60px;width:29px;align-self:center;background:#9b4dc4;}#v5{height:60px;width:33px;align-self:flex-end;background:#cf3484;}#v6{height:60px;width:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 905 raw LayoutUnits, remainder 2 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r2-column-reverse-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.140625px;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}#v4{height:60px;width:29px;align-self:center;background:#9b4dc4;}#v5{height:60px;width:33px;align-self:flex-end;background:#cf3484;}#v6{height:60px;width:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 905 raw LayoutUnits, remainder 2 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r3-row-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.15625px;flex-direction:row;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}#v4{width:60px;height:29px;align-self:center;background:#9b4dc4;}#v5{width:60px;height:33px;align-self:flex-end;background:#cf3484;}#v6{width:60px;height:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 906 raw LayoutUnits, remainder 3 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r3-row-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.15625px;flex-direction:row;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}#v4{width:60px;height:29px;align-self:center;background:#9b4dc4;}#v5{width:60px;height:33px;align-self:flex-end;background:#cf3484;}#v6{width:60px;height:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 906 raw LayoutUnits, remainder 3 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r4-column-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.171875px;flex-direction:column;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}#v4{height:60px;width:29px;align-self:center;background:#9b4dc4;}#v5{height:60px;width:33px;align-self:flex-end;background:#cf3484;}#v6{height:60px;width:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 907 raw LayoutUnits, remainder 4 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r4-column-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.171875px;flex-direction:column;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}#v4{height:60px;width:29px;align-self:center;background:#9b4dc4;}#v5{height:60px;width:33px;align-self:flex-end;background:#cf3484;}#v6{height:60px;width:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 907 raw LayoutUnits, remainder 4 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r5-row-reverse-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.1875px;flex-direction:row-reverse;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}#v4{width:60px;height:29px;align-self:center;background:#9b4dc4;}#v5{width:60px;height:33px;align-self:flex-end;background:#cf3484;}#v6{width:60px;height:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 908 raw LayoutUnits, remainder 5 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r5-row-reverse-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.1875px;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{width:60px;height:13px;align-self:flex-start;background:#ffcc22;width:40px;min-width:60px;max-width:50px;height:23px;max-height:13px;}#v1{width:60px;height:17px;align-self:center;background:#ee553380;}#v2{width:60px;height:21px;align-self:flex-end;background:#2167b1;}#v3{width:60px;height:25px;align-self:flex-start;background:#1f9d76;}#v4{width:60px;height:29px;align-self:center;background:#9b4dc4;}#v5{width:60px;height:33px;align-self:flex-end;background:#cf3484;}#v6{width:60px;height:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 908 raw LayoutUnits, remainder 5 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r6-column-reverse-wrap-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.203125px;flex-direction:column-reverse;flex-wrap:wrap;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}#v4{height:60px;width:29px;align-self:center;background:#9b4dc4;}#v5{height:60px;width:33px;align-self:flex-end;background:#cf3484;}#v6{height:60px;width:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 909 raw LayoutUnits, remainder 6 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "forward physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r6-column-reverse-wrap-reverse-single",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.203125px;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:stretch;background:transparent;}#v0{height:60px;width:13px;align-self:flex-start;background:#ffcc22;height:40px;min-height:60px;max-height:50px;width:23px;max-width:13px;}#v1{height:60px;width:17px;align-self:center;background:#ee553380;}#v2{height:60px;width:21px;align-self:flex-end;background:#2167b1;}#v3{height:60px;width:25px;align-self:flex-start;background:#1f9d76;}#v4{height:60px;width:29px;align-self:center;background:#9b4dc4;}#v5{height:60px;width:33px;align-self:flex-end;background:#cf3484;}#v6{height:60px;width:37px;align-self:flex-start;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgba(238, 85, 51, 0.5)",
+      "v2": "rgb(33, 103, 177)",
+      "v3": "rgb(31, 157, 118)",
+      "v4": "rgb(155, 77, 196)",
+      "v5": "rgb(207, 52, 132)",
+      "v6": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "flex-start",
+      "v1": "center",
+      "v2": "flex-end",
+      "v3": "flex-start",
+      "v4": "center",
+      "v5": "flex-end",
+      "v6": "flex-start"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 909 raw LayoutUnits, remainder 6 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "wrap-reverse physical bucket placement",
+      "one fixed owner per line; mixed start/center/end alignment",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k2-r1-row-wrap-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:34.046875px;flex-direction:row;flex-wrap:wrap;align-content:normal;background:transparent;}#v0{width:40px;height:13px;align-self:center;background:#ffcc22;width:20px;min-width:40px;max-width:30px;height:23px;max-height:13px;}#v1{width:40px;height:5.984375px;align-self:center;background:#ffcc22;}#v2{width:40px;height:17px;align-self:center;background:#ee553380;}#v3{width:40px;height:9.984375px;align-self:center;background:#ee553380;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "2 unequal cross-size lines",
+      "free cross space 259 raw LayoutUnits, remainder 1 modulo 2",
+      "source-authored exact dyadic lengths",
+      "row",
+      "forward physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k2-r1-column-reverse-wrap-reverse-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:34.046875px;flex-direction:column-reverse;flex-wrap:wrap-reverse;align-content:normal;background:transparent;}#v0{height:40px;width:13px;align-self:center;background:#ffcc22;height:20px;min-height:40px;max-height:30px;width:23px;max-width:13px;}#v1{height:40px;width:5.984375px;align-self:center;background:#ffcc22;}#v2{height:40px;width:17px;align-self:center;background:#ee553380;}#v3{height:40px;width:9.984375px;align-self:center;background:#ee553380;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "2 unequal cross-size lines",
+      "free cross space 259 raw LayoutUnits, remainder 1 modulo 2",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "wrap-reverse physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k3-r1-row-reverse-wrap-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:57.0625px;flex-direction:row-reverse;flex-wrap:wrap;align-content:normal;background:transparent;}#v0{width:40px;height:13px;align-self:center;background:#ffcc22;width:20px;min-width:40px;max-width:30px;height:23px;max-height:13px;}#v1{width:40px;height:5.984375px;align-self:center;background:#ffcc22;}#v2{width:40px;height:17px;align-self:center;background:#ee553380;}#v3{width:40px;height:9.984375px;align-self:center;background:#ee553380;}#v4{width:40px;height:21px;align-self:center;background:#2167b1;}#v5{width:40px;height:13.984375px;align-self:center;background:#2167b1;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)",
+      "v4": "rgb(33, 103, 177)",
+      "v5": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center",
+      "v4": "center",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "3 unequal cross-size lines",
+      "free cross space 388 raw LayoutUnits, remainder 1 modulo 3",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "forward physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k3-r2-column-wrap-reverse-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:57.078125px;flex-direction:column;flex-wrap:wrap-reverse;align-content:normal;background:transparent;}#v0{height:40px;width:13px;align-self:center;background:#ffcc22;height:20px;min-height:40px;max-height:30px;width:23px;max-width:13px;}#v1{height:40px;width:5.984375px;align-self:center;background:#ffcc22;}#v2{height:40px;width:17px;align-self:center;background:#ee553380;}#v3{height:40px;width:9.984375px;align-self:center;background:#ee553380;}#v4{height:40px;width:21px;align-self:center;background:#2167b1;}#v5{height:40px;width:13.984375px;align-self:center;background:#2167b1;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)",
+      "v4": "rgb(33, 103, 177)",
+      "v5": "rgb(33, 103, 177)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center",
+      "v4": "center",
+      "v5": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "3 unequal cross-size lines",
+      "free cross space 389 raw LayoutUnits, remainder 2 modulo 3",
+      "source-authored exact dyadic lengths",
+      "column",
+      "wrap-reverse physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r1-column-wrap-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div><div id=\"v7\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:84.078125px;flex-direction:column;flex-wrap:wrap;align-content:normal;background:transparent;}#v0{height:40px;width:13px;align-self:center;background:#ffcc22;height:20px;min-height:40px;max-height:30px;width:23px;max-width:13px;}#v1{height:40px;width:5.984375px;align-self:center;background:#ffcc22;}#v2{height:40px;width:17px;align-self:center;background:#ee553380;}#v3{height:40px;width:9.984375px;align-self:center;background:#ee553380;}#v4{height:40px;width:21px;align-self:center;background:#2167b1;}#v5{height:40px;width:13.984375px;align-self:center;background:#2167b1;}#v6{height:40px;width:25px;align-self:center;background:#1f9d76;}#v7{height:40px;width:17.984375px;align-self:center;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)",
+      "v4": "rgb(33, 103, 177)",
+      "v5": "rgb(33, 103, 177)",
+      "v6": "rgb(31, 157, 118)",
+      "v7": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center",
+      "v4": "center",
+      "v5": "center",
+      "v6": "center",
+      "v7": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 517 raw LayoutUnits, remainder 1 modulo 4",
+      "source-authored exact dyadic lengths",
+      "column",
+      "forward physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k4-r3-row-reverse-wrap-reverse-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div><div id=\"v7\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:84.109375px;flex-direction:row-reverse;flex-wrap:wrap-reverse;align-content:normal;background:transparent;}#v0{width:40px;height:13px;align-self:center;background:#ffcc22;width:20px;min-width:40px;max-width:30px;height:23px;max-height:13px;}#v1{width:40px;height:5.984375px;align-self:center;background:#ffcc22;}#v2{width:40px;height:17px;align-self:center;background:#ee553380;}#v3{width:40px;height:9.984375px;align-self:center;background:#ee553380;}#v4{width:40px;height:21px;align-self:center;background:#2167b1;}#v5{width:40px;height:13.984375px;align-self:center;background:#2167b1;}#v6{width:40px;height:25px;align-self:center;background:#1f9d76;}#v7{width:40px;height:17.984375px;align-self:center;background:#1f9d76;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)",
+      "v4": "rgb(33, 103, 177)",
+      "v5": "rgb(33, 103, 177)",
+      "v6": "rgb(31, 157, 118)",
+      "v7": "rgb(31, 157, 118)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center",
+      "v4": "center",
+      "v5": "center",
+      "v6": "center",
+      "v7": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "4 unequal cross-size lines",
+      "free cross space 519 raw LayoutUnits, remainder 3 modulo 4",
+      "source-authored exact dyadic lengths",
+      "row-reverse",
+      "wrap-reverse physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r1-column-reverse-wrap-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div><div id=\"v7\"></div><div id=\"v8\"></div><div id=\"v9\"></div><div id=\"v10\"></div><div id=\"v11\"></div><div id=\"v12\"></div><div id=\"v13\"></div></div>",
+    "css": "#p{height:60px;min-height:80px;max-height:70px;width:189.125px;flex-direction:column-reverse;flex-wrap:wrap;align-content:normal;background:transparent;}#v0{height:40px;width:13px;align-self:center;background:#ffcc22;height:20px;min-height:40px;max-height:30px;width:23px;max-width:13px;}#v1{height:40px;width:5.984375px;align-self:center;background:#ffcc22;}#v2{height:40px;width:17px;align-self:center;background:#ee553380;}#v3{height:40px;width:9.984375px;align-self:center;background:#ee553380;}#v4{height:40px;width:21px;align-self:center;background:#2167b1;}#v5{height:40px;width:13.984375px;align-self:center;background:#2167b1;}#v6{height:40px;width:25px;align-self:center;background:#1f9d76;}#v7{height:40px;width:17.984375px;align-self:center;background:#1f9d76;}#v8{height:40px;width:29px;align-self:center;background:#9b4dc4;}#v9{height:40px;width:21.984375px;align-self:center;background:#9b4dc4;}#v10{height:40px;width:33px;align-self:center;background:#cf3484;}#v11{height:40px;width:25.984375px;align-self:center;background:#cf3484;}#v12{height:40px;width:37px;align-self:center;background:#164e63;}#v13{height:40px;width:29.984375px;align-self:center;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)",
+      "v4": "rgb(33, 103, 177)",
+      "v5": "rgb(33, 103, 177)",
+      "v6": "rgb(31, 157, 118)",
+      "v7": "rgb(31, 157, 118)",
+      "v8": "rgb(155, 77, 196)",
+      "v9": "rgb(155, 77, 196)",
+      "v10": "rgb(207, 52, 132)",
+      "v11": "rgb(207, 52, 132)",
+      "v12": "rgb(22, 78, 99)",
+      "v13": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center",
+      "v4": "center",
+      "v5": "center",
+      "v6": "center",
+      "v7": "center",
+      "v8": "center",
+      "v9": "center",
+      "v10": "center",
+      "v11": "center",
+      "v12": "center",
+      "v13": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 904 raw LayoutUnits, remainder 1 modulo 7",
+      "source-authored exact dyadic lengths",
+      "column-reverse",
+      "forward physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  },
+  {
+    "name": "public-remainder-k7-r6-row-wrap-reverse-pairs",
+    "html": "<div id=\"p\"><div id=\"v0\"></div><div id=\"v1\"></div><div id=\"v2\"></div><div id=\"v3\"></div><div id=\"v4\"></div><div id=\"v5\"></div><div id=\"v6\"></div><div id=\"v7\"></div><div id=\"v8\"></div><div id=\"v9\"></div><div id=\"v10\"></div><div id=\"v11\"></div><div id=\"v12\"></div><div id=\"v13\"></div></div>",
+    "css": "#p{width:60px;min-width:80px;max-width:70px;height:189.203125px;flex-direction:row;flex-wrap:wrap-reverse;align-content:normal;background:transparent;}#v0{width:40px;height:13px;align-self:center;background:#ffcc22;width:20px;min-width:40px;max-width:30px;height:23px;max-height:13px;}#v1{width:40px;height:5.984375px;align-self:center;background:#ffcc22;}#v2{width:40px;height:17px;align-self:center;background:#ee553380;}#v3{width:40px;height:9.984375px;align-self:center;background:#ee553380;}#v4{width:40px;height:21px;align-self:center;background:#2167b1;}#v5{width:40px;height:13.984375px;align-self:center;background:#2167b1;}#v6{width:40px;height:25px;align-self:center;background:#1f9d76;}#v7{width:40px;height:17.984375px;align-self:center;background:#1f9d76;}#v8{width:40px;height:29px;align-self:center;background:#9b4dc4;}#v9{width:40px;height:21.984375px;align-self:center;background:#9b4dc4;}#v10{width:40px;height:33px;align-self:center;background:#cf3484;}#v11{width:40px;height:25.984375px;align-self:center;background:#cf3484;}#v12{width:40px;height:37px;align-self:center;background:#164e63;}#v13{width:40px;height:29.984375px;align-self:center;background:#164e63;}",
+    "compileViewport": [
+      300,
+      260
+    ],
+    "viewports": [
+      [
+        300,
+        260
+      ],
+      [
+        96,
+        260
+      ],
+      [
+        300,
+        80
+      ],
+      [
+        300,
+        260
+      ]
+    ],
+    "expectedPaint": {
+      "v0": "rgb(255, 204, 34)",
+      "v1": "rgb(255, 204, 34)",
+      "v2": "rgba(238, 85, 51, 0.5)",
+      "v3": "rgba(238, 85, 51, 0.5)",
+      "v4": "rgb(33, 103, 177)",
+      "v5": "rgb(33, 103, 177)",
+      "v6": "rgb(31, 157, 118)",
+      "v7": "rgb(31, 157, 118)",
+      "v8": "rgb(155, 77, 196)",
+      "v9": "rgb(155, 77, 196)",
+      "v10": "rgb(207, 52, 132)",
+      "v11": "rgb(207, 52, 132)",
+      "v12": "rgb(22, 78, 99)",
+      "v13": "rgb(22, 78, 99)"
+    },
+    "expectedAlignment": {
+      "v0": "center",
+      "v1": "center",
+      "v2": "center",
+      "v3": "center",
+      "v4": "center",
+      "v5": "center",
+      "v6": "center",
+      "v7": "center",
+      "v8": "center",
+      "v9": "center",
+      "v10": "center",
+      "v11": "center",
+      "v12": "center",
+      "v13": "center"
+    },
+    "features": [
+      "actual public CLI without adapter",
+      "7 unequal cross-size lines",
+      "free cross space 909 raw LayoutUnits, remainder 6 modulo 7",
+      "source-authored exact dyadic lengths",
+      "row",
+      "wrap-reverse physical bucket placement",
+      "two fixed owners per line with centered odd-LayoutUnit cross difference",
+      "odd 129-LayoutUnit base extra line space",
+      "root/first-leaf minimum wins over maximum; first-leaf cross maximum clamps",
+      "partial-alpha paint expected serialization 0.5",
+      "compiler reset provides zero spacing, zero minima and flex:0 0 auto",
+      "four fixed-root viewport clips including return; original and clone"
+    ]
+  }
+]

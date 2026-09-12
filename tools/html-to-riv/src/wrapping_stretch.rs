@@ -8,7 +8,7 @@ use super::{fixed_layout::{LayoutLength, LayoutStyle, FixedLayoutLength},
 const LIMIT: i64 = 65_536 * 64;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) enum Unresolved { Empty, FixedRequired, InvalidSource, Negative,
-    ArithmeticBound, Remainder, NativePartition, InvalidBinding }
+    ArithmeticBound, NativePartition, InvalidBinding }
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct Calculation { used: Vec<[i64; 2]>, lines: Vec<usize>, heights: Vec<i64>, expanded: Vec<i64> }
 #[derive(Clone, Debug)]
@@ -16,9 +16,10 @@ pub(super) struct Plan {
     parent: LayoutStyle,
     children: Vec<LayoutStyle>,
     row: bool,
+    reverse_cross: bool,
     // Immutable source witness, separate from derived constants. It also makes
     // internal mutation controls distinguish changed inactive authored bounds.
-    source: (LayoutStyle, Vec<LayoutStyle>, bool),
+    source: (LayoutStyle, Vec<LayoutStyle>, bool, bool),
     calculation: Calculation,
     slots: Vec<LayoutStyle>,
 }
@@ -48,7 +49,7 @@ fn native(raw: i64) -> Result<f32, Unresolved> {
     let exact = raw as f64 / 64.; let f = exact as f32;
     if f64::from(f) != exact { Err(Unresolved::ArithmeticBound) } else { Ok(f) }
 }
-fn calculate(parent: &LayoutStyle, children: &[LayoutStyle], row: bool) -> Result<Calculation, Unresolved> {
+fn calculate(parent: &LayoutStyle, children: &[LayoutStyle], row: bool, reverse_cross: bool) -> Result<Calculation, Unresolved> {
     if children.is_empty() { return Err(Unresolved::Empty); }
     let p = used(parent)?; let values = children.iter().map(used).collect::<Result<Vec<_>, _>>()?;
     let main = usize::from(!row); let cross = 1 - main;
@@ -73,9 +74,26 @@ fn calculate(parent: &LayoutStyle, children: &[LayoutStyle], row: bool) -> Resul
     let total = heights.iter().try_fold(0, |a, b| add(a, *b))?;
     let free = (p[cross] - total).max(0);
     let k = i64::try_from(heights.len()).map_err(|_| Unresolved::ArithmeticBound)?;
-    if free % k != 0 { return Err(Unresolved::Remainder); }
     let delta = free / k;
-    let expanded = heights.iter().map(|h| add(*h, delta)).collect::<Result<Vec<_>, _>>()?;
+    // Pinned Chrome LayoutUnitDiffuser runs after ApplyReversals. Allocate in
+    // physical line order, then attach each increment to its logical members.
+    let dx = (free % k).checked_mul(2).ok_or(Unresolved::ArithmeticBound)?;
+    let dy = k.checked_mul(2).ok_or(Unresolved::ArithmeticBound)?;
+    let (mut x, mut y) = (0_i64, k);
+    let mut expanded = heights.clone();
+    let mut distributed = 0;
+    for physical in 0..heights.len() {
+        x = x.checked_add(dx).ok_or(Unresolved::ArithmeticBound)?;
+        let extra = if x >= y {
+            y = y.checked_add(dy).ok_or(Unresolved::ArithmeticBound)?;
+            1
+        } else { 0 };
+        let increment = add(delta, extra)?;
+        distributed = add(distributed, increment)?;
+        let logical = if reverse_cross { heights.len()-1-physical } else { physical };
+        expanded[logical] = add(heights[logical], increment)?;
+    }
+    if distributed != free { return Err(Unresolved::InvalidBinding); }
     let mut end = 0;
     for h in &expanded { end = add(end, *h)?; native(end)?; }
     Ok(Calculation { used: values, lines, heights, expanded })
@@ -114,23 +132,23 @@ fn same(a: &LayoutStyle, b: &LayoutStyle) -> bool {
         .all(|(a,b)| same_length(a,b))
 }
 impl Plan {
-    pub(super) fn new(parent: &LayoutStyle, children: &[LayoutStyle], row: bool) -> Result<Self, Unresolved> {
-        let calculation = calculate(parent, children, row)?;
+    pub(super) fn new(parent: &LayoutStyle, children: &[LayoutStyle], row: bool, reverse_cross: bool) -> Result<Self, Unresolved> {
+        let calculation = calculate(parent, children, row, reverse_cross)?;
         let slots = slots(&calculation, row)?;
-        let plan = Self { parent: parent.clone(), children: children.to_vec(), row,
-            source: (parent.clone(), children.to_vec(), row), calculation, slots };
+        let plan = Self { parent: parent.clone(), children: children.to_vec(), row, reverse_cross,
+            source: (parent.clone(), children.to_vec(), row, reverse_cross), calculation, slots };
         plan.validate()?; Ok(plan)
     }
     pub(super) fn slots(&self) -> &[LayoutStyle] { &self.slots }
     pub(super) fn parent(&self) -> &LayoutStyle { &self.parent }
     pub(super) fn children(&self) -> &[LayoutStyle] { &self.children }
-    pub(super) fn matches_sources(&self, parent: &LayoutStyle, children: &[LayoutStyle], row: bool) -> bool {
-        self.row == row && self.source.2 == row && same(&self.source.0, parent) && children.len() == self.source.1.len()
+    pub(super) fn matches_sources(&self, parent: &LayoutStyle, children: &[LayoutStyle], row: bool, reverse_cross: bool) -> bool {
+        self.row == row && self.source.2 == row && self.reverse_cross == reverse_cross && self.source.3 == reverse_cross && same(&self.source.0, parent) && children.len() == self.source.1.len()
             && children.iter().zip(&self.source.1).all(|(a,b)| same(a,b))
     }
     pub(super) fn validate(&self) -> Result<(), Unresolved> {
-        if !self.matches_sources(&self.parent, &self.children, self.row) { return Err(Unresolved::InvalidBinding); }
-        let expected = calculate(&self.parent, &self.children, self.row)?;
+        if !self.matches_sources(&self.parent, &self.children, self.row, self.reverse_cross) { return Err(Unresolved::InvalidBinding); }
+        let expected = calculate(&self.parent, &self.children, self.row, self.reverse_cross)?;
         if expected != self.calculation { return Err(Unresolved::InvalidBinding); }
         let expected_slots = slots(&expected, self.row)?;
         if expected_slots.len() != self.slots.len() || !expected_slots.iter().zip(&self.slots).all(|(a,b)| same(a,b)) {
@@ -149,51 +167,94 @@ mod tests {
             max_width: LayoutLength::Auto, max_height: LayoutLength::Auto }
     }
     #[test] fn equal_lines_and_column_axes() {
-        let p = Plan::new(&box_(20,120), &vec![box_(20,20);3], true).unwrap();
+        let p = Plan::new(&box_(20,120), &vec![box_(20,20);3], true, false).unwrap();
         assert_eq!(p.calculation.lines, vec![0,1,2]);
         assert_eq!(p.calculation.expanded, vec![40*64;3]);
         assert!(p.slots().iter().all(|s| s.height.value()==Some(40.)));
-        let p = Plan::new(&box_(120,20), &vec![box_(20,20);3], false).unwrap();
+        let p = Plan::new(&box_(120,20), &vec![box_(20,20);3], false, false).unwrap();
         assert!(p.slots().iter().all(|s| s.width.value()==Some(40.)));
     }
     #[test] fn unequal_lines_exact_fit_oversize_zero_and_overflow() {
         let children = vec![box_(30,10),box_(0,40),box_(20,20),box_(20,30)];
-        let p = Plan::new(&box_(20,50), &children, true).unwrap();
+        let p = Plan::new(&box_(20,50), &children, true, false).unwrap();
         assert_eq!(p.calculation.lines, vec![0,1,1,2]);
         assert_eq!(p.calculation.expanded, vec![640,2560,1920]);
-        let exact = Plan::new(&box_(40,20), &vec![box_(20,20);2], true).unwrap();
+        let exact = Plan::new(&box_(40,20), &vec![box_(20,20);2], true, false).unwrap();
         assert_eq!(exact.calculation.lines,vec![0,0]);
-        let zero = Plan::new(&box_(0,0), &vec![box_(0,0);2], true).unwrap();
+        let zero = Plan::new(&box_(0,0), &vec![box_(0,0);2], true, false).unwrap();
         assert_eq!(zero.calculation.expanded,vec![0]);
     }
     #[test] fn bounds_minimum_wins_and_original_is_retained() {
         let mut child=box_(10,10);child.min_width=generated(30*64).unwrap();child.max_width=generated(20*64).unwrap();
         child.max_height=generated(5*64).unwrap();
-        let p=Plan::new(&box_(30,40), &[child.clone()], true).unwrap();
+        let p=Plan::new(&box_(30,40), &[child.clone()], true, false).unwrap();
         assert_eq!(p.slots()[0].width.value(),Some(30.));
         assert_eq!(p.slots()[0].height.value(),Some(40.));
         assert!(matches!(p.slots()[0].max_height,LayoutLength::Auto));
         assert!(same(&p.children()[0],&child));
         assert_eq!(p.children()[0].max_height.value(),Some(5.));
     }
-    #[test] fn fractional_boundary_and_remainder_rejection() {
+    #[test] fn fractional_boundary_and_domain_rejection() {
         let mut parent=box_(40,40);parent.width=generated(40*64-1).unwrap();
-        assert_eq!(Plan::new(&parent,&vec![box_(20,20);2],true).unwrap().calculation.lines,vec![0,1]);
+        assert_eq!(Plan::new(&parent,&vec![box_(20,20);2], true, false).unwrap().calculation.lines,vec![0,1]);
         parent.width=generated(40*64+1).unwrap();
-        assert_eq!(Plan::new(&parent,&vec![box_(20,20);2],true).unwrap().calculation.lines,vec![0,0]);
-        assert_eq!(Plan::new(&box_(20,100),&vec![box_(20,20);3],true).unwrap_err(),Unresolved::Remainder);
-        assert_eq!(Plan::new(&box_(20,20),&[],true).unwrap_err(),Unresolved::Empty);
-        assert!(Plan::new(&box_(65_537,20),&[box_(1,1)],true).is_err());
+        assert_eq!(Plan::new(&parent,&vec![box_(20,20);2], true, false).unwrap().calculation.lines,vec![0,0]);
+        assert_eq!(Plan::new(&box_(20,100),&vec![box_(20,20);3], true, false).unwrap().calculation.expanded,vec![2133,2134,2133]);
+        assert_eq!(Plan::new(&box_(20,20),&[], true, false).unwrap_err(),Unresolved::Empty);
+        assert!(Plan::new(&box_(65_537,20),&[box_(1,1)], true, false).is_err());
     }
     #[test] fn every_derived_field_and_source_bound_mutation_is_rejected() {
-        let p=Plan::new(&box_(20,120),&vec![box_(20,20);3],true).unwrap();
+        let p=Plan::new(&box_(20,120),&vec![box_(20,20);3], true, false).unwrap();
         assert!(p.clone().validate().is_ok());
         let mut changed=p.clone();changed.calculation.lines[1]=0;assert!(changed.validate().is_err());
         let mut changed=p.clone();changed.slots[0].height=generated(41*64).unwrap();assert!(changed.validate().is_err());
         let mut changed=p.clone();changed.slots[0].max_height=generated(20*64).unwrap();assert!(changed.validate().is_err());
         let mut changed=p.clone();changed.children[0].max_height=generated(100*64).unwrap();assert!(changed.validate().is_err());
         let mut other=p.children.clone();other[0].max_width=generated(100*64).unwrap();
-        assert!(!p.matches_sources(p.parent(),&other,true));
-        assert!(!p.matches_sources(p.parent(),p.children(),false));
+        assert!(!p.matches_sources(p.parent(),&other, true, false));
+        assert!(!p.matches_sources(p.parent(),p.children(), false, false));
     }
+    fn remainder_plan(k: usize, free: i64, reverse: bool) -> Plan {
+        // Unequal line heights expose assignment to the wrong source line.
+        let children = (1..=k).map(|i| box_(20,i as i64)).collect::<Vec<_>>();
+        let mut parent = box_(20,0);
+        parent.height = generated((k*(k+1)/2) as i64*64 + free).unwrap();
+        Plan::new(&parent,&children,true,reverse).unwrap()
+    }
+    #[test] fn pinned_diffuser_arrays_map_back_from_physical_order() {
+        for (k,remainder,extras) in [
+            (2,1,vec![1,0]),
+            (3,1,vec![0,1,0]), (3,2,vec![1,0,1]),
+            (4,1,vec![0,1,0,0]), (4,2,vec![1,0,1,0]), (4,3,vec![1,1,0,1]),
+            (7,1,vec![0,0,0,1,0,0,0]), (7,3,vec![0,1,0,1,0,1,0]),
+            (7,6,vec![1,1,1,0,1,1,1]),
+        ] {
+            for reverse in [false,true] {
+                let p=remainder_plan(k,k as i64*5+remainder,reverse);
+                let mut assigned=extras.clone();if reverse {assigned.reverse();}
+                assert_eq!(p.calculation.expanded.iter().zip(&p.calculation.heights)
+                    .map(|(e,h)|e-h-5).collect::<Vec<_>>(),assigned);
+                assert!(p.validate().is_ok());
+            }
+        }
+    }
+    #[test] fn every_remainder_conserves_cross_space_and_reverse_is_bound() {
+        for k in [2,3,4,7] {
+            for remainder in 0..k {
+                let free=(k*3+remainder) as i64;
+                let forward=remainder_plan(k,free,false);
+                let reverse=remainder_plan(k,free,true);
+                let increments=|p:&Plan|p.calculation.expanded.iter().zip(&p.calculation.heights)
+                    .map(|(e,h)|e-h).collect::<Vec<_>>();
+                let a=increments(&forward);let b=increments(&reverse);
+                assert_eq!(a.iter().sum::<i64>(),free);
+                assert!(a.iter().all(|d|*d==3||*d==4));
+                assert_eq!(a.into_iter().rev().collect::<Vec<_>>(),b);
+                let mut changed=forward.clone();changed.reverse_cross=true;
+                assert!(changed.validate().is_err());
+                assert!(!forward.matches_sources(forward.parent(),forward.children(),true,true));
+            }
+        }
+    }
+
 }

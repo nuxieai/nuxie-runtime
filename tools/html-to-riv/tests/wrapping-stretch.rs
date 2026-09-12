@@ -66,8 +66,14 @@ fn nowrap_does_not_gain_stretch_helpers() {
     }
 }
 #[test]
-fn remainder_and_arithmetic_domain_are_explicit_diagnostics() {
-    rejects("#p{height:100px}", "Remainder");
+fn remainder_distribution_is_admitted_and_arithmetic_domain_still_diagnoses() {
+    for direction in ["row", "row-reverse", "column", "column-reverse"] {
+        let dimensions = if direction.starts_with("row") { "width:20px;height:100px" } else { "width:100px;height:20px" };
+        for wrap in ["wrap", "wrap-reverse"] {
+            let css = format!("#p{{{dimensions};flex-direction:{direction};flex-wrap:{wrap}}}");
+            assert_eq!(scene(&css), scene(&format!("{css}#p{{align-content:stretch}}")));
+        }
+    }
     rejects("#p{height:65537px}", "ArithmeticBound");
     rejects("#a{max-height:65537px}", "ArithmeticBound");
 }

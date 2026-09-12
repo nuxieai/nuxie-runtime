@@ -672,7 +672,7 @@ test('public content owner handles substantial inherited custom-value context at
 });
 
 test('public wrapping corpus has deterministic CLI and JavaScript/WASM parity',async()=>{
- const fixtures=['public-wrapping-cases.json','public-wrapping-stretch-cases.json'].flatMap(name=>JSON.parse(fs.readFileSync(new URL('../validation/'+name,import.meta.url))));
+ const fixtures=['public-wrapping-cases.json','public-wrapping-stretch-cases.json','public-wrapping-remainder-cases.json'].flatMap(name=>JSON.parse(fs.readFileSync(new URL('../validation/'+name,import.meta.url))));
  const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'public-wrapping-parity-'));
  try{
   for(const fixture of fixtures){

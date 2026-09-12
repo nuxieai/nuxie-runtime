@@ -155,12 +155,12 @@ pub(super) fn compile(body: ElementRef<'_>, rules: &[css::Rule], input: &Compile
     let row = style.direction.is_row();
     let source_children = ordered.iter().map(|item| item.4.clone()).collect::<Vec<_>>();
     let stretch = if line.is_none() {
-        Some(super::wrapping_stretch::Plan::new(&pnum, &source_children, row)
+        Some(super::wrapping_stretch::Plan::new(&pnum, &source_children, row, reverse_cross)
             .map_err(|e| unsupported("/0", format!("Wrapping stretch-line source proof is unresolved: {e:?}")))?)
     } else { None };
     if let Some(plan) = &stretch {
         plan.validate().map_err(|e| unsupported("/0", format!("Wrapping stretch-line binding is unresolved: {e:?}")))?;
-        if !plan.matches_sources(&pnum, &source_children, row) {
+        if !plan.matches_sources(&pnum, &source_children, row, reverse_cross) {
             return Err(unsupported("/0", "Wrapping stretch-line authored sources do not match"));
         }
     }

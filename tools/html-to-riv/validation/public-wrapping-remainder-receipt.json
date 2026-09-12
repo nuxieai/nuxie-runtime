@@ -1,0 +1,66 @@
+{
+  "status": "public-remainder-pixel-campaign-pass-with-subpixel-geometry-deltas",
+  "scope": "476Rust/57Node,256public geometry/pixel gates,512clear controls,96direct pairs/160exact repeats;1116previous scenes exact.552nonzero geometry axis differences preserved, max0.007815px; not exact geometry. No new lifecycle or stream-observer claim.",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-remainder-product-build-r1/summary.json",
+      "sha256": "34e4653d9137992687582ec862beed8b870adc65d4a658c2aa997754c39299b0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-remainder-product-build-r1/frozen/source-bindings.json",
+      "sha256": "12830417dba2643ed0640138695eb96dca92702bbc911e34768197988f5ba755"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-remainder-regression-r1/receipt.json",
+      "sha256": "d12a15e0e5a2e7a732b7e8602729e237bad22b5e940ba7f3d62ffcdbcb18d4d8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-remainder-r1/receipt.json",
+      "sha256": "d6a9bebb1b07fe35ba1af7d6a9975d4ce111122f5ca3096dab72996083bc75e3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-remainder-r1/geometry-deltas.json",
+      "sha256": "a2ed8c58d0d6d356738f19e4588daebfb70e205139ec3082cf1d38233b9388ff"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-remainder-r1/public-visual/coverage.json",
+      "sha256": "22c2e6248e400b22b74fe6e0665250ddbcaa38f2272d357d5cebf27250bb3aa4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-remainder-review.md",
+      "sha256": "1eb91a58f6455d69bb8afb76076d11c7055d4fe284ab5562abc601c359d9da39"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-remainder-visual-root.md",
+      "sha256": "65fe93b7e6135ae18eb3aac9cb02f663cbe1edaaad298b5ba2729f969d94052f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-remainder-visual-emitter.md",
+      "sha256": "21aca7facc51061b7a152addd9ebad914401f9824e2f0be59ee5e4147b3121a0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-remainder-visual-signed.md",
+      "sha256": "c63f3a42c35dbb278334544d882c0179d16837db7294e7433b323b7b46044b9b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-target-review.md",
+      "sha256": "f5150660cd215c5c25d02e0d99a529d13273c1a782c3ec84d1f0f0bd455e1955"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-stretch-source-review.md",
+      "sha256": "e6e66b60e8cfccdfe50d8fa14b0aa6a10e0ed0f659a40cb21a9b9c3f44ad9429"
+    }
+  ],
+  "visual": {
+    "frames": 256,
+    "representatives": 96,
+    "transfers": 160,
+    "sheets": 24,
+    "geometryPass": 256,
+    "pixelPass": 256
+  },
+  "nativeToolHashes": {
+    "probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  }
+}

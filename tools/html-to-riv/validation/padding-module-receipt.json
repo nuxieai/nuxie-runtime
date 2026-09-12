@@ -1,0 +1,43 @@
+{
+  "scope": "Private padding model source-mounted isolated tests; no public routing/native qualification from unit tests.",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-module-tests-r2",
+  "supersedes": "output/padding-module-r1: mixed evidence directory collision, not authoritative for these isolated tests. Separate root native proof is padding-module-native-r1.",
+  "module": "tools/html-to-riv/src/padding.rs",
+  "moduleSha256": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+  "moduleUnchangedDuringBuildAndTests": true,
+  "wireSha256": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+  "testsPassed": 7,
+  "testsFailed": 0,
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "--test",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-module-tests-r2/harness.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "--extern",
+    "cssparser=tools/html-to-riv/target/debug/deps/libcssparser-2f9c2e0f2b0c8534.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-module-tests-r2/tests"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libcssparser-2f9c2e0f2b0c8534.rlib": "8bedf69a4a950a9afe92b5102df4f2fff4272ff18af2575ba09d532263a4ab98"
+  },
+  "files": {
+    "build-command.json": "8cfd1c4667fc764b05e8ed47ecdcf980f50de148dc3b1b64183162d1a654e116",
+    "test.log": "c3b4de799c185066426411fb49b366b5209dfe9e92b9c0471254e8d4e4690f19",
+    "tests": "c073d3fe32d439a010913ac18d48a699e5ac58c7a4c1d7e0909e5a61db0c4575",
+    "harness.rs": "e79c50477b9f1cab513ce2486709475655750847574e5db3886d572b48d8e810",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "build.log": "5703f4bf780a2a3afe40fe744ab4ffc745d1ab6c2175d08699af938c91717738"
+  },
+  "planSha256": "6ecfd08ca169c95ddd2fd26fbfad86be9c725725229e3e86e9cb97c4b7a274fb",
+  "harnessScope": "Actual padding.rs/wire.rs source-mounted; exact current unsupported/resolved_length function copies and constants. No full cascade integration claim."
+}

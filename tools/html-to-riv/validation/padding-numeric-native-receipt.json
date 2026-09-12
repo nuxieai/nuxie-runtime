@@ -1,0 +1,11 @@
+{
+  "status": "preserved-private-padding-numeric-boundaries",
+  "cases": 11,
+  "completeFiniteOriginalCloneRuns": 7,
+  "framesInCompleteRuns": 56,
+  "nativeNonfiniteFailures": 4,
+  "scope": "Native geometry/recording only; no browser or pixel qualification",
+  "bindings": {
+    "tools/html-to-riv/output/padding-numeric-native-r1/receipt.json": "cd41f3e0ade2ba894a17227755bbfcb2fbfcfc38f6e58e1a4b4ba9a29881e54a"
+  }
+}

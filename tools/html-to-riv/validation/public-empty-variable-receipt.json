@@ -1,0 +1,159 @@
+{
+  "status": "qualified-bounded-empty-ordinary-variable-recovery",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Successful token-empty ordinary variable values compute as unset at existing cascade priority. Seven forms across33 property names have parser/transport/browser-control evidence;26 representative scenes have native/Chrome qualification. Nonempty grammar and Unicode-boundary residuals remain.",
+  "rustTests": 237,
+  "nodeTests": 40,
+  "propertyNames": 33,
+  "emptyForms": 7,
+  "tokenFormCases": 231,
+  "acceptedTokenFormCases": 210,
+  "unsupportedInitialValueCases": 21,
+  "additionalStrictRejectionCases": 27,
+  "resourceDiagnosticPairs": 1,
+  "acceptedCliWasmPairs": 708,
+  "rejectedCliWasmPairs": 49,
+  "priorExactPublicOutputs": 668,
+  "browserComputedControlComparisons": 231,
+  "cases": 26,
+  "frames": 208,
+  "geometryPass": 208,
+  "pixelPass": 208,
+  "clearPass": 416,
+  "expectedPaintAssertions": 624,
+  "everyAuthoredBoxEntirelyInsideEveryViewport": true,
+  "directVisualPairs": 28,
+  "exactFullRgbaTransferredPairs": 180,
+  "transferScope": "Complete decoded RGBA equality after explicit white-canvas extension; responsive widths only match identical viewports.",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "638552a9c0c90a68949c2bb35ab0e2ab03892faec2f545bb276f0d632f71cff0",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "wasmSha256": "c79eda947084f76c0a04c288ab21f66e0cf9f627d505dcf0773bcfd8d9331ce9",
+  "fixturesSha256": "63c60d3e218926cba432ef8e4e4e25dcd273424637c6d2398d0b5a8177df1542",
+  "resetSha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+  "pixelGateSha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821",
+  "preservedResidual": "NBSP-wrapped nonempty color emits literal-red bytes in prior/current compilers while Chrome inherits navy; no runtime limitation claim.",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/frozen/source-bindings.json",
+      "sha256": "8689de54980e5ada8f13d72e960fb4c7d49d4b8f94d31383a47baeabb620c52b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/build-checks.json",
+      "sha256": "a102824525ac7f8c73307309766c99fe58d30fd32aeb21e8afe16b93685ab000"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/transport-check.json",
+      "sha256": "68b5d87070b860452d1d822ca9f0a9030f91439404b70c3f04ac10b454fbbbf0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/red-rust.log",
+      "sha256": "55ca075555a569aa12859a6b54f305a342366533bef6c548e6a78e22d57b3c2e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/red-command.json",
+      "sha256": "0626e026147f57c4a9be2e4a3f3a3d4db27177a4b1a9fac5157e8f844044c06b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/full-rust.log",
+      "sha256": "fce717083a7689dc79772772d13abeed7c561e5f530345d5f71dd9910057057d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/full-node.log",
+      "sha256": "a64b8d4c701143380a2ade9c1ad533ebeab3c13a7674df2f8dcfd86920c7eaa8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/cli-build.log",
+      "sha256": "402dfa17693ec14100fb83f3576c815844562c7de085c6186820033d7c89e69a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/wasm-build.log",
+      "sha256": "5c96cbe9ca4a98bfc5f805ba1e13c5d867eb3a903438bd44f946a80f0468339a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/render-command.json",
+      "sha256": "83cb19d9ec4242ce12e87625811579133fdbaceb3ef503b9573ad7ccc4ee2464"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/render/receipt.json",
+      "sha256": "1a0b22161e62085a9948a280f8320dfb090e8ffd93464749d4d1bebb16371944"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/visual-coverage.json",
+      "sha256": "44e16abf90e56965cf9071f0f98c0680f937b54b2b01302903c39402d2f0b942"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/browser-r2/receipt.json",
+      "sha256": "43a66ded7619e319f0d5d4740241326e870faedd27de369ae2019ce94e217119"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/browser-r2-command.json",
+      "sha256": "f017557e73c9d0a9c24ab77b52476e20ec6845e066c179d51e4cefb823a281ce"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-empty-variable-r1/nonempty-boundary/receipt.json",
+      "sha256": "d98aa943115553db67934d6b53ca0da257e582e1eca3bfaaa0fe3ab9f416686d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/empty-variable-prior-regression-r1/manifest.json",
+      "sha256": "a5d4cf5e6d728e25d544a7800772c80f3af502886960f0f3046fa8c256a47cf5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/empty-variable.rs",
+      "sha256": "fad5a15fa91c26f8dbe1a26549361e296c064ed94ef60e6c72d59fac4b198347"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/transport-parity.mjs",
+      "sha256": "9d8d77c6141828976c1807a3199cf35d7268644fcf5c46d35c3b5aa6804b77b2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-fixtures.py",
+      "sha256": "48ebe3a1c836dba216d49d782f07877a47ad510cd22e192521e8a64f4803660b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-forms.json",
+      "sha256": "5000530e9f8389e40953566ea9b348a11b6c64ab2d53a3eba68fa602a4cbc31f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-cases.json",
+      "sha256": "63c60d3e218926cba432ef8e4e4e25dcd273424637c6d2398d0b5a8177df1542"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-rejections.json",
+      "sha256": "5c2bc4c8c77f9558e30c33308437e919eebf51ac8348e7db7b6b303c1dda6c56"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-browser.mjs",
+      "sha256": "b19722b9e37c1ec1ff4cd89babfd25a6c89dd1f99a4588aeb247ef9eeff57dc3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-visual.py",
+      "sha256": "4edecfaf8a3cf2eb014ad37abcefde0f9861307192285053141b05fea58f4456"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-nonempty-boundary.mjs",
+      "sha256": "b8e2c02d23c2832e7534857d6496638c1c40c4b218bb51fd556c0423651163ef"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-review.md",
+      "sha256": "6e841905fb8540f3ffa9603e5a159faffde7c71298a32ce02d597102a51541e0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-empty-variable-receipt.py",
+      "sha256": "a0203d2cf2d1a981cbeaa490de448133316a388a31aa059012c3481658acf6e1"
+    }
+  ]
+}

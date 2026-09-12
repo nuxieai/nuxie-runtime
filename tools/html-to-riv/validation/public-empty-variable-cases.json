@@ -1,0 +1,418 @@
+[
+  {
+    "name": "empty-responsive-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{width:100%}#a{width:31px;width:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{width:100%}#a{width:31px;width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-intrinsic-height",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;height:60px;height:var(--e,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:60px;height:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-inherited-color",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:/**/;color:red;color:var(--e,coral);background:currentColor}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:red;color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-background-no-rollback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:red;background:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:red;background:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-inherited-font",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e: \t/**/ ;font-size:11px;font-size:var(--e,8px);width:2em}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:11px;font-size:unset;width:2em}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-order-before-emission",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a{--e:;order:-4;order:var(--e,2)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a{order:-4;order:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-direction-css-initial",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:column;flex-direction:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:column;flex-direction:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-self-alignment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;align-self:flex-end;align-self:var(--e,center)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:flex-end;align-self:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-main-spacing",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--e:;justify-content:space-evenly;justify-content:var(--e,space-around)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{justify-content:space-evenly;justify-content:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-gap-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:row}#p{gap:8px 10px;gap:var(--missing,);column-gap:4px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{flex-direction:row}#p{gap:8px 10px;gap:unset;column-gap:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-padding-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:auto}#p{--e:;padding:8px;padding:var(--e,2px);padding-right:4px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:auto}#p{padding:8px;padding:unset;padding-right:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-margin-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;margin:auto;margin:var(--e,auto);margin-left:auto}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:auto;margin:unset;margin-left:auto}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-min-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:60px;min-width:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:60px;min-width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-max-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;max-width:30px;max-width:var(--e,20px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:30px;max-width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-losing-declaration",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:var(--missing,);background:coral}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset;background:coral}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-important-declaration",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;background:var(--e,red)!important;background:coral}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset!important;background:coral}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-inherited-alias-suppresses-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--e:;--alias:var(--e)}#a{--e:red;background:var(--alias,coral)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--e:;--alias:var(--e)}#a{background:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-unused-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--good:30px;width:var(--good,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:30px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-concatenated-literal",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:/**/;width:var(--e)30px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:30px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-color-function-component",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;background:rgb(var(--e)255 0 0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:red}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 0, 0)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-order-dom-selector",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a:first-child{background:navy}#a{--e:;order:-4;order:var(--e,9)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#b{order:-1}#a:first-child{background:navy}#a{order:-4;order:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-content-box-css-initial",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding:4px;box-sizing:border-box;box-sizing:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding:4px;box-sizing:border-box;box-sizing:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-shorthand-longhand-importance",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:auto}#p{--e:;padding:8px!important;padding:var(--e)!important;padding-right:4px}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:auto}#p{padding:8px!important;padding:unset!important;padding-right:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "successful-empty-substitution-to-unset"
+    ]
+  },
+  {
+    "name": "empty-former-typed-empty-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "preserved-former-rejection"
+    ]
+  },
+  {
+    "name": "empty-former-typed-empty-primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;width:var(--empty,25px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "features": [
+      "S09",
+      "S10",
+      "preserved-former-rejection"
+    ]
+  }
+]

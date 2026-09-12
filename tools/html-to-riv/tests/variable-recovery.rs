@@ -32,11 +32,14 @@ fn recovery_preserves_inline_specificity_importance_and_dom_selector_order() {
 }
 
 #[test]
-fn successful_tokens_and_admission_errors_are_not_recovered() {
+fn nonempty_tokens_and_admission_errors_are_not_recovered() {
     #[derive(Deserialize)] struct Rejection {name:String,html:String,css:String}
     let cases: Vec<Rejection> = serde_json::from_str(include_str!("../validation/public-variable-recovery-rejections.json")).unwrap();
     assert_eq!(cases.len(),16);
     for case in cases {
+        // Preserve the historical fixture. These two are now positive cases in
+        // empty-variable.rs and the public empty-value native corpus.
+        if matches!(case.name.as_str(), "typed-empty-fallback" | "typed-empty-primary") { continue; }
         let diagnostics=compile(&CompileInput {html:case.html,css:case.css,width:240.,height:160.}).expect_err(&case.name);
         assert!(!diagnostics.is_empty(),"{}",case.name);
         assert!(diagnostics.iter().all(|d|!d.code.is_empty()&&!d.source.is_empty()&&!d.message.is_empty()),"{}",case.name);

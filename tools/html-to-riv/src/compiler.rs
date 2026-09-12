@@ -346,13 +346,15 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
     computed_order(&value.native, parent.order, &declaration.source)
 }
 
-// A guaranteed-invalid substitution computes as unset, at the declaration's
-// existing cascade priority. Do not discard it or restore an earlier value.
-// Syntax/resource errors still propagate, and valid substituted tokens still
-// undergo property and target admission (including declarations that lose).
+// Guaranteed-invalid substitution and a successful empty ordinary value compute
+// as unset at the declaration's existing cascade priority. Custom empty values
+// stay valid in the resolver and suppress fallbacks. Complete resolution first
+// so syntax/resource errors cannot be hidden; nonempty values still undergo
+// property and target admission (including declarations that lose).
 fn substitute_ordinary(value: &str, variables: &variables::Variables, source: &str)
     -> Result<variables::ResolvedValue, Diagnostic> {
     Ok(variables::substitute_with_provenance(value, variables, source)?
+        .filter(|value| !css::has_no_value_tokens(&value.native))
         .unwrap_or_else(|| variables::ResolvedValue { native: "unset".into(), original: None }))
 }
 
@@ -891,9 +893,11 @@ mod gap_pipeline_tests {
         }
         assert!(compile_profile(&request("#p{width:auto;height:auto;gap:4px;align-self:flex-start}"),FlexPolicy::Guarded).is_ok());
         assert!(compile_profile(&request("#p{row-gap:5%;column-gap:10%}"),FlexPolicy::Guarded).is_ok());
-        for css in ["#unmatched{gap:-1px}","#p{gap:1px 2px 3px;gap:0}","#p{gap:var(--missing,)}"] {
+        for css in ["#unmatched{gap:-1px}","#p{gap:1px 2px 3px;gap:0}"] {
             assert!(compile_profile(&request(css),FlexPolicy::Guarded).is_err(),"{css}");
         }
+        assert_eq!(compile_profile(&request("#p{gap:var(--missing,)}"),FlexPolicy::Guarded).unwrap(),
+            compile_profile(&request("#p{gap:unset}"),FlexPolicy::Guarded).unwrap());
     }
     #[test]
     fn candidate_zero_gaps_preserve_bytes_and_nonzero_gaps_exclude_flex_proof() {

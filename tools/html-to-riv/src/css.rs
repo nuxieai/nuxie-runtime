@@ -72,6 +72,11 @@ fn value_text(p: &mut Parser<'_, '_>) -> Result<String, Diagnostic> {
     value_text_inner(p, true)
 }
 
+// Unicode whitespace such as NBSP is a CSS token, not declaration padding.
+fn trim_value_whitespace(text: &str) -> &str {
+    text.trim_matches(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{c}'))
+}
+
 fn value_text_inner(p: &mut Parser<'_, '_>, allow_color: bool) -> Result<String, Diagnostic> {
     let mut text = String::new();
     while !p.is_exhausted() {
@@ -122,7 +127,7 @@ fn value_text_inner(p: &mut Parser<'_, '_>, allow_color: bool) -> Result<String,
             token => text.push_str(&token.to_css_string()),
         }
     }
-    Ok(text.trim().to_owned())
+    Ok(trim_value_whitespace(&text).to_owned())
 }
 
 fn consume_values<'i>(
@@ -157,6 +162,13 @@ fn consume_values<'i>(
 pub(crate) fn ordinary_value(text: &str) -> Result<String, Diagnostic> {
     let mut input = ParserInput::new(text);
     value_text(&mut Parser::new(&mut input))
+}
+
+// Empty after CSS whitespace/comments is different from a string, function,
+// delimiter or non-CSS whitespace token. This does not classify other grammar.
+pub(crate) fn has_no_value_tokens(text: &str) -> bool {
+    let mut input = ParserInput::new(text);
+    Parser::new(&mut input).is_exhausted()
 }
 
 pub(crate) fn declarations(text: &str, source: &str) -> Result<Vec<Declaration>, Diagnostic> {
@@ -221,9 +233,9 @@ fn parse_declarations(
             if vp.expect_ident_matching("important").is_err() || vp.expect_exhausted().is_err() {
                 return Err(error(&here, "Invalid !important suffix"));
             }
-            (value[..start].trim().to_owned(), true)
+            (trim_value_whitespace(&value[..start]).to_owned(), true)
         } else {
-            (value.trim().to_owned(), false)
+            (trim_value_whitespace(&value).to_owned(), false)
         };
         // Admission and computed-value semantics belong to the caller. Keep
         // every authored value, including unsupported functions/custom properties.

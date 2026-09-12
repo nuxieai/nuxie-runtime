@@ -1,0 +1,137 @@
+[
+  {
+    "name": "empty-reject-nonempty-wrong-type",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:20px;background:var(--e)}"
+  },
+  {
+    "name": "empty-reject-nonempty-token-boundary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:10;width:var(--e)px}"
+  },
+  {
+    "name": "empty-reject-quoted-empty-string",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:\"\";width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-empty-function",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:rgb();background:var(--e)}"
+  },
+  {
+    "name": "empty-reject-empty-block",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:();width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-comma-token",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:,;width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-non-css-nbsp",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:\u00a0;width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-non-css-vertical-tab",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:\u000b;width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-fallback-non-css-nbsp",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,\u00a0)}"
+  },
+  {
+    "name": "empty-reject-fallback-non-css-vertical-tab",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,\u000b)}"
+  },
+  {
+    "name": "empty-reject-escaped-non-css-nbsp",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:\\a0;width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-fallback-escaped-non-css-nbsp",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,\\a0)}"
+  },
+  {
+    "name": "empty-reject-unsupported-property",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;opacity:var(--e)}"
+  },
+  {
+    "name": "empty-reject-unsupported-grid",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:grid;display:var(--e,)}"
+  },
+  {
+    "name": "empty-reject-unsupported-calc-after-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;width:var(--e)calc(20px + 10px)}"
+  },
+  {
+    "name": "empty-reject-over-limit-after-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;width:var(--e)1000001px}"
+  },
+  {
+    "name": "empty-reject-literal-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:}"
+  },
+  {
+    "name": "empty-reject-literal-comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:/**/}"
+  },
+  {
+    "name": "empty-reject-malformed-var",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(empty)}"
+  },
+  {
+    "name": "empty-reject-malformed-unused-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:30px;width:var(--e,var(bad))}"
+  },
+  {
+    "name": "empty-reject-nonempty-invalid-loser",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:teal;width:var(--e);width:40px}"
+  },
+  {
+    "name": "empty-reject-nonempty-suffix-after-empty",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:;width:var(--e)px}"
+  },
+  {
+    "name": "empty-reject-nonfinite-token",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--e:1e999px;width:var(--e)}"
+  },
+  {
+    "name": "empty-reject-content-box-percent-size",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{box-sizing:var(--missing,);width:50%;padding:4px}"
+  },
+  {
+    "name": "empty-reject-content-box-percent-padding",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{box-sizing:var(--missing,);padding:2%}"
+  },
+  {
+    "name": "empty-reject-context-auto-height",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{height:var(--missing,)}#a{height:50%}"
+  },
+  {
+    "name": "empty-reject-font-overflow",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{font-size:1000000px}#a{font-size:var(--missing,);width:2em}"
+  }
+]

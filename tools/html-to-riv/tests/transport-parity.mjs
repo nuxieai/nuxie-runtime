@@ -74,7 +74,7 @@ test('every public baseline fixture has exact CLI/WASM parity at three viewports
 test('rejected styles produce identical native and WASM diagnostics and no output',async()=>{
  const compiler=await createCompiler(wasm);const dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-rejection-parity-'));
  try {
-  for(const [index,css] of ['#box{display:grid;}','#box{background-image:linear-gradient(red,blue);}','#box{background-color:var(--missing,);}','#box{position:fixed;}','#box{transform:rotate(20deg);}','#box{opacity:0.5;}'].entries()) {
+  for(const [index,css] of ['#box{display:grid;}','#box{background-image:linear-gradient(red,blue);}','#box{background-color:var(--missing,"");}','#box{position:fixed;}','#box{transform:rotate(20deg);}','#box{opacity:0.5;}'].entries()) {
    const value={...input,css},prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(value));
    const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'});
    const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...value});
@@ -367,6 +367,8 @@ test('failed variable substitution preserves unset cascade and strict CLI/WASM d
  const rejections=JSON.parse(fs.readFileSync(new URL('../validation/public-variable-recovery-rejections.json',import.meta.url)));
  const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-variable-recovery-'));
  try{for(const [index,fixture] of rejections.entries()){
+  // Historical empty-value rejections are positively covered by the new corpus.
+  if(['typed-empty-fallback','typed-empty-primary'].includes(fixture.name))continue;
   const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
   fs.writeFileSync(prefix+'.json',JSON.stringify(request));
   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
@@ -394,5 +396,33 @@ test('content-box lowering preserves CLI/WASM bytes, inherited values and diagno
    if(depth<=128){assert.equal(cli.status,0,cli.stderr);assert.equal(result.ok,true);assert.equal(result.sourceMap.length,depth);assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'));assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json')));}
    else{assert.equal(cli.status,1);assert.equal(result.ok,false);assert.equal(result.diagnostics[0].code,'depth-limit');assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));}
   }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('empty ordinary variable values preserve token boundaries and CLI/WASM semantics',async()=>{
+ const forms=JSON.parse(fs.readFileSync(new URL('../validation/public-empty-variable-forms.json',import.meta.url)));
+ const scenes=JSON.parse(fs.readFileSync(new URL('../validation/public-empty-variable-cases.json',import.meta.url)));
+ const rejected=JSON.parse(fs.readFileSync(new URL('../validation/public-empty-variable-rejections.json',import.meta.url)));
+ assert.equal(forms.length,231);assert.equal(forms.filter(f=>f.accepted).length,210);
+ assert.equal(scenes.length,26);assert.equal(rejected.length,27);
+ await assertCorpusParity(forms.filter(f=>f.accepted));await assertCorpusParity(scenes);
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-empty-variable-'));
+ try{
+  const cases=[...forms.filter(f=>!f.accepted),...rejected];
+  for(const [index,fixture] of cases.entries()){
+   const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
+   fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),fixture.name);
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+  // Empty recovery must happen after the resolver checks the whole expression.
+  const css=`#a{--empty:;--large:${'x'.repeat(40000)};width:var(--empty)var(--large)var(--large)}`;
+  const request={html:'<div id=a></div>',css,width:240,height:160},prefix=path.join(dir,'resource');
+  fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+  const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+  assert.equal(cli.status,1);assert.equal(result.ok,false);assert(result.diagnostics.some(d=>d.code==='input-limit'));
+  assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

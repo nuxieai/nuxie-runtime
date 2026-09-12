@@ -1,11 +1,23 @@
 {
-  "updated": "2026-09-11",
-  "focus": "Public content-box checkpoint; numeric and paint limits retained",
-  "status": "Runtime immutable; content-box implementation recorded as partial",
-  "current": "Fixed-padding content-box lowering is implemented with preserved inheritance. Validation passes 233 Rust tests, 39 Node tests, strict TypeScript and 629 prior exact outputs; strengthened fixtures and first-invalid depth129 pass focused retests. Current34 scenes pass264/272 geometry and266/272 pixels, with544 clear checks and complete visual coverage. One0.25px child-width mismatch and six fractional-paint failures remain explicit.",
-  "next": "Isolate the large-coordinate child rectangle discrepancy and evaluate a sound numeric admission guard or ordinary-file composition. Preserve the fractional paint failure and investigate responsive mixed point/percentage sizing. Ordinary-value grammar recovery and all remaining backlog items stay in scope.",
+  "updated": "2026-09-12",
+  "focus": "Empty-variable recovery qualified; compiler numeric rounding repair next",
+  "status": "Runtime immutable; variable and content-box features remain partial",
+  "current": "Empty ordinary variable recovery passes 237 Rust tests, 40 Node tests, strict TypeScript and 668 prior exact outputs. All 231 browser token-form controls match unset. The 26 representative scenes pass 208 geometry/pixel comparisons and 416 clear checks, with 28 direct visual pairs and 180 complete-RGBA transfers. Nonempty wrong-type recovery and the pre-existing NBSP normalization bug remain.",
+  "next": "Repair shared numeric-token serialization, which rounds some authored values before Rive emission. Classify changed outputs and rerun content-box controls while preserving separate Chrome percentage/projection and fractional-paint failures. Continue nonempty grammar recovery and the remaining 99-item backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Empty ordinary variable recovery, full visual coverage and retained boundaries",
+      "path": "tools/html-to-riv/validation/public-empty-variable-review.md"
+    },
+    {
+      "label": "Empty-variable Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-empty-variable-r1/render/gallery.html"
+    },
+    {
+      "label": "Compiler numeric serialization and Chrome rectangle diagnosis",
+      "path": "tools/html-to-riv/validation/content-box-rounding-review.md"
+    },
     {
       "label": "Public content-box implementation, complete visual review and retained failures",
       "path": "tools/html-to-riv/validation/public-content-box-review.md"

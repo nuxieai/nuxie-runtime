@@ -1,0 +1,2081 @@
+[
+  {
+    "name": "empty-width-fallback",
+    "property": "width",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-width-primary",
+    "property": "width",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-width-whitespace",
+    "property": "width",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-width-comment",
+    "property": "width",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-width-mixed",
+    "property": "width",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-width-nested-fallback",
+    "property": "width",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-width-inherited-alias",
+    "property": "width",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;width:var(--alias,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-fallback",
+    "property": "height",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-primary",
+    "property": "height",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-whitespace",
+    "property": "height",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-comment",
+    "property": "height",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-mixed",
+    "property": "height",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-nested-fallback",
+    "property": "height",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-height-inherited-alias",
+    "property": "height",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;height:var(--alias,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-fallback",
+    "property": "min-width",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-primary",
+    "property": "min-width",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;min-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-whitespace",
+    "property": "min-width",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;min-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-comment",
+    "property": "min-width",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;min-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-mixed",
+    "property": "min-width",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;min-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-nested-fallback",
+    "property": "min-width",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-width-inherited-alias",
+    "property": "min-width",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;min-width:var(--alias,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;min-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-fallback",
+    "property": "min-height",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-height:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-primary",
+    "property": "min-height",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;min-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-whitespace",
+    "property": "min-height",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;min-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-comment",
+    "property": "min-height",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;min-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-mixed",
+    "property": "min-height",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;min-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-nested-fallback",
+    "property": "min-height",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-height:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-min-height-inherited-alias",
+    "property": "min-height",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;min-height:var(--alias,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;min-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-fallback",
+    "property": "max-width",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-primary",
+    "property": "max-width",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;max-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-whitespace",
+    "property": "max-width",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;max-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-comment",
+    "property": "max-width",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;max-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-mixed",
+    "property": "max-width",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;max-width:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-nested-fallback",
+    "property": "max-width",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-width-inherited-alias",
+    "property": "max-width",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;max-width:var(--alias,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;max-width:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-fallback",
+    "property": "max-height",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-height:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-primary",
+    "property": "max-height",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;max-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-whitespace",
+    "property": "max-height",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;max-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-comment",
+    "property": "max-height",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;max-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-mixed",
+    "property": "max-height",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;max-height:var(--empty,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-nested-fallback",
+    "property": "max-height",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-height:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-max-height-inherited-alias",
+    "property": "max-height",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;max-height:var(--alias,30px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;max-height:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-fallback",
+    "property": "box-sizing",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{box-sizing:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-primary",
+    "property": "box-sizing",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;box-sizing:var(--empty,border-box)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-whitespace",
+    "property": "box-sizing",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;box-sizing:var(--empty,border-box)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-comment",
+    "property": "box-sizing",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;box-sizing:var(--empty,border-box)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-mixed",
+    "property": "box-sizing",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;box-sizing:var(--empty,border-box)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-nested-fallback",
+    "property": "box-sizing",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{box-sizing:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-box-sizing-inherited-alias",
+    "property": "box-sizing",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;box-sizing:var(--alias,border-box)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;box-sizing:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-fallback",
+    "property": "font-size",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-primary",
+    "property": "font-size",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;font-size:var(--empty,12px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-whitespace",
+    "property": "font-size",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;font-size:var(--empty,12px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-comment",
+    "property": "font-size",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;font-size:var(--empty,12px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-mixed",
+    "property": "font-size",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;font-size:var(--empty,12px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-nested-fallback",
+    "property": "font-size",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-font-size-inherited-alias",
+    "property": "font-size",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;font-size:var(--alias,12px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;font-size:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-fallback",
+    "property": "background",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-primary",
+    "property": "background",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;background:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-whitespace",
+    "property": "background",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;background:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-comment",
+    "property": "background",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;background:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-mixed",
+    "property": "background",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;background:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-nested-fallback",
+    "property": "background",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-inherited-alias",
+    "property": "background",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;background:var(--alias,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;background:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-fallback",
+    "property": "background-color",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background-color:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-primary",
+    "property": "background-color",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;background-color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-whitespace",
+    "property": "background-color",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;background-color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-comment",
+    "property": "background-color",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;background-color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-mixed",
+    "property": "background-color",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;background-color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-nested-fallback",
+    "property": "background-color",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background-color:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-background-color-inherited-alias",
+    "property": "background-color",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;background-color:var(--alias,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;background-color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-fallback",
+    "property": "color",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-primary",
+    "property": "color",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-whitespace",
+    "property": "color",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-comment",
+    "property": "color",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-mixed",
+    "property": "color",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;color:var(--empty,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-nested-fallback",
+    "property": "color",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-color-inherited-alias",
+    "property": "color",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;color:var(--alias,red)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;color:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-display-fallback",
+    "property": "display",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{display:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-display-primary",
+    "property": "display",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;display:var(--empty,flex)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-display-whitespace",
+    "property": "display",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;display:var(--empty,flex)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-display-comment",
+    "property": "display",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;display:var(--empty,flex)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-display-mixed",
+    "property": "display",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;display:var(--empty,flex)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-display-nested-fallback",
+    "property": "display",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{display:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-display-inherited-alias",
+    "property": "display",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;display:var(--alias,flex)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;display:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-direction-fallback",
+    "property": "flex-direction",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-direction:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-direction-primary",
+    "property": "flex-direction",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-direction:var(--empty,column)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-direction-whitespace",
+    "property": "flex-direction",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-direction:var(--empty,column)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-direction-comment",
+    "property": "flex-direction",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-direction:var(--empty,column)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-direction-mixed",
+    "property": "flex-direction",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-direction:var(--empty,column)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-direction-nested-fallback",
+    "property": "flex-direction",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-direction:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-direction-inherited-alias",
+    "property": "flex-direction",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-direction:var(--alias,column)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-direction:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-fallback",
+    "property": "flex",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-primary",
+    "property": "flex",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex:var(--empty,none)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-whitespace",
+    "property": "flex",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex:var(--empty,none)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-comment",
+    "property": "flex",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex:var(--empty,none)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-mixed",
+    "property": "flex",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex:var(--empty,none)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-nested-fallback",
+    "property": "flex",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-inherited-alias",
+    "property": "flex",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex:var(--alias,none)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-grow-fallback",
+    "property": "flex-grow",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-grow:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-grow-primary",
+    "property": "flex-grow",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-grow:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-grow-whitespace",
+    "property": "flex-grow",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-grow:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-grow-comment",
+    "property": "flex-grow",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-grow:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-grow-mixed",
+    "property": "flex-grow",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-grow:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-grow-nested-fallback",
+    "property": "flex-grow",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-grow:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-grow-inherited-alias",
+    "property": "flex-grow",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-grow:var(--alias,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-grow:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-shrink-fallback",
+    "property": "flex-shrink",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-shrink:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-shrink-primary",
+    "property": "flex-shrink",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-shrink:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-shrink-whitespace",
+    "property": "flex-shrink",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-shrink:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-shrink-comment",
+    "property": "flex-shrink",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-shrink:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-shrink-mixed",
+    "property": "flex-shrink",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-shrink:var(--empty,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-shrink-nested-fallback",
+    "property": "flex-shrink",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-shrink:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-shrink-inherited-alias",
+    "property": "flex-shrink",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-shrink:var(--alias,0)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-shrink:unset}",
+    "accepted": false
+  },
+  {
+    "name": "empty-flex-basis-fallback",
+    "property": "flex-basis",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-basis:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-basis-primary",
+    "property": "flex-basis",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-basis:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-basis-whitespace",
+    "property": "flex-basis",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-basis:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-basis-comment",
+    "property": "flex-basis",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-basis:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-basis-mixed",
+    "property": "flex-basis",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-basis:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-basis-nested-fallback",
+    "property": "flex-basis",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-basis:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-flex-basis-inherited-alias",
+    "property": "flex-basis",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-basis:var(--alias,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;flex-basis:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-fallback",
+    "property": "order",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{order:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-primary",
+    "property": "order",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;order:var(--empty,-1)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-whitespace",
+    "property": "order",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;order:var(--empty,-1)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-comment",
+    "property": "order",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;order:var(--empty,-1)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-mixed",
+    "property": "order",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;order:var(--empty,-1)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-nested-fallback",
+    "property": "order",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{order:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-order-inherited-alias",
+    "property": "order",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;order:var(--alias,-1)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;order:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-fallback",
+    "property": "align-self",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-primary",
+    "property": "align-self",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;align-self:var(--empty,flex-end)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-whitespace",
+    "property": "align-self",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;align-self:var(--empty,flex-end)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-comment",
+    "property": "align-self",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;align-self:var(--empty,flex-end)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-mixed",
+    "property": "align-self",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;align-self:var(--empty,flex-end)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-nested-fallback",
+    "property": "align-self",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-align-self-inherited-alias",
+    "property": "align-self",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;align-self:var(--alias,flex-end)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;align-self:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-fallback",
+    "property": "justify-content",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{justify-content:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-primary",
+    "property": "justify-content",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;justify-content:var(--empty,space-evenly)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-whitespace",
+    "property": "justify-content",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;justify-content:var(--empty,space-evenly)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-comment",
+    "property": "justify-content",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;justify-content:var(--empty,space-evenly)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-mixed",
+    "property": "justify-content",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;justify-content:var(--empty,space-evenly)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-nested-fallback",
+    "property": "justify-content",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{justify-content:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-justify-content-inherited-alias",
+    "property": "justify-content",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;justify-content:var(--alias,space-evenly)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;justify-content:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-fallback",
+    "property": "margin",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-primary",
+    "property": "margin",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-whitespace",
+    "property": "margin",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-comment",
+    "property": "margin",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-mixed",
+    "property": "margin",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-nested-fallback",
+    "property": "margin",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-inherited-alias",
+    "property": "margin",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin:var(--alias,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-fallback",
+    "property": "margin-left",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-left:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-primary",
+    "property": "margin-left",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-left:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-whitespace",
+    "property": "margin-left",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-left:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-comment",
+    "property": "margin-left",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-left:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-mixed",
+    "property": "margin-left",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-left:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-nested-fallback",
+    "property": "margin-left",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-left:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-left-inherited-alias",
+    "property": "margin-left",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-left:var(--alias,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-fallback",
+    "property": "margin-top",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-top:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-primary",
+    "property": "margin-top",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-top:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-whitespace",
+    "property": "margin-top",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-top:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-comment",
+    "property": "margin-top",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-top:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-mixed",
+    "property": "margin-top",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-top:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-nested-fallback",
+    "property": "margin-top",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-top:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-top-inherited-alias",
+    "property": "margin-top",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-top:var(--alias,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-fallback",
+    "property": "margin-right",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-right:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-primary",
+    "property": "margin-right",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-right:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-whitespace",
+    "property": "margin-right",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-right:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-comment",
+    "property": "margin-right",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-right:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-mixed",
+    "property": "margin-right",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-right:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-nested-fallback",
+    "property": "margin-right",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-right:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-right-inherited-alias",
+    "property": "margin-right",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-right:var(--alias,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-fallback",
+    "property": "margin-bottom",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-bottom:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-primary",
+    "property": "margin-bottom",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-bottom:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-whitespace",
+    "property": "margin-bottom",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-bottom:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-comment",
+    "property": "margin-bottom",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-bottom:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-mixed",
+    "property": "margin-bottom",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-bottom:var(--empty,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-nested-fallback",
+    "property": "margin-bottom",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-bottom:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-margin-bottom-inherited-alias",
+    "property": "margin-bottom",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-bottom:var(--alias,auto)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;margin-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-fallback",
+    "property": "padding",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-primary",
+    "property": "padding",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-whitespace",
+    "property": "padding",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-comment",
+    "property": "padding",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-mixed",
+    "property": "padding",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-nested-fallback",
+    "property": "padding",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-inherited-alias",
+    "property": "padding",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-fallback",
+    "property": "padding-left",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-left:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-primary",
+    "property": "padding-left",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-left:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-whitespace",
+    "property": "padding-left",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-left:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-comment",
+    "property": "padding-left",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-left:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-mixed",
+    "property": "padding-left",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-left:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-nested-fallback",
+    "property": "padding-left",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-left:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-left-inherited-alias",
+    "property": "padding-left",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-left:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-left:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-fallback",
+    "property": "padding-top",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-top:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-primary",
+    "property": "padding-top",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-top:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-whitespace",
+    "property": "padding-top",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-top:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-comment",
+    "property": "padding-top",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-top:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-mixed",
+    "property": "padding-top",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-top:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-nested-fallback",
+    "property": "padding-top",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-top:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-top-inherited-alias",
+    "property": "padding-top",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-top:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-top:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-fallback",
+    "property": "padding-right",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-right:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-primary",
+    "property": "padding-right",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-right:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-whitespace",
+    "property": "padding-right",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-right:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-comment",
+    "property": "padding-right",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-right:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-mixed",
+    "property": "padding-right",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-right:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-nested-fallback",
+    "property": "padding-right",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-right:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-right-inherited-alias",
+    "property": "padding-right",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-right:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-right:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-fallback",
+    "property": "padding-bottom",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-bottom:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-primary",
+    "property": "padding-bottom",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-bottom:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-whitespace",
+    "property": "padding-bottom",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-bottom:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-comment",
+    "property": "padding-bottom",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-bottom:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-mixed",
+    "property": "padding-bottom",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-bottom:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-nested-fallback",
+    "property": "padding-bottom",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-bottom:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-padding-bottom-inherited-alias",
+    "property": "padding-bottom",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-bottom:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;padding-bottom:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-fallback",
+    "property": "gap",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{gap:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-primary",
+    "property": "gap",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-whitespace",
+    "property": "gap",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-comment",
+    "property": "gap",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-mixed",
+    "property": "gap",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-nested-fallback",
+    "property": "gap",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{gap:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-gap-inherited-alias",
+    "property": "gap",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;gap:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-fallback",
+    "property": "row-gap",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{row-gap:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-primary",
+    "property": "row-gap",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;row-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-whitespace",
+    "property": "row-gap",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;row-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-comment",
+    "property": "row-gap",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;row-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-mixed",
+    "property": "row-gap",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;row-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-nested-fallback",
+    "property": "row-gap",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{row-gap:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-row-gap-inherited-alias",
+    "property": "row-gap",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;row-gap:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;row-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-fallback",
+    "property": "column-gap",
+    "form": "fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{column-gap:var(--missing,)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{column-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-primary",
+    "property": "column-gap",
+    "form": "primary",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;column-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:;column-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-whitespace",
+    "property": "column-gap",
+    "form": "whitespace",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;column-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: \t\r\n\f ;column-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-comment",
+    "property": "column-gap",
+    "form": "comment",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;column-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty:/**/;column-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-mixed",
+    "property": "column-gap",
+    "form": "mixed",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;column-gap:var(--empty,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--empty: /* first */\t/**/ ;column-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-nested-fallback",
+    "property": "column-gap",
+    "form": "nested-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{column-gap:var(--missing,var(--also-missing,))}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{column-gap:unset}",
+    "accepted": true
+  },
+  {
+    "name": "empty-column-gap-inherited-alias",
+    "property": "column-gap",
+    "form": "inherited-alias",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;column-gap:var(--alias,4px)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#p{--empty:;--alias:var(--empty)}#a{--empty:8px;column-gap:unset}",
+    "accepted": true
+  }
+]

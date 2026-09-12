@@ -1,0 +1,42 @@
+[
+  {
+    "name": "rounding-percent-both-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-fixed-both-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:999999.875px;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-auto-both-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:auto;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-percent-zero",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 0px 0 0px;background:#14233f}#c{width:100%;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-fixed-zero",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 0px 0 0px;background:#14233f}#c{width:999999.875px;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-percent-right-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 1000000px 0 0px;background:#14233f}#c{width:100%;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-percent-left-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 0px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}"
+  },
+  {
+    "name": "rounding-percent-split-half-million",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;height:20px;padding:0 500000px 0 500000px;background:#14233f}#c{width:100%;height:1px;background:#669933}"
+  }
+]

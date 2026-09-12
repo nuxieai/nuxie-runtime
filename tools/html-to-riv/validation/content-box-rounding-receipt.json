@@ -1,0 +1,769 @@
+{
+  "status": "bounded-diagnosis-complete-original-failure-preserved",
+  "scope": "Geometry and emitted-number diagnosis only. No production repair, wrapper candidate, pixel qualification or runtime change.",
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/html-to-riv",
+    "sha256": "e1b16fd2a068b96afe5f878ca0423877538760178ac78041f5c88b5918c2e9fc"
+  },
+  "probe": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+    "sha256": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a"
+  },
+  "browser": "153.0.8010.12",
+  "sourceFreeze": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/source-bindings.json",
+    "sha256": "00796d16a1d6055f8cf4c6ca4514f80b77694937cab07349ac2db5803863a9eb"
+  },
+  "frozenSourceSnapshots": [
+    {
+      "sourceCommit": "b2641a69aee45d38cd6c6393c71eeeb5e88d4d25",
+      "repoPath": "tools/html-to-riv/src/css.rs",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-css.rs",
+      "sha256": "6668d1cb967a52b011bef6ca2829e57e64d638d1f37ae555f456755cd506402c"
+    },
+    {
+      "sourceCommit": "b2641a69aee45d38cd6c6393c71eeeb5e88d4d25",
+      "repoPath": "tools/html-to-riv/src/variables.rs",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-variables.rs",
+      "sha256": "e02fbc60033ba88d95f19700618f57d577f4b83906f9fa10787d9f1ed954df95"
+    },
+    {
+      "sourceCommit": "b2641a69aee45d38cd6c6393c71eeeb5e88d4d25",
+      "repoPath": "tools/html-to-riv/src/compiler.rs",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-compiler.rs",
+      "sha256": "d38f8578531b1ac51a44bc876ff3161b439663410b43b4b8ef5f5d2672881881"
+    },
+    {
+      "sourceCommit": "b2641a69aee45d38cd6c6393c71eeeb5e88d4d25",
+      "repoPath": "tools/html-to-riv/src/computed_provenance.rs",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-computed_provenance.rs",
+      "sha256": "cfd76346f97a965125e464b4674c2b58045354b8c8f72962160999ca6a30c395"
+    }
+  ],
+  "sources": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-measure.mjs",
+      "sha256": "b75472846b65f23a3cbbdb8977379affd42a5abdaba48e017efb85edf322f889"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-repro-cases.json",
+      "sha256": "793be3fa3a46c73ee41640444721ed3ac9d47d9c4001b8080bcac9737fb51d5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-controls.json",
+      "sha256": "a7a275137159ee7bcc5c4624193468a46f57c7842d720a160f704e3e73e26c31"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-token.rs",
+      "sha256": "b906d4f047cd63aeed460bf830b49b81dc0ae1b757219527d6552e0031e92e0e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-wire.py",
+      "sha256": "5f78f2feb1404cd31bf784236ccd9ebd663b5c8ce27d86ab509426d60453ceb5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-rounding-review.md",
+      "sha256": "0eacdfdae0d8d05fee3657fbd54f93df5bc35c2ac3fd2998665bf7fad5a6440c"
+    }
+  ],
+  "dependencySources": [
+    {
+      "path": "/Users/levi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/cssparser-0.37.0/src/serializer.rs",
+      "sha256": "ccc3f0e44189284b46dfad1d48ca5c21860f2c7e1c00540da5cee77e0c891275"
+    },
+    {
+      "path": "/Users/levi/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/dtoa-short-0.3.5/src/lib.rs",
+      "sha256": "3ab8d9a808725e9bc1972cc385be659ebf786bb17c45f7ad2c3b63fd3973b39d"
+    }
+  ],
+  "originalPublicEvidence": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-receipt.json",
+    "sha256": "c9b60cbf2cc03a6140828942f41827939372ef020dac5f3e11d0d209000af9ce"
+  },
+  "originalSourceExact": true,
+  "repro": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/receipt.json",
+    "sha256": "aa0f5dbd22ecadc2e4602f00fbffe8eb745dcf7838bb55109cb25676d8e5f6d9"
+  },
+  "controls": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/receipt.json",
+    "sha256": "d70a6199ed7686f3ffe1dd325e89c6519bf6e366de04cf859f8bea768ce4ef17"
+  },
+  "emittedNumericFields": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/receipt.json",
+    "sha256": "c579658f3a86cc6c83d872dfcdb5b6de749a92362d4984cf9db60659295d376b"
+  },
+  "originalAndReducedCases": 2,
+  "discriminatingControlCases": 8,
+  "geometryFrames": 20,
+  "geometryPassed": 0,
+  "geometryToleranceCssPx": 0.1,
+  "diagnosticViewport": [
+    390,
+    200
+  ],
+  "instances": [
+    "original",
+    "clone"
+  ],
+  "observedFacts": [
+    "cssparser parses999999.875px as binary32 999999.875 then serializes1000000px; both built dependency artifacts agree.",
+    "Literal/custom-property/fallback/escaped-unit one-node frozen r2 outputs are byte/map identical and ordinary width field7 is1000000 before native import.",
+    "Chrome Typed OM parent width value999999.875 survives computed-style string1e+06px.",
+    "Chrome percentage child ResizeObserver content/border width999999.8125 differs from fixed/auto child999999.875.",
+    "Moving padding right-to-left leaves Chrome child local width999999.8125 unchanged and changes its rect width999999.8125 to999999.75."
+  ],
+  "inferenceLimits": [
+    "No exact Blink internal arithmetic sequence was established.",
+    "A serializer repair is required but cannot be assumed to repair padded outer/content cancellation.",
+    "No immutable-runtime impossibility was proven."
+  ],
+  "proposedRepair": "Preserve raw numeric prefix plus canonical decoded unit in both ordinary-value and variable token normalization; changed-output and Chrome qualification follows the separate variable-empty recovery checkpoint.",
+  "wrapperStatus": "Deferred after the parent narrowed scope: the confirmed compiler normalization error affects an inner content owner too. No wrapper candidate was compiled, patched, rendered or qualified.",
+  "setupFailures": [
+    "r3 launcher first assumed one cssparser artifact; both were subsequently tested and bound.",
+    "r4 partial wire inspection omitted the leading Backboard record when joining artboard source IDs; r5 corrects the index and asserts layout type and name."
+  ],
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/browser-reset.css",
+      "sha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/compile.log",
+      "sha256": "2a2f735cbc49f7b1645a9cc881bf47f62b0020bf2c1410e6862f8d12544de89c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe/frame-0.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe/frame-0.stream",
+      "sha256": "fe7c580a23f8ebf4705e422aecf4b2ed240c80a17546288631e5a053e31230d2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe/frame-1.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe/frame-1.stream",
+      "sha256": "8af98ada1d751979337cae653edbe8836a85c3dc7fb32f57b49a88377ebb0788"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe/scene.riv",
+      "sha256": "51e64e7cf23b384616d761fedc58916a227d032ac3eeac14d5cb38fe100402d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/probe.log",
+      "sha256": "cf115ea3d36e2cf7fc200624984d80ed968e7a2f27965af640edf03c362ad897"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/reference.html",
+      "sha256": "751617ad6a3e5a5e99ac77b5dbbb177e9b7e690ceb236b1a252cbc6ae5d857a1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/request.json",
+      "sha256": "17a97a4da4e9781b5cd8b83f6e39caac4d0df1c653c55f59fdc3af876542e187"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/content-large-rounded-outer/scene.riv",
+      "sha256": "51e64e7cf23b384616d761fedc58916a227d032ac3eeac14d5cb38fe100402d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/receipt.json",
+      "sha256": "aa0f5dbd22ecadc2e4602f00fbffe8eb745dcf7838bb55109cb25676d8e5f6d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/compile.log",
+      "sha256": "8bfe7300833a06480b98e8ed6191d681014e8f5a0d469cee1cd9c8d970ad3de9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe/frame-0.geometry.json",
+      "sha256": "085dc4eb1edcef9dbc0ca891d8c497ea71e1041cd827cee88babebe93e0fcc59"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe/frame-0.stream",
+      "sha256": "98aefba9c2a4e6462bd2a3dd9091903915efbf68d24c2a3dcbe2b3ae86f75fde"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe/frame-1.geometry.json",
+      "sha256": "085dc4eb1edcef9dbc0ca891d8c497ea71e1041cd827cee88babebe93e0fcc59"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe/frame-1.stream",
+      "sha256": "bf6d427116bab4f86ade9e395652f5424ea81e889551498053a18cb31011e271"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe/scene.riv",
+      "sha256": "c623b314628cae180ff1ebfd2ececf25134cf5a0ea1dbed56ad6e0511112ddd6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/probe.log",
+      "sha256": "28d0fc77e95e9b3c17aadf6ff5b05b9612d60cfb78d5d5f163bcd77e0d7e9955"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/reference.html",
+      "sha256": "cdb55080b8971479b101aed301d1e9cc61c16b61783aeeedccb05bdeeb97fd65"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/request.json",
+      "sha256": "fb5238d03eecc03a39610487379074294c8c99a0ffd54f39a1e57ff0813523d3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/scene.map.json",
+      "sha256": "6cbfce423b9559ace876ef517faefeecf5856c3f5d8563de74f26d84c0a03dac"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/rounded-minimal/scene.riv",
+      "sha256": "c623b314628cae180ff1ebfd2ececf25134cf5a0ea1dbed56ad6e0511112ddd6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1/source-cases.json",
+      "sha256": "793be3fa3a46c73ee41640444721ed3ac9d47d9c4001b8080bcac9737fb51d5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/browser-reset.css",
+      "sha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/receipt.json",
+      "sha256": "d70a6199ed7686f3ffe1dd325e89c6519bf6e366de04cf859f8bea768ce4ef17"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/compile.log",
+      "sha256": "8529945cee908c8146fe2639b7d611764fded09efbe7a531272a6b4731bd9a0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe/frame-0.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe/frame-0.stream",
+      "sha256": "fe7c580a23f8ebf4705e422aecf4b2ed240c80a17546288631e5a053e31230d2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe/frame-1.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe/frame-1.stream",
+      "sha256": "8af98ada1d751979337cae653edbe8836a85c3dc7fb32f57b49a88377ebb0788"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe/scene.riv",
+      "sha256": "1c984a05c004e0b2bc83613906dfc937843681683e129f4eaf6b5f89de066a00"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/probe.log",
+      "sha256": "f10172af87c4a6cbf6cfab7e71e2991c1c5dcc39bdf370d5f53cb124a2eb9fb2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/reference.html",
+      "sha256": "5e1edbef673c9eaeaf68a0d978a4fd155269a7d7356a3349f07ebcce8d26c57d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/request.json",
+      "sha256": "f512afaff9d687648ba6cfd9731aff090ae3150a9a16737e3ba7c67050a04953"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-auto-both-million/scene.riv",
+      "sha256": "1c984a05c004e0b2bc83613906dfc937843681683e129f4eaf6b5f89de066a00"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/compile.log",
+      "sha256": "dfa82859c94d2af8dc8b72f687380af5e71031f7948c09e58457b27ee2d30dbc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe/frame-0.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe/frame-0.stream",
+      "sha256": "fe7c580a23f8ebf4705e422aecf4b2ed240c80a17546288631e5a053e31230d2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe/frame-1.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe/frame-1.stream",
+      "sha256": "8af98ada1d751979337cae653edbe8836a85c3dc7fb32f57b49a88377ebb0788"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe/scene.riv",
+      "sha256": "dc92d56c6e5f7be4ec1e3dcda4eedad44cca9acc1e8f6e3bd4ba6d7d5ba5d1a9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/probe.log",
+      "sha256": "a74720c6c83ac2776b756f15eda97ddb092f35ae2d10ba480119a6dbc4826d3d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/reference.html",
+      "sha256": "4c059148b685ba916996dcb4d8731bc583024030fefec0417c732fcd01c521c7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/request.json",
+      "sha256": "35648c40da42312bb516fc3a73914821865b5de7a5c0c1cafd39ee1da404c9c9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-both-million/scene.riv",
+      "sha256": "dc92d56c6e5f7be4ec1e3dcda4eedad44cca9acc1e8f6e3bd4ba6d7d5ba5d1a9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/compile.log",
+      "sha256": "699f5057e7cbf5c66a86f50c78e3b50b5281604da2b324fba976e2972ea468d0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe/frame-0.geometry.json",
+      "sha256": "24026eba98a6df3a0c0ab718212c5424b8c2333f92468fc94875032b59fc0368"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe/frame-0.stream",
+      "sha256": "320ff04849c5c8f4a4ebc2f872c468f0a3215e4f3593b6d5f8f28f3660268e1f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe/frame-1.geometry.json",
+      "sha256": "24026eba98a6df3a0c0ab718212c5424b8c2333f92468fc94875032b59fc0368"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe/frame-1.stream",
+      "sha256": "bc186ad1f98991d52b0a2866d962710f68d8b75fb43384846fa8eeb303aa6d82"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe/scene.riv",
+      "sha256": "cd64ec5b6f862eea9f957ccca06c9856d78ccda4619b4c82ca4753c73d9ac88e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/probe.log",
+      "sha256": "b5b2a3c19a9441c0c27631dd751f743f0bb7dc8ffb6edb7862aa0aceeb596d2a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/reference.html",
+      "sha256": "35c89dbb5384c7468ce94181a2074797652eddfe82327de42d7b1c8eca85fe2f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/request.json",
+      "sha256": "da2a426d7549571a3a02b4455a7f5fef58f6fb90731eb59f0a44a2381baa3d4e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-fixed-zero/scene.riv",
+      "sha256": "cd64ec5b6f862eea9f957ccca06c9856d78ccda4619b4c82ca4753c73d9ac88e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/compile.log",
+      "sha256": "838b4d1dc73d5b9d7264ad372ef366279b2f66a96ebc2fb1696cc6cbc2a70108"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe/frame-0.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe/frame-0.stream",
+      "sha256": "fe7c580a23f8ebf4705e422aecf4b2ed240c80a17546288631e5a053e31230d2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe/frame-1.geometry.json",
+      "sha256": "337f6f97a14506c2893c5dd6e8f4eca5eef8e2ee4406fa0fc141ea770a732abc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe/frame-1.stream",
+      "sha256": "8af98ada1d751979337cae653edbe8836a85c3dc7fb32f57b49a88377ebb0788"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe/scene.riv",
+      "sha256": "51e64e7cf23b384616d761fedc58916a227d032ac3eeac14d5cb38fe100402d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/probe.log",
+      "sha256": "c1d79041ae3d2b2a2b886d445f11e8ff3895c0aa1c10c0210873c4c3260a85d8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/reference.html",
+      "sha256": "c450fb7eae5decfb3332d16f692dcb50c8ff660c342cfff0262453dbfe071046"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/request.json",
+      "sha256": "abf52aedc4256e17b28c924425ab900c2ad5803eacf03cbbdcb18e28b36f2d23"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-both-million/scene.riv",
+      "sha256": "51e64e7cf23b384616d761fedc58916a227d032ac3eeac14d5cb38fe100402d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/compile.log",
+      "sha256": "4ae5b4a68430446ab9be03fd253816f4294eb2dcae3c54db5b6adcd7c05f2c2f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe/frame-0.geometry.json",
+      "sha256": "958b36e97a1f112175c0273f1078a6c17d091820269e805dbf54b01db637acc5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe/frame-0.stream",
+      "sha256": "6d2811c719887ad8e02767560b35d228e66dcf4951a7756ef1de654daede3e50"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe/frame-1.geometry.json",
+      "sha256": "958b36e97a1f112175c0273f1078a6c17d091820269e805dbf54b01db637acc5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe/frame-1.stream",
+      "sha256": "c625f0dd2089d7614246c82cdee948465af99babc175b984b193b91f17d388a5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe/scene.riv",
+      "sha256": "8477bbb3701def2236270f21fa5c88a943f4651b0ee8ebed430526555e98ac4b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/probe.log",
+      "sha256": "2ea5a6410b70212ab92ad1f97cf4669fbf86a3de934b55047389934ce1f660cd"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/reference.html",
+      "sha256": "e571cf4d6625b945bbd586e8f406ecc928025590b0b0e13a3a1d54c2117620c8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/request.json",
+      "sha256": "4e1ff844ecd8cc697f69d4c8e9709fba8798df2eb3fadee9d1ad6695dbc2f68a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-left-million/scene.riv",
+      "sha256": "8477bbb3701def2236270f21fa5c88a943f4651b0ee8ebed430526555e98ac4b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/compile.log",
+      "sha256": "4e34234dee02c2cb6bf16b4532e559730112f65341067a6036c5ecb32917e970"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe/frame-0.geometry.json",
+      "sha256": "7e903c5d7a8e312c25e709ee424874d803f0ec1b0e26e424cfa69c14a6f48b81"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe/frame-0.stream",
+      "sha256": "6c148d4eaa2efd9ed50767a4ceec59c3f2c17922b42a710090f9bea098b2e1f3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe/frame-1.geometry.json",
+      "sha256": "7e903c5d7a8e312c25e709ee424874d803f0ec1b0e26e424cfa69c14a6f48b81"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe/frame-1.stream",
+      "sha256": "a54313b834420b6a120fd24c234247e96d25c79e336191d0db8a57ba9dbe64ec"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe/scene.riv",
+      "sha256": "d74f9d8eacc428ccfe422a054aa738e726ec918008c11e627934201d69a76df5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/probe.log",
+      "sha256": "c47c6d8ac641889d360c3cc287114bb4f36215425ceb1a7a0777a7bcc03f1885"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/reference.html",
+      "sha256": "5dce34db73e41a2daff64995078b9190bdc2aa40669e6704d007b6565ebd83ad"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/request.json",
+      "sha256": "3d8d2f15f960689f5671aec2c64740d377e7b0209cdb2fd6ee642559841e3d06"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-right-million/scene.riv",
+      "sha256": "d74f9d8eacc428ccfe422a054aa738e726ec918008c11e627934201d69a76df5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/compile.log",
+      "sha256": "f46a583e6903572b17f4ac8e2f1b3093f6b2959dc1e1148fc86345c98f6ac4a1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe/frame-0.geometry.json",
+      "sha256": "2843271ba62b4c25b9a3d92f32f8d00abf6b4c8f837df7ae57828e37057236e4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe/frame-0.stream",
+      "sha256": "7cd4fbf321cd3f03ec4ce0b344927db1a9f9be1c903b75e54bbb7e965458b659"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe/frame-1.geometry.json",
+      "sha256": "2843271ba62b4c25b9a3d92f32f8d00abf6b4c8f837df7ae57828e37057236e4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe/frame-1.stream",
+      "sha256": "07b773be9b104aad880b7b1539bf211f2ea8e7d166d14b39d98f66abd16c999b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe/scene.riv",
+      "sha256": "812653c3eb4d3296d4e84004d574a59f6be225d42b85d6568135b8bae1bf0288"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/probe.log",
+      "sha256": "4cc8d2e84377f2c3447c90d55453df0f592ee6ecd3665b150690a72b7b32d6f2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/reference.html",
+      "sha256": "69cc587363fa88e3538627393cd1b6cd17211597d54ad1c625f763598d6edaad"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/request.json",
+      "sha256": "f433cee9a2d0230395763dc1852e0ac7652044edb93bd4586a44ecdc1b010566"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-split-half-million/scene.riv",
+      "sha256": "812653c3eb4d3296d4e84004d574a59f6be225d42b85d6568135b8bae1bf0288"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/compile.log",
+      "sha256": "86222875e18db8ff6e3149f99c068cea36a2ca4959dab88e7227755a2db310b1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe/frame-0.geometry.json",
+      "sha256": "24026eba98a6df3a0c0ab718212c5424b8c2333f92468fc94875032b59fc0368"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe/frame-0.stream",
+      "sha256": "320ff04849c5c8f4a4ebc2f872c468f0a3215e4f3593b6d5f8f28f3660268e1f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe/frame-1.geometry.json",
+      "sha256": "24026eba98a6df3a0c0ab718212c5424b8c2333f92468fc94875032b59fc0368"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe/frame-1.stream",
+      "sha256": "bc186ad1f98991d52b0a2866d962710f68d8b75fb43384846fa8eeb303aa6d82"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe/frames.json",
+      "sha256": "346bcf9ff99dbee81abbb9fdf5de42ba7c0cee7fa0d5cdb16f7e619d6074cd0c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe/scene.riv",
+      "sha256": "bfca53d5dfa9b3cc909780bd43d43a7572da7975999a9247dfcaa2df60b4eaca"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/probe.log",
+      "sha256": "828cfc50db7b81f0536b766c9c92c3debd5b0602ee18f187277bf5a7013ee22c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/reference.html",
+      "sha256": "48e80e2fb2ed7c553f8a0b11ef2140a35d6adf97375962899287d033b280e8df"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/request.json",
+      "sha256": "5148f3170c751ef7d185344b23c62ab89d58e274b5fcda2825ca0b4dd612d9cb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/scene.map.json",
+      "sha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/rounding-percent-zero/scene.riv",
+      "sha256": "bfca53d5dfa9b3cc909780bd43d43a7572da7975999a9247dfcaa2df60b4eaca"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2/source-cases.json",
+      "sha256": "a7a275137159ee7bcc5c4624193468a46f57c7842d720a160f704e3e73e26c31"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/build-0.json",
+      "sha256": "db54324b1d64fa9160c0f6154373105d0f1f488eaf7bf854ec1930e07aca7fd5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/build-1.json",
+      "sha256": "d9bee9cae3e8f5802c59e5ad703c9c99cfc4d03c2f1888fcd095c2961187b9d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-compiler.rs",
+      "sha256": "d38f8578531b1ac51a44bc876ff3161b439663410b43b4b8ef5f5d2672881881"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-computed_provenance.rs",
+      "sha256": "cfd76346f97a965125e464b4674c2b58045354b8c8f72962160999ca6a30c395"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-css.rs",
+      "sha256": "6668d1cb967a52b011bef6ca2829e57e64d638d1f37ae555f456755cd506402c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/frozen-variables.rs",
+      "sha256": "e02fbc60033ba88d95f19700618f57d577f4b83906f9fa10787d9f1ed954df95"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/source-snapshots.json",
+      "sha256": "af9c09602c4572e52b26d0ba490a428505ae6b6b0aa64a4e38d7283043491047"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/token-probe-0",
+      "sha256": "431c519f6fb827ecca5c7233a25034e27aa8b61d31f71da066ce1ca6581e6baf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/token-probe-1",
+      "sha256": "a9439fc1543d3a61c4bf26a25091f547e2a9bb11de46f3389ade34a9c595d138"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/tokens-0.log",
+      "sha256": "b0699c772cfd379e7bf3732f6cdf5f4d24606f10fd61943bf017f9f1eb3c20cf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r3/tokens-1.log",
+      "sha256": "b0699c772cfd379e7bf3732f6cdf5f4d24606f10fd61943bf017f9f1eb3c20cf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r4/literal/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r4/literal/request.json",
+      "sha256": "d77ded5f2a62cd823eb040d2e9b4d63592f040a39f8ac6fee2f18b2282ff8828"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r4/literal/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r4/literal/scene.riv",
+      "sha256": "a0ce7e0ce0ad0b10839743f3c77502896e37579d65bf3be4290994e139e03a67"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/custom-property/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/custom-property/request.json",
+      "sha256": "271f3afc7b8c7a5e95537a33102ad482744d67f079e1d36867f21d83915009b7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/custom-property/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/custom-property/scene.riv",
+      "sha256": "a0ce7e0ce0ad0b10839743f3c77502896e37579d65bf3be4290994e139e03a67"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/escaped-unit/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/escaped-unit/request.json",
+      "sha256": "97a9ad051990dbd57b08e2d485c257f9aed2b84b79ba02ec02529f9191aea378"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/escaped-unit/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/escaped-unit/scene.riv",
+      "sha256": "a0ce7e0ce0ad0b10839743f3c77502896e37579d65bf3be4290994e139e03a67"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/fallback/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/fallback/request.json",
+      "sha256": "b2183df7a2a6809930dd6d4e5adeee0b06aa6663bc0dba3a6af065daf05fadd2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/fallback/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/fallback/scene.riv",
+      "sha256": "a0ce7e0ce0ad0b10839743f3c77502896e37579d65bf3be4290994e139e03a67"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/literal/compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/literal/request.json",
+      "sha256": "d77ded5f2a62cd823eb040d2e9b4d63592f040a39f8ac6fee2f18b2282ff8828"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/literal/scene.map.json",
+      "sha256": "f438ca5207754df579a38420c80a44b670d72554ecaf63b7b140c108f66eeda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/literal/scene.riv",
+      "sha256": "a0ce7e0ce0ad0b10839743f3c77502896e37579d65bf3be4290994e139e03a67"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r5/receipt.json",
+      "sha256": "c579658f3a86cc6c83d872dfcdb5b6de749a92362d4984cf9db60659295d376b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r1.log",
+      "sha256": "a4a0e17a40d94bf0c74735c9ca8ab17411ee4076b4b7cafa58888301ceae2741"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-rounding-r2.log",
+      "sha256": "835877cc5f76c10eeb54c906f49bae918f5676c1cbc5dd2b9cd7e9c9b94db66e"
+    }
+  ]
+}

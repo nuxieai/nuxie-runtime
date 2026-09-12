@@ -1,0 +1,12 @@
+[
+  {
+    "name": "content-large-rounded-outer",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}"
+  },
+  {
+    "name": "rounded-minimal",
+    "html": "<div id=p><div id=c></div></div>",
+    "css": "#p{box-sizing:content-box;width:999999.875px;padding:0 1000000px}#c{width:100%}"
+  }
+]

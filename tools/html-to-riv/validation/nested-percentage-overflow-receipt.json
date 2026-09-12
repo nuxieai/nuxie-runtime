@@ -1,0 +1,15 @@
+{
+  "status": "preserved-native-nonfinite-failure",
+  "compilerAccepted": true,
+  "nativeObserverExitCode": 1,
+  "nativeError": "nonfinite observed layout at frame 0, object 36",
+  "scope": "One actual ordinary import/layout observation; no Chrome, pixel, clone or all-viewport claim",
+  "bindings": {
+    "tools/html-to-riv/output/nested-percentage-overflow-r1/request.json": "6e04f8a584d04985e319afda6e86bb41db4db2eb9a0f20d0b1d07e61bc78434b",
+    "tools/html-to-riv/output/nested-percentage-overflow-r1/scene.riv": "6609544f7a556bb2c0fa4918da92dc7a72ed65fb36655a84b10999edec54afff",
+    "tools/html-to-riv/output/nested-percentage-overflow-r1/scene.map.json": "d25c0d96a6c33b825a84741d4cebc9a7c93f4bc2da127f27a4b4487d9d9a9ec3",
+    "tools/html-to-riv/output/nested-percentage-overflow-r1/commands.json": "2d27d6597305e868d45161d4a970a559d3b513dcd1cf6b44ddcdbcd5b4efa7f7",
+    "tools/html-to-riv/output/public-auto-margins-r3/html-to-riv": "a61975ce0aef5f153b9db3300c5b3b13707cac113bff3f0a4b4bf450c8d2ce1d",
+    "tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a"
+  }
+}

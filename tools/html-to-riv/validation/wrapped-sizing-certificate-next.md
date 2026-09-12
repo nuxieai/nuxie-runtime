@@ -1,3 +1,5 @@
+> Anchored checkpoint supersedes the missing-term task: ComponentOrigin now lands the actual visible extent without feedback, with updated record/error bounds and a384frame native positive/old-emitter negative control. Next bind paint/mask premises and validate the actual source-derived candidate against Chrome. Read wrapped-anchored-review.md.
+
 > Latest scalar/position checkpoint: sizing records/defaults/operands and final emitted-expression bounds are now connected to the same owned candidate. A new unequal-visible-size counterexample reveals the missing a*(h-v) semantic term; repair before public admission. Existing mask rectangles may preserve AA through the pinned renderer's clip intersection, so bind/test that route before changing their dimensions. See wrapped-scalar-position-review.md and its linked audits. Older proposed obligations below remain historical where superseded.
 
 # Source-derived certificate for wrapped sizing and paint gates

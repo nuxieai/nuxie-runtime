@@ -1,0 +1,32 @@
+{
+  "scope": "Private source-derived anchored positioning candidate; no public wrapping or new pixel qualification",
+  "rustTests": 397,
+  "nodeTests": 56,
+  "imageOutputs": 282,
+  "historicalOutputs": 794,
+  "compilerSha256": "9769e39d382c1ec2178f1780a68e8a0b7b9342428a8f7ed195acff4d9fdd8359",
+  "wasmSha256": "04c5a6e770ac8f333b8cc4daa7ead7d5a909c3d836351832a642e2331e717e29",
+  "publicWrappingAdmitted": false,
+  "nativeFrames": 384,
+  "nativePositionsExact": 1152,
+  "negativeFramesFailed": 384,
+  "negativePositionsFailed": 768,
+  "artifactBindings": 11453,
+  "priorCheckpoint": "49169f2bfb",
+  "build": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-anchored-build-r1",
+  "buildSummarySha256": "300506b91ed5362ea146c6796cdd4ee20e3824594c11290888ad72543a4493cf",
+  "verification": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-anchored-verification-r1.json",
+  "verificationSha256": "1718d26c22e4306264312db115649a61ae94e7cddaa36ebec495ffd5ac0260a8",
+  "frozenEntries": 297,
+  "nativeEpsilon": 0.015625,
+  "nativeEpsilonIsAdmissionCertificate": false,
+  "publicBinariesUnchanged": true,
+  "reemittedArtifactsExact": 144,
+  "reviews": {
+    "wrapped-anchored-review.md": "f3085cbe486ab28d5826c5f5cbc183714f28ebd734af70da0c0031c6416a9a4c",
+    "wrapped-anchored-native-review.md": "a38b1151e5c955ed6a0a4f2a6a7e4c84fe6af7ebc0081bc4c36d9476143936b1",
+    "wrapped-anchored-scalar-review.md": "3d4901b93ccea96d7da450af001b5dc47411620e8bc339120f00ee238283ac5b",
+    "wrapped-anchored-position-review.md": "b1f185cb048fe0feb69c1e11d790963ce0e99988325e015ee8602c619aa008b3",
+    "wrapped-visible-measurement-options.md": "a0d810b44bf67f5fe1b3e0771059612257b728993fd7751552d338e2578312ca"
+  }
+}

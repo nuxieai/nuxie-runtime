@@ -53,7 +53,8 @@ impl Candidate {
     }
 }
 /// A source-derived arithmetic analysis attached to the exact candidate it
-/// configured. Remaining scalar-field and mask/paint proofs are not implied.
+/// configured. Sizing fields and visible anchors are bound; mask/paint proofs
+/// and actual native/Chrome qualification are not implied.
 pub(super) struct Derived {
     candidate:Candidate,
     arithmetic:super::wrapping_coordinates::Proof,
@@ -72,7 +73,7 @@ pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_b
     let reverse_cross=domains.base().reverse_cross;
     let line_fraction=domains.base().line_fraction;
     let roles=domains.base().slots.iter().map(|s|(s.id,s.visible)).collect::<Vec<_>>();
-    let position=super::wrapping_position::prove(&arithmetic,alignments,row,line_fraction,reverse_cross)
+    let position=super::wrapping_position::prove(&arithmetic,domains.slots(),alignments,row,line_fraction,reverse_cross)
         .map_err(Unresolved::Position)?;
     let candidate=compose(domains,alignments,arithmetic.epsilon(),record_budget)?;
     let (start,sizing,_)=candidate.record_costs();
@@ -105,17 +106,18 @@ fn preserved(
     if wire::encode(prefix)? != wire::encode(&expected)? { return Err(Unresolved::BaseChanged); }
     let slots = visible.iter().filter_map(|id| base.get(*id as usize+1).and_then(parent)).collect::<BTreeSet<_>>();
     let kind = |id:u32| final_records.get(id as usize+1).map(|r|r.kind);
+    let mut origins=BTreeSet::new();
     for (position, record) in final_records.iter().enumerate().skip(base.len()) {
         let object = u32::try_from(position - 1).map_err(|_| Unresolved::ResourceBudget)?;
         if !matches!(record.kind, "Node" | "TranslationConstraint" | "TransformConstraint"
-            | "DistanceConstraint" | "Shape" | "Rectangle" | "ForegroundLayoutDrawable"
+            | "DistanceConstraint" | "ComponentOrigin" | "Shape" | "Rectangle" | "ForegroundLayoutDrawable"
             | "Fill" | "SolidColor" | "ClippingShape" | "DrawRules" | "DrawTarget") {
             return Err(Unresolved::GeneratedRole { object });
         }
         let owner = parent(record).ok_or(Unresolved::GeneratedRole { object })?;
         let root_node = owner == 0 && record.kind == "Node";
         let visible_attachment = visible.contains(&owner)
-            && matches!(record.kind, "ForegroundLayoutDrawable" | "TranslationConstraint");
+            && matches!(record.kind, "ForegroundLayoutDrawable" | "TranslationConstraint" | "ComponentOrigin");
         let expected_owner = match record.kind {
             "Node" | "TranslationConstraint" | "TransformConstraint" | "DistanceConstraint" | "Shape" => "Node",
             "Rectangle" => "Shape",
@@ -127,6 +129,10 @@ fn preserved(
         let helper_attachment = owner as usize >= base.len() - 1 && owner < object
             && kind(owner)==Some(expected_owner);
         if !(root_node || visible_attachment || helper_attachment) {
+            return Err(Unresolved::GeneratedRole { object });
+        }
+        if record.kind=="ComponentOrigin" && (!origins.insert(owner)
+            || !record.has_only_properties(&["parentId","originX","originY"])) {
             return Err(Unresolved::GeneratedRole { object });
         }
         // Measurements read only independent slots. Scalar helpers read older
@@ -148,6 +154,7 @@ fn preserved(
         };
         if !valid_reference { return Err(Unresolved::GeneratedRole { object }); }
     }
+    if origins!=*visible {return Err(Unresolved::PaintOwnership);}
     Ok(())
 }
 
@@ -310,7 +317,7 @@ mod tests {
             let bind=|changed:&[Record],trace:&wrapping::Trace| wrapping_scalar::bind(changed,start,start+size,
                 &roles,&[0.,0.5,1.],row,false,0.5,0.25,trace);
             let binding=bind(candidate.records(),candidate.trace()).unwrap();
-            assert_eq!(binding.nodes+binding.constraints,size);
+            assert_eq!(binding.nodes+binding.constraints+binding.origins,size);
             // Each mutation breaks a premise actually used by the scalar
             // ledger: identity, strength, exact mode, origin or operand.
             for (kind,key,value) in [
@@ -321,6 +328,7 @@ mod tests {
                 ("TranslationConstraint","offset",Value::Bool(true)),
                 ("TranslationConstraint","targetId",Value::Uint(candidate.trace().heights[2])),
                 ("TransformConstraint",if row {"originX"}else{"originY"},Value::Float(0.5)),
+                ("ComponentOrigin",if row {"originY"}else{"originX"},Value::Float(0.5)),
                 ("DistanceConstraint","modeValue",Value::Uint(0)),
                 ("DistanceConstraint","distance",Value::Float(65535.)),
                 ("DistanceConstraint","targetId",Value::Uint(candidate.trace().tops[0])),

@@ -1,5 +1,5 @@
 //! Structural binding of the sizing arithmetic to actual ordinary records.
-//! This checks a closed scalar instruction grammar, including fields omitted
+//! This checks a closed scalar and visible-anchor instruction grammar, including fields omitted
 //! to use immutable native defaults. It does not prove paint gates, runtime
 //! evaluation scheduling, arithmetic bounds or CSS visible-size equivalence.
 use super::wrapping::{Boundary, Trace};
@@ -8,8 +8,8 @@ use crate::wire::{Record, Value};
 #[derive(Debug, PartialEq, Eq)]
 pub(super) struct Unresolved { pub object: usize }
 #[derive(Debug)]
-pub(super) struct Binding { pub nodes: usize, pub constraints: usize }
-struct Reader<'a> { records:&'a[Record], next:usize, end:usize, row:bool, nodes:usize, constraints:usize }
+pub(super) struct Binding { pub nodes: usize, pub constraints: usize, pub origins: usize }
+struct Reader<'a> { records:&'a[Record], next:usize, end:usize, row:bool, nodes:usize, constraints:usize, origins:usize }
 impl Reader<'_> {
     fn fail(&self)->Unresolved {Unresolved{object:self.next.saturating_sub(1)}}
     fn take(&mut self,kind:&str,fields:&[(&str,Value)])->Result<u32,Unresolved> {
@@ -21,7 +21,7 @@ impl Reader<'_> {
             || fields.iter().any(|(k,v)| !same(r.get(k),v)) {return Err(self.fail());}
         let id=u32::try_from(self.next-1).map_err(|_|self.fail())?;
         self.next+=1;
-        if kind=="Node" {self.nodes+=1;}else{self.constraints+=1;}
+        if kind=="Node" {self.nodes+=1;}else if kind=="ComponentOrigin" {self.origins+=1;}else{self.constraints+=1;}
         Ok(id)
     }
     fn node(&mut self,parent:u32,value:Option<f32>)->Result<u32,Unresolved> {
@@ -92,7 +92,7 @@ fn same(actual:Option<&Value>,expected:&Value)->bool {
 /// Forward references and extra instructions cannot fit this closed grammar.
 pub(super) fn bind(records:&[Record],start:usize,end:usize,roles:&[(u32,u32)],alignments:&[f32],
     row:bool,reverse_cross:bool,line_fraction:f32,epsilon:f32,trace:&Trace)->Result<Binding,Unresolved> {
-    let mut r=Reader{records,next:start,end,row,nodes:0,constraints:0};
+    let mut r=Reader{records,next:start,end,row,nodes:0,constraints:0,origins:0};
     if start==0 || end>records.len() || start>end || roles.is_empty() || roles.len()!=alignments.len()
         || ![0.,0.5,1.].contains(&line_fraction) || alignments.iter().any(|a|![0.,0.5,1.].contains(a))
         || !epsilon.is_finite() || !(0. ..65536.).contains(&epsilon)
@@ -119,13 +119,15 @@ pub(super) fn bind(records:&[Record],start:usize,end:usize,roles:&[(u32,u32)],al
     }
     for (i,&(_,visible)) in roles.iter().enumerate() {
         let maximum=r.max(expected.forward[i],expected.backward[i])?;
-        let excess=r.diff(maximum,expected.heights[i])?;
         let alignment=if reverse_cross {1.-alignments[i]}else{alignments[i]};
-        let offset=r.scale(excess,alignment-fraction)?;
-        let target=r.sum(expected.tops[i],offset)?;
+        let offset=r.scale(maximum,alignment-fraction)?;
+        let target=r.sum(expected.anchors[i],offset)?;
+        r.take("ComponentOrigin",&[("parentId",Value::Uint(visible)),
+            ("originX",Value::Float(if row {0.}else{alignment})),
+            ("originY",Value::Float(if row {alignment}else{0.}))])?;
         r.copy(visible,target,1.,false,false,false,false)?;
         expected.line_maxima.push(maximum);expected.offsets.push(offset);expected.targets.push(target);
     }
     if r.next!=end || expected!=*trace {return Err(r.fail());}
-    Ok(Binding{nodes:r.nodes,constraints:r.constraints})
+    Ok(Binding{nodes:r.nodes,constraints:r.constraints,origins:r.origins})
 }

@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
   "focus": "Wrapped sizing and admission proof",
-  "status": "Sizing scalar records and position bounds bound; visible-size correction remains",
-  "current": "Private sizing grammar and final-position bounds pass396Rust/56Node plus builds/TypeScript/source guard.282image+794historical outputs stay exact;7,865bindings verify. Unequal visible/slot extents expose a missing alignment term. No public wrapping or new pixel campaign.",
-  "next": "Repair missing a*(h-v) alignment term with independent visible-size measurement; update arithmetic/record binding, bind paint and mask domain/fields, then run derived native/Chrome original/clone resize and edge-pixel validation.",
+  "status": "Unequal visible sizing repaired with ordinary component anchors",
+  "current": "Private anchored graph passes397Rust/56Node plus builds/source guard. Native fixed-epsilon experiment passes384frames/1152exactpositions; old emitter fails384frames/768positions on samebases. Public binaries/1076outputs unchanged;11453bindings verify. No Chrome/pixel or public wrapping qualification.",
+  "next": "Bind paint scalar fields, leader inversion, mask viewport/rectangle and clip/draw semantics; then validate the source-derived anchored candidate against native/Chrome original/clone resizing, edge pixels and visual inspection.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Anchored visible-size repair with native negative control",
+      "path": "tools/html-to-riv/validation/wrapped-anchored-review.md"
+    },
     {
       "label": "Sizing scalar/position checkpoint and visible-size counterexample",
       "path": "tools/html-to-riv/validation/wrapped-scalar-position-review.md"

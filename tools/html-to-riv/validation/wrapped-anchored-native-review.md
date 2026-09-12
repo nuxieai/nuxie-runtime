@@ -1,0 +1,17 @@
+# Private ComponentOrigin native semantic experiment
+
+The repaired wrapping emitter passes 48 direct-record recipes and 384 native frames (1,152 visible cross-axis positions), with maximum observed absolute position error **0**. This is an ordinary-file semantic experiment, not Chrome/pixel qualification or public admission.
+
+The recipes cover row/column, normal/reversed main order, normal/reversed wrap, parent start/center/end alignment, and fixed/percentage visible cross sizes. Three independent slots have unequal cross extents 50/30/70; visible extents are either 20/40/90 or 50%/150%/75% of those slots. Per-item alignment is start/center/end; slot child alignments also vary. The four-step viewport sequence makes one, two, and three lines and then repeats the first size. Both original and clone traverse the same sequence without recompilation.
+
+The independent oracle partitions unaugmented native slot extents using available main size, then computes each line origin from the unaugmented slot position, slot size, line maximum and parent fraction. Expected visible origin is line origin plus (line maximum minus the unaugmented visible used size) times the requested physical alignment. Augmentation preserves all observed slot geometry, visible used sizes and main-axis positions exactly. Complete observed transform arrays match between original/clone and first/repeated frames.
+
+The negative control freezes wrapping.rs from commit `49169f2bfb` and uses the same harness, libraries and immutable read-only node probe. Its base `.riv` files match the repaired run exactly. All 384 frames fail the same 0.1 position threshold, totaling 768 mismatched item positions; its original/clone/repeat states are still deterministic. This distinguishes the alignment repair from a lifecycle-only check.
+
+Evidence: `output/wrapped-anchored-native-r2/receipt.json` and `observations.json`; negative control `output/wrapped-anchored-native-negative-r2/receipt.json` and `observations.json`. Both receipts bind full artifact bytes. The positive receipt binds frozen compiler sources, harness and libraries. The negative receipt binds the old emitter and positive evidence. The immutable probe SHA-256 is `2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53`.
+
+The positive run uses experimental epsilon 1/64, not the derived-epsilon candidate or an admission certificate. No images were rendered or visually inspected, and these results do not establish masking, arbitrary numeric domains or Chrome fidelity. Setup failures are retained separately in the two r1 directories: invalid harness property before native import, and a library filename glob before negative-control compilation. Neither was a renderer/runtime failure.
+
+Reproduction uses `python3 validation/wrapped-anchored-native-candidate.py FRESH_OUTPUT`, then `python3 validation/wrapped-anchored-native-negative.py POSITIVE_OUTPUT FRESH_NEGATIVE_OUTPUT`, from the module directory, with compiler sources held stable. The candidate script refuses existing output directories and retains native files/logs and source snapshots.
+
+Frozen executable reemission also reproduced all 48 recipes: 144 base `.riv`, augmented `.riv` and trace artifacts were byte-identical. Receipt: `output/wrapped-anchored-native-reproduce-r1/receipt.json`; driver: `validation/wrapped-anchored-native-reproduce.py`. This rerun did not recapture native geometry.

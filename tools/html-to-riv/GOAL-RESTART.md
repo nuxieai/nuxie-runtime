@@ -2,6 +2,14 @@
 
 Reviewed on 2026-09-12 against the saved goal, current git state, immutable source guard and latest wrapped-sizing checkpoint. The saved goal remains active and unlimited. Its public-interface restoration instruction is already satisfied; use this brief instead of repeating that step. Work only in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`; the older `7c27` worktree is not the implementation checkout.
 
+## Latest anchored wrapping repair
+
+The unequal visible/slot correction is now implemented using existing ComponentOrigin landing. No independent measurement proxy or runtime change is needed. Read `validation/wrapped-anchored-review.md`, receipt and native/scalar/position audits. Sizing uses58N-33records, including141atN3. Full build397Rust/56Node passes with source guard and public CLI/WASM identical to the previous checkpoint;282image+794historical artifacts stay exact.
+
+The separate experimental1/64native campaign passes48recipes/384frames/1,152exact positions, unchanged layout/main positions and exact original/clone/repeat geometry. Identical base bytes with the old emitter fail384frames/768positions;144reemitted artifacts are exact. Verifier checks11,453bindings. No Chrome/pixel/visual or derived-epsilon qualification is claimed.
+
+Next bind paint fields, leader inversion, mask viewport/rectangle/clip/draw semantics, then exercise the actual source-derived anchored candidate against native/Chrome with same-file original/clone resizing and visual review. The earlier missing-term instructions below are historical and superseded by this repair. Keep all99items, public wrapping unadmitted and the runtime immutable.
+
 ## Latest scalar/position advance
 
 Checkpoint evidence is `validation/wrapped-scalar-position-review.md` and its receipt. The frozen R2 build passes396Rust/56Node, native/WASM/TypeScript/source guard;282image+794historical outputs are exact and7,865bindings verify. No new pixel campaign.

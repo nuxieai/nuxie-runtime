@@ -2,7 +2,9 @@
 //!
 //! This is a lowering primitive, not CSS admission. The caller must prove that
 //! slots do not depend on their visible children, line anchors are distinguishable
-//! by the immutable DistanceConstraint, and all extents are below RESET_DISTANCE.
+//! by the immutable DistanceConstraint, and all carried extents are below RESET_DISTANCE. Visible children use ordinary
+//! ComponentOrigin anchors so their own resolved sizes participate without
+//! measuring their constrained world transforms.
 use crate::{Diagnostic, wire::{Record, Value}};
 
 const RESET_DISTANCE: f32 = 65_536.;
@@ -69,6 +71,11 @@ pub(super) fn align_items(
             return Err(invalid("A wrapping slot must be independent of its visible child"));
         }
     }
+    let visible = items.iter().map(|item| item.visible).collect::<std::collections::BTreeSet<_>>();
+    if visible.len() != items.len() || records.iter().any(|record| record.kind == "ComponentOrigin"
+        && matches!(record.get("parentId"),Some(Value::Uint(id)) if visible.contains(id))) {
+        return Err(invalid("Wrapping visible owners require one newly owned component origin"));
+    }
     let added = alignment_records(items.len())
         .ok_or_else(|| invalid("Wrapping alignment record count overflow"))?;
     let end = records.len().checked_add(added)
@@ -113,10 +120,15 @@ pub(super) fn align_items(
     let mut targets=Vec::with_capacity(items.len());
     for (i, item) in items.iter().enumerate() {
         let maximum = graph.max(forward[i], backward[i])?;
-        let excess = graph.diff(maximum, heights[i])?;
         let alignment = if reverse_cross { 1. - item.alignment } else { item.alignment };
-        let offset = graph.scale(excess, alignment - fraction)?;
-        let target = graph.sum(tops[i], offset)?;
+        // The slot anchor is line_origin + line_max * fraction. Land the
+        // visible child's own alignment anchor at line_origin + line_max *
+        // alignment; native land_anchor subtracts alignment * visible_size.
+        let offset = graph.scale(maximum, alignment - fraction)?;
+        let target = graph.sum(anchors[i], offset)?;
+        let origin = graph.add("ComponentOrigin", item.visible)?;
+        graph.set(origin, "originX", Value::Float(if row { 0. } else { alignment }))?;
+        graph.set(origin, "originY", Value::Float(if row { alignment } else { 0. }))?;
         graph.copy(item.visible, target, 1., false, false)?;
         line_maxima.push(maximum);offsets.push(offset);targets.push(target);
     }
@@ -126,11 +138,11 @@ pub(super) fn align_items(
     Ok(Trace{origin:Some(origin),tops,heights,anchors,boundaries,forward,backward,line_maxima,offsets,targets})
 }
 
-/// One origin; 16 measurement and 11 positioning records per item; 18 boundary
-/// records and two 8-record carry steps per adjacent pair: 61N - 33 for N > 0.
+/// One origin; 16 measurement and 8 positioning records per item; 18 boundary
+/// records and two 8-record carry steps per adjacent pair: 58N - 33 for N > 0.
 pub(super) fn alignment_records(items: usize) -> Option<usize> {
     if items == 0 { Some(0) }
-    else { items.checked_mul(61)?.checked_sub(33) }
+    else { items.checked_mul(58)?.checked_sub(33) }
 }
 
 struct Graph<'a> { records: &'a mut Vec<Record>, row: bool, epsilon: f32 }
@@ -264,7 +276,7 @@ mod tests {
             let (mut records,items)=fixture(3);
             let start=records.len();
             let trace=align_items(&mut records,&items,row,true,0.5,1./64.).unwrap();
-            assert_eq!(records.len()-start,150);
+            assert_eq!(records.len()-start,141);
             for ids in [&trace.tops,&trace.heights,&trace.anchors,&trace.forward,&trace.backward,&trace.line_maxima,&trace.offsets,&trace.targets] {
                 assert_eq!(ids.len(),3);
                 assert!(ids.iter().all(|&id|records[id as usize+1].kind=="Node"));
@@ -296,6 +308,19 @@ mod tests {
             let repeated_trace=align_items(&mut repeated,&repeated_items,row,true,0.5,1./64.).unwrap();
             assert_eq!(trace,repeated_trace);
             assert_eq!(crate::wire::encode(&records).unwrap(),crate::wire::encode(&repeated).unwrap());
+        }
+    }
+    #[test]
+    fn existing_or_duplicate_visible_origins_reject_atomically() {
+        for duplicate in [false,true] {
+            let (mut records,mut items)=fixture(2);
+            if duplicate {items[1].visible=items[0].visible;} else {
+                let mut origin=Record::new("ComponentOrigin");
+                origin.set("parentId",Value::Uint(items[0].visible)).unwrap();records.push(origin);
+            }
+            let before=crate::wire::encode(&records).unwrap();
+            assert!(align_items(&mut records,&items,true,false,0.,0.25).is_err());
+            assert_eq!(crate::wire::encode(&records).unwrap(),before);
         }
     }
     #[test]

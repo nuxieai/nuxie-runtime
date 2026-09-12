@@ -710,7 +710,7 @@
   },
   {
     "name": "image-padding",
-    "group": "intentional-diagnostic",
+    "group": "point-padding-and-content-area",
     "assetFiles": {
       "picture": "fixtures/images/ordinary-r1/opaque.png"
     },
@@ -721,14 +721,20 @@
       "height": 320
     },
     "expected": {
-      "outcome": "diagnostic",
-      "code": "unsupported-target-semantics",
-      "messageIncludes": "require separate replaced-element qualification"
+      "outcome": "compile"
     },
     "observeIds": [
       "image"
     ],
-    "notes": []
+    "notes": [
+      "The same authored padding:1px source is now an intended compile case for the ordinary inner-content-owner composition.",
+      "The previous diagnostic is preserved in priorExpected; native paint qualification remains separate from admission and deterministic byte checks."
+    ],
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    }
   },
   {
     "name": "image-minimum",

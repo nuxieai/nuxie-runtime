@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { comparePixels, compareInkPresence } from './pixels.mjs';
+import { observeImageContent, compareImageContent } from './image-content.mjs';
 
 const changedOnly = process.argv.includes('--changed-only');
 const [rootArg, probeArg, rendererArg, outputLabel = 'render', reuseLabel] = process.argv.slice(2).filter(a => a !== '--changed-only');
@@ -28,7 +28,22 @@ const resetPath = path.join(root, 'frozen/inputs/src/reset.css');
 const bindings = [probe, renderer, resetPath, path.join(root, 'build-receipt.json'),
   path.join(root, 'compile-receipt.json'), path.join(root, 'cases.json'),
   fileURLToPath(import.meta.url), fileURLToPath(new URL('./pixels.mjs', import.meta.url)),
+  fileURLToPath(new URL('./image-content.mjs', import.meta.url)),
 ].map(p => ({ path: p, sha256: sha(p) }));
+let reuseReceipt = null;
+if (reuseLabel) {
+  const receiptPath = path.join(root, reuseLabel === 'render' ? 'native-receipt.json' : reuseLabel + '-receipt.json');
+  reuseReceipt = read(receiptPath);
+  assert.deepEqual(reuseReceipt.errors, [], 'Reused native receipt contains errors');
+  assert.equal(reuseReceipt.browser, '153.0.8010.12', 'Reused receipt Chrome version differs');
+  assert.equal(reuseReceipt.outputLabel, reuseLabel, 'Reused native receipt label differs');
+  for (const tool of [probe, renderer, resetPath]) {
+    const original = reuseReceipt.bindings.filter(binding => binding.path === tool);
+    assert.equal(original.length, 1, `Missing or ambiguous reused tool binding: ${tool}`);
+    assert.equal(original[0].sha256, sha(tool), `Reused tool/reset bytes differ: ${tool}`);
+  }
+  bindings.push({ path: receiptPath, sha256: sha(receiptPath) });
+}
 const sourceSnapshot = path.join(root, `validation-inputs-${outputLabel}`);
 assert(!fs.existsSync(sourceSnapshot)); fs.mkdirSync(sourceSnapshot);
 for (const b of bindings.filter(b => b.path.endsWith('.mjs'))) {
@@ -89,22 +104,7 @@ try {
       for (const f of frames) {
         const prefix = path.join(out, `frame-${f.frame}`);
         await page.setViewportSize({ width: f.width, height: f.height }); await page.setContent(html);
-        const metrics = await page.evaluate(async ids => {
-          await Promise.all([...document.images].map(e => e.decode()));
-          const rectangles = {}, images = {};
-          for (const id of ids) {
-            const e = document.getElementById(id); if (!e) throw new Error(`Missing observed source id ${id}`);
-            const r = e.getBoundingClientRect(); rectangles[id] = { x: r.x, y: r.y, width: r.width, height: r.height };
-          }
-          for (const e of document.images) {
-            if (!e.id || !rectangles[e.id]) throw new Error('Every fixture image must have an observed authored id');
-            const s = getComputedStyle(e);
-            images[e.id] = { src: e.getAttribute('src'), complete: e.complete, naturalWidth: e.naturalWidth,
-              naturalHeight: e.naturalHeight, objectFit: s.objectFit, objectPosition: s.objectPosition,
-              imageRendering: s.imageRendering, alignSelf: s.alignSelf };
-          }
-          return { rectangles, images };
-        }, fixture.observeIds);
+        const metrics = await page.evaluate(observeImageContent, fixture.observeIds);
         for (const image of Object.values(metrics.images)) assert(image.complete && image.naturalWidth > 0 && image.naturalHeight > 0);
         await page.screenshot({ path: prefix + '.chrome.png' });
         const geometry = read(path.join(observed, f.geometry)), nativeBoxes = {}, metricFailures = [];
@@ -118,6 +118,9 @@ try {
         let transferredNative = null;
         if (reuseLabel) {
           const prior = path.join(dir, reuseLabel, `frame-${f.frame}`), old = read(prior + '.result.json');
+          const receiptRows = reuseReceipt.rows.filter(row => row.name === fixture.name && row.frame === f.frame);
+          assert.equal(receiptRows.length, 1, 'Reused frame must have exactly one raw receipt row');
+          assert.deepEqual(old, receiptRows[0], 'Reused result differs from its raw receipt row');
           assert.equal(old.rivSha256, rivSha256);
           assert.equal(old.streamSha256, sha(path.join(observed, f.stream)));
           assert.equal(old.geometrySha256, sha(path.join(observed, f.geometry)));
@@ -130,11 +133,11 @@ try {
             '--backend', 'rust-metal', '--mode', 'clockwise-atomic', '--frame', String(f.frame)], prefix + '.native.log');
         }
         const expected = PNG.sync.read(fs.readFileSync(prefix + '.chrome.png')), actual = PNG.sync.read(fs.readFileSync(prefix + '.native.png'));
-        const compared = comparePixels(expected, actual, metrics.rectangles, false), imagePresence = {};
-        for (const id of Object.keys(metrics.images)) imagePresence[id] = compareInkPresence(expected, actual, metrics.rectangles[id], [255, 255, 255]);
+        const compared = compareImageContent(expected, actual, metrics);
+        const { imagePresence, borderBoxImagePresence, pixelRegions } = compared;
         fs.writeFileSync(prefix + '.diff.png', PNG.sync.write(compared.diff));
         const row = { name: fixture.name, ...f, prefix, probeDirectory: observed, transferredNative, browserMetrics: metrics, nativeBoxes, metricFailures,
-          pixelFailures: compared.failures, pixelMetrics: compared.metrics, imagePresence,
+          pixelFailures: compared.failures, pixelMetrics: compared.metrics, imagePresence, borderBoxImagePresence, pixelRegions,
           rivSha256, requestSha256: sha(path.join(dir, 'request.json')), mapSha256: sha(path.join(dir, 'scene.map.json')),
           htmlSha256: sha(path.join(out, 'reference.html')), streamSha256: sha(path.join(observed, f.stream)),
           geometrySha256: sha(path.join(observed, f.geometry)), chromeSha256: sha(prefix + '.chrome.png'), nativeSha256: sha(prefix + '.native.png') };

@@ -1,0 +1,56 @@
+[
+  {
+    "name": "padding-content-percent-width-zero-axis-insets",
+    "group": "image-point-padding-percentage-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{align-self:flex-start;box-sizing:content-box;width:50%;padding:8px 0;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "The authored content-box width percentage has zero padding on that same axis, so ordinary outer sizing can resolve it directly against the original containing dimension.",
+      "The inner content owner must fill the already-resolved content axis; applying the authored 50% there again incorrectly halves it a second time.",
+      "Only opposite-axis point padding is nonzero. With the 96x64 opaque PNG and standard viewports, intended natural-ratio dimensions are integral.",
+      "These public sources preserve parent/image/following 8px tail identities. Native evidence against the old frozen candidate is a retained failure, not successful qualification."
+    ]
+  },
+  {
+    "name": "padding-content-percent-height-zero-axis-insets",
+    "group": "image-point-padding-percentage-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{align-self:flex-start;box-sizing:content-box;height:50%;padding:0 10px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "The authored content-box height percentage has zero padding on that same axis, so ordinary outer sizing can resolve it directly against the original containing dimension.",
+      "The inner content owner must fill the already-resolved content axis; applying the authored 50% there again incorrectly halves it a second time.",
+      "Only opposite-axis point padding is nonzero. With the 96x64 opaque PNG and standard viewports, intended natural-ratio dimensions are integral.",
+      "These public sources preserve parent/image/following 8px tail identities. Native evidence against the old frozen candidate is a retained failure, not successful qualification."
+    ]
+  }
+]

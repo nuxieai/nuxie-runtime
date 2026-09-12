@@ -1,11 +1,47 @@
 {
   "updated": "2026-09-12",
-  "focus": "Public JPEG subsampling and additional image ratios",
-  "status": "Bounded JPEG checkpoint complete; narrow decoder contexts diagnose; all 99 backlog items remain in scope",
-  "current": "Public 4:2:2/4:2:0 JPEG at widths >=5 embeds original bytes. 309 Rust/56 Node tests, TypeScript/native/WASM builds, 56 public cases and 272 native geometry/pixel/presence frames pass. Narrow subsampled assets diagnose after retained color failures invalidated a tiny-image exception. All794 prior outputs and39 earlier image/ratio scenes remain exact; new ratios retain16 local pixel failures alongside the earlier18.",
-  "next": "Advance another public compiler context with a finite acceptance matrix, starting with plausible ordinary image-padding/constraint compositions. Preserve known fractional paint failures. Revisit narrow JPEG exceptions or text paint only with a concrete new hypothesis; continue independent backlog work without repeating completed campaigns.",
-  "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
+  "focus": "Public image point padding",
+  "status": "R2 padding checkpoint qualified in its finite matrix; retained pixel limitations; full goal active",
+  "current": "The percentage-sizing repair passes all 16 native/Chrome geometry, pixel and presence checks; all 16 original failures remain preserved. Final build: 311 Rust / 56 Node tests, strict TypeScript, native/WASM and 272 corpus parity comparisons pass. All 794 historical outputs and 98 R1 image files/maps remain exact. Primary padding retains 24 tail-edge pixel failures. Visual coverage: 33 inspected pairs and 183 exact transfers across 216 frames.",
+  "next": "Preserve the reviewed R2 padding checkpoint and advance image min/max constraints or a concrete percentage-padding composition with a finite public acceptance matrix. Keep all 99 backlog items in scope and continue independent work when an investigation has no new testable hypothesis.",
+  "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Reviewed goal and exact restart steps",
+      "path": "tools/html-to-riv/GOAL-RESTART.md"
+    },
+    {
+      "label": "Percentage sizing repair: Chrome, old native and repaired native",
+      "path": "tools/html-to-riv/output/public-image-padding-percent-r2/visual-r2/gallery.html"
+    },
+    {
+      "label": "Percentage-sizing failure controls before the repair",
+      "path": "tools/html-to-riv/output/public-image-padding-percent-before-r1/visual-before/gallery.html"
+    },
+    {
+      "label": "Final R2 build and transport checks",
+      "path": "tools/html-to-riv/output/public-image-padding-build-r2/summary.json"
+    },
+    {
+      "label": "Public image point padding: scope, evidence and retained failures",
+      "path": "tools/html-to-riv/validation/public-image-padding-review.md"
+    },
+    {
+      "label": "Historical R1 point-padding Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-image-padding-layout-r1/visual-content-r2/gallery.html"
+    },
+    {
+      "label": "Alpha padding compositions",
+      "path": "tools/html-to-riv/output/public-image-padding-alpha-r1/visual-content-r2/gallery.html"
+    },
+    {
+      "label": "Final R2 padding verification and retained limitations",
+      "path": "tools/html-to-riv/validation/public-image-padding-receipt.json"
+    },
+    {
+      "label": "Image content observations and preserved pixel gates",
+      "path": "tools/html-to-riv/validation/image-content-review.md"
+    },
     {
       "label": "Public JPEG checkpoint: unchanged runtime, APIs and decoder boundary",
       "path": "tools/html-to-riv/validation/public-jpeg-checkpoint-review.md"
@@ -553,16 +589,16 @@
   ],
   "activeWork": [
     {
-      "name": "Public JPEG checkpoint",
-      "work": "34 ordinary scenes and 22 diagnostics; 272 native frames pass. Narrow chroma failures remain preserved. Final visual and source evidence is bound separately from earlier image-layout limitations."
+      "name": "R2 padding checkpoint",
+      "work": "Public build, parity, output regression, native/Chrome and complete visual review finished. Existing pixel failures remain explicit."
     },
     {
-      "name": "Image padding and constraints",
-      "work": "Next bounded compiler work: test ordinary content/ratio-owner compositions before widening public admission."
+      "name": "Image constraints and percentage padding",
+      "work": "Next: test concrete ordinary-file compositions and ratio/clamp/stretch interactions before public admission."
     },
     {
-      "name": "Typography prerequisites",
-      "work": "Source-derived line-height geometry is preserved; public fonts/text and glyph paint remain unresolved. Revisit with a new discriminating hypothesis."
+      "name": "Remaining compiler backlog",
+      "work": "Typography paint, broader flex/painting/positioning, responsive expressions, assets and compiler quality remain in scope. Unresolved does not mean impossible."
     }
   ],
   "publication": {

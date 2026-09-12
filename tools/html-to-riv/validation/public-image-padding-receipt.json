@@ -1,0 +1,141 @@
+{
+  "scope": "Final R2 public point-padding checkpoint against the immutable runtime, including the percentage-sizing repair. Bounded partial support; retained pixel failures and all99 backlog items remain explicit.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "runtimeChanged": false,
+  "build": {
+    "status": "public-build-and-transport-pass",
+    "sourceUnchanged": true,
+    "rustTests": 311,
+    "nodeTests": 56,
+    "compilerSha256": "9c93c9cbf702db0ec976e93bfa28b6181ecb752c324bcab5821c37629a7b9b0d",
+    "wasmSha256": "ff655118a9f46be7b7347f32f1a1b7a631c20c6719bb416753772af794b7e270",
+    "nativeQualification": "Separate native/Chrome and regression receipts required."
+  },
+  "sourceBindings": 253,
+  "api": {
+    "requests": 136,
+    "abiAndJsComparisonsAgainstCli": 272,
+    "allMatch": true
+  },
+  "exactHistoricalOutputs": 794,
+  "exactR1SuccessfulFiles": 98,
+  "exactEarlierImageJpegRatioFiles": 73,
+  "primaryPadding": {
+    "frames": 176,
+    "geometryPass": 176,
+    "pixelPass": 152,
+    "presencePass": 176
+  },
+  "defaultImageRegression": {
+    "frames": 224,
+    "geometryPass": 224,
+    "pixelPass": 206,
+    "presencePass": 224
+  },
+  "alpha": {
+    "frames": 16,
+    "geometryPass": 16,
+    "pixelPass": 16,
+    "presencePass": 16
+  },
+  "percentageRepair": {
+    "before": {
+      "frames": 16,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    "after": {
+      "frames": 16,
+      "geometryPass": 16,
+      "pixelPass": 16,
+      "presencePass": 16
+    },
+    "current": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-percent-r2/receipt.json",
+      "sha256": "f3e4f2c9d9647067c2e73cd7739473018ce30f2873774240c94faae5ba0f4804"
+    },
+    "preservedFailure": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-percent-before-r1/receipt.json",
+      "sha256": "33aff2f37395e7e71cbc53e103c34a316b53c657e9885492909e5edcc034cf76"
+    }
+  },
+  "newVisualCoverage": {
+    "frames": 216,
+    "directPairs": 33,
+    "exactTransfers": 183,
+    "beforeAfterFrames": 16,
+    "inspectedBeforeAfterTriples": 2
+  },
+  "retainedPrimaryPixelFailuresByCase": {
+    "padding-width-border": 8,
+    "padding-percent-width-border": 8,
+    "padding-odd-responsive-percent-width": 8
+  },
+  "validatorTests": {
+    "imageContent": 17,
+    "transfer": 12,
+    "visualProjection": 18
+  },
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-checkpoint-r2/verification.json",
+    "sha256": "100097a86b20dbb2c1cf3cfce22c66646b2b4df3335d178a4724098d0ba0f0fa"
+  },
+  "verifier": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-padding-evidence.py",
+    "sha256": "ee55b58462e3bb97cfdeeb3133df01b1cc2f2dbfb81f7bc229048b68d794d7ee"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-padding-review.md",
+    "sha256": "ef16d72f11a72842e331334568b3ed35db6a556d4e3b31598e75ddaba35c9dad"
+  },
+  "additionalEvidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-padding-plan.md",
+      "sha256": "9ffb5956c2da53380738a246418c57220b26cfe51506c1c5c0b8ae0e0ff0a279"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-padding-numeric-review.md",
+      "sha256": "6092efeff8d540ea25f11bda4520d747a9dd2c9a7188b964aedff5e2d3c184eb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-padding-chrome-review.md",
+      "sha256": "8202b9005039a24e89fde9e6348cc7aad59b83cf37e7570657ec3758b29d04c2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-content-review.md",
+      "sha256": "83e596440707e2b4e97c2dcf8ee729fc8e768103ff7305fec9ea70e70485e74e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-transfer-review.md",
+      "sha256": "2a78500a8c4462cbd7892310d695aaa6b753b41e49197cff2a3ac913f127252f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-regression-suite-r2/receipt.json",
+      "sha256": "1d9405d76f89a4b589f8f8a22277e47292c86a76d41e8162f3a40335553f3104"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-regression-suite-r2/older73-receipt.json",
+      "sha256": "625a4e5f06697c50598a42739f00b23b2a35d89515b747d928bb426a180167c7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-candidate-r1/content-preservation-receipt.json",
+      "sha256": "6dd91be6be8750e7abc94daddc596262e63e1077ac8d070bf8d459f050a41511"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-padding-layout-r1/visual-content-r2/package-receipt.json",
+      "sha256": "37ba405995207cf075166a49760ac8ea8fb2238bbbba92160af6f8e7a42051f1"
+    }
+  ],
+  "historicalR1Receipt": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/goal-restart-review-2026-09-12-r1/validation/public-image-padding-receipt.json",
+    "sha256": "88f10ea20ed39de62faea2289268ad2c448624fb1b863ae4e4cfe6484f9190b3"
+  },
+  "limitations": [
+    "24 primary padding tail-edge pixel frames remain failed; no tolerances were relaxed.",
+    "The earlier18 image and16 additional-ratio pixel failures remain preserved; geometry alone is not paint qualification.",
+    "Percentage padding, content-box percentages with nonzero same-axis padding, own min/max constraints and alignment/flex combinations remain unfinished diagnostic contexts.",
+    "Additional asset representations, text, broader layout/painting and compiler quality remain in the full99-item backlog.",
+    "A finite passing matrix does not establish arbitrary browser equivalence or peak resource bounds."
+  ]
+}

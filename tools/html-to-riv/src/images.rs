@@ -67,18 +67,28 @@ fn position(text: &str, source: &str) -> Result<[f32; 2], Diagnostic> {
     }
 }
 
-pub(super) struct Plan { pub metadata: ImageMetadata, pub aspect_axis: Option<usize> }
+pub(super) struct Plan {
+    pub metadata: ImageMetadata,
+    pub aspect_axis: Option<usize>,
+    padded: Option<PaddedLayout>,
+}
+#[derive(Clone, Copy)]
+struct PaddedLayout {
+    content: super::box_sizing::ContentOwner,
+    outer_stretch_axis: Option<usize>,
+}
 pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, assets: &AssetTable, source: &str) -> Result<Option<Plan>, Diagnostic> {
     if element.value().name() != "img" { return Ok(None); }
     let src = element.attr("src").filter(|s| !s.is_empty())
         .ok_or_else(|| Diagnostic::new("missing-image-source", source, "img requires a nonempty src naming an explicitly supplied asset"))?;
     let metadata = assets.get(src)?;
-    if !style.padding.is_zero() || style.margins.any() || style.self_alignment.is_baseline()
+    if style.margins.any() || style.self_alignment.is_baseline()
         || style.self_alignment.wrapper_alignment(parent.direction).is_some()
         || !matches!(style.min_width, Size::Pixels(0.)) || !matches!(style.min_height, Size::Pixels(0.))
         || !matches!(style.max_width, Size::Auto) || !matches!(style.max_height, Size::Auto) {
-        return Err(unsupported(source, "Image padding, min/max constraints, automatic margins and alignment wrappers require separate replaced-element qualification"));
+        return Err(unsupported(source, "Image min/max constraints, automatic margins and alignment wrappers require separate replaced-element qualification"));
     }
+    if !style.padding.is_zero() { return padded_plan(metadata, style, parent, source).map(Some); }
     let auto = [matches!(style.width, Size::Auto), matches!(style.height, Size::Auto)];
     let main = if parent.direction.is_row() { 0 } else { 1 };
     let stretches = style.self_alignment.stretches();
@@ -91,7 +101,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.width as f32).map_err(Into::into));
         style.numeric.height = super::computed_provenance::NumericSize::Pixels(
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.height as f32).map_err(Into::into));
-        return Ok(Some(Plan { metadata, aspect_axis: None }));
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None }));
     }
     if auto == [true, true] && stretches {
         // Resolve the ordinary owner's cross axis before measuring its Image.
@@ -108,9 +118,60 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
     // is fixed. Automatic main size instead follows the intrinsic aspect ratio.
     let aspect_axis = if auto[main] { Some(main) }
         else if auto[1-main] && !stretches { Some(1-main) } else { None };
-    Ok(Some(Plan { metadata, aspect_axis }))
+    Ok(Some(Plan { metadata, aspect_axis, padded: None }))
+}
+
+fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &str) -> Result<Plan, Diagnostic> {
+    use super::{Direction, box_sizing::{BoxSizing, ContentOwner}};
+    if style.padding.has_percentage() {
+        return Err(unsupported(source, "Image percentage padding requires separate containing-width and content-ratio qualification"));
+    }
+    let authored = [style.width, style.height];
+    let auto = authored.map(|size| matches!(size, Size::Auto));
+    let main = usize::from(!parent.direction.is_row());
+    let stretches = style.self_alignment.stretches();
+    let intrinsic = auto == [true, true] && !stretches;
+    let aspect_axis = if intrinsic { None }
+        else if auto[main] { Some(main) }
+        else if auto[1-main] && !stretches { Some(1-main) }
+        else { None };
+    let packing = match aspect_axis {
+        Some(0) => Direction::Row,
+        Some(1) => Direction::Column,
+        _ if parent.direction.is_row() => Direction::Row,
+        _ => Direction::Column,
+    };
+    let sizes = if intrinsic {
+        [Size::Pixels(metadata.width as f32), Size::Pixels(metadata.height as f32)]
+    } else {
+        std::array::from_fn(|axis| {
+            if aspect_axis == Some(axis) { Size::Auto }
+            // Keep exact authored point content sizes across outer padding
+            // arithmetic. A percentage was already resolved by the outer box;
+            // repeating it on the inner would apply the coefficient twice.
+            else if style.box_sizing == BoxSizing::ContentBox && matches!(authored[axis], Size::Pixels(_)) { authored[axis] }
+            else { Size::Percent(100.) }
+        })
+    };
+    Ok(Plan { metadata, aspect_axis, padded: Some(PaddedLayout {
+        content: ContentOwner { packing, sizes, bounds: [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto] },
+        outer_stretch_axis: (auto == [true, true] && stretches).then_some(1-main),
+    }) })
 }
 impl Plan {
+    /// Synthetic stretch resolves the outer border box before the inner ratio
+    /// is measured. It must not become an authored content-box percentage.
+    pub fn adjust_outer(&self, lowered: &mut super::box_sizing::Lowered) {
+        if let Some(axis) = self.padded.and_then(|p| p.outer_stretch_axis) {
+            lowered.sizes[axis] = Size::Percent(100.);
+            let numeric = super::computed_provenance::NumericSize::Percent(
+                super::scalar_provenance::ScalarProvenance::exact_constant(100.).map_err(Into::into));
+            if axis == 0 { lowered.numeric.width = numeric; } else { lowered.numeric.height = numeric; }
+        }
+    }
+    pub fn content_owner(&self) -> Option<super::box_sizing::ContentOwner> {
+        self.padded.map(|p| p.content)
+    }
     pub fn emit(&self, records: &mut Vec<Record>, owner: u32, style: Paint) -> Result<(), Diagnostic> {
         records[owner as usize + 1].set("clip", Value::Bool(true))?;
         if self.aspect_axis.is_some() {

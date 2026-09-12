@@ -1,0 +1,735 @@
+[
+  {
+    "name": "padding-intrinsic-border-symmetric",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;padding:8px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Auto/auto border-box retains the intrinsic 96x64 content plus point padding.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-intrinsic-content-asymmetric",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;padding:3px 11px 7px 5px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Auto/auto content-box with four distinct side insets.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-portrait-intrinsic-content",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/portrait.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;padding:5px 9px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Portrait intrinsic 48x96 content with fixed point padding.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-width-border",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:border-box;width:120px;padding:6px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "One fixed authored axis, other automatic; natural ratio acts on content dimensions.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-width-content",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;width:120px;padding:6px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "One fixed authored axis, other automatic; natural ratio acts on content dimensions.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-height-border",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:border-box;height:100px;padding:6px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "One fixed authored axis, other automatic; natural ratio acts on content dimensions.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-height-content",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;height:100px;padding:6px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "One fixed authored axis, other automatic; natural ratio acts on content dimensions.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-both-fixed-border",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:border-box;width:120px;height:96px;padding:6px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both axes fixed; box-sizing distinguishes outer and image content dimensions.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-both-fixed-content",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;width:120px;height:96px;padding:6px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both axes fixed; box-sizing distinguishes outer and image content dimensions.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-column-auto-stretch",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:160px;background:#dce6ee}#image{background:#ffedc2;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Column auto/auto stretch supplies border-box cross width; automatic height follows content ratio.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-row-auto-stretch",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#ffedc2;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Row auto/auto stretch supplies border-box cross height; automatic width follows content ratio.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-column-fixed-main-stretch",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:160px;background:#dce6ee}#image{background:#ffedc2;height:80px;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed column main height with an auto stretched cross width; avoid unconditional ratio.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-row-fixed-main-stretch",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#ffedc2;width:80px;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed row main width with an auto stretched cross height; avoid unconditional ratio.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-column-content-auto-stretch",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:160px;background:#dce6ee}#image{background:#ffedc2;box-sizing:content-box;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Content-box auto cross stretch still fills the parent with the outer box.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-row-content-auto-stretch",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#ffedc2;box-sizing:content-box;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Content-box auto cross stretch in row with padding and ratio-derived main size.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-percent-width-border",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;width:50%;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Percentage border-box width against definite parent; automatic content height.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-percent-height-border",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;height:50%;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Percentage border-box height against definite parent; automatic content width.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  },
+  {
+    "name": "padding-border-padding-exceeds-width",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;width:12px;padding:10px 12px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Authored border-box width below horizontal padding; content width floors at zero and auto height remains falsifiable.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-border-padding-exceeds-both",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;width:12px;height:10px;padding:10px 12px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both explicit border-box dimensions below padding sum; image content area collapses without losing padding paint.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-contain-content-area",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;width:150px;height:100px;padding:10px 20px;object-fit:contain;object-position:right bottom}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Contain fits and positions against 110x80 content, leaving padding and letterbox background visible.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-cover-content-area",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;width:110px;height:80px;padding:10px 20px;object-fit:cover;object-position:25% 75%}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Same 150x100 outer box, cover is clipped to 110x80 content rather than padding.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-odd-responsive-percent-width",
+    "group": "image-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/odd.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:80%;height:200px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;width:50%;padding:3px 5px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Responsive border-box percentage width plus fixed point padding and odd 37x23 natural ratio; retain fractional geometry/paint.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-percentage-padding-retained",
+    "group": "image-padding-retained-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;width:150px;height:100px;padding:5% 10%}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "percentage"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Outside initial profile: percentage padding on every side depends on containing width, including vertical sides.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler."
+    ]
+  },
+  {
+    "name": "padding-content-percent-width-retained",
+    "group": "image-padding-retained-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:180px;background:#dce6ee}#image{background:#ffedc2;align-self:flex-start;box-sizing:content-box;width:50%;padding:8px 10px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "percentage"
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Outside initial profile: content-box percentage preferred dimension plus fixed padding requires responsive mixed arithmetic.",
+      "Candidate expectations are intended scope, pending native qualification; priorExpected describes the frozen committed compiler.",
+      "Strengthened after r1 Chrome capture: horizontal/vertical padding sum20/16 differs from the natural96/64 ratio; r1 sources and screenshots remain frozen."
+    ]
+  }
+]

@@ -59,7 +59,7 @@ fn image_sources_are_explicit_and_no_external_loader_is_available() {
 
 #[test]
 fn unqualified_image_combinations_produce_diagnostics() {
-    for css in ["padding:1px", "min-width:10px", "max-height:100px", "margin:auto", "align-self:baseline",
+    for css in ["padding:1%", "min-width:10px", "max-height:100px", "margin:auto", "align-self:baseline",
         "align-self:center", "object-position:20px 30px", "object-position:100.000001%", "object-position:-1e-500%",
         "object-position:100.000000000000000000001%", "object-fit:invalid", "image-rendering:crisp-edges"] {
         let mut input = request("<img id=image src=logo>", &format!("#image{{width:96px;height:64px;{css}}}"));

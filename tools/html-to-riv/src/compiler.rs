@@ -682,9 +682,9 @@ impl Emitter {
         if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
             return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
         }
-        let lowered = box_sizing::lower(&style, &path)?;
+        let mut lowered = box_sizing::lower(&style, &path)?;
+        if let Some(image) = &image { image.adjust_outer(&mut lowered); }
         let child_bounds = numeric_bounds.child_with_sizing(&style, &lowered, parent_style, &path)?;
-        let child_bounds = if let Some(image) = &image { child_bounds.image(image.metadata.width, image.metadata.height, image.aspect_axis, &path)? } else { child_bounds };
         let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
         let cross_auto_margin = style.margins.cross(parent_style.direction);
         let effective_alignment = if cross_auto_margin {
@@ -754,10 +754,12 @@ impl Emitter {
         }
         let alignment_margins = effective_alignment.auto_margins(parent_style.direction);
         for (margin, synthetic) in authored_margins.iter_mut().zip(alignment_margins) { *margin |= synthetic; }
-        let content_owner = box_sizing::content_owner(&style, native_parent_direction);
+        let content_owner = image.as_ref().and_then(images::Plan::content_owner)
+            .or_else(|| box_sizing::content_owner(&style, native_parent_direction));
         // Evaluate both actual owners. Rounded outer content bounds alone can
         // erase a tiny fixed inner size and miss overflow in its descendants.
         let child_bounds = if let Some(owner) = &content_owner { child_bounds.content_owner(owner, &path)? } else { child_bounds };
+        let child_bounds = if let Some(image) = &image { child_bounds.image(image.metadata.width, image.metadata.height, image.aspect_axis, &path)? } else { child_bounds };
         let outer_direction = content_owner.map_or(style.direction, |owner| owner.packing);
         let outer_alignment = content_owner.map_or_else(|| style.spacing.alignment(style.direction), |owner| owner.packing.alignment());
         let object_id = self.layout_box(&id, authored_parent, outer_direction, outer_alignment,

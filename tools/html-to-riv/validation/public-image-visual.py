@@ -55,6 +55,38 @@ def rgba_equal_on_white(a,b):
     aa.paste(ai,(0,0));bb.paste(bi,(0,0))
     return aa.tobytes()==bb.tobytes(),list(size),list(ai.size),list(bi.size)
 
+def visual_metadata(row):
+    """Separate only recorded background-chain border boxes from strict data.
+
+    These rectangles are per-frame observation provenance, not transferred
+    measurements. Content rectangles, paint colors, chain identities and every
+    other browser/presence field remain part of the strict comparison.
+    """
+    data=json.loads(json.dumps({key:row[key] for key in ['browserMetrics','imagePresence']}))
+    boxes={}
+    def separate(chain,path):
+        if not isinstance(chain,list):return
+        for index,entry in enumerate(chain):
+            if not isinstance(entry,dict):continue
+            box=entry.get('borderBox')
+            if not isinstance(box,dict) or set(box)!={'x','y','width','height'}:continue
+            if not all(type(value) in (int,float) and math.isfinite(value) for value in box.values()):continue
+            key=(*path,index,'borderBox');boxes[key]=box
+            entry['borderBox']={'perFrameBackgroundBoxMetadata':True}
+    for id,value in data['browserMetrics'].get('images',{}).items():
+        separate(value.get('backgroundChain'),('browserMetrics','images',id,'backgroundChain'))
+    for id,value in data['imagePresence'].items():
+        separate(value.get('background',{}).get('chain'),('imagePresence',id,'background','chain'))
+    return data,boxes
+
+def matching_visual_metadata(origin,row):
+    if any(row[key]!=origin[key] for key in ['name','rivSha256','mapSha256','requestSha256','htmlSha256','nativeBoxes']):return False,[]
+    left,left_boxes=visual_metadata(origin);right,right_boxes=visual_metadata(row)
+    if left!=right or left_boxes.keys()!=right_boxes.keys():return False,[]
+    differences=[{'path':list(path),'sourceValue':value,'targetValue':right_boxes[path],'transferred':False}
+                 for path,value in left_boxes.items() if value!=right_boxes[path]]
+    return True,differences
+
 def sheets(rows,out,prefix,columns=('chrome','native')):
     result=[]
     groups=collections.defaultdict(list)
@@ -92,10 +124,10 @@ def gallery(coverage,out,reviewed=False,supplementary=()):
     comparisons=''.join(f'<p><a href="{rel(sheet["path"])}">Chrome / previous native / current native</a></p>' for sheet in coverage['beforeAfterSheets'])
     supplementary_links=''.join(f'<p><a href="{rel(b["path"])}">{html.escape(Path(b["path"]).name)}</a>: {html.escape(b["observation"])}</p>' for b in supplementary)
     counts=coverage['counts'];text=f"{counts['sourceCases']} cases; {counts['frames']} frames; {counts['representatives']} directly reviewed pairs; {counts['visualTransfers']} exact visual transfers. Geometry {counts['geometryPass']}/{counts['frames']}, pixels {counts['pixelPass']}/{counts['frames']}, presence {counts['presencePass']}/{counts['frames']}." if reviewed else f"Prepared coverage: {counts}. Direct inspection pending."
-    page='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public image corpus · visual review</title><style>body{font:15px system-ui;margin:0;background:#f3f4f5;color:#17212b}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:28px}h2{font-size:17px}a{color:#125bc7}p{line-height:1.55}article{background:white;border:1px solid #ccd1d6;border-radius:8px;margin:20px 0;padding:16px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0;overflow:auto}figcaption{margin-bottom:6px}img{display:block;max-width:100%;height:auto}pre{overflow:auto;font-size:12px;max-height:600px;background:#f6f7f8;padding:12px}.fail{color:#a02020}.pass{color:#165930}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}.controls{position:sticky;top:0;background:#f3f4f5;padding:12px 0}input,select{font:inherit;padding:6px}.hidden{display:none}</style><main><h1>Public image compiler corpus</h1><p>'''+html.escape(text)+'''</p><p>This is visual evidence for frozen emitted scenes, not a claim of complete public API qualification. Fractional failures are retained. Exact white-canvas extensions transfer complete visible RGBA evidence only; each frame retains its own numeric gates and viewport. Gallery previews fit the panel; linked PNGs and sheets are unscaled.</p><p><a href="coverage.json">Coverage</a> · <a href="review-receipt.json">Review receipt</a> · <a href="../combined-receipt.json">Combined native receipt</a></p><details><summary>All retained pixel failures</summary><table><tr><th>Case</th><th>Frame</th><th>Failure</th><th>Evidence</th></tr>'''+failures+'''</table></details><details><summary>Optional exact-source before and after</summary>'''+comparisons+'''</details><details><summary>Supplementary inspected evidence</summary>'''+supplementary_links+'''</details><div class="controls"><input id="search" placeholder="Filter case"><select id="result"><option value="all">All representatives</option><option value="failed">Pixel failures</option><option value="geometry">Geometry failures</option><option value="presence">Presence failures</option></select><span id="count"></span></div>'''+''.join(cards)+'''</main><script>const cards=[...document.querySelectorAll('article')],search=document.querySelector('#search'),result=document.querySelector('#result');function filter(){let n=0;for(const c of cards){const show=c.dataset.name.includes(search.value.toLowerCase())&&(result.value==='all'||(result.value==='failed'?c.dataset.fail:c.dataset[result.value])==='true');c.classList.toggle('hidden',!show);n+=show}document.querySelector('#count').textContent=` ${n}/${cards.length} representatives`}search.oninput=result.onchange=filter;filter();</script></html>'''
+    page='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public image corpus · visual review</title><style>body{font:15px system-ui;margin:0;background:#f3f4f5;color:#17212b}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:28px}h2{font-size:17px}a{color:#125bc7}p{line-height:1.55}article{background:white;border:1px solid #ccd1d6;border-radius:8px;margin:20px 0;padding:16px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0;overflow:auto}figcaption{margin-bottom:6px}img{display:block;max-width:100%;height:auto}pre{overflow:auto;font-size:12px;max-height:600px;background:#f6f7f8;padding:12px}.fail{color:#a02020}.pass{color:#165930}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}.controls{position:sticky;top:0;background:#f3f4f5;padding:12px 0}input,select{font:inherit;padding:6px}.hidden{display:none}</style><main><h1>Public image compiler corpus</h1><p>'''+html.escape(text)+'''</p><p>This is visual evidence for frozen emitted scenes, not a claim of complete public API qualification. Fractional failures are retained. Exact white-canvas extensions transfer complete visible RGBA evidence only; each frame retains its own geometry, pixel and presence gates and viewport. Recorded background-chain borderBox metadata may differ; those exact per-frame values are recorded in transfer proofs and are not transferred. Gallery previews fit the panel; linked PNGs and sheets are unscaled.</p><p><a href="coverage.json">Coverage</a> · <a href="review-receipt.json">Review receipt</a> · <a href="../combined-receipt.json">Combined native receipt</a></p><details><summary>All retained pixel failures</summary><table><tr><th>Case</th><th>Frame</th><th>Failure</th><th>Evidence</th></tr>'''+failures+'''</table></details><details><summary>Optional exact-source before and after</summary>'''+comparisons+'''</details><details><summary>Supplementary inspected evidence</summary>'''+supplementary_links+'''</details><div class="controls"><input id="search" placeholder="Filter case"><select id="result"><option value="all">All representatives</option><option value="failed">Pixel failures</option><option value="geometry">Geometry failures</option><option value="presence">Presence failures</option></select><span id="count"></span></div>'''+''.join(cards)+'''</main><script>const cards=[...document.querySelectorAll('article')],search=document.querySelector('#search'),result=document.querySelector('#result');function filter(){let n=0;for(const c of cards){const show=c.dataset.name.includes(search.value.toLowerCase())&&(result.value==='all'||(result.value==='failed'?c.dataset.fail:c.dataset[result.value])==='true');c.classList.toggle('hidden',!show);n+=show}document.querySelector('#count').textContent=` ${n}/${cards.length} representatives`}search.oninput=result.onchange=filter;filter();</script></html>'''
     (out/'gallery.html').write_text(page)
 
-parser=argparse.ArgumentParser();parser.add_argument('--root',type=Path,default=BASE/'output/public-image-layout-r2');parser.add_argument('--complete',type=Path);parser.add_argument('--before-native',type=Path,help='Optional prior native receipt for exact-source before/after comparisons');args=parser.parse_args();root=args.root.resolve();out=root/'visual'
+parser=argparse.ArgumentParser();parser.add_argument('--root',type=Path,default=BASE/'output/public-image-layout-r2');parser.add_argument('--complete',type=Path);parser.add_argument('--label',default='visual',help='Fresh review directory name inside the native root');parser.add_argument('--before-native',type=Path,help='Optional prior native receipt for exact-source before/after comparisons');args=parser.parse_args();assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',args.label),'Review label must be one directory name';root=args.root.resolve();out=root/args.label
 if args.complete:
     coverage=read(out/'coverage.json');notes=read(args.complete)
     completion_helper=out/'completion-helper.py';assert not completion_helper.exists();completion_helper.write_bytes(Path(__file__).read_bytes())
@@ -168,15 +200,16 @@ for name in dict.fromkeys(r['name'] for r in rows):
         source['rows'].append({'frame':row['frame'],'evidence':e,'probeFrames':record_file(probe/'frames.json'),'browserAssets':record_file(render/'browser-assets.json'),'browserRequests':record_file(render/'browser-requests.json')})
         matched=None
         for origin in own:
-            if any(row[k]!=origin[k] for k in ['name','rivSha256','mapSha256','requestSha256','htmlSha256','browserMetrics','nativeBoxes','imagePresence']):continue
+            compatible,metadata_differences=matching_visual_metadata(origin,row)
+            if not compatible:continue
             proof=[]
             for suffix in ['chrome','native']:
                 a=origin['prefix']+'.'+suffix+'.png';b=row['prefix']+'.'+suffix+'.png';equal,size,aa,bb=rgba_equal_on_white(a,b)
                 if not equal:break
                 proof.append({'source':record_file(a),'target':record_file(b),'sourceSize':aa,'targetSize':bb,'comparisonCanvas':size,'completeRgbaEqualAfterOpaqueWhiteExtension':True})
-            if len(proof)==2:matched=(origin,proof);break
+            if len(proof)==2:matched=(origin,proof,metadata_differences);break
         if matched:
-            origin,proof=matched;transfers.append({'case':name,'frame':row['frame'],'instance':row['instance'],'sourceFrame':origin['frame'],'sourceInstance':origin['instance'],'sameRequestSceneMapReferenceAndMeasurements':True,'pixelFailures':row['pixelFailures'],'pixelMetrics':row['pixelMetrics'],'images':proof})
+            origin,proof,metadata_differences=matched;transfers.append({'case':name,'frame':row['frame'],'instance':row['instance'],'sourceFrame':origin['frame'],'sourceInstance':origin['instance'],'sameRequestSceneMapReferenceAndMeasurements':not metadata_differences,'sameRequestSceneMapReferenceNativeBoxesAndOtherMetadata':True,'backgroundBoxMetadataDifferences':metadata_differences,'backgroundBoxMetadataTransferred':False,'targetFrameEvidence':row['evidence'],'metricFailures':row['metricFailures'],'pixelFailures':row['pixelFailures'],'pixelMetrics':row['pixelMetrics'],'imagePresence':row['imagePresence'],'images':proof})
         else:own.append(row);representatives.append(row)
     sources.append(source)
 before_after=[];before_rows=[]
@@ -197,6 +230,6 @@ if args.before_native:
             before_after.append({'case':name,'frame':b['frame'],'previous':a,'current':b,'previousGeometryPass':not a['metricFailures'],'currentGeometryPass':not b['metricFailures']})
         a,b=previous[0],current[0];witness=dict(b);witness['oldNativePath']=a['prefix']+'.native.png';witness['newNativePath']=b['prefix']+'.native.png'
         before_rows.append(witness)
-counts={'sourceCases':len(sources),'frames':len(rows),'representatives':len(representatives),'visualTransfers':len(transfers),'geometryPass':sum(not r['metricFailures'] for r in rows),'pixelPass':sum(not r['pixelFailures'] for r in rows),'presencePass':sum(all(v['passed'] for v in r['imagePresence'].values()) for r in rows),'freshFrames':native['summary']['freshFrames'],'unchangedSceneTransfers':native['summary']['transferredFrames'],'beforeAfterFrames':len(before_after)}
-coverage={'scope':'Visual evidence for frozen public-image candidate scenes; full API qualification is separate. Complete opaque-white RGBA extension proves only visible pixel transfer, not offscreen content or shared numeric gates.','counts':counts,'bindings':[bind(p) for p in [root/'combined-receipt.json',root/'build-receipt.json',root/'compile-receipt.json',root/'cases.json',helper_snapshot]]+extra_bindings,'sources':sources,'artifacts':list(file_bindings.values()),'representatives':representatives,'transfers':transfers,'sheets':sheets(representatives,out,'review-sheet'),'beforeAfterSheets':sheets(before_rows,out,'before-after',('chrome','oldNative','newNative')),'beforeAfter':before_after,'pixelFailureRows':[r for r in rows if r['pixelFailures']],'reviewCompleted':False}
+counts={'sourceCases':len(sources),'frames':len(rows),'representatives':len(representatives),'visualTransfers':len(transfers),'backgroundBoxDifferenceTransfers':sum(bool(t['backgroundBoxMetadataDifferences']) for t in transfers),'geometryPass':sum(not r['metricFailures'] for r in rows),'pixelPass':sum(not r['pixelFailures'] for r in rows),'presencePass':sum(all(v['passed'] for v in r['imagePresence'].values()) for r in rows),'freshFrames':native['summary']['freshFrames'],'unchangedSceneTransfers':native['summary']['transferredFrames'],'beforeAfterFrames':len(before_after)}
+coverage={'scope':'Visual evidence for frozen public-image candidate scenes; full API qualification is separate. Complete opaque-white RGBA extension proves only visible pixel transfer, not offscreen content or shared numeric gates. Only background-chain borderBox metadata can differ: exact source/target values remain recorded and are not transferred; all other browser, native-box and presence metadata must match.','counts':counts,'bindings':[bind(p) for p in [root/'combined-receipt.json',root/'build-receipt.json',root/'compile-receipt.json',root/'cases.json',helper_snapshot]]+extra_bindings,'sources':sources,'artifacts':list(file_bindings.values()),'representatives':representatives,'transfers':transfers,'sheets':sheets(representatives,out,'review-sheet'),'beforeAfterSheets':sheets(before_rows,out,'before-after',('chrome','oldNative','newNative')),'beforeAfter':before_after,'pixelFailureRows':[r for r in rows if r['pixelFailures']],'reviewCompleted':False}
 save(out/'coverage.json',coverage);gallery(coverage,out);print(json.dumps(counts,indent=2));print('sheets',len(coverage['sheets']),'before/after sheets',len(coverage['beforeAfterSheets']))

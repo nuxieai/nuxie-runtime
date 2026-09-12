@@ -67,6 +67,12 @@ mod wrapping_normalizer;
 #[allow(dead_code)] // Closed private composition; no public wrapping admission.
 #[path = "wrapping_composition.rs"]
 mod wrapping_composition;
+#[allow(dead_code)] // Conditional carry bounds; exact line gates remain a premise.
+#[path = "wrapping_carry.rs"]
+mod wrapping_carry;
+#[allow(dead_code)] // Conditional source-derived envelope; final scalar/mask checks follow.
+#[path = "wrapping_coordinates.rs"]
+mod wrapping_coordinates;
 #[path = "images.rs"]
 mod images;
 #[path = "image_constraints.rs"]

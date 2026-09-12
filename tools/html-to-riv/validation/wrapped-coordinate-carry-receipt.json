@@ -1,0 +1,19 @@
+{
+  "scope": "Private source-derived coordinate/carry candidate; no public wrapping or new pixel qualification",
+  "rustTests": 390,
+  "nodeTests": 56,
+  "imageOutputs": 282,
+  "historicalOutputs": 794,
+  "compilerSha256": "a6f3f640baffa67204ef831fd8e14241041ca667b46a53c3c2da98fd99114914",
+  "wasmSha256": "d5b1ccf6a3d30a7d6601f6d6a154c5a153129396937d4b64d5ecaf5eddcd933a",
+  "publicWrappingAdmitted": false,
+  "artifactBindings": 7857,
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-coordinate-carry-verification-r1.json",
+    "sha256": "5301de85190e5be6a325a020955b5518a56c9c8668651f1deb406b9bfc3f77b2"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-coordinate-carry-review.md",
+    "sha256": "8dfd50c39f8d56b73d0248ac2289ab6057665534dfeebba76b83161f6d5f7309"
+  }
+}

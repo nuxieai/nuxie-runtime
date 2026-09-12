@@ -14,6 +14,7 @@ pub(super) enum Unresolved {
     PaintOwnership,
     BaseChanged,
     GeneratedRole { object: u32 },
+    Arithmetic(super::wrapping_coordinates::Unresolved),
     Emission(Diagnostic),
 }
 impl From<Diagnostic> for Unresolved {
@@ -48,6 +49,21 @@ impl Candidate {
     pub(super) fn record_costs(&self) -> (usize, usize, usize) {
         (self.base_records, self.sizing_records, self.paint_records)
     }
+}
+/// A source-derived arithmetic analysis attached to the exact candidate it
+/// configured. Remaining scalar-field and mask/paint proofs are not implied.
+pub(super) struct Derived {
+    candidate:Candidate,
+    arithmetic:super::wrapping_coordinates::Proof,
+}
+impl Derived {
+    pub(super) fn candidate(&self)->&Candidate {&self.candidate}
+    pub(super) fn arithmetic(&self)->&super::wrapping_coordinates::Proof {&self.arithmetic}
+}
+pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
+    let arithmetic=super::wrapping_coordinates::prove(&domains).map_err(Unresolved::Arithmetic)?;
+    let candidate=compose(domains,alignments,arithmetic.epsilon(),record_budget)?;
+    Ok(Derived{candidate,arithmetic})
 }
 fn parent(record: &Record) -> Option<u32> {
     match record.get("parentId") { Some(Value::Uint(id)) => Some(*id), _ => None }
@@ -219,6 +235,55 @@ mod tests {
             assert_eq!(wire::encode(candidate.records()).unwrap(),wire::encode(again.records()).unwrap());
             assert_eq!(wire::encode(&records).unwrap(),original);
         } }
+    }
+    #[test]
+    fn source_derived_epsilon_configures_the_actual_owned_graph() {
+        for count in [1,2,3,8] {for (direction,alignment,wrap) in [(0,0,1),(1,4,2),(2,8,1),(3,4,2)] {
+            let (records,roles)=fixture(count,direction,alignment,wrap);
+            let fractions=(0..count).map(|i|(i%3) as f32/2.).collect::<Vec<_>>();
+            let derived=compose_with_bounds(domains(&records,&roles),&fractions,100_000).unwrap();
+            let epsilon=derived.arithmetic().epsilon();
+            assert_eq!(derived.candidate().epsilon(),epsilon);
+            assert!((epsilon as f64)>=derived.arithmetic().same_line_error());
+            assert!(derived.arithmetic().normalizer().interpolated.lower()>32768.);
+            assert_eq!(derived.arithmetic().carry().line_maxima.len(),count);
+            let axis=if direction>=2 {"y"}else{"x"};
+            let constants=derived.candidate().records().iter().skip(records.len()).filter(|r|
+                r.kind=="Node" && matches!(r.get(axis),Some(Value::Float(v)) if *v == -epsilon)).count();
+            assert_eq!(constants,(count-1)+count*(count-1)/2);
+        }}
+        // This bound fixture derives its error budget rather than inheriting
+        // the earlier private experiment's fixed1/64 epsilon.
+        let (records,roles)=fixture(3,2,0,1);
+        let derived=compose_with_bounds(domains(&records,&roles),&[0.;3],1000).unwrap();
+        assert_ne!(derived.arithmetic().epsilon(),1./64.);
+    }
+    #[test]
+    fn derived_analysis_rejects_visible_world_overflow_and_tiny_line_gaps() {
+        for overflow in [false,true] {
+            let (mut records,roles)=fixture(2,2,if overflow {2}else{0},1);
+            let parent=numeric();let mut slot=numeric();
+            let value=if overflow {2_f32.powi(126)}else{0.0005};
+            let scalar=NumericSize::Pixels(Ok(ScalarProvenance::exact_constant(value).unwrap()));
+            if overflow {slot.width=scalar;}else{slot.height=scalar;}
+            for &(id,visible) in &roles {
+                set(&mut records[id as usize+1],if overflow {"width"}else{"height"},Value::Float(value));
+                if overflow {
+                    set(&mut records[id as usize+2],"layoutAlignmentType",Value::Uint(2));
+                    set(&mut records[visible as usize+1],"width",Value::Float(f32::MAX));
+                }
+            }
+            let values=roles.iter().map(|&(id,_)|(id,&slot)).collect::<Vec<_>>();
+            let d=wrapping_domains::resolve(&records,2,&roles,&parent,&values,
+                [MachineInterval::new(0.,16384.).unwrap();2]).unwrap();
+            let result=compose_with_bounds(d,&[0.,1.],1000);
+            if overflow {
+                assert!(matches!(result,Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Arithmetic))));
+            }else{
+                assert!(matches!(result,Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Separation))
+                    |Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Normalizer(_)))));
+            }
+        }
     }
     #[test]
     fn failures_are_atomic_and_budget_is_exact() {

@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
   "focus": "Wrapped sizing and admission proof",
-  "status": "Authored domains, closed private composition and conditional normalizer implemented",
-  "current": "Authored parent/slot domains now feed a closed private composition; generated layout inputs are checked after emission. A conditional normalizer proof includes interpolation cancellation.379Rust/56Node, TypeScript, native/WASM and source guard pass;282image+794historical outputs remain exact.7,853artifact bindings verified. No public wrapping or new pixel campaign.",
-  "next": "Implement coordinate accumulator and carry envelopes; derive source-dependent epsilon/dead intervals; bind scalar normalizer premises to the candidate and prove mask coverage. Public wrapping remains closed.",
+  "status": "Source-derived coordinate/carry analysis now configures private candidate epsilon",
+  "current": "Visible native sizes/initial transforms are bounded. Main/cross recurrences derive epsilon/dead intervals, normalizer inputs and measured-height/carry bounds.390Rust/56Node, TypeScript, native/WASM and source guard pass;282image+794historical outputs remain exact.7,857artifact bindings verified. No new public wrapping or pixel campaign.",
+  "next": "Bind final scalar fields/dependency evaluation, propagate offset/target error and prove active/inactive mask coverage; then validate derived-epsilon native/Chrome original/clone resizing and visuals before public admission.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Source-derived coordinate/carry checkpoint and visible overflow correction",
+      "path": "tools/html-to-riv/validation/wrapped-coordinate-carry-review.md"
+    },
     {
       "label": "Authored domains, closed composition and conditional normalizer",
       "path": "tools/html-to-riv/validation/wrapped-composition-review.md"

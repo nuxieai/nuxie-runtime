@@ -18,6 +18,9 @@ pub(super) enum Unresolved {
 pub(super) struct Slot {
     pub object: u32,
     pub axes: [MachineInterval; 2],
+    pub visible: u32,
+    pub visible_axes: [MachineInterval; 2],
+    pub visible_fraction: [f32; 2],
 }
 
 pub(super) struct Domains<'a> {
@@ -76,7 +79,14 @@ pub(super) fn resolve<'a>(
     let parent_axes = dimensions(parent, authored_parent, &base.parent_sizes, viewport)?;
     let slots = base.slots.iter().map(|slot| {
         let numeric = authored.get(&slot.id).ok_or(Unresolved::AuthoredRole { object: slot.id })?;
-        Ok(Slot { object: slot.id, axes: dimensions(slot.id, numeric, &slot.sizes, parent_axes)? })
+        let axes = dimensions(slot.id, numeric, &slot.sizes, parent_axes)?;
+        let visible_axis = |axis: usize| wrapping_sizes::native_used_size(
+            &slot.visible_sizes.preferred[axis], &slot.visible_sizes.minimum[axis],
+            &slot.visible_sizes.maximum[axis], axes[axis])
+            .map_err(|reason| Unresolved::Dimension { object: slot.visible, axis, reason });
+        Ok(Slot { object: slot.id, axes, visible: slot.visible,
+            visible_axes: [visible_axis(0)?, visible_axis(1)?],
+            visible_fraction: slot.visible_fraction })
     }).collect::<Result<Vec<_>, Unresolved>>()?;
     let cross = usize::from(base.row);
     let cross_extents = wrapping_sizes::cross_extents(
@@ -156,6 +166,31 @@ mod tests {
             Err(Unresolved::Dimension{object:4,axis:1,reason:wrapping_sizes::Unresolved::NativeBinding})));
         set(&mut records[6], "aspectRatio", Value::Float(2.));
         assert!(matches!(resolve(&records,2,&[(4,6)],&parent,&[(4,&slot)],viewport()), Err(Unresolved::Structure(_))));
+    }
+
+    #[test]
+    fn visible_bounds_use_bound_native_fields_and_reject_hidden_percentage_overflow() {
+        let mut records = scene();
+        let parent = authored(50.,25.,true); let slot = authored(60.,30.,false);
+        let get = |records: &[Record]| {
+            let d = resolve(records,2,&[(4,6)],&parent,&[(4,&slot)],viewport())?;
+            Ok::<_, Unresolved>(d.slots[0].clone())
+        };
+        let first = get(&records).unwrap();
+        assert_eq!(first.visible, 6);
+        assert_eq!(first.visible_axes, first.axes);
+        set(&mut records[7], "width", Value::Float(200.));
+        set(&mut records[6], "flexDirectionValue", Value::Uint(3));
+        let changed = get(&records).unwrap();
+        assert_eq!(changed.visible_axes[0], MachineInterval::new(120.,120.).unwrap());
+        assert_eq!(changed.visible_fraction, [1.,0.]);
+        // All stored values are finite and the finite maximum would conceal
+        // overflow if only the clamped result were checked.
+        set(&mut records[7], "width", Value::Float(f32::MAX));
+        set(&mut records[8], "maxWidth", Value::Float(1.));
+        set(&mut records[8], "maxWidthUnitsValue", Value::Uint(1));
+        assert!(matches!(get(&records), Err(Unresolved::Dimension {
+            object:6, axis:0, reason:wrapping_sizes::Unresolved::IntermediateOverflow })));
     }
 
     #[test]

@@ -32,6 +32,9 @@ pub(super) struct Slot {
     pub visible: u32,
     pub style: u32,
     pub sizes: Sizes,
+    pub visible_sizes: Sizes,
+    /// Physical x/y fractions used by this nonwrapping slot to place its child.
+    pub visible_fraction: [f32; 2],
 }
 pub(super) struct Binding<'a> {
     // Keep the examined array borrowed: this token does not survive mutation.
@@ -43,6 +46,7 @@ pub(super) struct Binding<'a> {
     pub reverse_main: bool,
     pub reverse_cross: bool,
     pub line_fraction: f32,
+    pub main_fraction: f32,
     pub slots: Vec<Slot>,
 }
 impl<'a> Binding<'a> {
@@ -201,14 +205,27 @@ pub(super) fn inspect<'a>(records: &'a [Record], parent: u32, roles: &[(u32, u32
     if !matches!(wrap, 1 | 2) { return Err(Unresolved::Defaults { id: parent }); }
     let alignment = uint(ps, "layoutAlignmentType").unwrap_or(0);
     let line_fraction = (if row { alignment / 3 } else { alignment % 3 }) as f32 / 2.;
+    let main_fraction = (if row { alignment % 3 } else { alignment / 3 }) as f32 / 2.;
     let slots = roles.iter().map(|&(id, visible)| {
         let r = at(records, id).ok_or(Unresolved::Role)?;
         let style = uint(r, "styleId").ok_or(Unresolved::Style { id })?;
-        Ok(Slot { id, visible, style, sizes: sizes(r, at(records, style).unwrap(), id)? })
+        let s = at(records, style).unwrap();
+        let vr = at(records, visible).ok_or(Unresolved::Role)?;
+        let vsid = uint(vr, "styleId").ok_or(Unresolved::Style { id: visible })?;
+        let vs = at(records, vsid).ok_or(Unresolved::Style { id: visible })?;
+        let direction = uint(s, "flexDirectionValue").unwrap_or(2);
+        let alignment = uint(s, "layoutAlignmentType").unwrap_or(0);
+        let mut visible_fraction = [(alignment % 3) as f32 / 2., (alignment / 3) as f32 / 2.];
+        if direction % 2 == 1 {
+            let main = usize::from(direction < 2);
+            visible_fraction[main] = 1. - visible_fraction[main];
+        }
+        Ok(Slot { id, visible, style, sizes: sizes(r, s, id)?,
+            visible_sizes: sizes(vr, vs, visible)?, visible_fraction })
     }).collect::<Result<_, Unresolved>>()?;
     Ok(Binding { _records: records, parent, parent_style: psid,
         parent_sizes: sizes(pr, ps, parent)?, row, reverse_main: direction % 2 == 1,
-        reverse_cross: wrap == 2, line_fraction, slots })
+        reverse_cross: wrap == 2, line_fraction, main_fraction, slots })
 }
 
 #[cfg(test)]
@@ -250,6 +267,7 @@ mod tests {
             let b = inspect(&r, 2, &[(4, 6)]).unwrap();
             assert_eq!((b.row, b.reverse_main, b.reverse_cross), (direction >= 2, direction % 2 == 1, wrap == 2));
             assert_eq!(b.line_fraction, (if direction >= 2 { alignment / 3 } else { alignment % 3 }) as f32 / 2.);
+            assert_eq!(b.main_fraction, (if direction >= 2 { alignment % 3 } else { alignment / 3 }) as f32 / 2.);
             assert_eq!(b.slots[0].sizes.minimum[1].value, Some(12.));
             assert_eq!(b.slots[0].sizes.minimum[1].units, Some(2));
         } } }
@@ -288,6 +306,25 @@ mod tests {
         let mut changed = r;
         set(&mut changed[13], "parentId", Value::Uint(4));
         assert!(inspect(&changed, 2, &roles).is_err());
+    }
+
+    #[test]
+    fn visible_role_binds_its_native_sizes_and_slot_physical_alignment() {
+        let mut r = scene();
+        set(&mut r[7], "width", Value::Float(75.));
+        set(&mut r[8], "widthUnitsValue", Value::Uint(2));
+        for direction in 0..4 { for alignment in 0..9 {
+            set(&mut r[6], "flexDirectionValue", Value::Uint(direction));
+            set(&mut r[6], "layoutAlignmentType", Value::Uint(alignment));
+            let b = inspect(&r, 2, &[(4,6)]).unwrap();
+            let slot = &b.slots[0];
+            assert_eq!(slot.visible_sizes.preferred[0].value, Some(75.));
+            assert_eq!(slot.visible_sizes.preferred[0].units, Some(2));
+            let x = (alignment % 3) as f32 / 2.;
+            let y = (alignment / 3) as f32 / 2.;
+            assert_eq!(slot.visible_fraction, [if direction == 3 {1.-x} else {x},
+                if direction == 1 {1.-y} else {y}]);
+        } }
     }
     #[test]
     fn bound_fields_feed_machine_sizes_and_detect_stale_authored_metadata() {

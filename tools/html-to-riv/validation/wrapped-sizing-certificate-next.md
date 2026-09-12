@@ -20,6 +20,16 @@ The newer `wrapped-gap-normalizer-audit.md` refines the proposed equations below
 
 Next implement the actual coordinate accumulator envelope and carry reconstruction bounds, derive epsilon and the positive dead interval, bind the normalizer's zero-target/identity/axis/distance/mode/strength/clamp premises to the candidate, and establish mask margins. Do not repeat the completed domain/base-composition implementation merely because older plan paragraphs below describe it as future work.
 
+## Coordinate/carry implementation and visible-source correction
+
+`wrapping_coordinates.rs` now encloses actual native main/cross sums, positional first offsets, accumulator updates and slot locations using binary32 endpoint recurrences. It checks both coordinates of slot landmarks and visible initial world transforms, derives R and31/31+4N conditional error budgets, rounds epsilon upward, derives positive dead endpoints with native subtraction, calls the normalizer proof, and passes measured-height enclosures/errors into `wrapping_carry.rs`.
+
+`wrapping_carry.rs` propagates measurement and max-reconstruction error through both passes and final maxima, checking every entering reset against65536. `compose_with_bounds` uses the resulting source-derived epsilon for the exact owned candidate; the old explicit-epsilon constructor remains a private experiment seam.
+
+The coordinate audit found that finite stored visible dimensions were insufficient: percentage resolution and initial visible world translations could overflow. The binder now retains visible sizes and placement fractions, and Domains resolves both visible axes from final ordinary records against each slot's axes. Native-only bounds do not invent authored provenance or certify visible CSS semantics. Explicit minima are still required by this helper. The immutable all-flex native path does adapt automatic minima to zero (`layout_component.rs:2173–2184`); that is a usable future premise, not an intrinsic runtime impossibility.
+
+These implementations close the stated source-envelope and carry prerequisites within the checked base shape. They still require final scalar-field/dependency evaluation bindings, final offset/target error and mask/raster coverage before public routing. Native evidence with the derived epsilon has not yet been captured. Do not rerun the earlier experimental epsilon campaign as though it qualifies this candidate.
+
 ## Smallest general route
 
 Start with a root-origin, translation-only wrapping scope whose parent has definite bounded dimensions, zero insets/gap, and independent slots with two definite dimensions. Require every slot's native cross size to have a strictly positive source-derived lower bound. Permit variable item count subject to computed bounds and actual graph cost; do not specialize the certificate to the three historical fixture identities. Explicit positional line fractions0,1/2,1 and both wrap directions are possible once each passes the same inequalities. Initially reject intrinsic/stretch/baseline slots, relative insets, slot aspect ratios, native size-modifying constraints, nonzero origins and unknown ancestry.

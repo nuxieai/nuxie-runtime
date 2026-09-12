@@ -56,6 +56,35 @@ fn absent(raw: &RecordLength) -> bool {
     raw.units.is_none() && raw.value.is_none()
 }
 
+/// Resolve a generated role directly from its bound native fields. This does
+/// not establish authored CSS provenance. As for `used_size`, explicit minima
+/// are required; automatic flex minima remain outside this helper's contract.
+pub(super) fn native_used_size(
+    preferred: &RecordLength, minimum: &RecordLength, maximum: &RecordLength,
+    parent: MachineInterval,
+) -> Result<MachineInterval, Unresolved> {
+    let undefined = |v: &RecordLength| v.units.unwrap_or(0) == 0
+        && v.value.is_none_or(|x| x == 0.);
+    let resolve = |raw: &RecordLength| {
+        let value = raw.value.filter(|v| v.is_finite() && *v >= 0.)
+            .ok_or(Unresolved::NativeBinding)?;
+        match raw.units {
+            Some(1) => MachineInterval::new(value, value),
+            Some(2) => parent.percentage(value),
+            _ => Err(Unresolved::NativeBinding),
+        }
+    };
+    if undefined(preferred) { return Err(Unresolved::AutomaticSize); }
+    let preferred = resolve(preferred)?;
+    if undefined(minimum) { return Err(Unresolved::AutomaticMinimum); }
+    let minimum = resolve(minimum)?;
+    let maximum = if undefined(maximum) { None } else { Some(resolve(maximum)?) };
+    MachineInterval::new(
+        maximum.map_or(preferred.lower, |m| preferred.lower.min(m.lower)).max(minimum.lower),
+        maximum.map_or(preferred.upper, |m| preferred.upper.min(m.upper)).max(minimum.upper),
+    )
+}
+
 fn resolve(
     source: &NumericSize, raw: &RecordLength, parent: MachineInterval,
 ) -> Result<MachineInterval, Unresolved> {
@@ -79,8 +108,9 @@ fn resolve(
 
 /// Authored metadata and the matching final ordinary record values. The three
 /// percentages all resolve against `parent`, never against the preferred size
-/// or an already clamped wrapper. Explicit minima are required; native automatic
-/// minima introduce an intrinsic/flex premise outside this resolver.
+/// or an already clamped wrapper. Explicit minima are required; resolving native
+/// automatic minima requires the flex-child adaptation premise, which this
+/// dimension-only helper does not establish.
 pub(super) fn used_size(
     preferred: (&NumericSize, &RecordLength),
     minimum: (&NumericSize, &RecordLength),
@@ -177,6 +207,26 @@ mod tests {
         assert_eq!(result, MachineInterval::new(160., 320.).unwrap());
         let point = run(&value(35., false), &value(50., true), &value(75., true), parent).unwrap();
         assert_eq!(point, MachineInterval::new(100., 200.).unwrap());
+    }
+
+    #[test]
+    fn generated_native_sizes_resolve_without_fabricating_authored_metadata() {
+        let parent = MachineInterval::new(60., 120.).unwrap();
+        let preferred = value(50., true).1;
+        let minimum = value(80., true).1;
+        let maximum = value(20., false).1;
+        assert_eq!(native_used_size(&preferred, &minimum, &maximum, parent).unwrap(),
+            MachineInterval::new(48., 96.).unwrap());
+        assert_eq!(native_used_size(&value(f32::MAX, true).1, &value(0., false).1,
+            &maximum, parent), Err(Unresolved::IntermediateOverflow));
+        assert_eq!(native_used_size(&preferred, &no_max().1, &maximum, parent),
+            Err(Unresolved::AutomaticMinimum));
+        let undefined = RecordLength { units: Some(0), value: Some(0.) };
+        assert_eq!(native_used_size(&preferred, &value(0., false).1, &undefined, parent).unwrap(),
+            MachineInterval::new(30., 60.).unwrap());
+        let malformed = RecordLength { units: Some(0), value: Some(1.) };
+        assert_eq!(native_used_size(&preferred, &value(0., false).1, &malformed, parent),
+            Err(Unresolved::NativeBinding));
     }
 
     #[test]

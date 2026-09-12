@@ -8,6 +8,8 @@ mod baseline;
 mod spacing;
 #[path = "margins.rs"]
 mod margins;
+#[path = "numeric.rs"]
+mod numeric;
 #[allow(dead_code)]
 #[path = "flex.rs"]
 mod flex;
@@ -415,7 +417,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
-    output.children(body, 0, &host_style, &rules, "", 0, [true; 2])?;
+    output.children(body, 0, &host_style, &rules, "", 0, [true; 2], numeric::Bounds::VIEWPORT)?;
     // File object order serves native drawing; public identities stay in DOM
     // preorder, with numeric path components (so /2 precedes /10).
     output.map.sort_by_cached_key(|node| node.path.split('/').skip(1)
@@ -470,7 +472,7 @@ impl Emitter {
             self.records.push(layout);self.records.push(layout_style);
         Ok(object_id)
     }
-    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2]) -> Result<Vec<baseline::Child>, Diagnostic> {
+    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2], numeric_bounds: numeric::Bounds) -> Result<Vec<baseline::Child>, Diagnostic> {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
         let mut elements = Vec::new();
         for node in parent.children() {
@@ -517,6 +519,7 @@ impl Emitter {
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
                 return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
             }
+            let child_bounds = numeric_bounds.child(&style, parent_style, &path)?;
             let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
             let cross_auto_margin = style.margins.cross(parent_style.direction);
             let effective_alignment = if cross_auto_margin {
@@ -596,7 +599,7 @@ impl Emitter {
             }
             self.map.push(SourceNode { id, path: path.clone(), object_id });
             let child_chain = flex::child_chain(definite_chain, &style);
-            let descendants = self.children(element, object_id, &style, rules, &path, depth + 1, child_chain)?;
+            let descendants = self.children(element, object_id, &style, rules, &path, depth + 1, child_chain, child_bounds)?;
             // A flexible vertical main size is not the authored intrinsic height.
             // Unknown scalar summaries prevent unsound ancestor baseline admission.
             let vertical_flex = flex_plan.is_some() && !parent_style.direction.is_row();

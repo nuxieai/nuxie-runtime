@@ -291,3 +291,19 @@ test('unqualified flex candidates have identical CLI/WASM diagnostics',async()=>
   }
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('percentage overflow diagnostics and finite clamps agree across CLI/WASM',async()=>{
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-numeric-boundaries-'));
+ try{
+  for(const axis of ['width','height'])for(const [index,[depth,extra,accepted]] of [[8,'',true],[9,'',false],[9,'div{min-width:auto}',false],[9,'div{min-width:auto}#n8{max-width:100px}',true],[9,'div{min-width:1000000%;max-width:100px}',false],[9,'#n0{width:0px}',true]].entries()){
+   let css='div{width:1000000%;height:1px}'+extra;
+   if(axis==='height')css=css.replaceAll('width','AXIS').replaceAll('height','width').replaceAll('AXIS','height');
+   const request={html:Array.from({length:depth},(_,i)=>`<div id="n${i}">`).join('')+'</div>'.repeat(depth),css,width:1,height:1};
+   const prefix=path.join(dir,`${axis}-${index}`);fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.equal(result.ok,accepted);assert.equal(cli.status,accepted?0:1);
+   if(accepted){assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'));assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json','utf8')));}
+   else{assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));}
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

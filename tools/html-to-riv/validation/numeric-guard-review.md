@@ -1,0 +1,11 @@
+# Compiler-side percentage overflow guard
+
+The compiler now diagnoses known nonfinite percentage chains before returning a scene. It evaluates the entire supported viewport domain (0,16384] rather than just the initial compilation size. The unchanged runtime's tagged dimension arithmetic is percentage times parent times0.01, with binary32 rounding between operations. The guard propagates outward upper bounds in that order and applies the native maximum-then-minimum clamp order. It does not change emitted dimensions or add runtime objects.
+
+Automatic minima need two distinct facts. An unknown intrinsic minimum prevents a general upper-size claim, but it cannot reduce a known preferred size. A separate lower bound at the maximum viewport preserves evidence of overflow through these nodes. This closes the reviewed min:auto bypass while retaining finite final maximum clamps. Intrinsic and flexible-main upper sizes remain unknown rather than guessed.
+
+Eighteen retained native controls cover both axes, eight versus nine huge percentage levels, fixed maximum clamps, minima overriding maxima, zero roots, fixed middle nodes and automatic minima. The guarded compiler rejects all six known nonfinite cases, with diagnostics and no output files. All twelve finite controls retain byte-identical files and maps. Their native reference observations are geometry/recording tests only, not browser or pixel qualification. The earlier failing files are preserved.
+
+133Rust tests and34Node transport tests pass, along with native/WASM builds, strict TypeScript checks and the immutable source guard. All482previous public outputs retain exact bytes/maps. The actual private flex compiler still reproduces all48native experiment files and parsed source maps. Source snapshots before/after builds and checks match; command logs, artifacts and evidence hashes are bound in `numeric-guard-receipt.json`.
+
+This is a focused exponent guard. It does not prove aggregate size/position sums, floating-point precision, generated helper costs, arbitrary intrinsic content bounds or general flex arithmetic safe. Nonlegacy flex admission still awaits its separate numeric qualification. Padding remains unadmitted; its future content-box insets and size floors must be incorporated into this analysis before public integration.

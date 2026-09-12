@@ -1,0 +1,32 @@
+{
+  "status": "implemented-percentage-chain-overflow-guard",
+  "rustTests": 133,
+  "nodeTests": 34,
+  "nativeAndWasmBuild": "pass",
+  "typeScript": "pass",
+  "retainedNativeBoundaryCases": 18,
+  "correctBoundaryDecisions": 18,
+  "nonfiniteCasesRejected": 6,
+  "finiteControlsByteAndMapUnchanged": 12,
+  "priorPublicOutputsUnchanged": 482,
+  "candidateFlexFilesAndParsedMapsUnchanged": 48,
+  "scope": "Definite percentage-chain exponent overflow over full viewport range, plus lower witness through automatic minima; not general numeric or pixel qualification",
+  "bindings": {
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/source-before.json": "35f170f070e64405e536ed26eb8fcee328489f9ede13a633eabaedd2e106832d",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/source-after.json": "35f170f070e64405e536ed26eb8fcee328489f9ede13a633eabaedd2e106832d",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/native-build.log": "47d1ebe904a90b00c5b9e4f31a52db52e92ee8caeaa47e1a29a4a65b6baf0c9d",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/wasm-build.log": "b81e4bf9434dea0727c6205cf6545a849fb6386b6430f79162d30f3713216a1a",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/transport.log": "0d5c45adec1ac1a0b6b322008343832173996d8ac7d2f4e709d5d214773f3aef",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/boundaries.json": "5cb7673b9d6196aa30f67644ca754b708f05f94305d20d936d01304dbc45e7fd",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/numeric-guard-checkpoint-r1/html-to-riv": "17b7157b85f31e67dfbdbb46f193749f4d323d5943a8d41310bc741b12e37104",
+    "tools/html-to-riv/output/numeric-guard-tests-r6.log": "5f45140800969bdabdea8c49b77be7bbc191823529744063e7598c68a60ff2d5",
+    "tools/html-to-riv/output/numeric-guard-byte-regression-r1/manifest.json": "00295117a6cd3ac496928336f05348aa3bb30db9b4e80e11aba057c8b7ac42a7",
+    "tools/html-to-riv/output/flex-integration-module-r4/receipt.json": "ec53ba2177d07ce65d83db759ab5fb07692c039ba4fc0836527f4b5a53d977a0",
+    "tools/html-to-riv/output/percentage-boundary-native-r3/receipt.json": "c0f84d970d15f42a120e534fe5d34791f12fae4f56199db597254bd74b8972b0",
+    "tools/html-to-riv/src/numeric.rs": "eedaa4d64ec6ac7b266651185d286f870998d521ab1259dc511b18855334e58d",
+    "tools/html-to-riv/src/compiler.rs": "82eb525ba84088b5dfff26f1b7201ae988b43f77718b50197e95475e6392d75b",
+    "tools/html-to-riv/tests/numeric.rs": "ad85f03f9706941c0eb48a6d2a80c20f8cc813bfcf9740dd3a0ba01948494414",
+    "tools/html-to-riv/tests/transport-parity.mjs": "59fa8dc0eb92601060ce3c90b19354cc95daabf77c8cfb35b754d73cc6ae4cb6"
+  }
+}

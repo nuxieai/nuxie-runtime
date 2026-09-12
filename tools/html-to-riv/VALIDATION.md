@@ -193,3 +193,5 @@ Reusable byte regression: `python3 tools/html-to-riv/validation/check-output-reg
 Direct flex-factor experiment:24scenes pass192geometry/184pixel comparisons and384clear checks. All24files/maps reproduce, with72direct visual pairs and120exact transfers. Eight thin fractional alpha-paint failures remain; see `validation/flex-factors-native-review.md`. Public parser/emission integration remains a separate qualification.
 
 Guarded flex integration checkpoint:126Rust/33Node tests, native/WASM builds and strict TypeScript checks pass;482prior byte/map outputs remain exact. The private Candidate compiler reproduces48experimental native files and parsed maps, twice. Public nonlegacy declaration admission remains diagnostic, including unmatched/overridden values. See `validation/flex-integration-review.md` and its receipt.
+
+Percentage overflow guard:18native boundary decisions match retained evidence, with6nonfinite cases diagnosed and12finite controls byte/map unchanged.133Rust/34Node tests, builds/TypeScript/source guard pass;482public outputs and48candidate flex outputs remain exact. See `validation/numeric-guard-review.md` and receipt.

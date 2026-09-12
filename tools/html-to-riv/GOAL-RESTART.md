@@ -2,6 +2,14 @@
 
 Reviewed 2026-09-12. This brief supersedes historical next-step instructions and the saved objective's stale public-interface restoration step. The goal remains active and unlimited.
 
+## Authoritative restart checkpoint — private folding foundations
+
+This section supersedes historical next-step statements below. The public interface and fixed wrapping/remainder allocation are already implemented. The latest work adds registered private `fixed_scalar`, `fixed_geometry` and `fixed_paint` modules; read `validation/public-fixed-foundations-review.md` and its unit receipt. Full compiler tests:493 pass. Source guard passes. Scalar native comparison:60 scenes/480 frames/140096 exact coordinates. Initial geometry:30 scenes/240 frames/12928 exact comparisons, confirmed by a sign-preserving offline recheck. Direct rectangle primitives:48 Chrome/native pixel passes,96 clear checks,48 strict ordered streams;all six sheets directly reviewed. These are separate foundation tests, not a connected/public folding path.
+
+Next connect certified initial geometry to evaluation of the actual sizing/position/paint constraints (TransformConstraint and DistanceConstraint remain unresolved), then perform the bounded three-leaf fractional/reverse paint-folding experiment. Preserve source IDs and the existing geometry graph. Never substitute native/browser observations for compiler inputs. Do not rerun unchanged foundation campaigns merely for bookkeeping.
+
+The 99-item goal remains active and unlimited:13 qualified/25 partial/4 investigating/57 pending. No additional public support is claimed. Known public geometry differences reach approximately0.007815px despite passing pixel gates; retain and address them. Continue broader responsive/nested/typography/painting work beyond this optimization. Keep runtime/renderer/schema/shared dependencies/root build immutable; no editor integration or pushing unfinished work.
+
 ## Workspace and immutable contract
 
 Work only in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`. Use explicit command working directories and `login:false`; ambient `7c27` is obsolete. Confirm HEAD/status before edits and preserve newer work. Inspect git log for the latest compiler-only checkpoint.
@@ -87,9 +95,10 @@ Next investigate the concrete paint constant-folding experiment in public-fixed-
 
 ## Immediate next work
 
-1. Finish qualification of the now-integrated public fixed wrapping path, especially public resource/lifecycle and admission boundaries. Extend contexts through owned authored provenance, normalization, source-bound certificates and independent record binding; diagnose unresolved contexts explicitly. Validate deterministic Rust/CLI/WASM/JavaScript outputs, metadata-free ordinary import, native pixels, same-file original/clone resizing and practical budgets. Private recipe support is not public language support. Keep editor integration excluded.
-2. Continue unresolved wrapping semantics: nondivisible stretch remainder allocation now has a pinned source algorithm; responsive percentage results must quantize after the live basis calculation, not by normalizing coefficients. Later flex arithmetic, normal/stretch distribution, intrinsic sizing and broader positioning still need their own proofs or evidenced limitations. Fixed-input and integral-paint success do not establish arbitrary browser fidelity. The high-count `Arithmetic(Separation)` rejection is a proof limitation to investigate, not a runtime impossibility.
-3. Continue all 99 backlog items in priority/dependency order, including typography, broader flex, images, borders/painting, positioning, responsive expressions and assets. Preserve failures and direct visual review. Make concrete language behavior progress; do not repeat unchanged captures, builds or timings merely for bookkeeping.
+1. Read the completed private foundation review and source audits. Connect typed source-bound initial geometry to evaluation of the actual emitted constraints; model required TransformConstraint/DistanceConstraint operations independently and test final native coordinates. Unknown operations must retain the existing path. Initial layout seeds are not final constrained corners.
+2. Complete the three-leaf fractional/reverse paint-only folding experiment in `validation/public-fixed-folding-plan.md`. Preserve geometry/source IDs and compare old/new geometry, paint order and Chrome/native pixels through original/clone resizing. Qualify and benchmark only after equivalence and direct review.
+3. Address exact center quantization and broader admission; continue all99 items, especially responsive/nested layout, typography, painting and assets. Fixed-root clipping tests do not prove responsive reflow. A proof rejection is not runtime impossibility.
+4. Maintain support/evidence/progress at meaningful tested milestones, commit reviewed compiler-only work locally, and keep unfinished replacement isolated. Preserve failures and avoid repeating unchanged builds/captures.
 
 Historical design/restart instructions are preserved under validation/history and checkpoint reviews. Current boundary/cost campaigns are complete; do not repeat them before implementing a changed behavior.
 
@@ -105,4 +114,4 @@ Completion requires every scoped item qualified or documented with an evidenced 
 
 ## Restart prompt
 
-> Resume the existing 99-item compiler goal in /Users/levi/.codex/worktrees/html-css-immutable, branch levi/html-css-immutable-runtime. Read tools/html-to-riv/GOAL-RESTART.md first. Fixed normalization, ordered integral paint and whole-scene nonoverlap/original paint are implemented and validated privately. Next integrate proven wrapping contexts through the public compiler with clear diagnostics and full native/Chrome validation, then continue the entire backlog. Preserve high-count proof rejections and historical failures. Keep the runtime immutable; no editor integration or pushing unfinished work.
+> Resume the full99-item standalone compiler goal in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`. Read `tools/html-to-riv/GOAL-RESTART.md` and `validation/public-fixed-foundations-review.md`. The public interface/fixed wrapping and private geometry/scalar/paint foundations are tested. Next connect source-bound geometry to actual constraint evaluation, qualify the bounded paint-folding experiment, then continue the entire backlog. Keep the baseline runtime immutable, preserve failures and source IDs, and validate ordinary files against native rendering and pinned Chrome through same-file original/clone resizing. No editor integration, CSS Grid or pushing unfinished work.

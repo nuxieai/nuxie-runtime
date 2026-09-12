@@ -1,0 +1,34 @@
+{
+  "scope": "Private fixed scalar, paint and initial geometry foundation tests; no public folding admission or fresh WASM/JS/pixel qualification",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--manifest-path",
+    "tools/html-to-riv/Cargo.toml"
+  ],
+  "testCount": 493,
+  "log": {
+    "path": "tools/html-to-riv/output/fixed-foundations-all-r3.log",
+    "sha256": "a4fa48d708c489bff57194c534f41a27dba2f5596a71f4fe167b82670889e81e"
+  },
+  "sourceGuard": {
+    "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+    "baselineTree": "25ccbb131d88dbd0fdde8f4c660919143b252edf",
+    "status": "pass",
+    "changesOutsideCompiler": {
+      "index": [],
+      "worktree": [],
+      "untracked": []
+    },
+    "scope": "Tracked source, index and nonignored additions; build resolution must be verified separately"
+  },
+  "sources": {
+    "tools/html-to-riv/src/compiler.rs": "b8873a73c6851bc0308ecca80bfbffd1876b60376f280fb99aac1c783801d643",
+    "tools/html-to-riv/src/fixed_scalar.rs": "521d19bb570387a9e1b2be6d119fa6c82c79eee02fc5ada1b860dbe3ee4cffd5",
+    "tools/html-to-riv/src/fixed_paint.rs": "777605dfec7fd3a1a8b4630620f8432c3de62471c4919525bf06f644758e7fb8",
+    "tools/html-to-riv/src/fixed_geometry.rs": "0519c625cc09e0b43139911c518cc5c58c2824b5a9fc154c62c59aa976e1e605",
+    "tools/html-to-riv/Cargo.toml": "d64c8518c703a930af04bb1fd3be0c634bd136f842164e864bfadc985e104ed6",
+    "tools/html-to-riv/Cargo.lock": "d1816dd53db510eac643e3f4d26cbe1878f07a7367ad7fa8202394147d96acaa"
+  }
+}

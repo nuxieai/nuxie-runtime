@@ -359,3 +359,7 @@ Public resource follow-up: [12 CLI/WASM outcomes and seven release lifecycle sce
 Public normal/stretch follow-up: [exact fixed line expansion](validation/public-wrapping-stretch-review.md) passes474Rust/57Node,192geometry/pixel frames and384clear controls.72representative pairs reviewed;120exact repeats.1092previous scene outputs remain exact. Eight normal/stretch twin pairs preserve identical scene/native/Chrome bytes across64frames. Remainder allocation and odd-LayoutUnit center boundaries remain follow-up work.
 
 [Public stretch remainder allocation](validation/public-wrapping-remainder-review.md):476Rust/57Node;256geometry/pixel gates,512clear controls,96direct visual pairs/160repeats;1116previous scenes exact. The full delta report retains552nonzero values of7040, max0.007815px. All pixel gates pass; exact centered geometry remains work.
+
+## Private paint-folding foundations
+
+Registered initial fixed geometry, translation-only scalar evaluation and ordinary rectangle emission now have separate native evidence; see [foundation review](validation/public-fixed-foundations-review.md). Full Rust tests pass493; exact scalar and initial geometry comparisons pass, and48 direct primitive Chrome/native frames pass with visual review. These modules are not connected to public folding. No support status is upgraded; final constraint evaluation, whole-scene equivalence and broader contexts remain outstanding.

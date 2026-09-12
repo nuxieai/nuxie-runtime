@@ -1,0 +1,88 @@
+{
+  "scope": "Separate private foundation experiments; no connected/public paint folding qualification",
+  "sourceBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "rustTests": 493,
+  "scalar": {
+    "scenes": 60,
+    "frames": 480,
+    "exactCoordinateChecks": 140096,
+    "mismatches": 0
+  },
+  "initialGeometry": {
+    "scenes": 30,
+    "frames": 240,
+    "exactSizeWorldChecks": 12928,
+    "mismatches": 0,
+    "signPreservingOfflineRecheck": true
+  },
+  "paintPrimitive": {
+    "scenes": 6,
+    "frames": 48,
+    "clearChecks": 96,
+    "strictStreams": 48,
+    "directRepresentativePairs": 18,
+    "exactRepeatPairs": 30
+  },
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/validation/public-fixed-foundations-review.md",
+      "sha256": "f26a4632217d57a74a47f95e9b819e1b1fe282d420ea663d52982cf3e09f920f"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-fixed-foundations-unit-receipt.json",
+      "sha256": "a25662768d234a5bcaf6bbc5e240640d242261610fc4b0221a693df0e81aaf35"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-fixed-scalar-review.md",
+      "sha256": "d09301893f07da626ac7ee99930a62545515130134bc590b20f9c250f5a2d26c"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-fixed-paint-visual-root.md",
+      "sha256": "1c49852c742c68139148303043aa4fde76b5eda30a1c925ea20f2456fa704c04"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-fixed-scalar-r1/receipt.json",
+      "sha256": "b728aa10ed4190d1c6d2b13f973c676c875f22304d97d41a869236e3962d8ec5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-fixed-scalar-r1/native-receipt.json",
+      "sha256": "cd7987e00b6f0986efe1514ff623990759224496e56211bcbeda3015b05828e3"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-fixed-geometry-constructor-r1/receipt.json",
+      "sha256": "1ae9d3a3dea5ccdf14c41e6d2c3679fa3ac6944cd5635d614d6cfb4252fae72d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-fixed-geometry-native-r1/receipt.json",
+      "sha256": "b3cb7d8f3bd43f06cee1cefd8b8d6193079bb618dd172a069f0feb26b9dfb603"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-fixed-geometry-native-r2/receipt.json",
+      "sha256": "62ca6ef628ca5966cbd177cf7536f04244cd4d648372a8f59687a10e69deeefc"
+    },
+    {
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-primitive-r1/receipt.json",
+      "sha256": "cd8aebc77bfe3fd1a5798ccbcb43069513252c2bcdaf88d024d745810cbd961b"
+    },
+    {
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-primitive-r1/visual-receipt.json",
+      "sha256": "2b816103ee2282194619d16d68788605e027a3985919dea98db7db59f5348132"
+    },
+    {
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-primitive-r1/stream-receipt.json",
+      "sha256": "8068f4528d0776c284fd112953afa8d6bb8215291744297790b2bb90af3cc2a2"
+    },
+    {
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-primitive-r1/visual/coverage.json",
+      "sha256": "6593c512681fb9ecfd5c2025e4dc926bfd5bf2cfb8e3bbd4ac7cfb964302c924"
+    },
+    {
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-primitive-r1/repeat-identity.json",
+      "sha256": "be634cbf3e781c9a5a9728ecae4a54eb09822e6514e978f6b19d81b25f501bd0"
+    },
+    {
+      "path": "tools/html-to-riv/output/playwright/public-fixed-paint-primitive-r1/initial-clip-rule-rejection.json",
+      "sha256": "d94c2f940a7cc893766691ca7aa9cb5696c81f0c46f9e5cb8f7ba168073030f0"
+    }
+  ]
+}

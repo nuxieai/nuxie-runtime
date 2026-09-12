@@ -9,6 +9,15 @@ mod wrapping_style;
 #[allow(dead_code)] // Retained certificate accessors are also exercised by private validation.
 #[path = "wrapping_stretch.rs"]
 mod wrapping_stretch;
+#[allow(dead_code)] // Private folding foundations; geometry equivalence is not yet qualified.
+#[path = "fixed_scalar.rs"]
+mod fixed_scalar;
+#[allow(dead_code)]
+#[path = "fixed_paint.rs"]
+mod fixed_paint;
+#[allow(dead_code)] // Initial fixed layout only; native and final constraint equivalence remain separate.
+#[path = "fixed_geometry.rs"]
+mod fixed_geometry;
 #[path = "public_wrapping.rs"]
 mod public_wrapping;
 #[path = "baseline.rs"]

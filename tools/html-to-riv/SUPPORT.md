@@ -188,3 +188,7 @@ The previously documented unequal visible/slot positioning gap is repaired priva
 ## Private paint and mask binding
 
 The source-derived wrapping candidate now checks exact paint records and mask viewport bounds, including initial serialized artboard dimensions.403Rust/56Node, TypeScript/native/WASM/source guard and1,076exact output regressions pass. A separate offline audit of384historical frames verifies4,992clip commands and infers2,304empty-clipped draws; these are not new candidate pixels or direct GPU observations. Current full-candidate native/Chrome resize, clip-stream and visual qualification comes next. Public wrapping remains unadmitted. See `validation/wrapped-paint-mask-review.md`.
+
+## Private paint-folding foundations
+
+Registered initial fixed geometry, translation-only scalar evaluation and ordinary rectangle emission now have separate native evidence; see [foundation review](validation/public-fixed-foundations-review.md). Full Rust tests pass493; exact scalar and initial geometry comparisons pass, and48 direct primitive Chrome/native frames pass with visual review. These modules are not connected to public folding. No support status is upgraded; final constraint evaluation, whole-scene equivalence and broader contexts remain outstanding.

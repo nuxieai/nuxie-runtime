@@ -374,3 +374,25 @@ test('failed variable substitution preserves unset cascade and strict CLI/WASM d
   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
  }}finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('content-box lowering preserves CLI/WASM bytes, inherited values and diagnostics',async()=>{
+ const cases=JSON.parse(fs.readFileSync(new URL('../validation/public-content-box-cases.json',import.meta.url)));
+ assert.equal(cases.length,34);await assertCorpusParity(cases);
+ const rejected=JSON.parse(fs.readFileSync(new URL('../validation/public-content-box-rejections.json',import.meta.url)));
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-content-box-'));
+ try{
+  for(const [index,fixture] of rejected.entries()){
+   const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+  for(const [index,depth] of [64,128,129,130].entries()){
+   const request={html:'<div>'.repeat(depth)+'</div>'.repeat(depth),css:'div{box-sizing:content-box;width:1px;height:1px;padding:1px}',width:240,height:160};
+   const prefix=path.join(dir,'depth-'+index);fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   if(depth<=128){assert.equal(cli.status,0,cli.stderr);assert.equal(result.ok,true);assert.equal(result.sourceMap.length,depth);assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'));assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json')));}
+   else{assert.equal(cli.status,1);assert.equal(result.ok,false);assert.equal(result.diagnostics[0].code,'depth-limit');assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));}
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

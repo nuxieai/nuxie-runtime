@@ -11,8 +11,8 @@ fn public_padding_preserves_strict_unsupported_literal_diagnostics() {
 }
 #[test]
 fn public_nonzero_padding_admits_ordinary_border_box_profiles() {
-    for css in ["#a{padding:2px}","#a{width:1px;height:1px;padding:10px}","#a{padding:1% 2% 3% 4%}","#a{padding:2px;padding:0}","#a{--p:2px;padding:var(--p)}","#a{width:auto;height:auto;align-self:flex-start;padding:2%}"] {assert!(compile(&input(css)).is_ok(),"{css}");}
-    for css in ["#a{padding:2px;align-self:center}","#a{padding:2px;align-self:baseline}","#a{padding:2px;box-sizing:content-box}","#a{padding:2px;flex:1 1 0px}"] {assert!(compile(&input(css)).is_err(),"{css}");}
+    for css in ["#a{padding:2px;box-sizing:content-box}","#a{padding:2px}","#a{width:1px;height:1px;padding:10px}","#a{padding:1% 2% 3% 4%}","#a{padding:2px;padding:0}","#a{--p:2px;padding:var(--p)}","#a{width:auto;height:auto;align-self:flex-start;padding:2%}"] {assert!(compile(&input(css)).is_ok(),"{css}");}
+    for css in ["#a{padding:2px;align-self:center}","#a{padding:2px;align-self:baseline}","#a{padding:2px;flex:1 1 0px}"] {assert!(compile(&input(css)).is_err(),"{css}");}
 }
 #[test]
 fn padding_numeric_guards_check_floors_and_sums_without_baking_viewport() {

@@ -1,0 +1,1011 @@
+{
+  "status": "partial-public-implementation-with-known-qualification-failures",
+  "backlog": "L12",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Bounded compiler lowering only. Current acceptance does not establish full qualification; large-coordinate child geometry and fractional paint failures remain. No runtime impossibility claim.",
+  "sourceFreeze": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/source-bindings.json",
+    "sha256": "00796d16a1d6055f8cf4c6ca4514f80b77694937cab07349ac2db5803863a9eb"
+  },
+  "verifiedCurrentInputs": 30,
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/html-to-riv",
+    "sha256": "e1b16fd2a068b96afe5f878ca0423877538760178ac78041f5c88b5918c2e9fc"
+  },
+  "wasm": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/compiler.wasm",
+    "sha256": "559f70d7fabab80bb1b5b296d50030b44e8a1f52a23b7e74b793adf0618293d0"
+  },
+  "sourceFiles": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-review.md",
+      "sha256": "8d742ab8602cc63516af17b2b75e8162f53942600f46e9b4b8763d494a2d9b44"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-receipt.py",
+      "sha256": "8e7f16bce609613a52ed3faf269fc7af65752030786d1e02000f4b7ed5cfb4fb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-visual.py",
+      "sha256": "8608feb6dfba6f97af39644388a2d2c6211e078c68d8f421dbe3bc5e9dd41b3b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-fixtures.py",
+      "sha256": "2ba0f9d4ded37cd3f48c148f0736ab82bfb17c676f2a5691f2143655cbeabc89"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-cases.json",
+      "sha256": "44a0fa2534ed31fca17ff8ff96e22e415353beed87d2c4da2261427115d283b0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-boundary-cases.json",
+      "sha256": "f2186b596a71070ecf087c51cae0ba7a0372933694d3793e8634c4fd7a047bfe"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-rejections.json",
+      "sha256": "8df5e51cb90df90e4eb1e5911f397470fc053b3cd2aca063993a6f9a5b5e05e0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-depth.mjs",
+      "sha256": "e5cf063725109987e85982860b32a988418d1814a1cce7ccaa1d629fe01589f3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-review.md",
+      "sha256": "cfdc7d42e034b05370d01e0b3f99443b4faf250d94cb2285858611d7f995f083"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/content-box-numeric-audit.md",
+      "sha256": "f095329ef8f2c92ff3f382e09081a598a1a43e2a2e830a0851c5389346b02919"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/content-box.rs",
+      "sha256": "a9d624c17eb21bd286124039031f780cb7a7a197f38890f24faa45242d416ff8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/padding.rs",
+      "sha256": "a891a9ae9a9268415ebae4c9c417638ad094ef8df44ce831227aa9935c73983d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/transport-parity.mjs",
+      "sha256": "6028573e25c05f229a4d0a69fe1a6afd7ea60dda03d4fddefb0fd1f707a3f091"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-public-baseline.mjs",
+      "sha256": "fd0ef07baa805e078f458d7729c5b80516e6a49ee6d92dff17ded30357a13f92"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/pixels.mjs",
+      "sha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/js/index.mjs",
+      "sha256": "42d6342c2aa7f84457eac76ae69afdc48923595586cb20569a4e15cbb730361d"
+    }
+  ],
+  "historicalCompilerFreeze": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/source-bindings.json",
+    "sha256": "82ea4bfd370030c725a37622b02a03691d2a23d08ffc88390392cdf0787bab32"
+  },
+  "originalNative": {
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/render/receipt.json",
+      "sha256": "bccebcb71afd7e3bc854d50be9f4901c37f5fdc01d3207235e26a0666f6a938b"
+    },
+    "fixtureSnapshot": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/render/source-cases.json",
+      "sha256": "112ccb4774c99a134b3b8e545538b5af43b3e607be9f4cfa7c372fad9fe5ae56"
+    },
+    "cases": 34,
+    "frames": 272,
+    "geometryPass": 272,
+    "pixelPass": 266,
+    "clearPass": 544
+  },
+  "strengthenedNative": {
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/boundary-render/receipt.json",
+      "sha256": "7615e085cb62494fc7cfedc677d02cbeccda0419467d63341a9cbdfd39c6ffdf"
+    },
+    "fixtureSnapshot": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/boundary-render/source-cases.json",
+      "sha256": "f2186b596a71070ecf087c51cae0ba7a0372933694d3793e8634c4fd7a047bfe"
+    },
+    "cases": 5,
+    "frames": 40,
+    "geometryPass": 32,
+    "pixelPass": 40,
+    "clearPass": 80
+  },
+  "currentCorpus": {
+    "cases": 34,
+    "reusedExactSourceOriginalCases": 29,
+    "strengthenedChildCases": 5,
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/native-aggregate.json",
+      "sha256": "ea3a0a5d593ded902e49230284ae3616ac88cca47960a8b6aa1fce0c291f18b1"
+    },
+    "frames": 272,
+    "geometryPass": 264,
+    "pixelPass": 266,
+    "clearPass": 544
+  },
+  "supersededParentOnly": {
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/render/receipt.json",
+      "sha256": "bccebcb71afd7e3bc854d50be9f4901c37f5fdc01d3207235e26a0666f6a938b"
+    },
+    "names": [
+      "content-large-add-side-first",
+      "content-large-content-cancellation",
+      "content-large-full-source-limits",
+      "content-large-padding-cancellation",
+      "content-large-rounded-outer"
+    ],
+    "cases": 5,
+    "frames": 40,
+    "geometryPass": 40,
+    "pixelPass": 40,
+    "clearPass": 80
+  },
+  "allRetainedEvidence": {
+    "scope": "Original 34 cases plus five strengthened additions; includes superseded parent-only controls.",
+    "cases": 39,
+    "frames": 312,
+    "geometryPass": 304,
+    "pixelPass": 306,
+    "clearPass": 624
+  },
+  "tools": {
+    "probe": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe",
+      "sha256": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a"
+    },
+    "renderer": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay",
+      "sha256": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+    }
+  },
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "geometryToleranceCssPx": 0.1,
+  "pixelGateSha256": "c072f999ffb77cabdb636f2bbc231a16352c3700cd9341858e5d9532357e9821",
+  "resetSha256": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+  "originalAndCloneResizeSequence": [
+    [
+      240,
+      160
+    ],
+    [
+      390,
+      200
+    ],
+    [
+      768,
+      120
+    ],
+    [
+      240,
+      160
+    ]
+  ],
+  "compileViewport": [
+    390,
+    160
+  ],
+  "exactContentBoxReproductions": [
+    {
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/reproduce-r1/receipt.json",
+        "sha256": "12a2c3d50e2500c13d10c47042d43797743b65e0356276b5e00dfb7e0c31c0c4"
+      },
+      "exactFilesAndMaps": 34
+    },
+    {
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/reproduce-boundaries/receipt.json",
+        "sha256": "099d4d2b07ff14f6004982d44e847a508835ed2fa0856c9cd56c2dd267ad25a5"
+      },
+      "exactFilesAndMaps": 5
+    }
+  ],
+  "priorOutputRegression": {
+    "manifest": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/content-box-prior-regression-r2/manifest.json",
+      "sha256": "8a0278fbf277fcfd4677dbda121a93af7d88f7c3c59400a5f15c69b6ff160469"
+    },
+    "exactFilesAndMaps": 629,
+    "scope": "Exact output regression; no new render qualification"
+  },
+  "visual": {
+    "evidence": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/visual-evidence.json",
+      "sha256": "09d03fcdd662d0fe0cb997aa1ef722ebfdc87230347d607f544335600a9e2695"
+    },
+    "review": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-content-box-review.md",
+      "sha256": "8d742ab8602cc63516af17b2b75e8162f53942600f46e9b4b8763d494a2d9b44"
+    },
+    "directPairsActuallyViewed": 60,
+    "historicalCurrentTransfers": 72,
+    "currentDirectTransfers": 140,
+    "currentPairsCovered": 272,
+    "supersededParentOnlyTransfers": 40,
+    "retainedPairsCovered": 312,
+    "scope": "Complete pair RGBA identity transfers inspection only; offscreen geometry remains independently gated"
+  },
+  "tests": [
+    {
+      "kind": "full Rust before strengthened fixture/depth129 edits",
+      "passed": 233,
+      "log": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/tests-after-stack-refactor.log",
+        "sha256": "46b35e07a4bce709ffa5fd0ab723c3b736a25b285dbc3ddebcfef36be1eaf754"
+      }
+    },
+    {
+      "kind": "full Node before strengthened fixture/depth129 edits",
+      "passed": 39,
+      "log": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/transport-final.log",
+        "sha256": "7900a02a796dc61091f2e504de95926db11199e173c8fe7175ba611b473dc78b"
+      }
+    },
+    {
+      "kind": "current-fixture focused Rust",
+      "passed": 3,
+      "log": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-tests-r2.log",
+        "sha256": "5282c6aebff0de4bd373e61273cc92515b8ad14b7f7144f1d01cdac0b21c8464"
+      }
+    },
+    {
+      "kind": "current-fixture focused Node on frozen r2 CLI/WASM",
+      "passed": 1,
+      "sceneViewportPairs": 102,
+      "diagnosticPairs": 14,
+      "successfulDepths": [
+        64,
+        128
+      ],
+      "diagnosticDepths": [
+        129,
+        130
+      ],
+      "log": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-transport-r3.log",
+        "sha256": "bc64ade721474753a2390c2c29df9dece62cc763c91d64d0acb0552d4e1ffa53"
+      }
+    },
+    {
+      "kind": "strict TypeScript",
+      "exitCode": 0,
+      "log": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/types.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  ],
+  "historicalDepthComparison": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/depth-comparison/receipt.json",
+    "sha256": "81ed5357b2585f56dbbf177e192f75a49cc81c5f8048ce64f5b427df0cfa44e5"
+  },
+  "depthScope": "Historical comparison64/128/130, old and initial traps retained. Final focused tests separately cover first-invalid129. Default stack and source limit unchanged.",
+  "numericBoundaryFrameZero": [
+    {
+      "name": "content-large-add-side-first",
+      "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+      "css": "#p{width:1000000px;height:20px;padding:0 .03125px 0 .03125px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+      "frame": 0,
+      "observed": {
+        "p": {
+          "rawProbeWidth": 1000000.06,
+          "binary32Width": 1000000.0625,
+          "chromeRect": {
+            "x": 0,
+            "y": 0,
+            "width": 1000000.0625,
+            "height": 20
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "20px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(20, 35, 63)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        },
+        "c": {
+          "rawProbeWidth": 1000000,
+          "binary32Width": 1000000.0,
+          "chromeRect": {
+            "x": 0.03125,
+            "y": 0,
+            "width": 1000000,
+            "height": 1
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "1px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(102, 153, 51)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        }
+      },
+      "geometryFailures": [],
+      "pixelFailures": []
+    },
+    {
+      "name": "content-large-padding-cancellation",
+      "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+      "css": "#p{width:.03125px;height:20px;padding:0 .03125px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+      "frame": 0,
+      "observed": {
+        "p": {
+          "rawProbeWidth": 1000000,
+          "binary32Width": 1000000.0,
+          "chromeRect": {
+            "x": 0,
+            "y": 0,
+            "width": 1000000.0625,
+            "height": 20
+          },
+          "computedStyle": {
+            "width": "0.03125px",
+            "height": "20px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(20, 35, 63)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        },
+        "c": {
+          "rawProbeWidth": 0,
+          "binary32Width": 0.0,
+          "chromeRect": {
+            "x": 1000000,
+            "y": 0,
+            "width": 0,
+            "height": 1
+          },
+          "computedStyle": {
+            "width": "0.03125px",
+            "height": "1px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(102, 153, 51)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        }
+      },
+      "geometryFailures": [],
+      "pixelFailures": []
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+      "css": "#p{width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+      "frame": 0,
+      "observed": {
+        "p": {
+          "rawProbeWidth": 3000000,
+          "binary32Width": 3000000.0,
+          "chromeRect": {
+            "x": 0,
+            "y": 0,
+            "width": 3000000,
+            "height": 20
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "20px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(20, 35, 63)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        },
+        "c": {
+          "rawProbeWidth": 1000000,
+          "binary32Width": 1000000.0,
+          "chromeRect": {
+            "x": 1000000,
+            "y": 0,
+            "width": 999999.75,
+            "height": 1
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "1px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(102, 153, 51)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        }
+      },
+      "geometryFailures": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixelFailures": []
+    },
+    {
+      "name": "content-large-content-cancellation",
+      "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+      "css": "#p{width:999999.9375px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+      "frame": 0,
+      "observed": {
+        "p": {
+          "rawProbeWidth": 3000000,
+          "binary32Width": 3000000.0,
+          "chromeRect": {
+            "x": 0,
+            "y": 0,
+            "width": 3000000,
+            "height": 20
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "20px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(20, 35, 63)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        },
+        "c": {
+          "rawProbeWidth": 1000000,
+          "binary32Width": 1000000.0,
+          "chromeRect": {
+            "x": 1000000,
+            "y": 0,
+            "width": 1000000,
+            "height": 1
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "1px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(102, 153, 51)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        }
+      },
+      "geometryFailures": [],
+      "pixelFailures": []
+    },
+    {
+      "name": "content-large-full-source-limits",
+      "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+      "css": "#p{width:1000000px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+      "frame": 0,
+      "observed": {
+        "p": {
+          "rawProbeWidth": 3000000,
+          "binary32Width": 3000000.0,
+          "chromeRect": {
+            "x": 0,
+            "y": 0,
+            "width": 3000000,
+            "height": 20
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "20px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(20, 35, 63)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        },
+        "c": {
+          "rawProbeWidth": 1000000,
+          "binary32Width": 1000000.0,
+          "chromeRect": {
+            "x": 1000000,
+            "y": 0,
+            "width": 1000000,
+            "height": 1
+          },
+          "computedStyle": {
+            "width": "1e+06px",
+            "height": "1px",
+            "color": "rgb(0, 0, 0)",
+            "backgroundColor": "rgb(102, 153, 51)",
+            "display": "flex",
+            "flexDirection": "column",
+            "alignSelf": "auto",
+            "order": "0"
+          }
+        }
+      },
+      "geometryFailures": [],
+      "pixelFailures": []
+    }
+  ],
+  "failures": [
+    {
+      "name": "content-point-fractional-paint-control",
+      "frame": 0,
+      "instance": 0,
+      "step": 0,
+      "width": 240,
+      "height": 160,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ],
+      "metrics": {
+        "mismatchedPixels": 240,
+        "mismatchRatio": 0.00625,
+        "meanChannelError": 0.5064518229166667,
+        "regionMeanRgbError": {
+          "p": 4.155502136752137
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009986603336986968
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-point-fractional-paint-control",
+      "frame": 2,
+      "instance": 0,
+      "step": 2,
+      "width": 768,
+      "height": 120,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ],
+      "metrics": {
+        "mismatchedPixels": 768,
+        "mismatchRatio": 0.008333333333333333,
+        "meanChannelError": 0.6752739800347223,
+        "regionMeanRgbError": {
+          "p": 4.15553218482906
+        },
+        "interiorMeanRgbError": {
+          "p": 0.010084383395769479
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-point-fractional-paint-control",
+      "frame": 3,
+      "instance": 0,
+      "step": 3,
+      "width": 240,
+      "height": 160,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ],
+      "metrics": {
+        "mismatchedPixels": 240,
+        "mismatchRatio": 0.00625,
+        "meanChannelError": 0.5064518229166667,
+        "regionMeanRgbError": {
+          "p": 4.155502136752137
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009986603336986968
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-point-fractional-paint-control",
+      "frame": 4,
+      "instance": 1,
+      "step": 0,
+      "width": 240,
+      "height": 160,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ],
+      "metrics": {
+        "mismatchedPixels": 240,
+        "mismatchRatio": 0.00625,
+        "meanChannelError": 0.5064518229166667,
+        "regionMeanRgbError": {
+          "p": 4.155502136752137
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009986603336986968
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-point-fractional-paint-control",
+      "frame": 6,
+      "instance": 1,
+      "step": 2,
+      "width": 768,
+      "height": 120,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ],
+      "metrics": {
+        "mismatchedPixels": 768,
+        "mismatchRatio": 0.008333333333333333,
+        "meanChannelError": 0.6752739800347223,
+        "regionMeanRgbError": {
+          "p": 4.15553218482906
+        },
+        "interiorMeanRgbError": {
+          "p": 0.010084383395769479
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-point-fractional-paint-control",
+      "frame": 7,
+      "instance": 1,
+      "step": 3,
+      "width": 240,
+      "height": 160,
+      "geometry": [],
+      "pixels": [
+        "mismatch ratio"
+      ],
+      "metrics": {
+        "mismatchedPixels": 240,
+        "mismatchRatio": 0.00625,
+        "meanChannelError": 0.5064518229166667,
+        "regionMeanRgbError": {
+          "p": 4.155502136752137
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009986603336986968
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 0,
+      "instance": 0,
+      "step": 0,
+      "width": 240,
+      "height": 160,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0015494791666666667,
+        "regionMeanRgbError": {
+          "p": 0.016527777777777777,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009917867658453433,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 1,
+      "instance": 0,
+      "step": 1,
+      "width": 390,
+      "height": 200,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0009294871794871795,
+        "regionMeanRgbError": {
+          "p": 0.012393162393162393,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009997143673236219,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 2,
+      "instance": 0,
+      "step": 2,
+      "width": 768,
+      "height": 120,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0019151475694444444,
+        "regionMeanRgbError": {
+          "p": 0.015321180555555555,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.010043942247332079,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 3,
+      "instance": 0,
+      "step": 3,
+      "width": 240,
+      "height": 160,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0015494791666666667,
+        "regionMeanRgbError": {
+          "p": 0.016527777777777777,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009917867658453433,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 4,
+      "instance": 1,
+      "step": 0,
+      "width": 240,
+      "height": 160,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0015494791666666667,
+        "regionMeanRgbError": {
+          "p": 0.016527777777777777,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009917867658453433,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 5,
+      "instance": 1,
+      "step": 1,
+      "width": 390,
+      "height": 200,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0009294871794871795,
+        "regionMeanRgbError": {
+          "p": 0.012393162393162393,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009997143673236219,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 6,
+      "instance": 1,
+      "step": 2,
+      "width": 768,
+      "height": 120,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0019151475694444444,
+        "regionMeanRgbError": {
+          "p": 0.015321180555555555,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.010043942247332079,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    },
+    {
+      "name": "content-large-rounded-outer",
+      "frame": 7,
+      "instance": 1,
+      "step": 3,
+      "width": 240,
+      "height": 160,
+      "geometry": [
+        "c.width: 1000000 vs 999999.75"
+      ],
+      "pixels": [],
+      "metrics": {
+        "mismatchedPixels": 0,
+        "mismatchRatio": 0,
+        "meanChannelError": 0.0015494791666666667,
+        "regionMeanRgbError": {
+          "p": 0.016527777777777777,
+          "c": 0
+        },
+        "interiorMeanRgbError": {
+          "p": 0.009917867658453433,
+          "c": 0
+        },
+        "antialiasingExcluded": false
+      }
+    }
+  ],
+  "historicalRuntimeGuard": {
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/runtime-guard.json",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    "scope": "Earlier source immutability receipt"
+  },
+  "finalRuntimeGuard": {
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/final-runtime-guard.json",
+      "sha256": "4236119cd298ced826bab73e488625668e330e4dcc08a9be124ace1244992088"
+    },
+    "scope": "Final pre-commit source/index/nonignored additions check; effective native build identity is separate"
+  },
+  "logs": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-build.log",
+      "sha256": "6e53be37a9103072a785cd502e8a36c5e0f8b72140f76388f3ecd5880ee2ec5f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-depth-r3.log",
+      "sha256": "dd9abec0ee0996a1608bc2621e814cd8209d2151379bd2ed44bc67d31fdad3dd"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-depth-r4.log",
+      "sha256": "d618cee7df2db1e7664b1b25e567e29c97710535d107912cf0fec835d08c0664"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-implementation-initial.log",
+      "sha256": "3e03eb7ece2dd6ef381235159d8a3ddd856573db58731551024284141a7f57c5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-implementation-r2.log",
+      "sha256": "a347b6ceabd010db23a618db13474df07f807ec5079afd26e0e6c7840d02d6c9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-tests-final.log",
+      "sha256": "17cb79a016c56a14756d16f60be70c8e85836b276ee54ee644698409810896b5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-tests-r5.log",
+      "sha256": "7ccbac48a43cae3326a4fe42aeb273746e0e208a31a457fd7a747513726178bc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/content-box-unit-r1.log",
+      "sha256": "13cd468b62ae9466dcc1889bb4a7c162db3b2ab9ecbd516a2b3e41c8849594be"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/depth-comparison.log",
+      "sha256": "a952f9408570d3365faca6fde1ad015f2e19a6f83b101b752a1486a183fb3c2f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/final-cli-build.log",
+      "sha256": "d3b9440d3e450f6b97f8839343b5e791d6aa5468465258828f157b383a7f870c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/native-run.log",
+      "sha256": "9fdcef6622f64950c37a8262e18031065d4b18a063c7e8a4780871fa0feb9d23"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/tests-after-stack-refactor.log",
+      "sha256": "46b35e07a4bce709ffa5fd0ab723c3b736a25b285dbc3ddebcfef36be1eaf754"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/transport-final.log",
+      "sha256": "7900a02a796dc61091f2e504de95926db11199e173c8fe7175ba611b473dc78b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/transport.log",
+      "sha256": "5802664b221bb568eadf4a9a3c993c564003a31e462767f8082535c8cb82fd25"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r1/wasm-after-stack-refactor.log",
+      "sha256": "7cee6134e9eb7baf72790d6febf30c22c09b89bd184131cf4f087f1e38159c90"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/boundary-run.log",
+      "sha256": "4fb0730827d37eb0405dfc726f0c6a146af7e5a0c626fde24ca3a34c128e1471"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-tests-r2.log",
+      "sha256": "5282c6aebff0de4bd373e61273cc92515b8ad14b7f7144f1d01cdac0b21c8464"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-tests.log",
+      "sha256": "32dd5c6e8b27f883c8ff2ad124051330254dd42aa25bb4b5df003c63c04edcff"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-transport-r2.log",
+      "sha256": "cafc85e3c4952855c52c31809a03c621759d4da17c8c3f871645984ed05556b1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-transport-r3.log",
+      "sha256": "bc64ade721474753a2390c2c29df9dece62cc763c91d64d0acb0552d4e1ffa53"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-content-box-r2/strengthened-transport.log",
+      "sha256": "9be54f628bf84bb68d127cec060184cb33bbf56c503c0a77bf8ff4b7b1a1a2a1"
+    }
+  ],
+  "nextRequiredWork": [
+    "Isolate large-coordinate native/Chrome rectangle discrepancy and add sound admission guard or ordinary-file composition.",
+    "Keep fractional paint control failing until an independently verified ordinary solution is available.",
+    "Investigate responsive mixed point/percentage compositions without viewport baking."
+  ]
+}

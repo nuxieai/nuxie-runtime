@@ -35,6 +35,9 @@ pub(crate) struct NumericStyle {
     pub min_height: NumericSize,
     pub max_width: NumericSize,
     pub max_height: NumericSize,
+    /// Physical left/top/right/bottom, retaining original padding coefficients.
+    /// The corresponding Padding descriptor distinguishes pixels from percent.
+    pub padding: [Scalar; 4],
 }
 fn exact(value: f32) -> Scalar {
     ScalarProvenance::exact_constant(value).map_err(Into::into)
@@ -50,8 +53,46 @@ impl Default for NumericStyle {
             min_height: NumericSize::Pixels(exact(0.)),
             max_width: NumericSize::Auto,
             max_height: NumericSize::Auto,
+            padding: std::array::from_fn(|_| exact(0.)),
         }
     }
+}
+
+/// Preserve padding token provenance beside the existing native padding parser.
+/// Native output is supplied by that parser, never recomputed from this metadata.
+pub(super) fn padding(declaration: &ResolvedDeclaration, native: super::padding::Padding,
+    current: &[Scalar; 4], parent: &[Scalar; 4], font: &Scalar) -> [Scalar; 4] {
+    let side = match declaration.name.as_str() {
+        "padding-left" => Some(0), "padding-top" => Some(1),
+        "padding-right" => Some(2), "padding-bottom" => Some(3), _ => None,
+    };
+    let value = declaration.value.trim().to_ascii_lowercase();
+    let result = (|| {
+        if value == "inherit" { return Ok(parent.clone()); }
+        if matches!(value.as_str(), "initial" | "unset") { return Ok(std::array::from_fn(|_| exact(0.))); }
+        let original = declaration.original.as_deref().ok_or(Unresolved::MissingOriginal)?;
+        let tokens = component_tokens(original, 4)?;
+        if tokens.is_empty() || tokens.len() > if side.is_some() { 1 } else { 4 } { return Err(Unresolved::OriginalSyntax); }
+        let n = tokens.len();
+        let indices = if side.is_some() { [0;4] } else { [if n==4 {3} else if n>1 {1} else {0}, 0, if n>1 {1} else {0}, if n>2 {2} else {0}] };
+        let sides = native.sides();
+        Ok(std::array::from_fn(|index| {
+            let actual_index = side.unwrap_or(index);
+            let (raw, unit) = original_number(Some(&tokens[indices[index]].text))?;
+            let coefficient = raw.parse::<f32>().map_err(|_|Unresolved::OriginalSyntax)?;
+            let coefficient = ScalarProvenance::from_decimal(&raw, coefficient)?;
+            let calculated = match unit {
+                Unit::Pixel | Unit::Percent => coefficient,
+                Unit::Em => coefficient.multiply(known(font)?)?,
+                Unit::Rem => coefficient.multiply(known(&exact(ROOT_FONT_SIZE))?)?,
+            };
+            let (actual, percent) = match sides[actual_index] { super::padding::Inset::Pixels(v)=>(v,false),super::padding::Inset::Percent(v)=>(v,true) };
+            if (unit==Unit::Percent) != percent { return Err(Unresolved::UnitMismatch); }
+            calculated.with_native(actual).map_err(Into::into)
+        }))
+    })();
+    let replacement = result.unwrap_or_else(|e: Unresolved| std::array::from_fn(|_|Err(e.clone())));
+    if let Some(index)=side { let mut result=current.clone();result[index]=replacement[index].clone();result } else { replacement }
 }
 impl NumericStyle {
     pub fn host() -> Self {
@@ -340,7 +381,8 @@ struct FlexToken {
     text: String,
     kind: FlexTokenKind,
 }
-fn flex_tokens(text: &str) -> Result<Vec<FlexToken>, Unresolved> {
+fn flex_tokens(text: &str) -> Result<Vec<FlexToken>, Unresolved> { component_tokens(text, 3) }
+fn component_tokens(text: &str, limit: usize) -> Result<Vec<FlexToken>, Unresolved> {
     let mut input = ParserInput::new(text);
     let mut parser = Parser::new(&mut input);
     let mut out = Vec::new();
@@ -358,7 +400,7 @@ fn flex_tokens(text: &str) -> Result<Vec<FlexToken>, Unresolved> {
             text: parser.slice_from(start).to_owned(),
             kind,
         });
-        if out.len() > 3 {
+        if out.len() > limit {
             return Err(Unresolved::OriginalSyntax);
         }
     }

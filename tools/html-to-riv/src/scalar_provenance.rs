@@ -38,6 +38,12 @@ impl IdealBounds {
     fn is_zero(self) -> bool { self.lower == 0. && self.upper == 0. }
     fn negate(self) -> Self { Self { lower: -self.upper, upper: -self.lower } }
 
+    fn add(self, rhs: Self) -> Result<Self, ScalarError> {
+        if self.is_zero() { return Ok(rhs); }
+        if rhs.is_zero() { return Ok(self); }
+        Self::new(outward(self.lower + rhs.lower)?.0, outward(self.upper + rhs.upper)?.1)
+    }
+
     pub(crate) fn multiply(self, rhs: Self) -> Result<Self, ScalarError> {
         if self.is_zero() || rhs.is_zero() { return Ok(Self::point(0.)); }
         let mut lower = f64::INFINITY;
@@ -165,6 +171,17 @@ impl ScalarProvenance {
         let native = self.native * rhs.native;
         finite_native(native)?;
         Ok(Self { native, ideal: self.ideal.multiply(rhs.ideal)?, sign: self.sign.product(rhs.sign),
+            identity: Arc::new(Identity::Opaque) })
+    }
+    /// One binary32 addition while preserving both original nonnegative values.
+    /// Used for padding sums and content-to-border size translation.
+    pub(crate) fn add_nonnegative(&self, rhs: &Self) -> Result<Self, ScalarError> {
+        if !self.is_nonnegative() || !rhs.is_nonnegative() { return Err(ScalarError::InvalidInterval); }
+        let native = self.native + rhs.native;
+        finite_native(native)?;
+        if self.is_exact_zero() { return rhs.with_native(native); }
+        if rhs.is_exact_zero() { return self.with_native(native); }
+        Ok(Self { native, ideal: self.ideal.add(rhs.ideal)?, sign: Sign::Positive,
             identity: Arc::new(Identity::Opaque) })
     }
     pub(crate) fn divide_100(&self) -> Result<Self, ScalarError> {

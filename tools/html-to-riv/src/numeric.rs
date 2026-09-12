@@ -35,13 +35,17 @@ impl Bounds {
         }
         Ok(())
     }
+    #[cfg(test)]
     pub fn child(self, style: &Style, parent: &Style, source: &str) -> Result<Self, Diagnostic> {
+        self.child_with_sizing(style, &super::box_sizing::lower(style, source)?, parent, source)
+    }
+    pub fn child_with_sizing(self, style: &Style, sizing: &super::box_sizing::Lowered, parent: &Style, source: &str) -> Result<Self, Diagnostic> {
         if style.padding.has_percentage() && self.upper[0].is_none() {
             return Err(unsupported(source, "Percentage padding requires a bounded containing content width; intrinsic percentage-padding bases need separate qualification"));
         }
-        let sizes = [style.width, style.height];
-        let minima = [style.min_width, style.min_height];
-        let maxima = [style.max_width, style.max_height];
+        let sizes = sizing.sizes;
+        let minima = [sizing.bounds[0], sizing.bounds[1]];
+        let maxima = [sizing.bounds[2], sizing.bounds[3]];
         let mut bounds = [None; 2];
         let mut witnesses = [None; 2];
         let mut lowers = [None; 2];
@@ -189,6 +193,16 @@ mod tests {
         child.padding.apply("padding","10px",super::super::padding::Padding::default(),16.,"test").unwrap();
         let bounds=Bounds::VIEWPORT.child(&child,&Style::default(),"test").unwrap();
         assert_eq!(bounds.upper,[Some(80.);2]);assert_eq!(bounds.witness,[Some(80.);2]);
+    }
+    #[test]
+    fn content_box_bounds_use_lowered_outer_dimensions_and_native_cancellation() {
+        let mut child=Style {box_sizing:super::super::box_sizing::BoxSizing::ContentBox,width:Size::Pixels(1.),height:Size::Pixels(1.),..Style::default()};
+        child.padding.apply("padding","1px",super::super::padding::Padding::default(),16.,"test").unwrap();
+        let content=Bounds::VIEWPORT.child(&child,&Style::default(),"test").unwrap();
+        assert_eq!(content.upper,[Some(1.);2]);
+        child.width=Size::Pixels(999999.9375);child.padding.apply("padding","1000000px",super::super::padding::Padding::default(),16.,"test").unwrap();
+        let content=Bounds::VIEWPORT.child(&child,&Style::default(),"test").unwrap();
+        assert!(content.upper[0].unwrap()>=1000000.);
     }
     #[test]
     fn percentage_content_upper_subtracts_lower_width_based_insets() {

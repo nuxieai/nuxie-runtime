@@ -22,6 +22,8 @@ mod computed_provenance;
 mod gap;
 #[path = "padding.rs"]
 mod padding;
+#[path = "box_sizing.rs"]
+mod box_sizing;
 #[allow(dead_code)]
 #[path = "flex.rs"]
 mod flex;
@@ -168,9 +170,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { box_sizing: box_sizing::BoxSizing, gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { box_sizing: box_sizing::BoxSizing::default(), gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -273,7 +275,7 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap"].contains(&d.name.as_str()) {
+             "box-sizing", "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -285,6 +287,7 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
     }
     let value = css::ordinary_value(&d.value)?.trim().to_ascii_lowercase();
     match d.name.as_str() {
+        "box-sizing" => { box_sizing::computed(&value, box_sizing::BoxSizing::default(), &d.source)?; }
         "width" | "height" => {
             if !["inherit", "initial", "unset"].contains(&value.as_str()) { size(&value, &d.source)?; }
         }
@@ -407,7 +410,8 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
     for d in &declarations {
         match d.name.as_str() {
             "margin" | "margin-left" | "margin-top" | "margin-right" | "margin-bottom" => style.margins.apply(&d.name, &d.value, parent.margins, &d.source)?,
-            "padding" | "padding-left" | "padding-top" | "padding-right" | "padding-bottom" => style.padding.apply(&d.name, &d.value, parent.padding, style.font_size, &d.source)?,
+            "padding" | "padding-left" | "padding-top" | "padding-right" | "padding-bottom" => { style.padding.apply(&d.name, &d.value, parent.padding, style.font_size, &d.source)?; style.numeric.padding = computed_provenance::padding(d, style.padding, &style.numeric.padding, &parent.numeric.padding, &style.numeric.font); },
+            "box-sizing" => style.box_sizing = box_sizing::computed(&d.value, parent.box_sizing, &d.source)?,
             "justify-content" => style.spacing = spacing::computed(&d.value, parent.spacing, &d.source)?,
             "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
@@ -504,6 +508,20 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
 }
 
 struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool, candidate_padding: bool, descriptor_capture: bool, descriptors: Vec<flex_descriptor::Pending> }
+type AuthoredElement<'a> = (usize, ElementRef<'a>, String, String, i32);
+struct ChildrenFrame<'a> {
+    elements: std::vec::IntoIter<AuthoredElement<'a>>,
+    descriptor_start: usize,
+    descriptor_items: Vec<flex_descriptor::Item>,
+    children: Vec<baseline::Child>,
+    count: usize,
+}
+struct PreparedChild<'a> {
+    element: ElementRef<'a>, object_id: u32, path: String, style: Style,
+    index: usize, order: i32, effective_alignment: SelfAlignment,
+    margin_after: bool, vertical_flex: bool,
+    child_chain: [bool; 2], child_bounds: numeric::Bounds,
+}
 impl Emitter {
     fn layout_box(&mut self, name: &str, parent_id: u32, direction: Direction, alignment: u32,
         parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool, auto_margins: [bool; 4]) -> Result<u32, Diagnostic> {
@@ -550,6 +568,23 @@ impl Emitter {
         Ok(object_id)
     }
     fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2], numeric_bounds: numeric::Bounds) -> Result<Vec<baseline::Child>, Diagnostic> {
+        // Recursion retains only heap-backed frame/child state. Large style,
+        // record and diagnostic temporaries live in nonrecursive helpers, so
+        // the public depth limit also fits the default WASM stack.
+        let mut frame = self.prepare_children(parent, parent_id, parent_style, rules, path, depth, definite_chain, numeric_bounds)?;
+        while let Some(item) = frame.elements.next() {
+            let child = self.start_child(item, parent_id, parent_style, rules, definite_chain, numeric_bounds, &mut frame.descriptor_items)?;
+            let descendants = self.children(child.element, child.object_id, &child.style, rules, &child.path, depth + 1, child.child_chain, child.child_bounds)?;
+            let result = self.finish_child(&child, &descendants, parent_id, parent_style, frame.children.len() + 1 == frame.count)?;
+            frame.children.push(result);
+        }
+        baseline::emit(self, parent_id, parent_style, &frame.children, path)?;
+        if frame.count != 0 { self.capture_parent(parent_style, parent_id, path, frame.descriptor_start, frame.descriptor_items)?; }
+        Ok(frame.children)
+    }
+    fn prepare_children<'a>(&mut self, parent: ElementRef<'a>, parent_id: u32, parent_style: &Style,
+        rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2], numeric_bounds: numeric::Bounds)
+        -> Result<Box<ChildrenFrame<'a>>, Diagnostic> {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
         let mut elements = Vec::new();
         for node in parent.children() {
@@ -608,130 +643,151 @@ impl Emitter {
             return Err(unsupported(path, "Padding with baseline groups needs padding-aware metric and origin qualification"));
         }
         let descriptor_start = self.records.len();
-        let mut descriptor_items = Vec::new();
+        let descriptor_items = Vec::new();
         let count = ordered_elements.len();
-        let mut children = Vec::with_capacity(count);
+        let children = Vec::with_capacity(count);
         if count != 0 { spacing::emit(self, parent_id, parent_style, true)?; }
-        for (index, element, path, id, order) in ordered_elements {
-            let style = computed(element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
-            if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
-                return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
-            }
-            let child_bounds = numeric_bounds.child(&style, parent_style, &path)?;
-            let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
-            let cross_auto_margin = style.margins.cross(parent_style.direction);
-            let effective_alignment = if cross_auto_margin {
-                let cross_start = if parent_style.direction.is_row() { 1 } else { 0 };
-                let start = style.margins.0[cross_start];
-                let end = style.margins.0[cross_start + 2];
-                // Native cross auto margins distribute negative free space.
-                // A perpendicular safe-alignment wrapper uses main-axis auto
-                // margins, which collapse on overflow as CSS requires.
-                SelfAlignment { position: if start && end { AlignmentPosition::Center }
-                    else if start { AlignmentPosition::FlexEnd } else { AlignmentPosition::FlexStart },
-                    overflow: OverflowAlignment::Safe }
-            } else { style.self_alignment };
-            if !self.candidate_flex && !style.gap.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
-                return Err(unsupported(&path,"Gap containers inside alignment wrappers require separate qualification"));
-            }
-            if !style.padding.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
-                return Err(unsupported(&path, "Padding on an alignment wrapper participant needs a separate padding-floor and percentage-containing-block proof"));
-            }
-            if style.margins.main(parent_style.direction) && parent_style.spacing.distributes() {
-                return Err(unsupported(&path, "Main-axis automatic margins with space-around/evenly require line-aware distribution; flexible spacer helpers would consume margin free space"));
-            }
-            if effective_alignment.is_baseline() && style.margins.any() {
-                return Err(unsupported(&path, "Baseline sharing with main-axis automatic margins requires separate native qualification"));
-            }
-            let mut authored_margins = style.margins.0;
-            if cross_auto_margin {
-                let cross = if parent_style.direction.is_row() { 1 } else { 0 };
-                authored_margins[cross] = false;
-                authored_margins[cross + 2] = false;
-            }
-            let main_axis = if parent_style.direction.is_row() { 0 } else { 1 };
-            // Native main-axis auto margins leave their distributed space in
-            // justification's free-space calculation. Ordinary flexible zero-
-            // cross-size participants consume it first and collapse on overflow.
-            // Native flow is reversed, so physical-end precedes the authored box
-            // in file order and physical-start follows it.
-            let margin_before = authored_margins[main_axis + 2];
-            let margin_after = authored_margins[main_axis];
-            authored_margins[main_axis] = false;
-            authored_margins[main_axis + 2] = false;
-            if margin_before { spacing::emit_weight(self, parent_id, parent_style.direction, 1.)?; }
-            let mut sizes = [style.width, style.height];
-            let mut bounds = [style.min_width, style.min_height, style.max_width, style.max_height];
-            let mut authored_parent = parent_id;
-            let mut native_parent_direction = parent_style.direction;
-            let mut stretch = effective_alignment.stretches();
-            if let Some(alignment) = effective_alignment.wrapper_alignment(parent_style.direction) {
-                let main = if parent_style.direction.is_row() { 0 } else { 1 };
-                let mut outer_sizes = [Size::Auto; 2];
-                outer_sizes[main] = sizes[main];
-                let mut outer_bounds = [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto];
-                outer_bounds[main] = bounds[main];
-                outer_bounds[main + 2] = bounds[main + 2];
-                // A perpendicular single-child wrapper aligns on its main
-                // axis and stretches the authored box on its cross axis.
-                // This transfers constrained automatic main sizes as well as
-                // fixed sizes, without percentage substitution or flex growth.
-                native_parent_direction = if parent_style.direction.is_row() { Direction::Column } else { Direction::Row };
-                authored_parent = self.layout_box("", parent_id, native_parent_direction, alignment,
-                    parent_style.direction, outer_sizes, outer_bounds, true, authored_margins)?;
-                authored_margins = [false; 4];
-                sizes[main] = Size::Auto;
-                stretch = true;
-                bounds[main] = Size::Pixels(0.);
-                bounds[main + 2] = Size::Auto;
-            }
-            let alignment_margins = effective_alignment.auto_margins(parent_style.direction);
-            for (margin, synthetic) in authored_margins.iter_mut().zip(alignment_margins) { *margin |= synthetic; }
-            let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
-                native_parent_direction, sizes, bounds, stretch, authored_margins)?;
-            style.padding.emit(&mut self.records[object_id as usize + 2])?;
-            style.gap.emit(&mut self.records[object_id as usize + 2])?;
-            if let Some(plan) = flex_plan {
-                // Cross-alignment wrappers are the actual flex participants.
-                // Keep the authored box identity and its inner stretch sizing.
-                plan.emit(&mut self.records, if authored_parent == parent_id { object_id } else { authored_parent }, parent_style.direction)?;
-            }
-            let background = style.background.used(style.foreground);
-            if background >> 24 != 0 {
-                let fill_id = self.records.len() as u32 - 1;
-                let mut fill = Record::new("Fill");fill.set("parentId", Value::Uint(object_id))?;self.records.push(fill);
-                let mut paint = Record::new("SolidColor");paint.set("parentId", Value::Uint(fill_id))?;
-                paint.set("colorValue", Value::Color(background))?;self.records.push(paint);
-            }
-            if self.descriptor_capture {
-                descriptor_items.push(flex_descriptor::Item::extract(&style, parent_style.direction, &self.records, &id, &path, object_id,
-                    if authored_parent == parent_id { object_id } else { authored_parent }, index, order));
-            }
-            self.map.push(SourceNode { id, path: path.clone(), object_id });
-            let child_chain = flex::child_chain(definite_chain, &style);
-            let descendants = self.children(element, object_id, &style, rules, &path, depth + 1, child_chain, child_bounds)?;
-            // A flexible vertical main size is not the authored intrinsic height.
-            // Unknown scalar summaries prevent unsound ancestor baseline admission.
-            let vertical_flex = flex_plan.is_some() && !parent_style.direction.is_row();
-            let metric = if vertical_flex { None } else { baseline::summarize(&style, &descendants) };
-            let used_height = if vertical_flex { None } else { baseline::used_height(&style, &descendants) };
-            let last_metric = if vertical_flex { None } else { baseline::summarize_last(&style, &descendants, used_height) };
-            let last = effective_alignment.is_last_baseline();
-            if last && last_metric.is_none() {
-                return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics, distributed columns and non-column nested topology require further ordinary-file validation"));
-            }
-            if effective_alignment.is_baseline() && !last && metric.is_none() {
-                return Err(unsupported(&path, "First baseline requires a bounded fixed or intrinsic box metric, or an empty unbounded percentage-height expression; nested columns need packed, undistributed children with fixed descendant metrics and a baseline within their used height"));
-            }
-            children.push(baseline::Child { object_id, index, order, metric, last_metric, used_height, last, vertical_auto_margin: style.margins.vertical(), participates: effective_alignment.is_baseline() });
-            if margin_after { spacing::emit_weight(self, parent_id, parent_style.direction, 1.)?; }
-            spacing::emit(self, parent_id, parent_style, children.len() == count)?;
+        Ok(Box::new(ChildrenFrame { elements: ordered_elements.into_iter(), descriptor_start, descriptor_items, children, count }))
+    }
+    fn start_child<'a>(&mut self, item: AuthoredElement<'a>, parent_id: u32, parent_style: &Style,
+        rules: &[css::Rule], definite_chain: [bool; 2], numeric_bounds: numeric::Bounds,
+        descriptor_items: &mut Vec<flex_descriptor::Item>) -> Result<Box<PreparedChild<'a>>, Diagnostic> {
+        let (index, element, path, id, order) = item;
+        let style = computed(element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
+        if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
+            return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
         }
-        baseline::emit(self, parent_id, parent_style, &children, path)?;
-        if self.descriptor_capture && count != 0 {
-            self.descriptors.push(flex_descriptor::Pending {parent:flex_descriptor::Parent::extract(parent_style),parent_id,path:path.into(),record_start:descriptor_start,record_end:self.records.len(),items:descriptor_items});
+        let lowered = box_sizing::lower(&style, &path)?;
+        let child_bounds = numeric_bounds.child_with_sizing(&style, &lowered, parent_style, &path)?;
+        let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
+        let cross_auto_margin = style.margins.cross(parent_style.direction);
+        let effective_alignment = if cross_auto_margin {
+            let cross_start = if parent_style.direction.is_row() { 1 } else { 0 };
+            let start = style.margins.0[cross_start];
+            let end = style.margins.0[cross_start + 2];
+            // Native cross auto margins distribute negative free space.
+            // A perpendicular safe-alignment wrapper uses main-axis auto
+            // margins, which collapse on overflow as CSS requires.
+            SelfAlignment { position: if start && end { AlignmentPosition::Center }
+                else if start { AlignmentPosition::FlexEnd } else { AlignmentPosition::FlexStart },
+                overflow: OverflowAlignment::Safe }
+        } else { style.self_alignment };
+        if !self.candidate_flex && !style.gap.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
+            return Err(unsupported(&path,"Gap containers inside alignment wrappers require separate qualification"));
         }
-        Ok(children)
+        if !style.padding.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
+            return Err(unsupported(&path, "Padding on an alignment wrapper participant needs a separate padding-floor and percentage-containing-block proof"));
+        }
+        if style.margins.main(parent_style.direction) && parent_style.spacing.distributes() {
+            return Err(unsupported(&path, "Main-axis automatic margins with space-around/evenly require line-aware distribution; flexible spacer helpers would consume margin free space"));
+        }
+        if effective_alignment.is_baseline() && style.margins.any() {
+            return Err(unsupported(&path, "Baseline sharing with main-axis automatic margins requires separate native qualification"));
+        }
+        let mut authored_margins = style.margins.0;
+        if cross_auto_margin {
+            let cross = if parent_style.direction.is_row() { 1 } else { 0 };
+            authored_margins[cross] = false;
+            authored_margins[cross + 2] = false;
+        }
+        let main_axis = if parent_style.direction.is_row() { 0 } else { 1 };
+        // Native main-axis auto margins leave their distributed space in
+        // justification's free-space calculation. Ordinary flexible zero-
+        // cross-size participants consume it first and collapse on overflow.
+        // Native flow is reversed, so physical-end precedes the authored box
+        // in file order and physical-start follows it.
+        let margin_before = authored_margins[main_axis + 2];
+        let margin_after = authored_margins[main_axis];
+        authored_margins[main_axis] = false;
+        authored_margins[main_axis + 2] = false;
+        if margin_before { spacing::emit_weight(self, parent_id, parent_style.direction, 1.)?; }
+        let mut sizes = lowered.sizes;
+        let mut bounds = lowered.bounds;
+        let mut authored_parent = parent_id;
+        let mut native_parent_direction = parent_style.direction;
+        let mut stretch = effective_alignment.stretches();
+        if let Some(alignment) = effective_alignment.wrapper_alignment(parent_style.direction) {
+            let main = if parent_style.direction.is_row() { 0 } else { 1 };
+            let mut outer_sizes = [Size::Auto; 2];
+            outer_sizes[main] = sizes[main];
+            let mut outer_bounds = [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto];
+            outer_bounds[main] = bounds[main];
+            outer_bounds[main + 2] = bounds[main + 2];
+            // A perpendicular single-child wrapper aligns on its main
+            // axis and stretches the authored box on its cross axis.
+            // This transfers constrained automatic main sizes as well as
+            // fixed sizes, without percentage substitution or flex growth.
+            native_parent_direction = if parent_style.direction.is_row() { Direction::Column } else { Direction::Row };
+            authored_parent = self.layout_box("", parent_id, native_parent_direction, alignment,
+                parent_style.direction, outer_sizes, outer_bounds, true, authored_margins)?;
+            authored_margins = [false; 4];
+            sizes[main] = Size::Auto;
+            stretch = true;
+            bounds[main] = Size::Pixels(0.);
+            bounds[main + 2] = Size::Auto;
+        }
+        let alignment_margins = effective_alignment.auto_margins(parent_style.direction);
+        for (margin, synthetic) in authored_margins.iter_mut().zip(alignment_margins) { *margin |= synthetic; }
+        let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
+            native_parent_direction, sizes, bounds, stretch, authored_margins)?;
+        style.padding.emit(&mut self.records[object_id as usize + 2])?;
+        style.gap.emit(&mut self.records[object_id as usize + 2])?;
+        if let Some(plan) = flex_plan {
+            // Cross-alignment wrappers are the actual flex participants.
+            // Keep the authored box identity and its inner stretch sizing.
+            plan.emit(&mut self.records, if authored_parent == parent_id { object_id } else { authored_parent }, parent_style.direction)?;
+        }
+        let background = style.background.used(style.foreground);
+        if background >> 24 != 0 {
+            let fill_id = self.records.len() as u32 - 1;
+            let mut fill = Record::new("Fill");fill.set("parentId", Value::Uint(object_id))?;self.records.push(fill);
+            let mut paint = Record::new("SolidColor");paint.set("parentId", Value::Uint(fill_id))?;
+            paint.set("colorValue", Value::Color(background))?;self.records.push(paint);
+        }
+        self.capture_item(descriptor_items, &style, &lowered, parent_style.direction, &id, &path,
+            object_id, if authored_parent == parent_id { object_id } else { authored_parent }, index, order);
+        self.map.push(SourceNode { id, path: path.clone(), object_id });
+        let child_chain = flex::child_chain(definite_chain, &style);
+        Ok(Box::new(PreparedChild { element, object_id, path, style, index, order, effective_alignment,
+            margin_after, vertical_flex: flex_plan.is_some() && !parent_style.direction.is_row(), child_chain, child_bounds }))
+    }
+    fn finish_child(&mut self, child: &PreparedChild<'_>, descendants: &[baseline::Child], parent_id: u32,
+        parent_style: &Style, last_child: bool) -> Result<baseline::Child, Diagnostic> {
+        let style = &child.style; let object_id = child.object_id; let index = child.index; let order = child.order;
+        let effective_alignment = child.effective_alignment; let path = &child.path; let margin_after = child.margin_after;
+        // A flexible vertical main size is not the authored intrinsic height.
+        // Unknown scalar summaries prevent unsound ancestor baseline admission.
+        let vertical_flex = child.vertical_flex;
+        let metric = if vertical_flex { None } else { baseline::summarize(&style, &descendants) };
+        let used_height = if vertical_flex { None } else { baseline::used_height(&style, &descendants) };
+        let last_metric = if vertical_flex { None } else { baseline::summarize_last(&style, &descendants, used_height) };
+        let last = effective_alignment.is_last_baseline();
+        if last && last_metric.is_none() {
+            return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics, distributed columns and non-column nested topology require further ordinary-file validation"));
+        }
+        if effective_alignment.is_baseline() && !last && metric.is_none() {
+            return Err(unsupported(&path, "First baseline requires a bounded fixed or intrinsic box metric, or an empty unbounded percentage-height expression; nested columns need packed, undistributed children with fixed descendant metrics and a baseline within their used height"));
+        }
+        let result = baseline::Child { object_id, index, order, metric, last_metric, used_height, last, vertical_auto_margin: style.margins.vertical(), participates: effective_alignment.is_baseline() };
+        if margin_after { spacing::emit_weight(self, parent_id, parent_style.direction, 1.)?; }
+        spacing::emit(self, parent_id, parent_style, last_child)?;
+        Ok(result)
+    }
+    // Keep the large optional diagnostic carriers out of each recursive
+    // emission frame; the declared 128-level input limit must fit native/WASM.
+    fn capture_item(&self, items: &mut Vec<flex_descriptor::Item>, style: &Style,
+        sizing: &box_sizing::Lowered, direction: Direction, id: &str, path: &str,
+        object: u32, participant: u32, index: usize, order: i32) {
+        if self.descriptor_capture { items.push(flex_descriptor::Item::extract_lowered(style,
+            sizing, direction, &self.records, id, path, object, participant, index, order)); }
+    }
+    fn capture_parent(&mut self, style: &Style, parent_id: u32, path: &str,
+        record_start: usize, items: Vec<flex_descriptor::Item>) -> Result<(), Diagnostic> {
+        if self.descriptor_capture {
+            self.descriptors.push(flex_descriptor::Pending {parent:flex_descriptor::Parent::extract_lowered(style,
+                &box_sizing::lower(style, path)?),parent_id,path:path.into(),record_start,record_end:self.records.len(),items});
+        }
+        Ok(())
     }
 }
 
@@ -764,7 +820,7 @@ mod padding_pipeline_tests {
             let css=format!("#p{{flex-direction:{direction}}}#a{{padding:2px;align-self:center}}");
             assert!(compile_profile(&input(&css),FlexPolicy::PaddingCandidate).is_err());
         }
-        for css in ["#p{flex-direction:row;padding:2px}#a{align-self:baseline}","#p{flex-direction:row}#a{padding:2px;align-self:baseline}","#a{height:auto;flex:1 1 0px;padding:2px}","#a{box-sizing:content-box;padding:2px}"] {
+        for css in ["#p{flex-direction:row;padding:2px}#a{align-self:baseline}","#p{flex-direction:row}#a{padding:2px;align-self:baseline}","#a{height:auto;flex:1 1 0px;padding:2px}"] {
             assert!(compile_profile(&input(css),FlexPolicy::PaddingCandidate).is_err(),"{css}");
         }
         assert!(compile_profile(&input("#a{padding:2px}"),FlexPolicy::Candidate).is_err());

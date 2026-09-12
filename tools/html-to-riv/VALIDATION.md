@@ -2,9 +2,13 @@
 
 The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.
 
-Current public checkpoint: [variable-recovery qualification](validation/public-variable-recovery-review.md) records 224 Rust and 38 Node tests, strict TypeScript and 605 prior exact-output regressions. The 24-scene extension passes 192/192 geometry and pixel frames, 384 clear controls and complete visual coverage. Sixteen diagnostic inputs preserve CLI/WASM parity and no-output behavior. Public grow/shrink admission remains unchanged.
+Current public checkpoint: [content-box implementation and evidence](validation/public-content-box-review.md) records 233 Rust tests, 39 Node tests, strict TypeScript and 629 prior exact-output regressions. The current 34 fixtures pass 264/272 geometry and 266/272 pixel frames, with 544 clear checks and complete visual coverage. Eight geometry failures expose one large-coordinate percentage-child mismatch; six fractional-edge pixel failures remain. Five superseded parent-only controls remain separately preserved, so all retained runs total 312 frames rather than enlarging the current fixture count. Default native/WASM builds preserve the declared nesting limit after a compiler stack repair. L12 remains partial.
+
+The previous [variable-recovery qualification](validation/public-variable-recovery-review.md) records 224 Rust and 38 Node tests, strict TypeScript and 605 prior exact-output regressions. The 24-scene extension passes 192/192 geometry and pixel frames, 384 clear controls and complete visual coverage. Sixteen diagnostic inputs preserve CLI/WASM parity and no-output behavior. Public grow/shrink admission remains unchanged.
 
 The previous [data-attribute checkpoint](validation/public-data-attributes-review.md) passes 128/128 geometry and pixel frames and 256 clear controls; all 16 emitted files/maps retain exact equality under the new compiler.
+
+Ordinary-value grammar follow-up: [124-case browser audit](validation/variable-value-grammar-review.md) distinguishes empty/wrong-type substitution from valid CSS outside current admission. It corrects an earlier example: background:20px is a valid position shorthand, whereas background-color:20px is invalid. The earlier audit did not observe background-position; its historical evidence remains preserved. This audit adds no public recovery behavior.
 
 Current private flex prerequisite: [flex-scene-review.md](validation/flex-scene-review.md) documents the final record/ownership/ancestry certificate and its connection to size, world and flex analysis.
 
@@ -12,7 +16,7 @@ Current paint diagnosis: [fixed-box controls](validation/flex-fixed-controls-rev
 
 Current private flex native/visual evidence: [flex-proof-bridge-review.md](validation/flex-proof-bridge-review.md) records 4,392 passing native bound checks, 96/96 Chrome geometry passes and 70/96 pixel passes. The complete visual review includes all failed frames; the reproducible command exits nonzero for those failures. [Solid border candidate evidence](validation/solid-border-candidate-review.md) records the independent ordinary-file experiment and retained fractional-edge failures.
 
-Current content-box candidate: [ordinary-file sizing translation](validation/content-box-review.md) records 64 passing frames for fixed-padding translations and eight for a same-axis percentage candidate. Two unlowered controls fail geometry/pixels, and the fractional-edge control preserves six pixel failures. All 36 distinct viewport pairs were reviewed. The finite adapter proves selected constructions; public box-sizing admission and whole-domain numeric qualification remain pending.
+Earlier content-box candidate: [ordinary-file sizing translation](validation/content-box-review.md) records 64 passing frames for fixed-padding translations and eight for a same-axis percentage candidate. Two unlowered controls fail geometry/pixels, and the fractional-edge control preserves six pixel failures. All 36 distinct viewport pairs were reviewed. Public fixed-padding lowering is now implemented; the candidate's same-axis percentage algebra is still separate experimental work. Neither candidate results nor finite arithmetic prove whole-domain geometry fidelity.
 
 Current gap checkpoint: [public-gap-review.md](validation/public-gap-review.md) binds direct public compilation, a Chrome/native interaction matrix, retained intrinsic-percentage failures, overflow controls and exact regressions.
 

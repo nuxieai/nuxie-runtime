@@ -9,7 +9,9 @@ use super::computed_provenance::{NumericSize, Scalar};
 pub(super) struct Parent {
     direction:Direction,width:Size,height:Size,numeric_width:NumericSize,numeric_height:NumericSize,padding_zero:bool,distributed:bool,
 }
+#[cfg(test)]
 impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,numeric_width:style.numeric.width.clone(),numeric_height:style.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes()}}}
+impl Parent {pub fn extract_lowered(style:&Style,sizing:&super::box_sizing::Lowered)->Self {Self{direction:style.direction,width:sizing.sizes[0],height:sizing.sizes[1],numeric_width:sizing.numeric.width.clone(),numeric_height:sizing.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes()}}}
 pub(super) struct Pending {
     pub parent:Parent,pub parent_id:u32,pub path:String,pub record_start:usize,pub record_end:usize,pub items:Vec<Item>,
 }
@@ -67,7 +69,9 @@ fn size_known(value:&NumericSize)->bool {match value {NumericSize::Auto=>true,Nu
 impl NumericFacts {
     fn available(&self)->bool {self.grow.is_ok() && self.shrink.is_ok() && [&self.main,&self.cross,&self.basis,&self.minimum,&self.maximum,&self.cross_minimum,&self.cross_maximum].into_iter().all(size_known)}
     fn extract(style:&Style,direction:Direction)->Self {
-        let n=&style.numeric;
+        Self::extract_numeric(&style.numeric,direction)
+    }
+    fn extract_numeric(n:&super::computed_provenance::NumericStyle,direction:Direction)->Self {
         let main=if direction.is_row(){0}else{1};let cross=1-main;
         let size=[&n.width,&n.height];let min=[&n.min_width,&n.min_height];let max=[&n.max_width,&n.max_height];
         Self{main:size[main].clone(),cross:size[cross].clone(),basis:n.flex.basis.clone(),
@@ -85,6 +89,15 @@ pub(crate) struct Computed {
     pub padding_zero: bool, pub margins_zero: bool, pub start_aligned_cross: bool,
 }
 impl Computed {
+    fn extract_lowered(style:&Style,sizing:&super::box_sizing::Lowered,direction:Direction)->Self {
+        let mut result=Self::extract(style,direction);
+        let main=usize::from(!direction.is_row());let cross=1-main;
+        result.numeric=NumericFacts::extract_numeric(&sizing.numeric,direction);
+        result.main=sizing.sizes[main].into();result.cross=sizing.sizes[cross].into();
+        result.minimum=sizing.bounds[main].into();result.maximum=sizing.bounds[main+2].into();
+        result.cross_minimum=sizing.bounds[cross].into();result.cross_maximum=sizing.bounds[cross+2].into();
+        result
+    }
     fn extract(style:&Style,direction:Direction)->Self {
         let main=if direction.is_row(){0}else{1};let cross=1-main;
         let sizes=[style.width,style.height];let min=[style.min_width,style.min_height];let max=[style.max_width,style.max_height];
@@ -182,6 +195,10 @@ fn point(value:&NumericSize,name:&'static str)->Result<super::scalar_provenance:
 fn same_bits(actual:Option<f32>,expected:f32)->bool {actual.is_some_and(|v|v.to_bits()==expected.to_bits())}
 fn point_binding(record:&RecordLength,value:f32)->bool {record.units==Some(1) && same_bits(record.value,value)}
 impl Item {
+    pub(super) fn extract_lowered(style:&Style,sizing:&super::box_sizing::Lowered,direction:Direction,records:&[Record],source_id:&str,source_path:&str,authored_id:u32,participant_id:u32,dom_index:usize,css_order:i32)->Self {
+        let mut item=Self::extract(style,direction,records,source_id,source_path,authored_id,participant_id,dom_index,css_order);
+        item.computed=Computed::extract_lowered(style,sizing,direction);item
+    }
     #[allow(dead_code)] // Used by the next record-indexed group qualification stage.
     pub(crate) fn numeric_input(&self)->Result<super::flex_numeric::Item,InputIssue> {
         if self.authored_id!=self.native.participant_id {return Err(InputIssue::Wrapper);}

@@ -1,0 +1,72 @@
+[
+  {
+    "name": "mixed-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;width:50%;padding:5px}"
+  },
+  {
+    "name": "mixed-height",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;height:50%;padding:5px}"
+  },
+  {
+    "name": "mixed-minimum",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;min-width:50%;padding:5px}"
+  },
+  {
+    "name": "mixed-maximum",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;max-height:50%;padding:5px}"
+  },
+  {
+    "name": "percentage-padding",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;padding:5%}"
+  },
+  {
+    "name": "padded-alignment-wrapper",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;padding:5px;align-self:center}"
+  },
+  {
+    "name": "padded-baseline",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#p{flex-direction:row}#a{box-sizing:content-box;padding:5px;align-self:baseline}"
+  },
+  {
+    "name": "padded-gap",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#p{gap:5px}#a{box-sizing:content-box;padding:5px}"
+  },
+  {
+    "name": "invalid-keyword",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:padding-box}"
+  },
+  {
+    "name": "strict-overridden",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:padding-box;box-sizing:border-box}"
+  },
+  {
+    "name": "strict-unmatched",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#never{box-sizing:padding-box}"
+  },
+  {
+    "name": "strict-variable",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{--bad:padding-box;box-sizing:var(--bad);box-sizing:border-box}"
+  },
+  {
+    "name": "invalid-unit",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:0}"
+  },
+  {
+    "name": "lowered-content-overflow-chain",
+    "html": "<div id=\"p\"><div><div><div><div><div><div><div><div><div><div></div></div></div></div></div></div></div></div></div></div></div>",
+    "css": "div{width:1000000%;height:1px}#p{box-sizing:content-box;width:1px;padding:1px}"
+  }
+]

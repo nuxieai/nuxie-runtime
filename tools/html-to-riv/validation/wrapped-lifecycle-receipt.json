@@ -1,0 +1,488 @@
+{
+  "status": "verified-native-lifecycle-measurements",
+  "publicQualification": false,
+  "scope": "Matched development and optimized standard release runtime CPU timings; no GPU render, production latency guarantee or leak qualification.",
+  "cases": 4,
+  "totalTrials": 88,
+  "measuredTrials": 72,
+  "resizeDrawSamples": 704,
+  "comparison": [
+    {
+      "name": "owners-1",
+      "fileBytes": 38849,
+      "records": 2359,
+      "sceneSha256": "4740dc23dc7e020bc8d9ac972f3115d3bd89d0e4a8d111775b1e7a2799b7f2a1",
+      "devStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 1000,
+          "medianNs": 1584,
+          "p95Ns": 5125,
+          "maxNs": 5125
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 10329333,
+          "medianNs": 10608875,
+          "p95Ns": 12596708,
+          "maxNs": 12596708
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 10389875,
+          "medianNs": 10508500,
+          "p95Ns": 11120792,
+          "maxNs": 11120792
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 7275000,
+          "medianNs": 7473625,
+          "p95Ns": 7731250,
+          "maxNs": 7731250
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 1347250,
+          "medianNs": 1395125,
+          "p95Ns": 1709333,
+          "maxNs": 1709333
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 2711667,
+          "medianNs": 2869979.5,
+          "p95Ns": 3261209,
+          "maxNs": 3383084
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 51541,
+          "medianNs": 61625.0,
+          "p95Ns": 82250,
+          "maxNs": 100167
+        }
+      },
+      "releaseStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 250,
+          "medianNs": 333,
+          "p95Ns": 500,
+          "maxNs": 500
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 1409542,
+          "medianNs": 1506917,
+          "p95Ns": 1560166,
+          "maxNs": 1560166
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 1401250,
+          "medianNs": 1527708,
+          "p95Ns": 1734125,
+          "maxNs": 1734125
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 1076667,
+          "medianNs": 1162208,
+          "p95Ns": 1275750,
+          "maxNs": 1275750
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 370708,
+          "medianNs": 410042,
+          "p95Ns": 435167,
+          "maxNs": 435167
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 316959,
+          "medianNs": 373542.0,
+          "p95Ns": 496375,
+          "maxNs": 615000
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 12541,
+          "medianNs": 15250.0,
+          "p95Ns": 23125,
+          "maxNs": 25208
+        }
+      },
+      "devProcessPeakResidentBytes": 27312128,
+      "releaseProcessPeakResidentBytes": 19693568
+    },
+    {
+      "name": "owners-3",
+      "fileBytes": 118956,
+      "records": 7239,
+      "sceneSha256": "e216452ab0e37ea3fe3fceff7ca2ea8bba60714a9890307824b381bafa68b083",
+      "devStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 1875,
+          "medianNs": 2542,
+          "p95Ns": 9083,
+          "maxNs": 9083
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 44948917,
+          "medianNs": 45168500,
+          "p95Ns": 47694875,
+          "maxNs": 47694875
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 45754708,
+          "medianNs": 46827083,
+          "p95Ns": 49328708,
+          "maxNs": 49328708
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 35920500,
+          "medianNs": 36359000,
+          "p95Ns": 36694459,
+          "maxNs": 36694459
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 4386125,
+          "medianNs": 4523667,
+          "p95Ns": 4871542,
+          "maxNs": 4871542
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 8567708,
+          "medianNs": 9004520.5,
+          "p95Ns": 10685291,
+          "maxNs": 11489166
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 251500,
+          "medianNs": 276750.0,
+          "p95Ns": 370625,
+          "maxNs": 503833
+        }
+      },
+      "releaseStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 291,
+          "medianNs": 375,
+          "p95Ns": 6584,
+          "maxNs": 6584
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 7692542,
+          "medianNs": 7809292,
+          "p95Ns": 8190208,
+          "maxNs": 8190208
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 8296334,
+          "medianNs": 8471500,
+          "p95Ns": 8971166,
+          "maxNs": 8971166
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 7025708,
+          "medianNs": 7119250,
+          "p95Ns": 7494375,
+          "maxNs": 7494375
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 1224708,
+          "medianNs": 1279708,
+          "p95Ns": 1355500,
+          "maxNs": 1355500
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 1042292,
+          "medianNs": 1142771.0,
+          "p95Ns": 1509042,
+          "maxNs": 1606417
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 60083,
+          "medianNs": 66666.5,
+          "p95Ns": 81917,
+          "maxNs": 113625
+        }
+      },
+      "devProcessPeakResidentBytes": 44023808,
+      "releaseProcessPeakResidentBytes": 36438016
+    },
+    {
+      "name": "owners-8",
+      "fileBytes": 330171,
+      "records": 19999,
+      "sceneSha256": "0850c42d71c1c21abefe486606cbaae3c68047b6a02120ab97f0ed355b81eaa4",
+      "devStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 2459,
+          "medianNs": 3041,
+          "p95Ns": 3542,
+          "maxNs": 3542
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 225205583,
+          "medianNs": 232450666,
+          "p95Ns": 261757833,
+          "maxNs": 261757833
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 227998250,
+          "medianNs": 232375250,
+          "p95Ns": 269904833,
+          "maxNs": 269904833
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 199692792,
+          "medianNs": 204487917,
+          "p95Ns": 274323083,
+          "maxNs": 274323083
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 11657209,
+          "medianNs": 12418250,
+          "p95Ns": 15758792,
+          "maxNs": 15758792
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 24705625,
+          "medianNs": 26512020.5,
+          "p95Ns": 36301042,
+          "maxNs": 46530500
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 1456041,
+          "medianNs": 1594396.0,
+          "p95Ns": 2289375,
+          "maxNs": 3149042
+        }
+      },
+      "releaseStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 417,
+          "medianNs": 791,
+          "p95Ns": 1208,
+          "maxNs": 1208
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 53121000,
+          "medianNs": 54854959,
+          "p95Ns": 56542291,
+          "maxNs": 56542291
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 56176375,
+          "medianNs": 58015667,
+          "p95Ns": 58871125,
+          "maxNs": 58871125
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 51890833,
+          "medianNs": 53416750,
+          "p95Ns": 56902375,
+          "maxNs": 56902375
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 3555959,
+          "medianNs": 3690083,
+          "p95Ns": 3945542,
+          "maxNs": 3945542
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 3372458,
+          "medianNs": 4163646.0,
+          "p95Ns": 5554041,
+          "maxNs": 7032292
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 390083,
+          "medianNs": 431000.0,
+          "p95Ns": 595541,
+          "maxNs": 676916
+        }
+      },
+      "devProcessPeakResidentBytes": 98566144,
+      "releaseProcessPeakResidentBytes": 85753856
+    },
+    {
+      "name": "owners-34",
+      "fileBytes": 1658530,
+      "records": 99247,
+      "sceneSha256": "6f5a4e1f18243159092fbf325119074b5ec587eea96326194ce119a4f66c82c6",
+      "devStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 4292,
+          "medianNs": 4834,
+          "p95Ns": 5500,
+          "maxNs": 5500
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 5257096333,
+          "medianNs": 5267046000,
+          "p95Ns": 5381419000,
+          "maxNs": 5381419000
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 5280666625,
+          "medianNs": 5301290666,
+          "p95Ns": 5390372208,
+          "maxNs": 5390372208
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 5124613834,
+          "medianNs": 5157462750,
+          "p95Ns": 5186626917,
+          "maxNs": 5186626917
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 67167708,
+          "medianNs": 69782083,
+          "p95Ns": 72484459,
+          "maxNs": 72484459
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 132646625,
+          "medianNs": 135040145.5,
+          "p95Ns": 150273042,
+          "maxNs": 154413334
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 25986792,
+          "medianNs": 26911291.5,
+          "p95Ns": 28969583,
+          "maxNs": 30178125
+        }
+      },
+      "releaseStages": {
+        "factorySetupNs": {
+          "samples": 9,
+          "minNs": 1833,
+          "medianNs": 1959,
+          "p95Ns": 4292,
+          "maxNs": 4292
+        },
+        "importNs": {
+          "samples": 9,
+          "minNs": 1332370500,
+          "medianNs": 1385639875,
+          "p95Ns": 1555849875,
+          "maxNs": 1555849875
+        },
+        "initialSettleNs": {
+          "samples": 9,
+          "minNs": 1350037333,
+          "medianNs": 1396171667,
+          "p95Ns": 1457199333,
+          "maxNs": 1457199333
+        },
+        "cloneNs": {
+          "samples": 9,
+          "minNs": 1327643958,
+          "medianNs": 1370399125,
+          "p95Ns": 1440163125,
+          "maxNs": 1440163125
+        },
+        "releaseNs": {
+          "samples": 9,
+          "minNs": 22216000,
+          "medianNs": 23722042,
+          "p95Ns": 31121959,
+          "maxNs": 31121959
+        },
+        "resizeUpdateNs": {
+          "samples": 72,
+          "minNs": 26800000,
+          "medianNs": 29234167.0,
+          "p95Ns": 34811250,
+          "maxNs": 35620375
+        },
+        "drawRecordingNs": {
+          "samples": 72,
+          "minNs": 7310416,
+          "medianNs": 7842083.0,
+          "p95Ns": 8280375,
+          "maxNs": 8692209
+        }
+      },
+      "devProcessPeakResidentBytes": 422936576,
+      "releaseProcessPeakResidentBytes": 424902656
+    }
+  ],
+  "artifactBindings": 333,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "practicalPublicCostQualified": false,
+  "evidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-lifecycle-verification-r1.json",
+      "sha256": "a1c507f7c8a1186aacee1d37a54277a4ec4e0c8755eaed1e9a904f46b52af855"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-lifecycle-r1/receipt.json",
+      "sha256": "14685737dd17f1cb83e9119043cfdffb8c9f23e5c28075dd02ee9b14547dd120"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-lifecycle-release-r1/receipt.json",
+      "sha256": "f41e2af35741562b2282be66209cff7a0c5cce1f79cddb7f603ca4569012dbe7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-lifecycle-toolchain-r1/manifest.json",
+      "sha256": "293797933012d22a2bb7b157e1f87058ee635d298d9aca3a872af4d396bf5abe"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-lifecycle-toolchain-release-r1/failure-receipt.json",
+      "sha256": "a593137700ce6bb368471fbf6a75ef5ebb3dcc05cb0bd927eb14799c5d4ee840"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-lifecycle-toolchain-release-r2/manifest.json",
+      "sha256": "5ab5eb7768a9e5ab41286458535846aa65f815cc97c43d05ae432ecc07a7140c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-lifecycle-review.md",
+      "sha256": "39b7d212cbb6ef1ba3723d692bec08bc4c1bfc7bb9c8b925f9bfe03b92bd784e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-lifecycle-evidence.py",
+      "sha256": "29e742144b0b94432dcfcd06277473edf532a4537dc45c46b6e3925998e9b518"
+    }
+  ]
+}

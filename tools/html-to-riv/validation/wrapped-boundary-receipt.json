@@ -1,0 +1,95 @@
+{
+  "status": "verified-private-boundary-evidence-with-retained-failures",
+  "publicAdmission": false,
+  "counts": {
+    "frames": 256,
+    "representatives": 96,
+    "transfers": 160,
+    "sheets": 26,
+    "geometryPass": 256,
+    "pixelPass": 228
+  },
+  "observationCounts": {
+    "frames": 256,
+    "scalarChecks": 20608,
+    "scalarFailures": 0,
+    "zeroSignDifferences": 0,
+    "streamFailures": 0,
+    "chromeEdgeComparisons": 896,
+    "chromeEdgeDifferences": 92,
+    "chromeClippedEdgeDifferences": 28,
+    "saturationIntersectionFailures": 0
+  },
+  "clips": 3776,
+  "draws": 992,
+  "clearChecks": 512,
+  "preservedPixelFailures": 28,
+  "saturationOnlyRawDifferences": 64,
+  "pixelFailureCounts": {
+    "boundary-row-negative-saturation": 0,
+    "boundary-row-positive-saturation": 0,
+    "boundary-row-spanning": 0,
+    "boundary-row-negative-spanning": 0,
+    "boundary-row-zero": 0,
+    "boundary-row-thin-limit": 0,
+    "boundary-row-thin-next-above": 8,
+    "boundary-row-thin-next-below": 0,
+    "boundary-row-thin-above": 0,
+    "boundary-row-half-extent": 0,
+    "boundary-row-accumulated-exact": 0,
+    "boundary-row-accumulated-decimal": 6,
+    "boundary-row-overlap-r0-w1": 0,
+    "boundary-row-overlap-r0-w2": 0,
+    "boundary-row-overlap-r1-w1": 0,
+    "boundary-row-overlap-r1-w2": 0,
+    "boundary-column-negative-saturation": 0,
+    "boundary-column-positive-saturation": 0,
+    "boundary-column-spanning": 0,
+    "boundary-column-negative-spanning": 0,
+    "boundary-column-zero": 0,
+    "boundary-column-thin-limit": 0,
+    "boundary-column-thin-next-above": 8,
+    "boundary-column-thin-next-below": 0,
+    "boundary-column-thin-above": 0,
+    "boundary-column-half-extent": 0,
+    "boundary-column-accumulated-exact": 0,
+    "boundary-column-accumulated-decimal": 6,
+    "boundary-column-overlap-r0-w1": 0,
+    "boundary-column-overlap-r0-w2": 0,
+    "boundary-column-overlap-r1-w1": 0,
+    "boundary-column-overlap-r1-w2": 0
+  },
+  "rustTests": 419,
+  "nodeTests": 56,
+  "maxMismatchedPixels": 100,
+  "maxMeanChannelError": 0.737060546875,
+  "artifactBindings": 9223,
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Private immutable Derived boundary evidence; known Chrome quantization failures remain unqualified.",
+  "evidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-boundary-verification-r1.json",
+      "sha256": "2dab140a468cc5c082ca0cc7a46c88c4e3051275ca0d3687916e33dcc313743b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-boundary-r1/receipt.json",
+      "sha256": "5efb862d23c0ceddd22ebecfde5f555cf4164535e0d85aa142db68fb42522bb5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-boundary-r1/boundary-observation/receipt.json",
+      "sha256": "30f5c1286681cd692e3c3cb52d71048943bda80aca0e8c7aa8ba2e00e072de9f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-boundary-r1/visual/review-receipt.json",
+      "sha256": "2bee4c5855213822c16b6a8431bb3155afa608e6e85b84a981d64cd87543b62a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-boundary-review.md",
+      "sha256": "eda6ba53d69c69958b30487061e68a4826b162c513045ae26eaf88fb02574a78"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-boundary-quantization-review.md",
+      "sha256": "1576943fbe747646f1bd77ac03f9d4caf547ed3c3c594ca093c6cccd4fbd7aa0"
+    }
+  ]
+}

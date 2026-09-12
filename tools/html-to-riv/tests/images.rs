@@ -140,3 +140,19 @@ fn constrained_images_keep_responsive_and_automatic_minimum_diagnostics() {
         assert_eq!(compile(&input).unwrap_err()[0].code,"unsupported-target-semantics","{declaration}");
     }
 }
+
+#[test]
+fn responsive_image_opposite_constraints_remain_runtime_sized_and_deterministic() {
+    for direction in ["row","column"] {
+        for declaration in ["width:37.5%;max-height:83px", "height:42%;max-width:61%", "width:28%;min-height:31px", "height:63%;min-width:117px"] {
+            let mut input=request("<div id=parent><img id=image src=logo><div id=tail></div></div>",
+                &format!("#parent{{width:100%;height:100%;padding:7px 11px;flex-direction:{direction}}}#image{{align-self:flex-start;{declaration}}}#tail{{width:8px;height:8px}}"));
+            asset(&mut input,"logo","opaque.png");
+            let output=compile(&input).unwrap_or_else(|e|panic!("{declaration}: {e:?}"));
+            assert_eq!(output,compile(&input).unwrap());
+            let Asset::Image{bytes}=&input.assets["logo"];
+            assert_eq!(output.riv.windows(bytes.len()).filter(|b|*b==bytes).count(),1);
+            assert_eq!(output.source_map.len(),3);
+        }
+    }
+}

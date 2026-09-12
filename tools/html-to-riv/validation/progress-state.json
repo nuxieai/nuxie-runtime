@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
-  "focus": "Public image point min/max constraints",
-  "status": "Point constraint checkpoint verified; responsive candidates under investigation",
-  "current": "Source-derived point constraints compile through ordinary owners. 51 requests/102 interface comparisons;368 geometry passes,352 pixel passes and352 presence passes. Preserve16 fractional pixel failures and16 unsampleable zero-area presence controls. 794 historical outputs and126 older image files/maps remain exact.",
-  "next": "Review the captured responsive candidate pixels and verify parent content bases before public integration. Numeric ratio intermediates and automatic-axis bounds need an explicit plan.",
+  "focus": "Public responsive image min/max constraints",
+  "status": "Responsive constraint checkpoint verified; broader image sizing remains partial",
+  "current": "Ordinary ratio owners retain authored percentage dimensions while clamping the opposite automatic axis.31 requests/62 interface comparisons;192 geometry/presence passes and180 pixel passes, preserving12 fractional tail failures. All172 older image files/maps and794 historical outputs remain exact.",
+  "next": "Investigate simultaneous automatic-axis min/max or preferred-axis constraints with a finite ordinary-file matrix. Image padding, automatic minima/stretch and broader responsive constraints remain unresolved.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Responsive image bounds, original parent bases and retained failures",
+      "path": "tools/html-to-riv/validation/public-image-responsive-constraints-review.md"
+    },
     {
       "label": "Public point-constraint scope and retained limitations",
       "path": "tools/html-to-riv/validation/public-image-point-constraints-review.md"
@@ -607,12 +611,7 @@
       "path": "tools/html-to-riv/output/immutable-layout-native-r3/gallery.html"
     }
   ],
-  "activeWork": [
-    {
-      "name": "Responsive constraints",
-      "work": "Initial12 intended recipes pass96 native frames;36 unguarded failures retained. Visual review and parent-padding basis controls remain."
-    }
-  ],
+  "activeWork": [],
   "publication": {
     "status": "reverted",
     "revertPr": "https://github.com/nuxieai/nuxie-runtime/pull/629",

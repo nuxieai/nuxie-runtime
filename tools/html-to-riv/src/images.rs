@@ -72,6 +72,7 @@ pub(super) struct Plan {
     pub aspect_axis: Option<usize>,
     padded: Option<PaddedLayout>,
     constraints: Option<super::image_constraints::Resolved>,
+    responsive: Option<super::image_responsive_constraints::Resolved>,
 }
 #[derive(Clone, Copy)]
 struct PaddedLayout {
@@ -87,8 +88,11 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
         || style.self_alignment.wrapper_alignment(parent.direction).is_some() {
         return Err(unsupported(source, "Image automatic margins and alignment wrappers require separate replaced-element qualification"));
     }
+    if let Some(responsive) = super::image_responsive_constraints::resolve(style, parent, source)? {
+        return Ok(Some(Plan { metadata, aspect_axis: Some(responsive.automatic), padded: None, constraints: None, responsive: Some(responsive) }));
+    }
     if let Some(constraints) = super::image_constraints::resolve(style, parent, metadata, source)? {
-        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: Some(constraints) }));
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: Some(constraints), responsive: None }));
     }
     if !style.padding.is_zero() { return padded_plan(metadata, style, parent, source).map(Some); }
     let auto = [matches!(style.width, Size::Auto), matches!(style.height, Size::Auto)];
@@ -103,7 +107,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.width as f32).map_err(Into::into));
         style.numeric.height = super::computed_provenance::NumericSize::Pixels(
             super::scalar_provenance::ScalarProvenance::exact_constant(metadata.height as f32).map_err(Into::into));
-        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: None }));
+        return Ok(Some(Plan { metadata, aspect_axis: None, padded: None, constraints: None, responsive: None }));
     }
     if auto == [true, true] && stretches {
         // Resolve the ordinary owner's cross axis before measuring its Image.
@@ -120,7 +124,7 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
     // is fixed. Automatic main size instead follows the intrinsic aspect ratio.
     let aspect_axis = if auto[main] { Some(main) }
         else if auto[1-main] && !stretches { Some(1-main) } else { None };
-    Ok(Some(Plan { metadata, aspect_axis, padded: None, constraints: None }))
+    Ok(Some(Plan { metadata, aspect_axis, padded: None, constraints: None, responsive: None }))
 }
 
 fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &str) -> Result<Plan, Diagnostic> {
@@ -161,11 +165,12 @@ fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &
     Ok(Plan { metadata, aspect_axis, padded: Some(PaddedLayout {
         content: ContentOwner { packing, sizes, bounds: [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto] },
         outer_stretch_axis: (auto == [true, true] && stretches).then_some(1-main),
-    }), constraints: None })
+    }), constraints: None, responsive: None })
 }
 impl Plan {
     pub fn lower_outer(&self, style: &Style, source: &str) -> Result<super::box_sizing::Lowered, Diagnostic> {
         if let Some(constraints) = &self.constraints { return Ok(constraints.lower_outer(style)); }
+        if let Some(responsive) = &self.responsive { return Ok(responsive.lower_outer(style)); }
         let mut lowered = if self.padded.is_some() {
             super::box_sizing::lower_image(style, source)?
         } else { super::box_sizing::lower(style, source)? };
@@ -195,8 +200,23 @@ impl Plan {
         self.constraints.as_ref().and_then(|c|c.content_owner())
             .or_else(||self.padded.map(|p| p.content))
     }
+    pub fn validate_bounds(&self, child: super::numeric::Bounds, containing: super::numeric::Bounds, source: &str) -> Result<super::numeric::Bounds, Diagnostic> {
+        if let Some(plan)=&self.responsive {
+            child.image_constrained(self.metadata.width,self.metadata.height,plan.automatic,containing,plan.minimum,plan.maximum,source)
+        } else { child.image(self.metadata.width,self.metadata.height,self.aspect_axis,source) }
+    }
     pub fn emit(&self, records: &mut Vec<Record>, owner: u32, style: Paint) -> Result<(), Diagnostic> {
         records[owner as usize + 1].set("clip", Value::Bool(true))?;
+        if let Some(plan)=&self.responsive {
+            // Generic box emission omits reset zero minima. Ratio owners need
+            // both units explicitly Point, otherwise Taffy completes the
+            // missing minimum component using the intrinsic aspect ratio.
+            for (axis,name) in [(0,"minWidth"),(1,"minHeight")] {
+                let value=if axis==plan.automatic { match plan.minimum {Size::Pixels(v)=>v,_=>unreachable!("responsive minimum is point")} } else {0.};
+                records[owner as usize + 2].set(name,Value::Float(value))?;
+                records[owner as usize + 2].set(&format!("{name}UnitsValue"),Value::Uint(1))?;
+            }
+        }
         if self.aspect_axis.is_some() {
             records[owner as usize + 2].set("aspectRatio", Value::Float(self.metadata.width as f32 / self.metadata.height as f32))?;
         }
@@ -239,6 +259,21 @@ mod tests {
         let plan = padded_plan(ImageMetadata { asset_index: 0, width: 96, height: 64 }, &style, &parent, "image").unwrap();
         let lowered = plan.lower_outer(&style, "image").unwrap();
         (style, parent, plan, lowered)
+    }
+    #[test]
+    fn responsive_image_emission_materializes_both_point_minima() {
+        for (css,expected) in [("width:50%;max-height:100px",[0.,0.]),("width:50%;min-height:100px",[0.,100.]),("height:50%;min-width:220px",[220.,0.])] {
+            let parent=Style::default();
+            let style=computed(&format!("#image{{align-self:flex-start;{css}}}"),&parent);
+            let responsive=super::super::image_responsive_constraints::resolve(&style,&parent,"image").unwrap().unwrap();
+            let plan=Plan{metadata:ImageMetadata{width:96,height:64,asset_index:0},aspect_axis:Some(responsive.automatic),padded:None,constraints:None,responsive:Some(responsive)};
+            let mut records=vec![Record::new("Artboard"),Record::new("LayoutComponent"),Record::new("LayoutComponentStyle")];
+            plan.emit(&mut records,0,Paint::default()).unwrap();
+            for (index,name) in ["minWidth","minHeight"].into_iter().enumerate() {
+                assert!(matches!(records[2].get(name),Some(Value::Float(v)) if *v==expected[index]));
+                assert!(matches!(records[2].get(&format!("{name}UnitsValue")),Some(Value::Uint(1))));
+            }
+        }
     }
     #[test]
     fn synthetic_auto_definite_cross_is_hug_but_authored_auto_cross_still_stretches() {

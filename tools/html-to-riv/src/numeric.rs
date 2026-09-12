@@ -41,6 +41,34 @@ impl Bounds {
         }
         Ok(self)
     }
+    /// Ratio owners resolve opposite-axis constraints against the original
+    /// containing content box. Check the native ratio intermediate BEFORE its
+    /// clamp: a finite maximum must not disguise overflowing ratio arithmetic.
+    pub fn image_constrained(mut self, width:u32, height:u32, axis:usize, containing:Self,
+        minimum:Size, maximum:Size, source:&str)->Result<Self,Diagnostic> {
+        let ratio=width as f32 / height as f32;
+        let definite=self.upper[1-axis].ok_or_else(||unsupported(source,"Responsive image ratio requires a bounded preferred axis"))?;
+        let derive_upper=|value| if axis==0 { multiply_upper(value,ratio) } else { divide_upper(value,ratio) };
+        let derive_lower=|value| if axis==0 { value*ratio } else { value/ratio };
+        let intermediate=derive_upper(definite);
+        if !intermediate.is_finite() {
+            return Err(unsupported(source,"Responsive image ratio intermediate may exceed finite binary32 geometry before automatic-axis constraints"));
+        }
+        let min=resolve(minimum,containing.upper[axis]).ok_or_else(||unsupported(source,"Responsive image minimum requires a bounded original containing axis"))?;
+        let max=resolve(maximum,containing.upper[axis]);
+        if max.is_none() && !matches!(maximum,Size::Auto) {
+            return Err(unsupported(source,"Responsive image percentage maximum requires a bounded original containing axis"));
+        }
+        if !min.is_finite() { return Err(unsupported(source,"Responsive image minimum may exceed finite binary32 geometry")); }
+        self.upper[axis]=Some(max.map_or(intermediate,|max|intermediate.min(max)).max(min));
+        self.lower[axis]=cap_lower(self.lower[1-axis].map(derive_lower),resolve_witness(minimum,containing.lower[axis]),
+            resolve_witness(maximum,containing.lower[axis]),maximum);
+        self.witness[axis]=cap_lower(self.witness[1-axis].map(derive_lower),resolve_witness(minimum,containing.witness[axis]),
+            resolve_witness(maximum,containing.witness[axis]),maximum);
+        // Fit can overflow even after the ratio-derived dimension was capped,
+        // for example when a large minimum produces a distorted content box.
+        self.image(width,height,None,source)
+    }
     /// After image ratio/fit validation, bound the final automatic outer box.
     /// `self` is the original containing block: vertical percentage padding
     /// also uses its width, never the inner image's content width or height.
@@ -220,6 +248,11 @@ fn multiply_upper(a: f32, b: f32) -> f32 {
     let exact = f64::from(a) * f64::from(b);
     round_upper(exact)
 }
+// Match Taffy's width / emitted aspect ratio directly. Multiplication by a
+// rounded reciprocal can understate the division by one binary32 ULP.
+fn divide_upper(value: f32, divisor: f32) -> f32 {
+    round_upper(f64::from(value) / f64::from(divisor))
+}
 fn resolve(size: Size, parent: Option<f32>) -> Option<f32> {
     match size {
         Size::Auto => None,
@@ -243,6 +276,53 @@ fn resolve_witness(size: Size, parent: Option<f32>) -> Option<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn responsive_ratio_clamps_use_original_opposite_parent_content_axis() {
+        let parent=Bounds{upper:[Some(800.),Some(200.)],lower:[Some(800.),Some(200.)],witness:[Some(800.),Some(200.)]};
+        let width=Bounds{upper:[Some(400.),None],lower:[Some(400.),None],witness:[Some(400.),None]};
+        let result=width.image_constrained(96,64,1,parent,Size::Pixels(0.),Size::Percent(50.),"test").unwrap();
+        assert_eq!(result.upper,[Some(400.),Some(100.)]);
+        assert_eq!(result.lower,[Some(400.),Some(100.)]);
+        assert_eq!(result.witness,[Some(400.),Some(100.)]);
+        let height=Bounds{upper:[None,Some(100.)],lower:[None,Some(100.)],witness:[None,Some(100.)]};
+        let result=height.image_constrained(96,64,0,parent,Size::Pixels(0.),Size::Percent(10.),"test").unwrap();
+        assert_eq!(result.upper,[Some(80.),Some(100.)]);
+        let result=height.image_constrained(96,64,0,parent,Size::Pixels(220.),Size::Auto,"test").unwrap();
+        assert_eq!(result.upper,[Some(220.),Some(100.)]);
+    }
+    #[test]
+    fn responsive_ratio_intermediate_and_final_fit_have_separate_overflow_guards() {
+        let child=Bounds{upper:[Some(f32::MAX),None],lower:[Some(0.),None],witness:[None,None]};
+        let error=child.image_constrained(1,8192,1,Bounds::VIEWPORT,Size::Pixels(0.),Size::Pixels(10.),"test").err().unwrap();
+        assert!(error.message.contains("before automatic-axis constraints"));
+        let child=Bounds{upper:[Some(10.),None],lower:[Some(0.),None],witness:[None,None]};
+        let error=child.image_constrained(8192,1,1,Bounds::VIEWPORT,Size::Pixels(f32::MAX),Size::Auto,"test").err().unwrap();
+        assert!(error.message.contains("fit"));
+        let safe=child.image_constrained(1,8192,1,Bounds::VIEWPORT,Size::Pixels(0.),Size::Pixels(10.),"test").unwrap();
+        assert_eq!(safe.upper,[Some(10.),Some(10.)]);
+    }
+    #[test]
+    fn responsive_percentage_bound_never_borrows_the_image_size_for_unknown_parent() {
+        let parent=Bounds{upper:[Some(800.),None],lower:[Some(0.),None],witness:[Some(800.),None]};
+        let child=Bounds{upper:[Some(400.),None],lower:[Some(0.),None],witness:[Some(400.),None]};
+        assert!(child.image_constrained(96,64,1,parent,Size::Pixels(0.),Size::Percent(20.),"test").is_err());
+        assert!(child.image_constrained(96,64,1,parent,Size::Pixels(0.),Size::Pixels(20.),"test").is_ok());
+        let unknown=Bounds{upper:[None,None],lower:[Some(0.),None],witness:[None,None]};
+        assert!(unknown.image_constrained(96,64,1,parent,Size::Pixels(0.),Size::Pixels(20.),"test").is_err());
+    }
+    #[test]
+    fn outward_ratio_division_bounds_native_division_without_reciprocal_substitution() {
+        let mut discriminating=false;
+        for w in [1.,47.99,1000.25,f32::MAX/8192.] {
+            for (iw,ih) in [(7.,3.),(96.,64.),(8191.,8192.),(1.,8192.)] {
+                let ratio=iw/ih;
+                let native=w/ratio;
+                assert!(divide_upper(w,ratio)>=native);
+                discriminating |= native>w*(1./ratio);
+            }
+        }
+        assert!(discriminating,"test must distinguish direct division from reciprocal multiplication");
+    }
     #[test]
     fn outward_rounding_never_understates_a_definite_product() {
         for (parent, percent) in [(16384., 1000000.), (12345.67, 133.3333), (1., 0.), (1e36, 0.01)] {

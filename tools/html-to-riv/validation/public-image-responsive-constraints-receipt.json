@@ -1,0 +1,41 @@
+{
+  "scope": "Partial public responsive image constraints; 12 following-tail pixel failures preserved, separate private unguarded controls retain 36 geometry/pixel failures",
+  "rustTests": 343,
+  "nodeTests": 56,
+  "liveAndFrozenSourceBindings": 269,
+  "publicRequests": 31,
+  "successfulFiles": 24,
+  "expectedDiagnostics": 7,
+  "publicInterfaceComparisons": 62,
+  "nativeFrames": 192,
+  "geometryPass": 192,
+  "pixelPass": 180,
+  "presencePass": 192,
+  "pixelFailures": 12,
+  "historicalOutputsExact": 794,
+  "existingImageFilesExact": 172,
+  "publicVisualTransfers": 192,
+  "newPublicSheetInspectionsClaimed": 0,
+  "privateVisualReview": {
+    "inspectedSheets": 32,
+    "representativePairs": 96,
+    "exactVisualTransfers": 160,
+    "totalFrames": 256,
+    "publicIntendedFrames": 192,
+    "unguardedControlFrames": 64,
+    "unguardedControlGeometryFailures": 36,
+    "unguardedControlPixelFailures": 36
+  },
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-responsive-constraints-checkpoint-r1/verification.json",
+    "sha256": "5a66034371cd57a161099c8b0b68c5bac4fc7cb62553104cc8e8912e70cf3fa5"
+  },
+  "visualTransferProof": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-responsive-constraints-checkpoint-r1/visual-transfer-review.json",
+    "sha256": "2a1d2b0e00bc8d40e96bfbd72056f3f610db48e0f5e72c17514611e071fe42c3"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-responsive-constraints-review.md",
+    "sha256": "77e57905a2b5ce6df2b6fd0604fe41d3250b6537e9f8cd41aa0e33c619f61813"
+  }
+}

@@ -1,0 +1,609 @@
+[
+  {
+    "name": "image-responsive-constraints-width-max-height-point-row-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-width-max-height-percent-row-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": "35%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-width-min-height-point-row-direct",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-height-max-width-point-row-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:auto;height:50%;align-self:flex-start;max-width:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 220
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-height-max-width-percent-row-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:auto;height:50%;align-self:flex-start;max-width:60%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "60%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-height-min-width-point-row-direct",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:auto;height:50%;align-self:flex-start;min-width:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 220
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-width-max-height-point-column-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-width-max-height-percent-column-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": "35%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-width-min-height-point-column-direct",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-height-max-width-point-column-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:auto;height:50%;align-self:flex-start;max-width:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 220
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-height-max-width-percent-column-guard",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:auto;height:50%;align-self:flex-start;max-width:60%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "60%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-height-min-width-point-column-direct",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:auto;height:50%;align-self:flex-start;min-width:220px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 220
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private responsive ratio-bound hypothesis; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-image-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{padding:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{min-width:auto}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-cross-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{align-self:stretch}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-preferred-axis-maximum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{max-width:60%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-percentage-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{max-height:none;min-height:30%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-both-preferred-axes",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{height:40%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-responsive-constraints-diagnostic-intrinsic-both-auto",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}\n#image{width:auto}\n#image{max-height:35%}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intentionally-unsupported",
+      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  }
+]

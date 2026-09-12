@@ -56,6 +56,8 @@ mod wrapping_paint;
 mod images;
 #[path = "image_constraints.rs"]
 mod image_constraints;
+#[path = "image_responsive_constraints.rs"]
+mod image_responsive_constraints;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }
@@ -766,7 +768,7 @@ impl Emitter {
         // Evaluate both actual owners. Rounded outer content bounds alone can
         // erase a tiny fixed inner size and miss overflow in its descendants.
         let child_bounds = if let Some(owner) = &content_owner { child_bounds.content_owner(owner, &path)? } else { child_bounds };
-        let child_bounds = if let Some(image) = &image { child_bounds.image(image.metadata.width, image.metadata.height, image.aspect_axis, &path)? } else { child_bounds };
+        let child_bounds = if let Some(image) = &image { image.validate_bounds(child_bounds, numeric_bounds, &path)? } else { child_bounds };
         if image.is_some() && content_owner.is_some() {
             numeric_bounds.image_outer(child_bounds, sizes, style.padding, native_parent_direction, stretch, &path)?;
         }

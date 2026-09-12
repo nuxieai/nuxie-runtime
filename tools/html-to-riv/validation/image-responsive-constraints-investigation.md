@@ -1,6 +1,6 @@
 # Responsive image constraint maximum guard
 
-This is a private ordinary-file composition investigation, not public compiler admission. The current point implementation is unchanged. Generated candidates and measurement identities are recorded in `image-responsive-constraints-receipt.json` and `output/image-responsive-constraints-candidate-r1`.
+This records the private ordinary-file investigation before public responsive admission. At capture time the point implementation was unchanged. The subsequent public implementation and its exact evidence transfers are documented in `public-image-responsive-constraints-review.md`; the unguarded controls below remain private failures. Generated candidates and measurement identities are recorded in `image-responsive-constraints-receipt.json` and `output/image-responsive-constraints-candidate-r1`.
 
 The candidate keeps one ordinary ratio owner. For width50% / automatic height with an automatic-axis maximum, copy the authored width50% into an additional maxWidth50% field. Mirror for authored height. Native Taffy independently completes preferred/min/max vectors through aspect ratio (`vendor/taffy-0.12.1-rive-yoga-order/src/compute/flexbox.rs:179`, `:533`). Providing both maximum components suppresses unwanted maximum transfer (`geometry.rs:591`). Both ordinary minima are explicitly present to retain the CSS reset minima. All percentages remain on the original image owner. No browser measurements become emitted values.
 

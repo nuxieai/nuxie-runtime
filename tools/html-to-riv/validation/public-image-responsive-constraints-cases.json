@@ -527,8 +527,8 @@
     "contentBox": false,
     "pointInsets": 0,
     "candidateExpectation": {
-      "status": "intentionally-unsupported",
-      "reason": "Outside the evidenced responsive authored-axis constraint composition"
+      "status": "intended-support",
+      "reason": "Percentage minimum now admitted in extended opposite-axis profile; prior public diagnostic retained in frozen earlier corpus."
     },
     "observeIds": [
       "parent",
@@ -536,8 +536,7 @@
       "tail"
     ],
     "expected": {
-      "outcome": "diagnostic",
-      "code": "unsupported-target-semantics"
+      "outcome": "compile"
     }
   },
   {

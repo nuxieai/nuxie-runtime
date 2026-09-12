@@ -30,7 +30,7 @@ pub(super) fn resolve(style: &Style, parent: &Style, source: &str) -> Result<Opt
         _ => return Ok(None),
     };
     let definite=1-automatic;
-    let reject=||unsupported(source,"Responsive image constraints require one percentage preferred axis, an opposite point minimum or point/percentage maximum, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis and simultaneous bounds need separate qualification");
+    let reject=||unsupported(source,"Responsive image constraints require one percentage preferred axis, opposite point/percentage min/max bounds, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis bounds need separate qualification");
     if !style.flex.legacy() || !style.padding.is_zero()
         || !style.numeric.padding.iter().all(|v|v.as_ref().is_ok_and(|v|v.is_exact_zero() && v.native()==0.))
         || !scalar(sizes[definite],numeric[definite],true)
@@ -43,10 +43,12 @@ pub(super) fn resolve(style: &Style, parent: &Style, source: &str) -> Result<Opt
     let min_numeric=[&style.numeric.min_width,&style.numeric.min_height];
     let max_numeric=[&style.numeric.max_width,&style.numeric.max_height];
     if !zero(minima[definite],min_numeric[definite]) || !absent(maxima[definite],max_numeric[definite]) { return Err(reject()); }
-    let minimum_only=scalar(minima[automatic],min_numeric[automatic],false) && absent(maxima[automatic],max_numeric[automatic]);
-    let maximum_only=zero(minima[automatic],min_numeric[automatic]) && scalar(maxima[automatic],max_numeric[automatic],true);
-    if !minimum_only && !maximum_only { return Err(reject()); }
-    Ok(Some(Resolved{automatic,minimum:minima[automatic],maximum:maxima[automatic],guard:maximum_only}))
+    let maximum_absent=absent(maxima[automatic],max_numeric[automatic]);
+    if !scalar(minima[automatic],min_numeric[automatic],true)
+        || !(maximum_absent || scalar(maxima[automatic],max_numeric[automatic],true)) { return Err(reject()); }
+    // Keep authored bounds separate: point/percentage ordering can change on
+    // resize, and native clamping gives the minimum priority when they cross.
+    Ok(Some(Resolved{automatic,minimum:minima[automatic],maximum:maxima[automatic],guard:!maximum_absent}))
 }
 impl Resolved {
     pub fn lower_outer(&self, style: &Style) -> Lowered {
@@ -93,8 +95,33 @@ mod tests {
         assert!(matches!(lowered.bounds[1],Size::Pixels(0.)));
     }
     #[test]
+    fn combined_bounds_preserve_mixed_units_conflicts_and_original_provenance() {
+        for css in ["width:50%;min-height:100px;max-height:35%",
+            "height:50%;min-width:80%;max-width:30%", "width:50%;min-height:45%"] {
+            let authored=style(css);
+            let plan=resolve(&authored,&Style::default(),"image").unwrap().unwrap();
+            let lowered=plan.lower_outer(&authored);
+            let axis=plan.automatic;
+            let unchanged=|left:Size,right:Size|match (left,right) {
+                (Size::Pixels(a),Size::Pixels(b)) | (Size::Percent(a),Size::Percent(b)) => a==b,
+                (Size::Auto,Size::Auto)=>true, _=>false,
+            };
+            assert!(unchanged(lowered.bounds[axis],[authored.min_width,authored.min_height][axis]));
+            assert!(unchanged(lowered.bounds[axis+2],[authored.max_width,authored.max_height][axis]));
+            let original=if axis==0 {&authored.numeric.min_width} else {&authored.numeric.min_height};
+            let emitted=if axis==0 {&lowered.numeric.min_width} else {&lowered.numeric.min_height};
+            match (original,emitted) {
+                (NumericSize::Pixels(Ok(a)),NumericSize::Pixels(Ok(b))) |
+                (NumericSize::Percent(Ok(a)),NumericSize::Percent(Ok(b))) => assert!(a.proves_equal(b)),
+                _=>panic!("minimum provenance changed"),
+            }
+            if plan.guard { assert!(matches!(lowered.bounds[3-axis],Size::Percent(50.))); }
+            else { assert!(matches!(lowered.bounds[3-axis],Size::Auto)); }
+        }
+    }
+    #[test]
     fn unsupported_bound_topologies_and_tiny_percentage_padding_stay_closed() {
-        for css in ["width:40%;min-height:20%;", "width:40%;min-height:2px;max-height:10px",
+        for css in ["width:40%;min-width:20%;min-height:20%;", "width:40%;min-height:auto;max-height:10px",
             "width:40%;max-width:50px;max-height:10px", "width:40%;min-height:auto",
             "width:40%;max-height:10px;padding:1e-50%", "width:40%;max-height:10px;padding:1e-50px"] {
             assert!(resolve(&style(css),&Style::default(),"image").is_err(),"{css}");

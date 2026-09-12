@@ -291,6 +291,33 @@ mod tests {
         assert_eq!(result.upper,[Some(220.),Some(100.)]);
     }
     #[test]
+    fn combined_percentage_minima_use_parent_axis_and_win_conflicts_after_maximum() {
+        let parent=Bounds{upper:[Some(800.),Some(200.)],lower:[Some(800.),Some(200.)],witness:[Some(800.),Some(200.)]};
+        let width=Bounds{upper:[Some(400.),None],lower:[Some(400.),None],witness:[Some(400.),None]};
+        let result=width.image_constrained(96,64,1,parent,Size::Percent(75.),Size::Pixels(100.),"test").unwrap();
+        assert_eq!(result.upper,[Some(400.),Some(150.)]);
+        assert_eq!(result.lower,result.upper);
+        assert_eq!(result.witness,result.upper);
+        let height=Bounds{upper:[None,Some(100.)],lower:[None,Some(100.)],witness:[None,Some(100.)]};
+        let result=height.image_constrained(96,64,0,parent,Size::Percent(50.),Size::Percent(25.),"test").unwrap();
+        assert_eq!(result.upper,[Some(400.),Some(100.)]);
+        assert_eq!(result.lower,result.upper);
+        for (parent_height,expected) in [(100.,100.),(400.,200.)] {
+            let parent=Bounds{upper:[Some(800.),Some(parent_height)],..parent};
+            let result=width.image_constrained(96,64,1,parent,Size::Pixels(100.),Size::Percent(50.),"test").unwrap();
+            assert_eq!(result.upper,[Some(400.),Some(expected)]);
+        }
+    }
+    #[test]
+    fn overflowing_percentage_minimum_is_not_hidden_by_finite_maximum() {
+        let child=Bounds{upper:[Some(100.),None],lower:[Some(0.),None],witness:[None,None]};
+        assert!(child.image_constrained(96,64,1,Bounds::VIEWPORT,Size::Percent(f32::MAX),Size::Pixels(10.),"test").is_err());
+        // An overflowing maximum cannot enlarge the finite preferred ratio.
+        assert!(child.image_constrained(96,64,1,Bounds::VIEWPORT,Size::Pixels(100.),Size::Percent(f32::MAX),"test").is_ok());
+        let parent=Bounds{upper:[Some(800.),None],lower:[Some(0.),None],witness:[Some(800.),None]};
+        assert!(child.image_constrained(96,64,1,parent,Size::Percent(20.),Size::Pixels(100.),"test").is_err());
+    }
+    #[test]
     fn responsive_ratio_intermediate_and_final_fit_have_separate_overflow_guards() {
         let child=Bounds{upper:[Some(f32::MAX),None],lower:[Some(0.),None],witness:[None,None]};
         let error=child.image_constrained(1,8192,1,Bounds::VIEWPORT,Size::Pixels(0.),Size::Pixels(10.),"test").err().unwrap();

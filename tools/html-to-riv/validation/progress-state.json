@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
-  "focus": "Public responsive image min/max constraints",
-  "status": "Responsive constraint checkpoint verified; broader image sizing remains partial",
-  "current": "Ordinary ratio owners retain authored percentage dimensions while clamping the opposite automatic axis.31 requests/62 interface comparisons;192 geometry/presence passes and180 pixel passes, preserving12 fractional tail failures. All172 older image files/maps and794 historical outputs remain exact.",
-  "next": "Investigate simultaneous automatic-axis min/max or preferred-axis constraints with a finite ordinary-file matrix. Image padding, automatic minima/stretch and broader responsive constraints remain unresolved.",
+  "focus": "Combined image bounds and preferred-axis compositions",
+  "status": "Combined public checkpoint verified; preferred-axis candidates reviewed",
+  "current": "Point/percentage automatic-axis min/max, including conflicting bounds, compile as ordinary responsive properties.31requests/62interface comparisons;216geometry/presence passes,204pixel passes. Twelve fractional tail failures remain.196older image files/maps and794historical outputs remain exact.",
+  "next": "Carry tested preferred point-bound propagation and same-parent percentage coefficient clamping through public/numeric validation. Preserve failed native-transfer and wrapper controls; do not rerender unchanged scenes.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Combined image bounds and retained failures",
+      "path": "tools/html-to-riv/validation/public-image-combined-constraints-review.md"
+    },
+    {
+      "label": "Preferred-axis candidate repairs and failed wrappers",
+      "path": "tools/html-to-riv/validation/image-preferred-constraints-followup-investigation.md"
+    },
     {
       "label": "Responsive image bounds, original parent bases and retained failures",
       "path": "tools/html-to-riv/validation/public-image-responsive-constraints-review.md"

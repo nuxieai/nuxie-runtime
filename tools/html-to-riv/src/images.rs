@@ -209,12 +209,15 @@ impl Plan {
         records[owner as usize + 1].set("clip", Value::Bool(true))?;
         if let Some(plan)=&self.responsive {
             // Generic box emission omits reset zero minima. Ratio owners need
-            // both units explicitly Point, otherwise Taffy completes the
-            // missing minimum component using the intrinsic aspect ratio.
+            // both units explicit, otherwise Taffy completes the missing
+            // minimum component using the intrinsic aspect ratio.
             for (axis,name) in [(0,"minWidth"),(1,"minHeight")] {
-                let value=if axis==plan.automatic { match plan.minimum {Size::Pixels(v)=>v,_=>unreachable!("responsive minimum is point")} } else {0.};
+                let (value,units)=if axis==plan.automatic { match plan.minimum {
+                    Size::Pixels(v)=>(v,1), Size::Percent(v)=>(v,2),
+                    Size::Auto=>unreachable!("responsive automatic minimum is not admitted"),
+                }} else {(0.,1)};
                 records[owner as usize + 2].set(name,Value::Float(value))?;
-                records[owner as usize + 2].set(&format!("{name}UnitsValue"),Value::Uint(1))?;
+                records[owner as usize + 2].set(&format!("{name}UnitsValue"),Value::Uint(units))?;
             }
         }
         if self.aspect_axis.is_some() {
@@ -261,8 +264,8 @@ mod tests {
         (style, parent, plan, lowered)
     }
     #[test]
-    fn responsive_image_emission_materializes_both_point_minima() {
-        for (css,expected) in [("width:50%;max-height:100px",[0.,0.]),("width:50%;min-height:100px",[0.,100.]),("height:50%;min-width:220px",[220.,0.])] {
+    fn responsive_image_emission_materializes_both_minima_with_authored_units() {
+        for (css,expected,units) in [("width:50%;max-height:100px",[0.,0.],[1,1]),("width:50%;min-height:100px",[0.,100.],[1,1]),("height:50%;min-width:220px",[220.,0.],[1,1]),("width:50%;min-height:45%;max-height:100px",[0.,45.],[1,2]),("height:50%;min-width:80%;max-width:30%",[80.,0.],[2,1])] {
             let parent=Style::default();
             let style=computed(&format!("#image{{align-self:flex-start;{css}}}"),&parent);
             let responsive=super::super::image_responsive_constraints::resolve(&style,&parent,"image").unwrap().unwrap();
@@ -271,7 +274,7 @@ mod tests {
             plan.emit(&mut records,0,Paint::default()).unwrap();
             for (index,name) in ["minWidth","minHeight"].into_iter().enumerate() {
                 assert!(matches!(records[2].get(name),Some(Value::Float(v)) if *v==expected[index]));
-                assert!(matches!(records[2].get(&format!("{name}UnitsValue")),Some(Value::Uint(1))));
+                assert!(matches!(records[2].get(&format!("{name}UnitsValue")),Some(Value::Uint(v)) if *v==units[index]));
             }
         }
     }

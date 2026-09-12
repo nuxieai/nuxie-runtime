@@ -1,0 +1,197 @@
+{
+  "scope": "Partial combined opposite-axis public image constraints; 12 following-tail pixel failures retained.",
+  "rustTests": 346,
+  "nodeTests": 56,
+  "liveAndFrozenSourceBindings": 274,
+  "artifactBindingsVerified": 7288,
+  "publicRequests": 31,
+  "successfulFiles": 27,
+  "expectedDiagnostics": 4,
+  "publicInterfaceComparisons": 62,
+  "priorInterfaceRecheckRequests": 19,
+  "priorInterfaceRecheckComparisons": 38,
+  "duplicateConvertedRequestAlreadyCounted": "image-responsive-constraints-diagnostic-percentage-minimum",
+  "priorDiagnosticWordingChanges": [
+    {
+      "case": "image-responsive-constraints-diagnostic-image-padding",
+      "before": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, an opposite point minimum or point/percentage maximum, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis and simultaneous bounds need separate qualification"
+        }
+      ],
+      "after": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, opposite point/percentage min/max bounds, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis bounds need separate qualification"
+        }
+      ]
+    },
+    {
+      "case": "image-responsive-constraints-diagnostic-automatic-minimum",
+      "before": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, an opposite point minimum or point/percentage maximum, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis and simultaneous bounds need separate qualification"
+        }
+      ],
+      "after": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, opposite point/percentage min/max bounds, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis bounds need separate qualification"
+        }
+      ]
+    },
+    {
+      "case": "image-responsive-constraints-diagnostic-cross-stretch",
+      "before": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, an opposite point minimum or point/percentage maximum, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis and simultaneous bounds need separate qualification"
+        }
+      ],
+      "after": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, opposite point/percentage min/max bounds, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis bounds need separate qualification"
+        }
+      ]
+    },
+    {
+      "case": "image-responsive-constraints-diagnostic-preferred-axis-maximum",
+      "before": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, an opposite point minimum or point/percentage maximum, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis and simultaneous bounds need separate qualification"
+        }
+      ],
+      "after": [
+        {
+          "code": "unsupported-target-semantics",
+          "source": "/0/0",
+          "message": "Responsive image constraints require one percentage preferred axis, opposite point/percentage min/max bounds, zero image padding, and ordinary sizing without automatic cross stretch; preferred-axis bounds need separate qualification"
+        }
+      ]
+    }
+  ],
+  "nativeFrames": 216,
+  "geometryPass": 216,
+  "pixelPass": 204,
+  "presencePass": 216,
+  "pixelFailures": [
+    {
+      "case": "image-combined-constraints-height-percent-min-point-max-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-height-percent-min-point-max-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-height-conflicting-percent-row",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-height-conflicting-percent-row",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 0,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 3,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 4,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 7,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-percentage-minimum-only-height",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-combined-constraints-percentage-minimum-only-height",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    }
+  ],
+  "historicalOutputsExact": 794,
+  "existingImageFilesExact": 196,
+  "exactPrivateFrameVisualTransfers": 192,
+  "freshPublicFramesReviewed": 24,
+  "newPublicSheetsInspected": 6,
+  "newPublicRepresentativePairs": 9,
+  "newPublicWithinCaseTransfers": 15,
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-combined-constraints-checkpoint-r1/verification.json",
+    "sha256": "bb2a60c2644b76553417f21b2c66a0d968210d730d500bf5215158ff5d377bac"
+  },
+  "visualTransferProof": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-combined-constraints-checkpoint-r1/visual-transfer-review.json",
+    "sha256": "d57358e35253c0522c85bd338b9d64eb3b68537af8778338fa2a30ccd12c6474"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-combined-constraints-review.md",
+    "sha256": "d829d965bd5efc54fb6a9d5095af8900f21b8f0bb261996a8f34e788c16826d6"
+  },
+  "verifier": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-combined-constraints-evidence.py",
+    "sha256": "d341377999d7bc988657f23c0db794fc293180e43b8d8f93b585ff09881d9fbb"
+  }
+}

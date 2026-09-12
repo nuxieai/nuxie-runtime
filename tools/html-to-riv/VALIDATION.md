@@ -76,6 +76,23 @@ The current frozen public compiler is `output/public-transport-malformed-build-r
 
 The earlier source-mutation evidence is `output/public-malformed-mutations-r1/lifecycle-r2/receipt.json`. From the module directory, run `node validation/public-malformed-mutations.mjs --output output/public-malformed-mutations-r1/NEW_RUN` with a fresh path; add `--only CASE_ID` for a retained-case replay. Every process or worker batch is bounded to ten seconds. This finite source mutation campaign does not replace coverage-guided fuzzing, malformed transport input, large resource stress or renderer/browser validation. Public production code is unchanged.
 
+## Resource-limit boundary campaign (Q06 partial)
+
+The [40-case resource campaign](validation/public-resource-boundaries-review.md) uses the same frozen public compiler above and passes all 120 CLI/raw-WASM/public-JS observations. It covers 1,048,575/1,048,576/1,048,577 combined source UTF-8 bytes; 127/128/129 authored nesting levels; and 8191/8192/8193 authored elements. Inert HTML/CSS comments distinguish bytes from characters, split totals and escaped JSON wire length. Plain and content-box structures preserve authored identities; six combined-limit controls cover admitted boundaries and source-before-structure diagnostic precedence. Per interface, 25 cases succeed, nine produce `input-limit`, three `depth-limit` and three `object-limit`.
+
+All results repeat exactly across the three interfaces. Successful CLI Rive/map files also match independent no-op controls byte-for-byte. Rejections publish no fresh files, preserve copies of preceding successful native outputs and allow successful recovery. Public JS results remain owned across later calls. Raw ABI checks cover post-allocation lengths, no Rive output after rejection, explicit reset and recovery; because every call resets, this campaign does not independently test allocation clearing a still-live previous raw response. See the [semantic integration review](validation/public-resource-boundaries-integration-review.md).
+
+The preserved run made 136 CLI, 121 raw ABI and 146 public JS calls. Each process/worker transaction had a ten-second timeout. The largest request contained 1,048,577 decoded source bytes and 3,145,694 serialized ABI bytes. No 192 MiB admitted allocation or arbitrary-pointer fuzzing was attempted. An independent verifier rehashed all 530 recorded case artifacts and 134 frozen compiler bindings and checked full requests, Unicode/byte counts, exact output files, identities, diagnostics and recovery. [The aggregate receipt](validation/public-resource-boundaries-receipt.json) binds the original campaign, verifier and review; all run evidence remains in `output/public-resource-boundaries-r1`.
+
+From the module directory, a future run uses fresh output paths:
+
+```sh
+node validation/public-resource-boundaries-campaign.mjs --output output/public-resource-boundaries-NEW
+node validation/public-resource-boundaries-verify.mjs output/public-resource-boundaries-NEW
+```
+
+The verifier requires the complete 40-case campaign. No unchanged campaign was rerun for this documentation integration. Q06 remains partial: other limits, CSS expansion stress, additional combinations and cross-host execution remain open. These compiler/transport checks do not establish renderer fidelity, broad memory bounds or performance guarantees.
+
 ## Immutable native/browser run
 
 Build a fresh baseline toolchain through the unchanged root workspace, with compiler-owned output paths:

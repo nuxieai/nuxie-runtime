@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-12",
-  "focus": "Request contracts repaired; line-height geometry validated",
-  "status": "Compiler-only fixes pass253 transport cases; runtime remains unchanged",
-  "current": "Named-field CLI/WASM requests now reject positional arrays, and JavaScript normalization preserves structured failures for unprintable thrown values. All253 transport cases,271 Rust/48 Node tests and strict TypeScript pass;794 prior valid Rive files/maps remain exact. The private line-height candidate passes344 metric frames plus16 source-precision controls, while local glyph-paint failures remain explicit in the complete Chrome/native gallery. Public typography remains unadmitted.",
-  "next": "Advance independent compiler quality/resource and asset/text groundwork. Keep line-height geometry separate from unresolved paint, preserve diagnostics and complete the remaining99-item scope without repeating unchanged evidence.",
+  "focus": "Request contracts and authoring resource boundaries checked",
+  "status": "Q05 and Q06 remain partial; public language and runtime unchanged",
+  "current": "All 253 transport cases, 271 Rust/48 Node tests and strict TypeScript pass; 794 prior valid Rive files/maps remain exact. A separate 40-case campaign passes 120 CLI/raw-WASM/public-JS observations around the 1 MiB source, 128-level nesting and 8192-authored-element limits, with exact outputs, diagnostics, ownership and recovery. The private line-height candidate retains 344 metric frames plus 16 source-precision controls, with local glyph-paint failures preserved. Public typography remains unadmitted.",
+  "next": "Advance asset/text groundwork and the remaining compiler-quality scope. Q06 remains partial: other limits, expansion-heavy CSS, further resource combinations and cross-host stress are open. Keep line-height geometry separate from unresolved paint and preserve existing evidence without unchanged reruns.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "40-case authoring resource boundaries, exact outputs and recovery",
+      "path": "tools/html-to-riv/validation/public-resource-boundaries-review.md"
+    },
+    {
+      "label": "Resource scope and raw ABI lifecycle interpretation",
+      "path": "tools/html-to-riv/validation/public-resource-boundaries-integration-review.md"
+    },
+    {
+      "label": "Resource campaign and independent artifact-verification receipts",
+      "path": "tools/html-to-riv/validation/public-resource-boundaries-receipt.json"
+    },
     {
       "label": "Named request contracts, malformed transport fixes and exact output regression",
       "path": "tools/html-to-riv/validation/public-transport-malformed-review.md"
@@ -515,6 +527,10 @@
     {
       "name": "Completed compiler request checkpoint",
       "work": "253-case transport campaign and794 exact valid outputs; broader fuzzing/resource coverage remains open."
+    },
+    {
+      "name": "Completed bounded resource campaign (Q06 partial)",
+      "work": "40 cases / 120 interface observations cover source bytes, authored nesting and element counts; all pass. Other limits, expansion-heavy CSS, additional interactions and cross-host stress remain open."
     },
     {
       "name": "Typography prerequisites",

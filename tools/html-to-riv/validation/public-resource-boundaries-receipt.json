@@ -1,0 +1,80 @@
+{
+  "status": "passed",
+  "scope": "Finite Q06 authoring resource-boundary campaign; compiler and transport evidence only",
+  "cases": 40,
+  "interfaceObservations": 120,
+  "outcomesPerInterface": {
+    "success": 25,
+    "input-limit": 9,
+    "depth-limit": 3,
+    "object-limit": 3
+  },
+  "calls": {
+    "cli": 136,
+    "rawAbi": 121,
+    "publicJs": 146
+  },
+  "unexpectedFailures": 0,
+  "productionEdits": false,
+  "runtimeRendererDependencyBuildEdits": false,
+  "nativeRenderingOrBrowserCapture": false,
+  "documentedLimitsTested": {
+    "combinedSourceUtf8Bytes": 1048576,
+    "authoredNesting": 128,
+    "authoredElements": 8192
+  },
+  "largestSourceUtf8Bytes": 1048577,
+  "largestSerializedAbiBytes": 3145694,
+  "verifiedCaseArtifacts": 530,
+  "verifiedCompilerBindings": 134,
+  "evidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-resource-boundaries-r1/receipt.json",
+      "sha256": "8d0fa6d223786f3eabbe37de08335fe2053ba6b1bcebae0360fcacb593bdac4a",
+      "bytes": 68227802
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-resource-boundaries-r1/artifact-verification.json",
+      "sha256": "bebbd6a8b716398d28dacde291b6c02499e76daae6e611856b70164127c572c5",
+      "bytes": 1726
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-resource-boundaries-r1/cases.json",
+      "sha256": "0fbab43147fc3cf3cd63a1614e64158df6065338a7123f5b058fb5d1c8f0b288",
+      "bytes": 30571128
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-resource-boundaries-r1/command.json",
+      "sha256": "a9d20cbd96dd092b15b14736a5fdbdf0fb890f6b1ddf6c758bde7ff352732c66",
+      "bytes": 2755
+    }
+  ],
+  "harness": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-resource-boundaries-cases.mjs",
+      "sha256": "38fdbc7a057037cf1d87aac98ce4e0b69b3fd83110b6ab65b2313adf751daf57",
+      "bytes": 6029
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-resource-boundaries-worker.mjs",
+      "sha256": "c512e29b2fefbbcb75b367e4281cc5655bd6bba0b6c7c8f8723e8fce23b1c8d1",
+      "bytes": 4360
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-resource-boundaries-campaign.mjs",
+      "sha256": "4c85ecb623fc0ea51fade0080f08502625ae47c41686f779a37b4867fcb95286",
+      "bytes": 12604
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-resource-boundaries-verify.mjs",
+      "sha256": "6035c1ee7423371a9e3447f399c1adfe20c56ce4f76b2b6bd3fe84a7aec0de01",
+      "bytes": 7373
+    }
+  ],
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-resource-boundaries-review.md",
+    "sha256": "2ba968ae7c8614bd3b6dbdb88f8ef84d049554639153c5932d964aed2d441ae8",
+    "bytes": 7674
+  },
+  "remaining": "No local implementation required by these results. Overall Q06 remains bounded: expansion-heavy CSS, other resource interactions, broad adversarial distributions and cross-host runs are not established by this campaign."
+}

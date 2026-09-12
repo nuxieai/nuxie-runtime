@@ -1,0 +1,186 @@
+{
+  "status": "private geometry proof passes; pixel qualification unresolved",
+  "scope": "Actual final-record leaf groups only; public flex admission unchanged. Derived f32 far edges are not separately rendered pixels.",
+  "sourceFileCount": 27,
+  "sourceHashes": {
+    "flex_structure.rs": "d8c3d2a1aa2b861cfd0d4102e4d6c215643bb29ca282b5b079a072b4824d8bb4",
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "d30d1e5ff14e89fce90531365c41ccf66236a90d8a4a11188d9f01beb4d3cd1f",
+    "flex_scene.rs": "c7dfe10de4e84e15afe0d918d689d90d208f1459515e18f8af22c4b6d293b99f",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "flex_sizes.rs": "1c8f76635f16a5b65e75927a7df35700bb79e6624f7b5d5b69459cbe0fb5d37f",
+    "computed_provenance.rs": "702754b214b429366273147aa0a56fc36deb9cf57c8ffde5d0c0c3db1d01509a",
+    "compiler.rs": "f8172a5443cdecb90b4e43fad1d382bf91a40dcd579fc667ed016bab4cb21d9a",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "flex_world.rs": "3c64ab1c8204cd4f6d8e52473b43300bb483c5a931c665c3e5745a0c7b7e813d",
+    "baseline.rs": "bf4f42624b6eb1b60f9ef0b3333d0b3cb4842d63de88e52de106a7e7507ac9a5",
+    "flex_descriptor.rs": "9215c889e7d088e3fe8c4b08c933be5c55da2af1630d97d725e63dee2f617075",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "gap.rs": "8b0848021dea9e2d1438e71ebf10ba2b7277a0ab10e41989ae14e7902686c67a",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "5098423575ecdf59ca264e72a9c9f6acfec4f906fc731a61d415a30646a626c8",
+    "flex_numeric.rs": "17f300df9ac25458a51540a23b389f9610e0e2b425a64550c1d7a931ca9ef615",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "15c303837344c7649b9691dbce049e8ab4d77caae34ae5845a89c73828c18a29",
+    "flex_proof.rs": "75da7238b2cefdfa945a61f3c6951385b7d3270e6ccaf3f94448dd24d0816f4f",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  },
+  "sourceHashSetSha256": "53095443a0edbad95d13a7b92f245f6eaf73a6575bbba13ff5c5343afa233d5a",
+  "casesSha256": "fd5aa38cd40df61880010e0ed9446b2bf82848a1e44bebd553f526abd7d9837d",
+  "currentDriverSha256": "8006f2436e190536a336358ace930df5de76b1e6897eadaebccd38c186a84f60",
+  "originalDriverSha256": "634b447a53c6a38b41b852a9c364f825b71fb832a492550f65438d14e11fae2a",
+  "originalRunReceiptSha256": "330a75685b0bcf251ba06a16f91344772eedbe2dadf349eafa0e51987a28a69d",
+  "currentDriverRunReceiptSha256": "fb5ba991f8a6c91de43b0c37d57f553939a3ca56922597a2c9911d7b852bba14",
+  "currentDriverExitCode": 1,
+  "currentDriverExitReason": "Preserved 26 pixel gate failures; source-bound numerical/native checks passed.",
+  "native": {
+    "scope": "Private actual-record group proof only; no public admission or whole-scene qualification. Native f32 sizes/origins and derived f32 far edges; derived edges are not rendered pixels.",
+    "cases": 22,
+    "historicalCases": 48,
+    "newCompileFailures": 0,
+    "historicalCompileFailures": 0,
+    "expectationFailures": 0,
+    "nativeFailures": 0,
+    "nativeChecks": {
+      "whole": 2160,
+      "exact": 2232
+    },
+    "boundFailures": 0,
+    "determinismFailures": 0,
+    "historicalBoundedGroups": 0
+  },
+  "nativeRepeatGeometry": {
+    "comparisons": 132,
+    "failures": 0,
+    "auditSha256": "49113c4682b46955e977a25d78d6ca1a4d35f55304dac15b09f7f762c93f1886"
+  },
+  "chromeNative": {
+    "browser": "153.0.8010.12",
+    "backend": "rust-metal",
+    "effectiveMode": "RasterOrdering",
+    "cases": 12,
+    "frames": 96,
+    "geometryPass": 96,
+    "pixelPass": 70,
+    "clearPass": 192,
+    "maximumGeometryDifference": 0.009385000000008858
+  },
+  "visualReview": {
+    "distinctPairsViewed": 36,
+    "sheetsViewed": 12,
+    "unscaledCopiesVerified": 72,
+    "repeatedPairRGBAComparisons": 60,
+    "repeatedImageRGBAComparisons": 120,
+    "rerunImageRGBAComparisons": 192,
+    "allSourcesOpaque": true,
+    "manifestSha256": "81c84589d2d1ea3163ba11b720ad089e5d5cb9510e04942247f167571cb69e6a",
+    "perCasePixelPass": [
+      {
+        "name": "bridge-row-subunit-point",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-row-zero-independent",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-row-decimal-point",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-row-reverse-subunit-point",
+        "pixelPassed": [
+          false,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-row-reverse-zero-independent",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-row-reverse-decimal-point",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-column-subunit-point",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-column-zero-independent",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-column-decimal-point",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-column-reverse-subunit-point",
+        "pixelPassed": [
+          true,
+          true,
+          true
+        ]
+      },
+      {
+        "name": "bridge-column-reverse-zero-independent",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      },
+      {
+        "name": "bridge-column-reverse-decimal-point",
+        "pixelPassed": [
+          true,
+          false,
+          true
+        ]
+      }
+    ]
+  },
+  "artifactRoot": "../output/flex-proof-bridge-r2",
+  "buildReceipt": "../output/flex-proof-bridge-r2/aggregate-driver-check/build-receipt.json",
+  "renderReceipt": "../output/flex-proof-bridge-r2/render/receipt.json",
+  "fullVisualManifest": "../output/flex-proof-bridge-r2/visual-sheets/reviewed-manifest.json"
+}

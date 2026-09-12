@@ -48,3 +48,9 @@ SHA-256 values below are current file bytes, each compared directly against `git
 | `crates/nuxie-runtime/src/mechanical_port/source/layout/layout_enums.rs` | `00e6c94c7d19965048b08c754b2656464a19102a96e4e6658e8166841d5b892a` | identical |
 | `crates/nuxie-runtime/src/mechanical_port/source/layout_component.rs` | `5154d46f471e2497886b2dbd420d5a0532baf8521f6cfe655a432c60d05122c3` | identical |
 | `vendor/taffy-0.12.1-rive-yoga-order/src/compute/flexbox.rs` | `75f7a79993712f3f115762291819bf3aab530e79002746c63ad9ad500cc728c2` | identical |
+
+## Final solve correction from the scene-certificate review
+
+The minimum rows above describe initial style application and missed a later normalization. In the immutable `source/layout_component.rs:2183-2205`, the actual solve converts **every flex child's Auto minimum on both axes to point zero**, including Fixed children and explicit Auto units. It does this before installing the styles in Taffy's tree. Consequently, Fixed automatic minima do not survive this final flex solve as the earlier audit assumed. Keep the encoded and initially applied forms distinct, but use the final solve state for target reasoning. Grid is outside this compiler profile and is deliberately not covered by that runtime normalization.
+
+This correction does not change emitted files or expand public admission. The current zero-minimum direct-leaf guards are conservative. Nonempty browser automatic minima still require separate semantic validation. The earlier audit conclusion is retained above as historical context, with this correction taking precedence; see flex-scene-review.md for the current restricted certificate.

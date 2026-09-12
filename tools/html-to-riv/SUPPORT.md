@@ -75,3 +75,7 @@ The private paint module now reproduces all48 dynamic snapped-layout files exact
 ## Public gap checkpoint
 
 The public compiler emits ordinary physical gap fields directly from HTML/CSS. Twelve prior native scenes reproduce exactly; four intrinsic-percentage controls reject while their experimental pixel failures remain preserved. The additional public interaction matrix covers ordering, inherited font-relative gaps, definite min/max clamps and overflow in all four directions. See validation/public-gap-review.md for validation and remaining combinations.
+
+## Private flex analysis checkpoint
+
+Final-scene record types/properties, style and paint ownership, ancestry, intrinsic sizing and interpolation defaults now gate the conditional flex analyzer. Size, world and far-corner bounds are connected to actual emitted descriptors. This does not expand public flex admission: nonlegacy factors/bases and wrapping remain diagnostic. See validation/flex-scene-review.md for the precise restricted model and its regression evidence.

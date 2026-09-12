@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Rigid world and far-edge domains pass native boundary controls",
-  "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
-  "current": "Public gaps:201Rust/36Node tests;128/128fresh geometry/pixel comparisons and256clear checks, complete visual coverage.12prior native gaps exact;4intrinsic-percentage controls reject with historical failures retained.",
-  "next": "Connect flexible target analysis to propagated size/world domains and verify remaining scene premises before public admission.",
+  "focus": "Private flex bounds validated; ordinary solid borders investigated",
+  "status": "Runtime remains immutable; public grow/shrink and borders remain unadmitted",
+  "current": "Final-scene structure and ancestry checks pass 213 Rust/36 Node tests,482 public regressions and107 additional controls. Private flex:4392 native bounds pass;96/96 geometry and70/96 pixels pass, with26 failures retained and all36 distinct pairs reviewed. Border candidate has eight fully passing fixtures, with fractional-edge failures preserved.",
+  "next": "Isolate flex fractional-edge and thin-paint failures with fixed native box controls; test alternative border paint compositions and continue independent backlog work.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Private flex native bounds and complete Chrome/native visual review",
+      "path": "tools/html-to-riv/validation/flex-proof-bridge-review.md"
+    },
+    {
+      "label": "Final-scene prerequisites and public regression checkpoint",
+      "path": "tools/html-to-riv/validation/flex-scene-receipt.json"
+    },
+    {
+      "label": "Ordinary solid border candidate and retained failures",
+      "path": "tools/html-to-riv/validation/solid-border-candidate-review.md"
+    },
     {
       "label": "World and corner error domains with96native frames",
       "path": "tools/html-to-riv/validation/flex-world-domains-receipt.json"
@@ -377,12 +389,16 @@
   ],
   "activeWork": [
     {
-      "name": "Automatic margin qualification",
-      "work": "Implementation and boundary corpus complete;8pixel failures persist with fixed-spacer control reproducing exact geometry and native pixels."
+      "name": "Flex qualification",
+      "work": "Actual leaf-group analyzer is connected to final records and ancestor size/world bounds. Pixel failures, descendants, helper wrappers and freeze-dependent groups remain unresolved."
     },
     {
-      "name": "Public wrapping integration",
-      "work": "Private sizing/paint code is staged. Snapped gates require layout-derived error/separation bounds and scene-wide resource admission."
+      "name": "Uniform solid borders",
+      "work": "Four-strip ordinary-file candidate, nested paint-order correction and tested DPR-1 width quantization have evidence. Public parsing/integration, fractional paint alternatives and resource/interaction checks remain."
+    },
+    {
+      "name": "Wrapping",
+      "work": "Private sizing/paint implementation remains staged; viewport error/separation and scene resource checks are unresolved."
     }
   ],
   "publication": {

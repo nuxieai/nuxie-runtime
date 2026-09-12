@@ -127,6 +127,7 @@ pub(crate) struct Group {
     pub helpers:Vec<u32>,pub wrappers:Vec<u32>,
     pub structural_issues:Vec<String>,
     pub no_local_constraint_or_origin:bool,
+    pub scene_certificate:Result<super::flex_scene::Certificate,super::flex_scene::Unresolved>,
     // Null means unresolved, never zero error or an asserted identity ancestor.
     pub parent_main_error:Option<f64>,pub parent_world_error:Option<f64>,
     pub ideal_literal_metadata:Option<String>,
@@ -137,9 +138,11 @@ pub(crate) struct Group {
 pub(super) struct SceneIndex {
     constraints:std::collections::BTreeSet<u32>,
     layout_children:std::collections::BTreeMap<u32,Vec<u32>>,
+    certificate:Option<Result<super::flex_scene::Certificate,super::flex_scene::Unresolved>>,
 }
 pub(super) fn scene_index(records:&[Record])->SceneIndex {
     let mut index=SceneIndex::default();
+    index.certificate=Some(super::flex_scene::inspect(records));
     for (position,record) in records.iter().enumerate().skip(1) {
         if let Some(parent)=uint(record,"parentId") {
             if record.kind=="LayoutComponent" {index.layout_children.entry(parent).or_default().push(position as u32-1);}
@@ -273,6 +276,7 @@ impl Group {
             parent_local_facts,parent_main:main.into(),parent_cross:cross.into(),
             parent_numeric_main:if direction.is_row(){parent.numeric_width.clone()}else{parent.numeric_height.clone()},
             parent_numeric_cross:if direction.is_row(){parent.numeric_height.clone()}else{parent.numeric_width.clone()},native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,no_local_constraint_or_origin,
+            scene_certificate:scene.certificate.clone().unwrap_or(Err(super::flex_scene::Unresolved::Root)),
             parent_main_error:None,parent_world_error:None,ideal_literal_metadata:metadata_available.then(||"computed_scalar_provenance".into()),numerical_admission:false,unresolved_premises}
     }
 }

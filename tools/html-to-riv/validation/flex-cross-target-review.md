@@ -1,0 +1,36 @@
+# Cross target and cross origin of direct flex leaves
+
+Read-only source audit of the conditional bridge. This is a restricted compiler-record contract, not public flex admission or a browser-pixel qualification. Runtime references below were checked against immutable baseline `6c7ac16617835b5f581784ff08a9e779bb52faf3` with no differences.
+
+## Actionable omission
+
+`LocalFacts.ordinary_flex_layout` originally checked only `layoutTypeValue == 0`. It also needs actual visible flex participation: `displayValue` is a Uint property, key 596, default **0 = Flex**; **1 = None**. `layout_component_style.rs:382` honors None independently of layout type. Taffy `compute/flexbox.rs:528` excludes non-generating items, so a final style mutation to displayValue 1 invalidates the sibling membership and targets even when all dimensions and alignment fields still match. Rejecting every present displayValue in the closed record-property vocabulary is sufficient for this restricted family; alternatively validate the actual default/allowed value explicitly for participants and every ancestor. Include a mutation test.
+
+The schema evidence is `crates/nuxie-schema/src/generated/schema.rs:25615`; the runtime default is `crates/nuxie-runtime/src/mechanical_port/source/generated/layout/layout_sizing_style_base.rs:57`; the enum mapping is `crates/nuxie-runtime/src/mechanical_port/source/layout/layout_style_applier.rs:87`.
+
+## Why the restricted cross target is preserved
+
+The actual compiler emits LayoutComponent objects. Their active sizing path is `crates/nuxie-runtime/src/mechanical_port/source/layout_component.rs:3227`, not only the analogous LayoutParticipant implementation. Fixed cross scale (0), explicit point units (1), finite nonnegative stored dimension, no forced/host overrides and a correctly bound style produce that same point dimension at `:3309`. Intrinsic legacy-hug behavior at `:3243` cannot apply when the intrinsic flag is false and point units are explicit.
+
+The same LayoutComponent path selects `align_self = Auto` for Fixed cross scale at `:3369`. `layout/layout_style_applier.rs:772` maps Auto to None. Taffy `compute/flexbox.rs:572` then inherits the parent's align-items. Parent RowReverse flow (3) with TopRight alignment (2), or ColumnReverse flow (1) with BottomLeft alignment (6), has physical cross-start alignment; the logical-reverse compiler encoding uses TopLeft (0), which also has cross-start alignment. These enum values are defined in `layout/layout_enums.rs:74`; their actual align-items and align-content effects are in `layout/layout_component_style.rs:274` and `:308`. Both effects are FlexStart for all three admitted combinations. No additional native per-child align-self field is required in this closed LayoutComponent vocabulary. The computed `start_aligned_cross` fact binds intended CSS semantics; the actual scale, parent flow and parent alignment establish the native behavior independently.
+
+Taffy `compute/flexbox.rs:1398` takes the known point cross dimension, clamps it by actual cross min/max, and floors it by padding plus border. With omitted/Auto or point-zero cross minimum, omitted/Auto maximum, zero padding/border and no aspect ratio, a finite nonnegative point dimension is unchanged. `:1626` stretches only when alignment is Stretch and the cross style is Auto; neither holds here. The point hypothetical cross size becomes the supplied target unchanged.
+
+At `compute/flexbox.rs:1938`, the final child pass supplies both target dimensions in ContentSize mode. `compute/leaf.rs:37` uses these known dimensions without preferred/min/max styles, and `:143` plus `:151` preserve them except for the padding/border floor, which is zero. This last step requires the separate final-scene proof that the child is an unmeasured LayoutComponent leaf, not an arbitrary host or a component with layout descendants. The native tree installs no measurement context for nonintrinsic LayoutComponent leaves at `layout_component.rs:2007`; absent context measures zero at `:2273`.
+
+An omitted Fixed-axis minimum initially maps to Auto, not an encoded point zero. The actual LayoutComponent solve then converts every flex child's Auto minima to point zero before Taffy (`layout_component.rs:2183-2205`). Thus omission supplies a zero cross clamp in this closed nonnegative family; the initial style conversion is not the final solve state. The main-axis guard remains conservative, and browser automatic minima for nonempty descendants remain a separate semantic question; see `flex-leaf-premises-review.md`.
+
+## Why the cross origin is zero locally
+
+The admitted flow is single-line and not wrap-reverse, all actual margins and insets resolve to zero, and the full direction chain is LTR. Under those conditions the child FlexStart branch returns zero at `compute/flexbox.rs:1816`, including when the child overflows the parent's cross size. Parent FlexStart align-content gives zero line offset through `compute/common/alignment.rs:70`, and the first line starts at the zero content-box inset (`compute/flexbox.rs:2108`). The final expression at `:1973` therefore adds only zeros. RowReverse/ColumnReverse reverses the main axis and does not by itself reverse this cross axis. World translation and the far corner still require the separate ancestor/world arithmetic envelopes; zero local offset does not mean zero world error.
+
+## Conditions the final-scene certificate must retain
+
+- Unique valid style links, actual parent/child membership and a closed record/property vocabulary. Extra LayoutParticipant, placement, measurement, constraint, origin or animation records cannot be silently ignored.
+- No intrinsic flag; no display None; ordinary flex layout; no host or forced sizing overrides; actual ancestor direction, interpolation and transform conditions.
+- Explicit Fixed cross scale and point units bound bit-for-bit to the numeric provenance; zero/Auto cross minimum distinguished from other units; absent maximum; no aspect ratio, margins, padding, borders, gaps or relative insets.
+- Exact parent flow/alignment values, with no wrapping. The child-owned container alignment is irrelevant for a childless node, but the parent-owned alignment is essential.
+
+Native width/height scales default to Fixed 0 and units to Point 1 (`generated/layout/layout_sizing_style_base.rs:52`); omitted min/max numeric values are zero and units Undefined 0 (the default sidecar). `layout_style_applier.rs` converts Undefined bounds to Auto. The bridge currently requires explicit scale/point fields, a conservative binding that avoids depending on their omission. Parent alignment defaults to TopLeft 0, direction to Inherit 0, wrap to NoWrap 0 and intrinsic sizing to false (`generated/layout/layout_component_style_base.rs:174`). Default flow is Row 2 and is **not** one of the reverse flows required by this bridge.
+
+Recommended one-fact controls are display None on a child or ancestor; Fixed-to-Fill cross scale; point-to-percent cross units; positive cross minimum; explicit max0; nonzero padding/margin/inset; parent center cross alignment; ancestor RTL; and an unexpected layout-style applier. Positive controls should include all four CSS directions and a child taller/wider than the parent's cross size, using the same imported original and clone across resize.

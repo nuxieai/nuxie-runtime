@@ -31,8 +31,13 @@ pub(super) mod flex_sizes;
 #[allow(dead_code)] // Conditional world propagation; native admission validation follows.
 #[path = "flex_world.rs"]
 pub(super) mod flex_world;
+#[allow(dead_code)] // Actual-group analyzer bridge; public admission remains separate.
+#[path = "flex_proof.rs"]
+pub(super) mod flex_proof;
 #[path = "flex_structure.rs"]
 mod flex_structure;
+#[path = "flex_scene.rs"]
+mod flex_scene;
 #[path = "flex_descriptor.rs"]
 pub(super) mod flex_descriptor;
 // Staged lowering, exercised against frozen ordinary-file experiments before

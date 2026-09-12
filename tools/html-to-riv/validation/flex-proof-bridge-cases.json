@@ -1,0 +1,282 @@
+[
+  {
+    "name": "bridge-row-subunit-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "subunit-point"
+    ]
+  },
+  {
+    "name": "bridge-row-zero-independent",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.2 .9 0px}#b{flex:.4 .1 0px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "zero-independent"
+    ]
+  },
+  {
+    "name": "bridge-row-decimal-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.1 .1 .03125px}#b{flex:.2 .2 23.125px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "decimal-point"
+    ]
+  },
+  {
+    "name": "bridge-row-freeze",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:1 1 20px;min-width:15px;max-width:40px}#b{flex:1 1 30px;min-width:12px;max-width:50px}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "min/max freeze control"
+    ]
+  },
+  {
+    "name": "bridge-row-nested-content",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a><div id=oa></div></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20px}#b{flex:.25 .25 30px}#oa{width:10px;height:12px;background:#fff}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "layout descendants must remain unresolved"
+    ]
+  },
+  {
+    "name": "bridge-row-reverse-subunit-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "subunit-point"
+    ]
+  },
+  {
+    "name": "bridge-row-reverse-zero-independent",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.2 .9 0px}#b{flex:.4 .1 0px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "zero-independent"
+    ]
+  },
+  {
+    "name": "bridge-row-reverse-decimal-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.1 .1 .03125px}#b{flex:.2 .2 23.125px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "decimal-point"
+    ]
+  },
+  {
+    "name": "bridge-row-reverse-freeze",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:1 1 20px;min-width:15px;max-width:40px}#b{flex:1 1 30px;min-width:12px;max-width:50px}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "min/max freeze control"
+    ]
+  },
+  {
+    "name": "bridge-row-reverse-nested-content",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a><div id=oa></div></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;height:25.5px;flex-direction:row-reverse;background:#14233f}#a,#b{height:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;width:13.125px;height:19.75px;background:#008080a0}#a{flex:.25 .25 20px}#b{flex:.25 .25 30px}#oa{width:10px;height:12px;background:#fff}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "layout descendants must remain unresolved"
+    ]
+  },
+  {
+    "name": "bridge-column-subunit-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "subunit-point"
+    ]
+  },
+  {
+    "name": "bridge-column-zero-independent",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.2 .9 0px}#b{flex:.4 .1 0px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "zero-independent"
+    ]
+  },
+  {
+    "name": "bridge-column-decimal-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.1 .1 .03125px}#b{flex:.2 .2 23.125px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "decimal-point"
+    ]
+  },
+  {
+    "name": "bridge-column-freeze",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:1 1 20px;min-height:15px;max-height:40px}#b{flex:1 1 30px;min-height:12px;max-height:50px}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "min/max freeze control"
+    ]
+  },
+  {
+    "name": "bridge-column-nested-content",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a><div id=oa></div></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.25 .25 20px}#b{flex:.25 .25 30px}#oa{width:10px;height:12px;background:#fff}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "layout descendants must remain unresolved"
+    ]
+  },
+  {
+    "name": "bridge-column-reverse-subunit-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.25 .25 20.125px}#b{flex:.25 .25 31.75px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "subunit-point"
+    ]
+  },
+  {
+    "name": "bridge-column-reverse-zero-independent",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.2 .9 0px}#b{flex:.4 .1 0px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "zero-independent"
+    ]
+  },
+  {
+    "name": "bridge-column-reverse-decimal-point",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.1 .1 .03125px}#b{flex:.2 .2 23.125px}",
+    "target": "p",
+    "expectWhole": "bounded",
+    "features": [
+      "private actual-record flex bridge",
+      "nested rigid percentage parent",
+      "CSS order",
+      "paint-only leaves",
+      "cross overflow",
+      "decimal-point"
+    ]
+  },
+  {
+    "name": "bridge-column-reverse-freeze",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:1 1 20px;min-height:15px;max-height:40px}#b{flex:1 1 30px;min-height:12px;max-height:50px}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "min/max freeze control"
+    ]
+  },
+  {
+    "name": "bridge-column-reverse-nested-content",
+    "html": "<div id=outer><div id=lead></div><div id=p><div id=a><div id=oa></div></div><div id=b></div><div id=fixed></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#lead{width:13.25px;height:9px;background:#3262ac}#p{width:75%;height:62.5%;width:25.5px;flex-direction:column-reverse;background:#14233f}#a,#b{width:40.125px;align-self:flex-start}#a{order:2;background:#ff7f5090}#b{order:-1;background:#ffd700a0}#fixed{order:0;height:13.125px;width:19.75px;background:#008080a0}#a{flex:.25 .25 20px}#b{flex:.25 .25 30px}#oa{width:10px;height:12px;background:#fff}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "layout descendants must remain unresolved"
+    ]
+  },
+  {
+    "name": "bridge-row-large-offset",
+    "html": "<div id=outer><div id=offset0></div><div id=offset1></div><div id=offset2></div><div id=offset3></div><div id=p><div id=a></div><div id=b></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#offset0,#offset1,#offset2,#offset3{width:999999px;height:1px}#p{width:200px;height:80px;flex-direction:row}#a,#b{height:20px;flex:.25 .25 20px}#a{background:red}#b{background:blue}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "large ancestor translation exceeds geometry error budget"
+    ]
+  },
+  {
+    "name": "bridge-column-large-offset",
+    "html": "<div id=outer><div id=offset0></div><div id=offset1></div><div id=offset2></div><div id=offset3></div><div id=p><div id=a></div><div id=b></div></div></div>",
+    "css": "#outer{width:100%;height:100%;flex-direction:row}#offset0,#offset1,#offset2,#offset3{width:999999px;height:1px}#p{width:200px;height:80px;flex-direction:column}#a,#b{width:20px;flex:.25 .25 20px}#a{background:red}#b{background:blue}",
+    "target": "p",
+    "expectWhole": "unresolved",
+    "features": [
+      "large ancestor translation exceeds geometry error budget"
+    ]
+  }
+]

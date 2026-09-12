@@ -36,6 +36,19 @@ impl Record {
         }
         None
     }
+    /// Restrict a private analysis to the fields it actually understands. A
+    /// future emitter field must not silently inherit an old certificate.
+    pub(crate) fn has_only_properties(&self, names: &[&str]) -> bool {
+        let mut allowed = std::collections::BTreeSet::new();
+        let mut definition = definition_by_name(self.kind);
+        while let Some(d) = definition {
+            for property in d.properties {
+                if names.contains(&property.name) { allowed.insert(property.key.int); }
+            }
+            definition = d.runtime_parent.and_then(definition_by_name);
+        }
+        self.properties.keys().all(|key| allowed.contains(key))
+    }
     pub fn set(&mut self, name: &str, value: Value) -> Result<(), Diagnostic> {
         let mut definition = definition_by_name(self.kind);
         while let Some(d) = definition {

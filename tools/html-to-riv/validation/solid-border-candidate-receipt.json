@@ -1,0 +1,322 @@
+{
+  "status": "private candidate evidence; P01 public admission unresolved",
+  "target": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browser": "153.0.8010.12",
+  "dpr": 1,
+  "backend": "rust-metal RasterOrdering",
+  "runs": [
+    {
+      "path": "output/solid-border-candidate-r1/render/receipt.json",
+      "sha256": "d5c72af621b8c49739042b218e0210537bf0449795cbcc49444fe97ca9561a5c",
+      "cases": [
+        {
+          "name": "integer-background-content",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "transparent-center",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "translucent-border-background",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "visible-content-overflow",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-edges",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-width-raw-control",
+          "frames": 8,
+          "geometryPass": 0,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "subpixel-width-raw-control",
+          "frames": 8,
+          "geometryPass": 0,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "border-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "border-padding-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "nested-borders",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        }
+      ]
+    },
+    {
+      "path": "output/solid-border-candidate-r1/r2/render/receipt.json",
+      "sha256": "55ea35ba7666f5b0cc0eae0c00eb3c6818b97095d69fc3dbe7137f36941856b4",
+      "cases": [
+        {
+          "name": "integer-background-content",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "transparent-center",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "translucent-border-background",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "visible-content-overflow",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-edges",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-width-raw-control",
+          "frames": 8,
+          "geometryPass": 0,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "subpixel-width-raw-control",
+          "frames": 8,
+          "geometryPass": 0,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "border-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "border-padding-floor",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "nested-borders",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 4,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-width-quantized",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        },
+        {
+          "name": "subpixel-width-quantized",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        }
+      ]
+    },
+    {
+      "path": "output/solid-border-candidate-r1/r3/render/receipt.json",
+      "sha256": "3c59095a5608910d7c4edd3ada0017f66bec4c2da5df97309c2dc356f93438e6",
+      "cases": [
+        {
+          "name": "fractional-origin-border-only",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 0,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-origin-fill-control",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 4,
+          "clearPass": 16
+        },
+        {
+          "name": "fractional-origin-alpha-border",
+          "frames": 8,
+          "geometryPass": 8,
+          "pixelPass": 8,
+          "clearPass": 16
+        }
+      ]
+    }
+  ],
+  "sourceHashes": {
+    "validation/solid-border-candidate-emitter.rs": "514117140cf174ee32707446c74d1dce28acad82b2e511b60bbc168a368eabcf",
+    "validation/solid-border-candidate-build.py": "81950518df884f2d315c88b9f27146acbf677f2dbe90e91479066cb4eff3c685",
+    "validation/solid-border-candidate-cases.json": "2c91680c458142da765f05999f58055e114a84e14db9fb7c2a4debe815d7083a",
+    "validation/solid-border-candidate-computed.mjs": "1eb1472661516163bfc090ed0e6ae52b06713e64c3d3a884b5425535e967cb3b",
+    "validation/solid-border-candidate-receipt.py": "23e9d04d63681900dfb3b9d341baccb55994603e082feb0600d44c3df50af845",
+    "validation/solid-border-candidate-review.md": "aae0cefff503207f960a3435768bff8c8c4fd7972d62434026687e7baffe0a44"
+  },
+  "buildReceipts": {
+    "output/solid-border-candidate-r1/build-receipt.json": "b24fab92e10d328de819494e6faa2f14474b0b03328a2a36181620eb2159a018",
+    "output/solid-border-candidate-r1/r2/build-receipt.json": "d88d2575304043bf24c41c56583f38ab4b69976fe4050f7d25e0ce8499d2f60b",
+    "output/solid-border-candidate-r1/r3/build-receipt.json": "6bc4c475da26cc0d70c246c73186543b34dc8c843f5c796e37ae41d6bef67904"
+  },
+  "visualCoverage": {
+    "path": "output/solid-border-candidate-r1/visual-coverage.json",
+    "sha256": "8a28d8f3eb0df856e23bdee3f59b29787eb39392b1adde8251c8103630d94215",
+    "directPairs": 48,
+    "totalFrames": 200,
+    "transferredFrames": 152
+  },
+  "reproductions": [
+    {
+      "name": "integer-background-content",
+      "rivSha256": "76b48d1f86ffb19f514bc9d0f27121e4187322e83840b96a80cc799e0b995259",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "transparent-center",
+      "rivSha256": "33ec1811509fa3b6004dd8422efc796f19c8a16125d288cb61979dfd2d32da3c",
+      "mapSha256": "61524b9ab5edb102e3109d379aaa4cdab3a1cf195f0d7636fa7b3405eed99cad",
+      "bytes": 801
+    },
+    {
+      "name": "translucent-border-background",
+      "rivSha256": "e39c02b8dfd1cd6ed8ef8eae42cc262402b0dba2164b1c93b710395feb944043",
+      "mapSha256": "9ad031dcd5f17ac1e9f4e2fe4ce37763aa4b671caad2ae62c26935bbe433ce6d",
+      "bytes": 814
+    },
+    {
+      "name": "visible-content-overflow",
+      "rivSha256": "1885aa214c118ba8a5132659907b784d70a4ad9638d2707ff4a60ef6a27884f2",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "fractional-edges",
+      "rivSha256": "7dd7a81ac7605e728fad9731b953d39ce902afce9b39ccfa3b35b462692e161a",
+      "mapSha256": "470e60c113704538bf48e6251f31e9a7112e82eab55e1691523f6bd7da537353",
+      "bytes": 801
+    },
+    {
+      "name": "fractional-width-raw-control",
+      "rivSha256": "b5eafd1d3f73e27327e2d1337fdcb20ddc26b6b978f2c096d388b126c3b7add6",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "subpixel-width-raw-control",
+      "rivSha256": "ad0c0875531505bbc4e55e82308347c76d4633ea92f5683eabcf6101a3c875d7",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "border-floor",
+      "rivSha256": "f946d2e904b84b7903f17b4e0fb5b42821fcb5a6758c50ced3cdbe59151cfbeb",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 660
+    },
+    {
+      "name": "border-padding-floor",
+      "rivSha256": "4c30b2b0c6468a94da8d2bcf654290a8b726c0245bb88760c398e8b83b1cd639",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "nested-borders",
+      "rivSha256": "b457a4a5b493a440d3b1d01f80ef0cc47a0a7586e51af9d57c40ce709a646f14",
+      "mapSha256": "8f3b824a8f5cf62bde3d93e92a723a3c141b205fe523c0804c27f4c2b98af281",
+      "bytes": 1226
+    },
+    {
+      "name": "fractional-width-quantized",
+      "rivSha256": "fe96de976dabdbaa1b17b96ef286bb8f7308dae0b7b0e727c44973a350d68ca8",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "subpixel-width-quantized",
+      "rivSha256": "4a6639066b310cf71812c0462d7dd4a4655c806fb0f16688cf88b7bff0bf6af9",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c",
+      "bytes": 720
+    },
+    {
+      "name": "fractional-origin-border-only",
+      "rivSha256": "8c66e861372109291fcbe90f8be4be1bbbddf8367c446d7202e1b182e63dfe7f",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959",
+      "bytes": 697
+    },
+    {
+      "name": "fractional-origin-fill-control",
+      "rivSha256": "9866a82b6e18f59057ec28d5c139079e3775f11904094c5dfc787dc34e698246",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959",
+      "bytes": 244
+    },
+    {
+      "name": "fractional-origin-alpha-border",
+      "rivSha256": "74f96d2306ae5c2a0714a03613e74561979a97fde665c2b75afeb90a6282b4e6",
+      "mapSha256": "e75f8b6508d2cbdd0aef0090b1fca5dcd49c0c80f9f51367225ce2f93a270959",
+      "bytes": 697
+    }
+  ],
+  "chromeComputedWidths": {
+    "path": "output/solid-border-candidate-r1/chrome-computed-widths.json",
+    "sha256": "bf85a32057592f1746dce3c844bbee1792e2296bdf7aea4a9e2c4575258e12b6"
+  },
+  "runtimeGuard": {
+    "path": "output/solid-border-candidate-r1/runtime-guard.json",
+    "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+  }
+}

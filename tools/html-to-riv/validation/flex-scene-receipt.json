@@ -1,0 +1,160 @@
+{
+  "status": "private direct-leaf flex bridge with closed scene prerequisites; no public admission expansion",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "sourceHashes": {
+    "flex_structure.rs": "d8c3d2a1aa2b861cfd0d4102e4d6c215643bb29ca282b5b079a072b4824d8bb4",
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "d30d1e5ff14e89fce90531365c41ccf66236a90d8a4a11188d9f01beb4d3cd1f",
+    "flex_scene.rs": "c7dfe10de4e84e15afe0d918d689d90d208f1459515e18f8af22c4b6d293b99f",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "flex_sizes.rs": "1c8f76635f16a5b65e75927a7df35700bb79e6624f7b5d5b69459cbe0fb5d37f",
+    "computed_provenance.rs": "702754b214b429366273147aa0a56fc36deb9cf57c8ffde5d0c0c3db1d01509a",
+    "compiler.rs": "f8172a5443cdecb90b4e43fad1d382bf91a40dcd579fc667ed016bab4cb21d9a",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "flex_world.rs": "3c64ab1c8204cd4f6d8e52473b43300bb483c5a931c665c3e5745a0c7b7e813d",
+    "baseline.rs": "bf4f42624b6eb1b60f9ef0b3333d0b3cb4842d63de88e52de106a7e7507ac9a5",
+    "flex_descriptor.rs": "9215c889e7d088e3fe8c4b08c933be5c55da2af1630d97d725e63dee2f617075",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "gap.rs": "8b0848021dea9e2d1438e71ebf10ba2b7277a0ab10e41989ae14e7902686c67a",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "5098423575ecdf59ca264e72a9c9f6acfec4f906fc731a61d415a30646a626c8",
+    "flex_numeric.rs": "17f300df9ac25458a51540a23b389f9610e0e2b425a64550c1d7a931ca9ef615",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "15c303837344c7649b9691dbce049e8ab4d77caae34ae5845a89c73828c18a29",
+    "flex_proof.rs": "75da7238b2cefdfa945a61f3c6951385b7d3270e6ccaf3f94448dd24d0816f4f",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  },
+  "rustTests": 213,
+  "nodeTests": 36,
+  "publicOutputRegressions": 482,
+  "additionalPublicControls": 107,
+  "checks": [
+    {
+      "name": "tests",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/Cargo.toml",
+        "--locked"
+      ],
+      "exitCode": 0,
+      "logSha256": "2f3170eab4a5959b691d9ad6937e9d228640d610090d472aeeae9b4071ee626d"
+    },
+    {
+      "name": "build",
+      "command": [
+        "cargo",
+        "build",
+        "--manifest-path",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/Cargo.toml",
+        "--locked"
+      ],
+      "exitCode": 0,
+      "logSha256": "a22fc4ac0fed77fa53489c19fdc051899cd7e332a7234734a7e772eb902a8d57"
+    },
+    {
+      "name": "wasm",
+      "command": [
+        "cargo",
+        "build",
+        "--manifest-path",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/Cargo.toml",
+        "--locked",
+        "--target",
+        "wasm32-unknown-unknown",
+        "--lib"
+      ],
+      "exitCode": 0,
+      "logSha256": "1278acd47e11e6084a49e31c481f0106abcba84368f9088eabc31df9f9951ae6"
+    },
+    {
+      "name": "transport",
+      "command": [
+        "node",
+        "--test",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/transport-parity.mjs"
+      ],
+      "exitCode": 0,
+      "logSha256": "081c9e205d127c7f1247dff8c5bab7e371ddb96f621da38618b9018476d7cc85"
+    },
+    {
+      "name": "types",
+      "command": [
+        "node",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/node_modules/typescript/bin/tsc",
+        "--noEmit",
+        "--strict",
+        "--module",
+        "nodenext",
+        "--moduleResolution",
+        "nodenext",
+        "--target",
+        "es2022",
+        "--lib",
+        "es2022,dom",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/tests/types.mts"
+      ],
+      "exitCode": 0,
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "runtime",
+      "command": [
+        "python3",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-target-runtime.py"
+      ],
+      "exitCode": 0,
+      "logSha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "name": "public-regression",
+      "command": [
+        "python3",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-output-regression.py",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/html-to-riv",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-world-public-regression-r1/manifest.json",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-proof-public-regression-r2"
+      ],
+      "exitCode": 0,
+      "logSha256": "cd47bb852f5a170f75387f996cc120704030ff55f82c38af041cc22103ef8d2f"
+    }
+  ],
+  "artifacts": {
+    "tools/html-to-riv/output/flex-proof-checkpoint-r2/sources.json": "d7a26d3665fe25272b265f7b439ce139fab7b06c9803d4fbe82cdb75293ded9d",
+    "tools/html-to-riv/output/flex-proof-checkpoint-r2/checks.json": "0297e57115d02c1d72e230d5a05df1b3fa4515d3513cdac5214fee4149ca9cc7",
+    "tools/html-to-riv/output/flex-proof-checkpoint-r2/controls.json": "71c7d76e7ca4d692d310d7d714c6c82d291ce73f8caef206914e6fe763cf3af4",
+    "tools/html-to-riv/output/flex-proof-checkpoint-r2/html-to-riv": "9ba14a0d3ecd1cf4d17d1c19a0f2cef3e77237d0de464008f41cae2eff093b6d",
+    "tools/html-to-riv/output/flex-proof-checkpoint-r2/nuxie_html_to_riv.wasm": "fe1edb1f1f5b697eb715be8b5336d4cc14770d068df6670e38a46c97e5c968c5",
+    "tools/html-to-riv/output/flex-proof-public-regression-r2/manifest.json": "fd21a5db62986844af7c5cd8221cb6a42df9d7efc71c8b6f600fb9356fa8057b",
+    "tools/html-to-riv/output/flex-proof-bridge-r2/build-receipt.json": "3d6c968bfe585072eebcb437641dfd13b9d87872c9351d3685293a4ecb5d6491",
+    "tools/html-to-riv/output/flex-proof-bridge-r2/native-results.json": "2c86ac814bd16e6c43cc4e846f0ee6fbef9e616444970bebc7409de540a362a1",
+    "tools/html-to-riv/output/flex-proof-bridge-r2/historical-classifications.json": "3ae26f769495b896a2384d50b62950738b85b087f1d317b1211cfc299a8b39f2",
+    "tools/html-to-riv/output/flex-proof-bridge-r2/summary.json": "7c7f8d6e89679e241db14a5d0c44a7781f93f5bc46d761463e9513f3617942a4",
+    "tools/html-to-riv/validation/flex-scene-review.md": "84d627cffa216c7129c93e56a9811dbeccaf85cc896fa07ccd3409dc702871c1",
+    "tools/html-to-riv/validation/flex-proof-bridge-review.md": "adc17d1f80c67c846e593656f0950406b50dd3aef1f5d88ce652ed4e59e170e5",
+    "tools/html-to-riv/validation/flex-proof-bridge-receipt.json": "45e5c26aa5e2c28d213b0191bcc9871386d727a75efb57dd5b3e87b7f88083e4",
+    "tools/html-to-riv/validation/flex-leaf-premises-review.md": "60cf2163a787ae975d6b5e9dfa1c15909ea27d6541172fa0185533e5b8610869",
+    "tools/html-to-riv/validation/flex-cross-target-review.md": "8678588a8d1cbaf51ff0b107e735d1f61b041d51a052648c981442c164dc748b"
+  },
+  "independentReview": {
+    "scope": "Closed final record vocabulary, actual ownership/ancestry, leaf target/default conditions and final numeric bindings",
+    "actionableCodeFindings": 0,
+    "documentationCorrection": "Final baseline flex solve normalizes every child Auto min size to point zero; earlier initial-style-only explanation corrected."
+  },
+  "nativeBridge": {
+    "checks": 4392,
+    "chromeGeometryPass": 96,
+    "chromeGeometryTotal": 96,
+    "chromePixelPass": 70,
+    "chromePixelTotal": 96,
+    "visualPairsReviewed": 36,
+    "publicAdmissionExpanded": false
+  }
+}

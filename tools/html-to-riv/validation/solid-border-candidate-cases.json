@@ -1,0 +1,241 @@
+[
+  {
+    "name": "integer-background-content",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:80%;height:70%;background:#ddeeff;padding:8px;}#c{width:100%;height:100%;background:#669933;}#p{border:4px solid #aa2244;}",
+    "nativeCss": "#p{width:80%;height:70%;background:#ddeeff;padding:8px;}#c{width:100%;height:100%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 4,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "transparent-center",
+    "html": "<div id=\"host\"><div id=\"p\"><div id=\"c\"></div></div></div>",
+    "css": "#host{width:100%;height:100%;background:#bbcc66;padding:10px;}#p{width:80%;height:70%;padding:8px;}#c{width:50%;height:50%;background:#663399;}#p{border:6px solid #aa2244;}",
+    "nativeCss": "#host{width:100%;height:100%;background:#bbcc66;padding:10px;}#p{width:80%;height:70%;padding:8px;}#c{width:50%;height:50%;background:#663399;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 6,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "translucent-border-background",
+    "html": "<div id=\"host\"><div id=\"p\"><div id=\"c\"></div></div></div>",
+    "css": "#host{width:100%;height:100%;background:#bbcc66;padding:10px;}#p{width:80%;height:70%;padding:8px;background:#2244aa80;}#c{width:50%;height:50%;background:#663399;}#p{border:6px solid #aa224480;}",
+    "nativeCss": "#host{width:100%;height:100%;background:#bbcc66;padding:10px;}#p{width:80%;height:70%;padding:8px;background:#2244aa80;}#c{width:50%;height:50%;background:#663399;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 6,
+        "argb": 2158633540
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "visible-content-overflow",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:50%;height:40%;background:#ddeeff;padding:8px;}#c{width:300px;height:130px;background:#66993380;}#p{border:4px solid #aa2244;}",
+    "nativeCss": "#p{width:50%;height:40%;background:#ddeeff;padding:8px;}#c{width:300px;height:130px;background:#66993380;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 4,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "fractional-edges",
+    "html": "<div id=\"host\"><div id=\"p\"><div id=\"c\"></div></div></div>",
+    "css": "#host{width:100%;height:100%;padding:5.25px;}#p{width:73.3%;height:67.7%;padding:8px;background:#ddeeff;}#c{width:51.7%;height:49.3%;background:#669933;}#p{border:3px solid #aa2244;}",
+    "nativeCss": "#host{width:100%;height:100%;padding:5.25px;}#p{width:73.3%;height:67.7%;padding:8px;background:#ddeeff;}#c{width:51.7%;height:49.3%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 3,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "fractional-width-raw-control",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}#p{border:2.75px solid #aa2244;}",
+    "nativeCss": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 2.75,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "subpixel-width-raw-control",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}#p{border:0.25px solid #aa2244;}",
+    "nativeCss": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 0.25,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "border-floor",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:3px;height:2px;background:#ddeeff;}#c{width:2px;height:2px;background:#669933;}#p{border:8px solid #aa224480;}",
+    "nativeCss": "#p{width:3px;height:2px;background:#ddeeff;}#c{width:2px;height:2px;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 8,
+        "argb": 2158633540
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "border-padding-floor",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:3px;height:2px;padding:3px;background:#ddeeff;}#c{width:2px;height:2px;background:#669933;}#p{border:8px solid #aa2244;}",
+    "nativeCss": "#p{width:3px;height:2px;padding:3px;background:#ddeeff;}#c{width:2px;height:2px;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 8,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "nested-borders",
+    "html": "<div id=\"p\"><div id=\"c\"><div id=\"leaf\"></div></div></div>",
+    "css": "#p{width:85%;height:85%;padding:9px;background:#ddeeff;}#c{width:75%;height:75%;padding:4px;background:#ccddee;}#leaf{width:100%;height:100%;background:#669933;}#p{border:5px solid #aa2244;}#c{border:3px solid #552288;}",
+    "nativeCss": "#p{width:85%;height:85%;padding:9px;background:#ddeeff;}#c{width:75%;height:75%;padding:4px;background:#ccddee;}#leaf{width:100%;height:100%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 5,
+        "argb": 4289339972
+      },
+      {
+        "id": "c",
+        "width": 3,
+        "argb": 4283769480
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "fractional-width-quantized",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}#p{border:2.75px solid #aa2244;}/* quantized native candidate */",
+    "nativeCss": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 2,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "subpixel-width-quantized",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}#p{border:0.25px solid #aa2244;}/* quantized native candidate */",
+    "nativeCss": "#p{width:80%;height:70%;padding:8px;background:#ddeeff;}#c{width:100%;height:100%;background:#669933;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 1,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private uniform solid border strips"
+    ]
+  },
+  {
+    "name": "fractional-origin-border-only",
+    "html": "<div id=\"host\"><div id=\"p\"></div></div>",
+    "css": "#host{width:100%;height:100%;padding:5.25px;}#p{width:100px;height:60px;}#p{border:3px solid #aa2244;}",
+    "nativeCss": "#host{width:100%;height:100%;padding:5.25px;}#p{width:100px;height:60px;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 3,
+        "argb": 4289339972
+      }
+    ],
+    "features": [
+      "private fractional-origin control"
+    ]
+  },
+  {
+    "name": "fractional-origin-fill-control",
+    "html": "<div id=\"host\"><div id=\"p\"></div></div>",
+    "css": "#host{width:100%;height:100%;padding:5.25px;}#p{width:100px;height:60px;}#p{background:#aa2244;}",
+    "nativeCss": "#host{width:100%;height:100%;padding:5.25px;}#p{width:100px;height:60px;}#p{background:#aa2244;}",
+    "borders": [],
+    "features": [
+      "private fractional-origin control"
+    ]
+  },
+  {
+    "name": "fractional-origin-alpha-border",
+    "html": "<div id=\"host\"><div id=\"p\"></div></div>",
+    "css": "#host{width:100%;height:100%;padding:5.25px;}#p{width:100px;height:60px;}#p{border:3px solid #aa224480;}",
+    "nativeCss": "#host{width:100%;height:100%;padding:5.25px;}#p{width:100px;height:60px;}",
+    "borders": [
+      {
+        "id": "p",
+        "width": 3,
+        "argb": 2158633540
+      }
+    ],
+    "features": [
+      "private fractional-origin control"
+    ]
+  }
+]

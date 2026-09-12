@@ -43,7 +43,7 @@ pub(crate) fn propagate(groups:&[Group],viewport:[ErrorEnvelope;2])->BTreeMap<u3
     let ordered:BTreeMap<_,_>=groups.iter().map(|g|(g.parent_id,g)).collect();
     for (parent_id,group) in ordered {
         let parent=result.get(&parent_id).cloned().unwrap_or_else(||all_error(Unresolved::MissingParent));
-        let valid=group.no_local_constraint_or_origin && group.parent_local_facts.direct_box_defaults() && group.helpers.is_empty() && group.wrappers.is_empty();
+        let valid=group.scene_certificate.is_ok() && group.no_local_constraint_or_origin && group.parent_local_facts.direct_box_defaults() && group.helpers.is_empty() && group.wrappers.is_empty();
         for item in &group.items {
             let sizes=if item.authored_id<=parent_id {all_error(Unresolved::Topology)}
                 else if !valid {all_error(Unresolved::ParentContext)}

@@ -168,3 +168,7 @@ Sizing fields/operands/trace handles are now checked against a closed scalar ins
 ## Anchored private wrapping repair
 
 The previously documented unequal visible/slot positioning gap is repaired privately through ordinary ComponentOrigin landing. No proxy or runtime mutation is required. The instruction binding and error bounds include actual visible origin multiplication and final subtraction.397Rust/56Node and build/TypeScript/source guard pass; public binaries and1,076historical outputs are unchanged. A separate fixed-epsilon native experiment passes384frames/1,152exact positions, while the old emitter fails384frames/768positions on identical base bytes. This is native geometry evidence, not Chrome/pixel or derived-epsilon qualification. Public wrapping remains unadmitted pending paint/mask binding and full visual validation. See `validation/wrapped-anchored-review.md`.
+
+## Private paint and mask binding
+
+The source-derived wrapping candidate now checks exact paint records and mask viewport bounds, including initial serialized artboard dimensions.403Rust/56Node, TypeScript/native/WASM/source guard and1,076exact output regressions pass. A separate offline audit of384historical frames verifies4,992clip commands and infers2,304empty-clipped draws; these are not new candidate pixels or direct GPU observations. Current full-candidate native/Chrome resize, clip-stream and visual qualification comes next. Public wrapping remains unadmitted. See `validation/wrapped-paint-mask-review.md`.

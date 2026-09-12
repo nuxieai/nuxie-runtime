@@ -2,6 +2,14 @@
 
 Reviewed on 2026-09-12 against the saved goal, current git state, immutable source guard and latest wrapped-sizing checkpoint. The saved goal remains active and unlimited. Its public-interface restoration instruction is already satisfied; use this brief instead of repeating that step. Work only in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`; the older `7c27` worktree is not the implementation checkout.
 
+## Latest paint and mask binding
+
+The complete private candidate now binds paint fields/defaults/operands, leader inversion, foreground ownership/colors, masks, clips and draw order. Its mask-domain proof covers the declared resize range and initial serialized artboard dimensions. Read `validation/wrapped-paint-mask-review.md`, receipt, paint arithmetic/scheduling and mask-domain audits. Full build403Rust/56Node, TypeScript/native/WASM/source guard passes with299frozen bindings;282image+794historical outputs are exact. Verifier checks8,306artifact bindings.
+
+A new offline checker confirms identity clipping matrices/AABB/intersection premises in384historical frames/4,992clips, including2,304empty-clipped draws and four rejecting controls. It observes historical ordinary runtime command inputs and infers the audited renderer intersections; it is not current candidate or GPU-state/pixel qualification. No mask expansion is needed for the conditional clipped-artboard route.
+
+**Next: run the complete current source-derived, anchored, paint-bound candidate against native and Chrome.** Freeze actual constructor and output, check ordinary import/original/clone resize and command streams, compare edge/overflow pixels and visually inspect them. Preserve failures. Earlier text below asking to bind paint fields or repair visible alignment is historical and superseded. Public wrapping remains unadmitted; all99items and runtime immutability remain in force.
+
 ## Latest anchored wrapping repair
 
 The unequal visible/slot correction is now implemented using existing ComponentOrigin landing. No independent measurement proxy or runtime change is needed. Read `validation/wrapped-anchored-review.md`, receipt and native/scalar/position audits. Sizing uses58N-33records, including141atN3. Full build397Rust/56Node passes with source guard and public CLI/WASM identical to the previous checkpoint;282image+794historical artifacts stay exact.

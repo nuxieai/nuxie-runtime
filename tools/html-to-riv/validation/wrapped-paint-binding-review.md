@@ -1,0 +1,23 @@
+# Private wrapping paint record binding
+
+`src/wrapping_paint_binding.rs` reads the actual generated paint suffix. It does not call the emitter, serialize an expected record list, or use emitter trace handles as proof. It reconstructs operands by consuming the closed instruction grammar and rejects any extra, missing, reordered, wrongly typed or differently valued record/property. Float comparisons retain exact bits, including the negative epsilon constant.
+
+The interface is `bind(base, records, start, end, roles, row, reverse_main, reverse_cross, line_fraction, epsilon)`. `base` is the original checked slot graph before color hiding; `start` and `end` are vector positions, and `roles` lists `(slot, visible)` in logical order. The whole paint suffix must end at the end of `records`. Sizing records between the base and paint suffix require the independent sizing reader. The returned binding reports unique signals, masks and paint replicas.
+
+This reader deliberately matches the existing closed composition: each visible layout component is directly owned by its slot, has exactly one Fill containing only `parentId`, and that fill has exactly one SolidColor containing `parentId` and a color value. It checks original fills remain unchanged, original colors are zeroed, and every replica has the original exact color. Other Fill properties and nested/multiple paints remain outside this reader; accepting the broader emitter does not establish a certificate for them. Base layout identity, sizing, complete base preservation and independence remain the caller's separate checked premises.
+
+The parser checks:
+
+- One zero-origin helper and all slot anchor origins with the actual reversed physical fraction.
+- Cached source nodes, world-copy child nodes and explicit local-source extraction in each distinct ordered pair. It consumes shared sources and signals once and verifies subsequent operands reuse the parsed IDs.
+- Negative scaling, absolute-value local minimum, negative epsilon, local sum, zero minimum, distance normalization with mode 2 and distance 65536, then factor 2 and maximum 65536.
+- Leader inversion uses a 65536 coordinate, factor -1 and explicit offset true; membership uses the uninverted signal.
+- Every mask is the existing shape and rectangle with center `(16384,16384)` and dimensions `(32768,32768)`; no expanded margin is claimed here.
+- Group order reverses only with the cross direction; member order reverses only with the main direction. Each foreground replica is attached to the correct visible geometry, contains its fill/color, and has exactly the required leader then membership clips.
+- The complete ordered foreground sequence is connected by consecutive DrawRules/DrawTarget pairs with placement 1 and the correct drawable target.
+
+Every generated record has an exact property allowlist. This also binds omitted native defaults rather than permitting hidden transform or constraint changes. In the pinned consumer's `mechanical_port/source/generated` files, `constraints/constraint_base.rs` sets strength to 1; `constraints/transform_space_constraint_base.rs` sets source/destination spaces to 0; `constraints/transform_component_constraint_base.rs` sets copy factor 1, offset false and min/max false; `transform_component_base.rs` sets rotation 0 and scales 1; `constraints/transform_constraint_base.rs` sets both origins to 0. `shapes/rectangle_base.rs` leaves all corner radii zero and `shapes/clipping_shape_base.rs` leaves clipping visible with fill rule 0. Required departures from these defaults are checked as explicit fields. The reader rejects even an extra property equal to its default, so future emitter changes require deliberate review.
+
+Three focused tests consume actual emitter output. The variation test covers counts 1, 2, 3 and 8, both axes, all four reversal combinations, and all three positional fractions. Mutation tests exercise transform/constraint defaults, targets, source/destination spaces, distance mode/value, local clamp, maximum, inverse offset, rectangle coordinates/dimensions, shape scale, clip source, foreground owner, fill visibility, replica color, draw targets/placement, instruction order, suffix completeness, epsilon, original color hiding and duplicate roles.
+
+This is a structural certificate only. It does not establish floating-point gate accuracy, runtime dependency scheduling, mask coverage at finite raster precision, line-packing equivalence, lifecycle behavior or Chrome pixel agreement. Those remain separate proof and native rendering obligations. No runtime or renderer changes and no public wrapping admission are made by this module.

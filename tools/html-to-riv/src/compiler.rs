@@ -79,6 +79,12 @@ mod wrapping_scalar;
 #[allow(dead_code)]
 #[path = "wrapping_position.rs"]
 mod wrapping_position;
+#[allow(dead_code)]
+#[path = "wrapping_masks.rs"]
+mod wrapping_masks;
+#[allow(dead_code)]
+#[path = "wrapping_paint_binding.rs"]
+mod wrapping_paint_binding;
 #[path = "images.rs"]
 mod images;
 #[path = "image_constraints.rs"]

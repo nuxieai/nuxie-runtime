@@ -1,0 +1,29 @@
+{
+  "scope": "Private source-derived paint/mask candidate; no public wrapping or new pixel qualification",
+  "rustTests": 403,
+  "nodeTests": 56,
+  "imageOutputs": 282,
+  "historicalOutputs": 794,
+  "compilerSha256": "e6478a67af8baa20ba80790da9c6943859e58d6af233ead45368cf0265bf846f",
+  "wasmSha256": "4fc1a8a231227d05fe22f8eac263ed9fe84d40e15ef379caf489df2379e723fb",
+  "publicWrappingAdmitted": false,
+  "historicalClipFrames": 384,
+  "historicalClipCommands": 4992,
+  "historicalEmptyClipDraws": 2304,
+  "artifactBindings": 8306,
+  "priorCheckpoint": "5438fa6480",
+  "build": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-paint-mask-build-r1",
+  "buildSummarySha256": "67f71c8de81ef86a3a61d3e5fa9a1c29f6a870585aff9e0130701de7107cf78f",
+  "verification": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-paint-mask-verification-r1.json",
+  "verificationSha256": "29a007da6b3d6902a6a247380d59f1eef1aee4692dddd6e0150f7f605542fc75",
+  "frozenEntries": 299,
+  "newNativeChromeCaptures": false,
+  "reviews": {
+    "wrapped-paint-mask-review.md": "137e7d465dea5a32580d2dd1711aaa41ac5136d9b0846ab0d9b1e89162c9896a",
+    "wrapped-paint-binding-review.md": "f1f9123fd9426cc09ffc24e84715f3095c47f96748d21338edfd4848e35ea4d5",
+    "wrapped-mask-domain-review.md": "c9b60848eeb7d3e0a04a1228e828131c9a64d6d6fdd6285a30892a0c235fc23d",
+    "wrapped-paint-arithmetic-scheduling-audit.md": "1929d617525e66959a44f17772c4010069ccd993204ebfa97078f08362d0c668",
+    "wrapped-clip-stream-review.md": "e8f25dceae940db9452fc7294796e62c867a121026d66f745ac1ab2e2fe85a29",
+    "wrapped-clip-observation-plan.md": "4370ea3597ac844f22ee67908e683915892d46e104fe84c2d1ad1d6e3e1c7ecb"
+  }
+}

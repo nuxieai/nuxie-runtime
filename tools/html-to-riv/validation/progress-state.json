@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
   "focus": "Wrapped sizing and admission proof",
-  "status": "Unequal visible sizing repaired with ordinary component anchors",
-  "current": "Private anchored graph passes397Rust/56Node plus builds/source guard. Native fixed-epsilon experiment passes384frames/1152exactpositions; old emitter fails384frames/768positions on samebases. Public binaries/1076outputs unchanged;11453bindings verify. No Chrome/pixel or public wrapping qualification.",
-  "next": "Bind paint scalar fields, leader inversion, mask viewport/rectangle and clip/draw semantics; then validate the source-derived anchored candidate against native/Chrome original/clone resizing, edge pixels and visual inspection.",
+  "status": "Complete private paint records and mask viewport domain bound",
+  "current": "403Rust/56Node and builds/source guard pass;1076outputs reproduce exactly. Paint/default/operand/clip/draw binding and initial/resize mask bounds are attached to the candidate.384historical frames/4992clip commands checked; no new pixels or public wrapping.8306artifact bindings verify.",
+  "next": "Freeze and run the complete source-derived anchored and paint-bound candidate against native/Chrome: ordinary import, same original/clone resize, actual command streams, edge/overflow pixels and visual inspection.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Paint records, mask domain and historical clip stream checkpoint",
+      "path": "tools/html-to-riv/validation/wrapped-paint-mask-review.md"
+    },
     {
       "label": "Anchored visible-size repair with native negative control",
       "path": "tools/html-to-riv/validation/wrapped-anchored-review.md"

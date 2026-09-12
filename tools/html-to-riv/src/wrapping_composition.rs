@@ -17,6 +17,8 @@ pub(super) enum Unresolved {
     Arithmetic(super::wrapping_coordinates::Unresolved),
     Scalar(super::wrapping_scalar::Unresolved),
     Position(super::wrapping_position::Unresolved),
+    Masks(super::wrapping_masks::Unresolved),
+    PaintBinding(super::wrapping_paint_binding::Unresolved),
     Emission(Diagnostic),
 }
 impl From<Diagnostic> for Unresolved {
@@ -60,26 +62,35 @@ pub(super) struct Derived {
     arithmetic:super::wrapping_coordinates::Proof,
     scalar:super::wrapping_scalar::Binding,
     position:super::wrapping_position::Proof,
+    masks:super::wrapping_masks::Proof,
+    paint:super::wrapping_paint_binding::Binding,
 }
 impl Derived {
     pub(super) fn candidate(&self)->&Candidate {&self.candidate}
     pub(super) fn arithmetic(&self)->&super::wrapping_coordinates::Proof {&self.arithmetic}
     pub(super) fn scalar(&self)->&super::wrapping_scalar::Binding {&self.scalar}
     pub(super) fn position(&self)->&super::wrapping_position::Proof {&self.position}
+    pub(super) fn masks(&self)->&super::wrapping_masks::Proof {&self.masks}
+    pub(super) fn paint(&self)->&super::wrapping_paint_binding::Binding {&self.paint}
 }
 pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
+    let masks=super::wrapping_masks::prove(&domains).map_err(Unresolved::Masks)?;
     let arithmetic=super::wrapping_coordinates::prove(&domains).map_err(Unresolved::Arithmetic)?;
     let row=domains.base().row;
     let reverse_cross=domains.base().reverse_cross;
+    let reverse_main=domains.base().reverse_main;
     let line_fraction=domains.base().line_fraction;
     let roles=domains.base().slots.iter().map(|s|(s.id,s.visible)).collect::<Vec<_>>();
     let position=super::wrapping_position::prove(&arithmetic,domains.slots(),alignments,row,line_fraction,reverse_cross)
         .map_err(Unresolved::Position)?;
+    let base=domains.base().records();
     let candidate=compose(domains,alignments,arithmetic.epsilon(),record_budget)?;
     let (start,sizing,_)=candidate.record_costs();
     let scalar=super::wrapping_scalar::bind(candidate.records(),start,start+sizing,&roles,alignments,
         row,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.trace()).map_err(Unresolved::Scalar)?;
-    Ok(Derived{candidate,arithmetic,scalar,position})
+    let paint=super::wrapping_paint_binding::bind(base,candidate.records(),start+sizing,candidate.records().len(),
+        &roles,row,reverse_main,reverse_cross,line_fraction,arithmetic.epsilon()).map_err(Unresolved::PaintBinding)?;
+    Ok(Derived{candidate,arithmetic,scalar,position,masks,paint})
 }
 fn parent(record: &Record) -> Option<u32> {
     match record.get("parentId") { Some(Value::Uint(id)) => Some(*id), _ => None }
@@ -305,6 +316,28 @@ mod tests {
                 assert!(matches!(result,Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Separation))
                     |Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Normalizer(_)))));
             }
+        }
+    }
+    #[test]
+    fn mask_domain_covers_initial_file_and_every_declared_resize() {
+        for axis in 0..2 {
+            let (mut records,roles)=fixture(2,2,0,1);
+            let n=numeric();let values=roles.iter().map(|&(id,_)|(id,&n)).collect::<Vec<_>>();
+            let mut viewport=[MachineInterval::new(0.,16384.).unwrap();2];
+            viewport[axis]=MachineInterval::new(0.,32768_f32.next_up()).unwrap();
+            let d=wrapping_domains::resolve(&records,2,&roles,&n,&values,viewport).unwrap();
+            assert!(matches!(compose_with_bounds(d,&[0.,1.],1000),
+                Err(Unresolved::Masks(super::super::wrapping_masks::Unresolved::Viewport{axis:a})) if a==axis));
+            for value in [16385.,-1.,f32::INFINITY,f32::NAN] {
+                set(&mut records[1],if axis==0 {"width"}else{"height"},Value::Float(value));
+                let d=domains(&records,&roles);
+                assert!(matches!(compose_with_bounds(d,&[0.,1.],1000),
+                    Err(Unresolved::Masks(super::super::wrapping_masks::Unresolved::InitialViewport{axis:a})) if a==axis));
+            }
+            set(&mut records[1],if axis==0 {"width"}else{"height"},Value::Float(16384.));
+            let d=compose_with_bounds(domains(&records,&roles),&[0.,1.],1000).unwrap();
+            assert_eq!(d.masks().active().min,[0.,0.]);
+            assert_eq!(d.masks().viewport()[axis].upper(),16384.);
         }
     }
     #[test]

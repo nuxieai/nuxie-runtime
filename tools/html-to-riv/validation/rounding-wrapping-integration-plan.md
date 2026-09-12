@@ -1,6 +1,8 @@
 # Rounded paint integration into the actual wrapping composition
 
-Read-only design audit, 2026-09-12. This plan follows GOAL-RESTART.md and preserves the immutable runtime contract. It does not qualify new behavior. Product sources were not edited by this audit.
+Historical design audit, 2026-09-12. The extraction, owned integration and 48-case native campaign described here are now implemented; see wrapped-rounded-review.md and GOAL-RESTART.md for current results and next work.
+
+Original audit: This plan follows GOAL-RESTART.md and preserves the immutable runtime contract. It does not qualify new behavior. Product sources were not edited by this audit.
 
 ## Concrete construction path
 

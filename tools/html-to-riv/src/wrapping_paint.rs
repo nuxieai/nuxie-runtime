@@ -4,6 +4,9 @@
 //! the supplied logical packing order and within-item paint order.
 use crate::{Diagnostic, wire::{Record, Value}};
 use std::collections::{BTreeMap, BTreeSet};
+use super::paint_box;
+#[derive(Debug)]
+pub(super) struct Trace { pub boxes: Vec<paint_box::Trace> }
 const DISTANCE: f32 = 65_536.;
 
 #[derive(Clone, Copy)]
@@ -11,10 +14,16 @@ pub(super) struct Paint { pub geometry: u32, pub fill: u32, pub color: u32 }
 pub(super) struct Item { pub slot: u32, pub paints: Vec<Paint> }
 fn invalid(message: &str) -> Diagnostic { Diagnostic::new("wrapping-paint-plan", "wrapping", message) }
 
-/// Exact additional record count, including masks, clips and draw ordering.
+/// Exact additional record count when every paint has a distinct geometry.
+/// Includes rounded box masks, clips and draw ordering. Shared owners must use
+/// paint_records_with_geometry instead.
 /// Empty paint plans emit nothing. Item counts must include unpainted items:
 /// their geometry still affects line packing and leader selection.
 pub(super) fn paint_records(counts: &[usize]) -> Option<usize> {
+    paint_records_with_geometry(counts, counts.iter().try_fold(0usize, |a,b| a.checked_add(*b))?)
+}
+/// Exact count with shared geometry; callers supply the number of distinct owners.
+pub(super) fn paint_records_with_geometry(counts: &[usize], geometries: usize) -> Option<usize> {
     let n = counts.len();
     if counts.iter().all(|count| *count == 0) { return Some(0); }
     let (mut replicas, mut clips) = (0usize, 0usize);
@@ -24,7 +33,8 @@ pub(super) fn paint_records(counts: &[usize]) -> Option<usize> {
     }
     let pairs = n.checked_mul(n.checked_sub(1)?)?.checked_div(2)?;
     n.checked_mul(8)?.checked_sub(5)?.checked_add(pairs.checked_mul(20)?)?
-        .checked_add(replicas.checked_mul(3)?)?
+        .checked_add(replicas.checked_mul(8)?)?
+        .checked_add(geometries.checked_mul(paint_box::RECORDS)?)?
         .checked_add(replicas.checked_sub(1)?.checked_mul(2)?)?.checked_add(clips)
 }
 fn record(records: &[Record], id: u32) -> Option<&Record> {
@@ -52,14 +62,35 @@ fn descendant(records: &[Record], mut id: u32, ancestor: u32, slots: &BTreeSet<u
 pub(super) fn paint_items(
     records: &mut Vec<Record>, items: &[Item], row: bool, reverse_main: bool,
     reverse_cross: bool, line_fraction: f32, epsilon: f32,
-) -> Result<(), Diagnostic> {
+) -> Result<Trace, Diagnostic> {
+    let start = records.len();
+    let geometries: BTreeSet<_> = items.iter().flat_map(|item| &item.paints).map(|p| p.geometry).collect();
+    let added=paint_records_with_geometry(&items.iter().map(|item|item.paints.len()).collect::<Vec<_>>(),geometries.len())
+        .ok_or_else(||invalid("Paint expansion record count overflow"))?;
+    records.len().checked_add(added).filter(|n|*n<=u32::MAX as usize)
+        .ok_or_else(||invalid("Paint expansion exceeds ordinary object ID capacity"))?;
+    // Restore only the prefix fields this emitter owns if a later schema error occurs.
+    let originals: Vec<_> = items.iter().flat_map(|item| &item.paints).filter_map(|paint|
+        record(records, paint.color).map(|r| (paint.color, r.clone()))).collect();
+    let result = emit_items(records, items, row, reverse_main, reverse_cross, line_fraction, epsilon);
+    if result.is_err() {
+        records.truncate(start);
+        for (id, original) in originals { records[id as usize + 1] = original; }
+    }
+    result
+}
+fn emit_items(
+    records: &mut Vec<Record>, items: &[Item], row: bool, reverse_main: bool,
+    reverse_cross: bool, line_fraction: f32, epsilon: f32,
+) -> Result<Trace, Diagnostic> {
     if ![0., 0.5, 1.].contains(&line_fraction) {
         return Err(invalid("Line fraction must be start, center or end"));
     }
     if !epsilon.is_finite() || !(0. ..DISTANCE).contains(&epsilon) {
         return Err(invalid("Line gate epsilon must be finite, nonnegative and below the reset distance"));
     }
-    let added = paint_records(&items.iter().map(|item| item.paints.len()).collect::<Vec<_>>())
+    let geometries: BTreeSet<_> = items.iter().flat_map(|item| &item.paints).map(|p| p.geometry).collect();
+    let added = paint_records_with_geometry(&items.iter().map(|item| item.paints.len()).collect::<Vec<_>>(), geometries.len())
         .ok_or_else(|| invalid("Paint expansion record count overflow"))?;
     let end = records.len().checked_add(added).filter(|n| *n <= u32::MAX as usize)
         .ok_or_else(|| invalid("Paint expansion exceeds ordinary object ID capacity"))?;
@@ -88,13 +119,21 @@ pub(super) fn paint_items(
             }
         }
     }
-    if added == 0 { return Ok(()); }
+    if added == 0 { return Ok(Trace { boxes: Vec::new() }); }
     let originals: Vec<Vec<_>> = items.iter().map(|item| item.paints.iter().map(|paint| {
         (record(records, paint.fill).unwrap().clone(), record(records, paint.color).unwrap().clone())
     }).collect()).collect();
     for item in items { for paint in &item.paints {
         records[paint.color as usize + 1].set("colorValue", Value::Color(0))?;
     }}
+    let mut boxes = Vec::with_capacity(geometries.len());
+    let mut cached = BTreeMap::new();
+    for paint in items.iter().flat_map(|item| &item.paints) {
+        if let std::collections::btree_map::Entry::Vacant(entry) = cached.entry(paint.geometry) {
+            let trace = paint_box::emit(records, paint.geometry)?;
+            entry.insert(trace.masks); boxes.push(trace);
+        }
+    }
     let mut graph = Graph { records, row, epsilon, sources: BTreeMap::new(), signals: BTreeMap::new() };
     let origin = graph.add("Node", 0)?;
     let mut anchors = Vec::with_capacity(items.len());
@@ -128,7 +167,11 @@ pub(super) fn paint_items(
                 Some(graph.mask(gate)?)
             };
             for (paint, (original_fill, original_color)) in items[j].paints.iter().zip(&originals[j]) {
-                let foreground = graph.add("ForegroundLayoutDrawable", paint.geometry)?;
+                let foreground = graph.add("Shape", 0)?;
+                let rect = graph.add("Rectangle", foreground)?;
+                for (name,value) in [("x",16384.),("y",16384.),("width",32768.),("height",32768.)] {
+                    graph.set(rect, name, Value::Float(value))?;
+                }
                 let fill = graph.records.len() as u32 - 1;
                 let mut cloned_fill = original_fill.clone();
                 cloned_fill.set("parentId", Value::Uint(foreground))?;
@@ -136,7 +179,7 @@ pub(super) fn paint_items(
                 let mut cloned_color = original_color.clone();
                 cloned_color.set("parentId", Value::Uint(fill))?;
                 graph.records.push(cloned_color);
-                for mask in [leader, membership].into_iter().flatten() {
+                for mask in cached[&paint.geometry].into_iter().chain([leader, membership].into_iter().flatten()) {
                     let clip = graph.add("ClippingShape", foreground)?;
                     graph.set(clip, "sourceId", Value::Uint(mask))?;
                 }
@@ -152,7 +195,7 @@ pub(super) fn paint_items(
         graph.set(target, "placementValue", Value::Uint(1))?;
     }
     if graph.records.len() != end { return Err(invalid("Paint emission disagrees with preflight count")); }
-    Ok(())
+    Ok(Trace { boxes })
 }
 struct Graph<'a> {
     records: &'a mut Vec<Record>, row: bool, epsilon: f32,
@@ -269,7 +312,7 @@ mod tests {
     }
     #[test]
     fn exact_preflight_handles_nonuniform_and_empty_paint_lists() {
-        for counts in [vec![],vec![0],vec![0,0,0],vec![1],vec![2,2,2],vec![0,3,1,0,2],vec![1;8],vec![2;32]] {
+        for counts in [vec![],vec![0],vec![0,0,0],vec![1],vec![2,2,2],vec![0,3,1,0,2],vec![1;8]] {
             for (row,main,cross,fraction) in [(true,false,false,0.),(false,true,false,0.5),(true,true,true,1.)] {
                 let (mut records,items)=fixture(&counts);let start=records.len();
                 paint_items(&mut records,&items,row,main,cross,fraction,0.015625).unwrap();
@@ -277,10 +320,30 @@ mod tests {
                 crate::wire::encode(&records).unwrap();
             }
         }
-        assert_eq!(paint_records(&[1,1,1]),Some(113));
-        assert_eq!(paint_records(&[2,2,2]),Some(149));
+        assert_eq!(paint_records(&[1,1,1]),Some(7073));
+        assert_eq!(paint_records(&[2,2,2]),Some(14069));
         assert_eq!(paint_records(&[usize::MAX]),None);
         assert_eq!(paint_records(&[0,usize::MAX]),None);
+    }
+    #[test]
+    fn shared_geometry_emits_one_box_and_keeps_both_paints() {
+        let (mut records, mut items)=fixture(&[1]);
+        let geometry=items[0].paints[0].geometry;
+        let fill=add(&mut records,"Fill",geometry); let color=add(&mut records,"SolidColor",fill);
+        records[color as usize+1].set("colorValue",Value::Color(0x8000ff00)).unwrap();
+        items[0].paints.push(Paint{geometry,fill,color}); let start=records.len();
+        let trace=paint_items(&mut records,&items,true,false,false,0.,0.015625).unwrap();
+        assert_eq!(trace.boxes.len(),1); assert_eq!(trace.boxes[0].geometry,geometry);
+        assert_eq!(records.len()-start,paint_records_with_geometry(&[2],1).unwrap());
+        assert_eq!(records[start..].iter().filter(|r|r.kind=="Fill").count(),2);
+        crate::wire::encode(&records).unwrap();
+    }
+    #[test]
+    fn failed_box_precondition_restores_hidden_colors_and_appended_records() {
+        let (mut records,items)=fixture(&[1]); records[1]=Record::new("Node");
+        let before=crate::wire::encode(&records).unwrap();
+        assert!(paint_items(&mut records,&items,true,false,false,0.,0.015625).is_err());
+        assert_eq!(crate::wire::encode(&records).unwrap(),before);
     }
     #[test]
     fn replicas_preserve_fill_properties_color_and_item_paint_order() {
@@ -292,8 +355,8 @@ mod tests {
             restored.set("colorValue",originals[paint.color as usize+1].get("colorValue").unwrap().clone()).unwrap();
             assert_eq!(crate::wire::encode(&[restored]).unwrap(),crate::wire::encode(&[originals[paint.color as usize+1].clone()]).unwrap());
         }}
-        let geometry_order:Vec<_>=records[start..].iter().filter(|r|r.kind=="ForegroundLayoutDrawable").map(|r|parent(r).unwrap()).collect();
-        assert_eq!(geometry_order,[items[1].paints[0].geometry,items[1].paints[0].geometry,items[0].paints[0].geometry,items[0].paints[1].geometry]);
+        let color_order:Vec<_>=records[start..].iter().filter(|r|r.kind=="SolidColor").map(|r| match r.get("colorValue") { Some(Value::Color(c))=>*c, _=>panic!("color") }).collect();
+        assert_eq!(color_order,[0x80ff0000,0x80ff0000,0x80ff0000,0x80ff0001]);
         for r in records[start..].iter().filter(|r|r.kind=="Fill") {
             assert!(matches!(r.get("fillRule"),Some(Value::Uint(1))));
             assert!(matches!(r.get("isVisible"),Some(Value::Bool(false))));

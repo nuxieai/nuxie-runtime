@@ -1003,3 +1003,15 @@ mod gap_pipeline_tests {
 #[allow(dead_code)]
 #[path = "paint_rounding.rs"]
 mod paint_rounding;
+
+#[allow(dead_code)]
+#[path = "paint_box.rs"]
+mod paint_box;
+
+#[allow(dead_code)]
+#[path = "paint_box_binding.rs"]
+mod paint_box_binding;
+
+#[allow(dead_code)]
+#[path = "paint_box_domains.rs"]
+mod paint_box_domains;

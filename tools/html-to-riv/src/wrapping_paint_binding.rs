@@ -6,7 +6,7 @@ const D:f32=65536.;
 #[derive(Debug,PartialEq,Eq)]
 pub(super) struct Unresolved { pub position:usize }
 #[derive(Debug)]
-pub(super) struct Binding { pub signals:usize, pub masks:usize, pub replicas:usize }
+pub(super) struct Binding { pub signals:usize, pub masks:usize, pub replicas:usize, pub boxes:Vec<super::paint_box_binding::Binding> }
 struct Reader<'a>{ records:&'a[Record], next:usize, end:usize, row:bool, epsilon:f32,
     sources:BTreeMap<u32,u32>, signals:BTreeMap<(u32,u32),u32>, masks:usize }
 fn same(actual:Option<&Value>,v:&Value)->bool {match(actual,v){
@@ -102,6 +102,11 @@ pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:
             || !records.get(ci).is_some_and(|x|exact(x,"SolidColor",&[("parentId",Value::Uint((fi-1) as u32)),("colorValue",Value::Color(0))])){return Err(r.fail());}
         originals.push(*value);
     }
+    let mut boxes=Vec::new();let mut box_masks=BTreeMap::new();
+    for &(_,visible) in roles {if !box_masks.contains_key(&visible){
+        let b=super::paint_box_binding::consume(records,r.next,end,visible).map_err(|e|Unresolved{position:e.position})?;
+        r.next=b.next;box_masks.insert(visible,b.masks);boxes.push(b);
+    }}
     let origin=r.node(0,None)?;let mut anchors=Vec::new();
     let fraction=if reverse_cross{1.-line_fraction}else{line_fraction};
     for &(slot,_) in roles {let n=r.node(0,None)?;
@@ -114,9 +119,11 @@ pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:
             let inverse=r.node(0,Some(D))?;r.translation(inverse,signal,false,true)?;Some(r.mask(inverse)?)};
         for &j in &members {if j<i{continue;}
             let member=if i==j{None}else{let signal=r.signal(anchors[i],anchors[j],origin)?;Some(r.mask(signal)?)};
-            let foreground=r.take("ForegroundLayoutDrawable",&[("parentId",Value::Uint(roles[j].1))])?;
+            let foreground=r.take("Shape",&[("parentId",Value::Uint(0))])?;
+            r.take("Rectangle",&[("parentId",Value::Uint(foreground)),("width",Value::Float(32768.)),("height",Value::Float(32768.)),("x",Value::Float(16384.)),("y",Value::Float(16384.))])?;
             let fill=r.take("Fill",&[("parentId",Value::Uint(foreground))])?;
             r.take("SolidColor",&[("parentId",Value::Uint(fill)),("colorValue",Value::Color(originals[j]))])?;
+            for mask in box_masks[&roles[j].1] {r.take("ClippingShape",&[("parentId",Value::Uint(foreground)),("sourceId",Value::Uint(mask))])?;}
             for mask in [leader,member].into_iter().flatten(){r.take("ClippingShape",&[("parentId",Value::Uint(foreground)),("sourceId",Value::Uint(mask))])?;}
             replicas.push(foreground);
         }
@@ -126,7 +133,7 @@ pub(super) fn bind(base:&[Record],records:&[Record],start:usize,end:usize,roles:
         r.take("DrawTarget",&[("parentId",Value::Uint(rule)),("drawableId",Value::Uint(pair[1])),("placementValue",Value::Uint(1))])?;
     }
     if r.next!=end{return Err(r.fail());}
-    Ok(Binding{signals:r.signals.len(),masks:r.masks,replicas:replicas.len()})
+    Ok(Binding{signals:r.signals.len(),masks:r.masks,replicas:replicas.len(),boxes})
 }
 
 #[cfg(test)]
@@ -176,7 +183,7 @@ mod tests {
             ("Rectangle","x",Value::Float(16383.)),
             ("Shape","scaleX",Value::Float(2.)),
             ("ClippingShape","sourceId",Value::Uint(roles[0].1)),
-            ("ForegroundLayoutDrawable","parentId",Value::Uint(roles[0].0)),
+            ("ClippingShape","isVisible",Value::Bool(false)),
             ("Fill","isVisible",Value::Bool(false)),
             ("SolidColor","colorValue",Value::Color(0)),
             ("DrawRules","drawTargetId",Value::Uint(0)),
@@ -201,6 +208,17 @@ mod tests {
         assert!(bind(&base,&records,start,records.len(),&roles,true,true,true,0.5,0.0625).is_err());
     }
     #[test]
+    fn rejects_cross_owner_cache_and_trace_confusion(){
+        let (base,items,roles)=scene(2);let mut records=base.clone();let start=records.len();
+        let mut trace=wrapping_paint::paint_items(&mut records,&items,false,false,false,0.,0.03125).unwrap();
+        let b=bind(&base,&records,start,records.len(),&roles,false,false,false,0.,0.03125).unwrap();assert!(b.matches_trace(&trace));assert_eq!(b.boxes.len(),2);
+        let first_mask=b.boxes[0].masks[0];let second_mask=b.boxes[1].masks[0];
+        let clip=(start..records.len()).find(|&p|records[p].kind=="ClippingShape"&&same(records[p].get("sourceId"),&Value::Uint(first_mask))).unwrap();
+        let mut changed=records.clone();changed[clip].set("sourceId",Value::Uint(second_mask)).unwrap();
+        assert!(bind(&base,&changed,start,changed.len(),&roles,false,false,false,0.,0.03125).is_err());
+        trace.boxes.swap(0,1);assert!(!b.matches_trace(&trace));
+    }
+    #[test]
     fn rejects_original_paint_and_role_mismatches(){
         let (base,items,roles)=scene(2);let mut records=base.clone();let start=records.len();
         wrapping_paint::paint_items(&mut records,&items,false,false,false,0.,0.03125).unwrap();
@@ -214,3 +232,5 @@ mod tests {
         assert!(bind(&wrong,&records,start,records.len(),&roles,false,false,false,0.,0.03125).is_err());
     }
 }
+
+impl Binding {pub(super) fn matches_trace(&self,t:&super::wrapping_paint::Trace)->bool{self.boxes.len()==t.boxes.len()&&self.boxes.iter().zip(&t.boxes).all(|(a,b)|a.matches_trace(b))}}

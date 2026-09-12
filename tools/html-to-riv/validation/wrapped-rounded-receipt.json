@@ -1,0 +1,94 @@
+{
+  "status": "verified-private-wrapped-rounded-paint",
+  "publicAdmission": false,
+  "counts": {
+    "frames": 384,
+    "representatives": 144,
+    "transfers": 240,
+    "sheets": 36,
+    "geometryPass": 384,
+    "pixelPass": 384
+  },
+  "observationCounts": {
+    "frames": 384,
+    "scalarChecks": 52992,
+    "scalarFailures": 0,
+    "zeroSignDifferences": 0,
+    "streamFailures": 0,
+    "chromeEdgeComparisons": 2304,
+    "chromeEdgeDifferences": 0
+  },
+  "clips": 11904,
+  "draws": 2688,
+  "clearChecks": 768,
+  "preservedPriorPixelFailures": 48,
+  "rustTests": 419,
+  "nodeTests": 56,
+  "maxMismatchedPixels": 0,
+  "maxMeanChannelError": 0.03318142361111111,
+  "artifactBindings": 11340,
+  "scope": "Private actual Derived rounded paint qualification for48 closed recipes; no public CSS wrapping admission or general thin/resource qualification.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "evidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-rounded-verification-r1.json",
+      "sha256": "7aa6dad296cc8cb53cb04fa50fe77258ecbf023d9bce519abce1e23b85d08d8d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/receipt.json",
+      "sha256": "c5a027f02858386fb58ff63ceab800f262f07fe93a170c99419e11dc3aa53008"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/rounded-observation/receipt.json",
+      "sha256": "a627b39f450e210c5fdafd1cd3f5db9e2deb307161e667d801b4cff63de7c0c0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/visual/coverage.json",
+      "sha256": "b1ac3989100b1eb9836ba296e6161dfeea5d0765125ea4e6c5906a6378f09bb8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/visual/review-receipt.json",
+      "sha256": "6718d98bb2494c4caf489174385dff53ff1ec51d5015fb140fb611f9016df49f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/visual/inspection-root.json",
+      "sha256": "2dafc0302feafbdc9988555d0f8a24c796001a1458de4082a0c2387f5e019417"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/visual/inspection-agent.json",
+      "sha256": "c6af4a53db6bfa564d22c44b4e52ceaeaf28e96dba97761a6be95328497330a1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/wrapped-rounded-r1/before-after-receipt.json",
+      "sha256": "8de48f73c7dbcb1003eb5eec0c7d4bef698cf96fb3cd9d528d957f70adc57777"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-rounded-constructor-r1/receipt.json",
+      "sha256": "7448b3cfcf63be0d9c3b007dd35a0a1052dce317912ba85f1f45289f0882117c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-rounded-constructor-r1/construction-receipt.json",
+      "sha256": "dc5e0a9cd91fb3a383cb169fc413a7588adc7f845a31cde3a117bcc2c5b7007a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-rounded-product-build-r1/summary.json",
+      "sha256": "0dce6ab91e8401b2a06e552a48cea8c597be5a9f9a50213cf54b7a8eb1907adf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-rounded-product-build-r1/prior-public-identity.json",
+      "sha256": "6dc9a400e39b6ec92ceb13b0a3b1e79f1ba693b7e43756432bbffb11e83d0934"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-rounded-evidence.py",
+      "sha256": "553f15e2d1339b24120cfb47e6bb0701794b6af82d6584149c423b74c21b7630"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-rounded-review.md",
+      "sha256": "7bb7f331190219db98258e4c8e9fb29de7d66aaa8fdc099979d2fcee56d52c08"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-rounded-domain-review.md",
+      "sha256": "36a6a1df6dc3e37b200a226a0158e013e8deb13affcd7367aa000832b236101e"
+    }
+  ]
+}

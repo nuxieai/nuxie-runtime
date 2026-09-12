@@ -1,0 +1,21 @@
+{
+  "scope": "Private native scalar predicate; no pixel/public admission",
+  "cases": 22,
+  "frames": 352,
+  "scalarChecks": 1760,
+  "failures": 0,
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/positive-clamp-r1/native-receipt.json",
+      "sha256": "6c3433cc740b394f972caf97288dfb08e01c7eb7f49a5e574fcbe47ea28edd65"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/positive-clamp-r1/native-source-audit.json",
+      "sha256": "af6457c15ead0ef67d72c0320bcb300614f285abf075dc8b2768e1b4b96c95c3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/positive-clamp-verification-r1.json",
+      "sha256": "363d4ce8e4d0b5f0018b38599967796e83e89428105d5b2ae4751973a04141dc"
+    }
+  ]
+}

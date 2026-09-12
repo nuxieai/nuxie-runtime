@@ -1,5 +1,7 @@
 # Immutable-target validation
 
+A private [ordinary positive predicate](validation/positive-clamp-review.md) now passes22cases/352native frames/1760bit-exact scalar checks, including subnormals and live zero crossings. Next test [live paint rounding](validation/paint-rounding-next.md); this is not paint or public wrapping qualification. Runtime and public product source remain unchanged.
+
 Latest private paint isolation: [standalone fractional paint](validation/fractional-paint-review.md) reproduces the wrapped edge discrepancy without wrapping. Layout and Shape/Rectangle native paints match across80route/frame pairs;160geometry/136pixel passes,24failures retained,60pairs directly reviewed. Chrome source confirms CSS background snapping. Next test an ordinary constraint predicate for live paint-only rounding; no runtime changes or public admission.
 
 Current private wrapping evidence: [actual Derived native/Chrome checkpoint](validation/wrapped-derived-review.md) records384/384geometry and336/384pixel passes,768clear controls, and complete144-pair visual review with240exact repeat transfers. All48fractional-edge pixel failures remain; public wrapping is unadmitted. The next experiment isolates ordinary fractional paint from wrapping; source/runtime immutability and all99items remain in force. Older next-step statements below are historical.

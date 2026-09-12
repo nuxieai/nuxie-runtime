@@ -6,7 +6,7 @@ Reviewed 2026-09-12. The saved goal remains active and unlimited. Work only in `
 
 Read validation/fractional-paint-review.md and fractional-paint-chrome-rule.md. The standalone20-case experiment is finished:160geometry/136pixel passes,24retained failures,320clear checks,60directly inspected pairs and100exact transfers. All80LayoutComponent/Shape native route pairs are identical. An exact local band reproduces the prior wrapped edge discrepancy in both engines. Ordinary CSS background snapping explains the tested edge behavior; no direct paint-snap wire field was found, but arbitrary compositions are not proven impossible.
 
-**Next complete the native gain/clamp positive-predicate probe, then test a live paint-only edge composition if the predicate works.** The probe uses only existing TranslationConstraints: clamp input to[0,1], then three stages multiply by2^64 and clamp to[0,1]. Test minimum subnormal, negative/zero, positive and large values, both axes, dependency updates, original/clone and a live value crossingzero. Inspect current positive-clamp artifacts/process handles before resuming; do not infer a process is running from files. Keep all99items, runtime immutability and failures. Do not repeat the completed standalone or wrapping captures without a changed hypothesis.
+**Positive predicate probe is now complete:** validation/positive-clamp-review.md records22cases/352frames/1760bit-exact scalar checks, including minimum subnormals, both axes, live zero crossings and original/clone repeats. The independent verifier checks1105bindings. No product/runtime changes or paint qualification. **Next execute validation/paint-rounding-next.md:** implement the bounded signed binary rounding graph, then test a live vector/clip paint composition against Chrome. Do not repeat these completed probes. Preserve all99items and retained pixel failures.
 
 ## Contract and overall state
 
@@ -52,6 +52,6 @@ Completion requires every scoped item qualified or an evidenced immutable-runtim
 
 ## Restart prompt
 
-> Resume the existing compiler goal in /Users/levi/.codex/worktrees/html-css-immutable using GOAL-RESTART.md. Wrapped and standalone fractional-paint campaigns are complete with48and24pixel failures retained. Next finish the native gain/clamp positive-predicate probe and, if viable, test a live file-level paint-edge rounding composition. Keep the full99-item scope and immutable runtime; no data bindings, animation, host policy or recompilation on resize. Do not repeat completed captures; keep the unfinished replacement isolated.
+> Resume the existing compiler goal in /Users/levi/.codex/worktrees/html-css-immutable using GOAL-RESTART.md. Wrapped and standalone paint campaigns and the native positive-predicate probe are complete. Next implement and test the ordinary signed binary rounding graph and live paint-only clip composition in validation/paint-rounding-next.md. Preserve the immutable runtime, full99-item backlog and48/24pixel failures; do not repeat completed probes, add bindings/animation/host policy or push the unfinished replacement.
 
 Earlier chronological notes are preserved in validation/history/GOAL-RESTART-before-derived-review-2026-09-12.md and checkpoint reviews. Their next steps are historical.

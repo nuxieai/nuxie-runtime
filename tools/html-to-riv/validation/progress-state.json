@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
-  "focus": "Fractional paint isolated from wrapping",
-  "status": "Ordinary paint-route discrepancy reproduced",
-  "current": "20 standalone cases:160/160 geometry,136/160 pixels,320clear checks. All80 LayoutComponent/Shape route pairs match.60pairs visually reviewed with100exact transfers.24pixel failures retained alongside48wrapped failures. No product/runtime changes.",
-  "next": "Test a live positive predicate using ordinary gain/clamp TranslationConstraints before attempting paint-only edge rounding. Preserve all failures and continue the99-item compiler backlog.",
+  "focus": "Live paint rounding: scalar building block verified",
+  "status": "Ordinary positive predicate works across subnormal and resize controls",
+  "current": "Standalone paint isolation is complete:160geometry/136pixel passes,24failures preserved. Ordinary gain/clamp predicate adds22cases/352frames/1760bit-exact scalar observations, with live zero crossings and clone/repeat checks. No runtime or product changes; public wrapping unadmitted.",
+  "next": "Implement the bounded signed binary rounding graph, then test a live vector/clip paint-only composition against Chrome. Preserve thin-box/quantization obligations and all99backlog items.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Positive predicate native evidence",
+      "path": "tools/html-to-riv/validation/positive-clamp-review.md"
+    },
+    {
+      "label": "Next live paint composition experiment",
+      "path": "tools/html-to-riv/validation/paint-rounding-next.md"
+    },
     {
       "label": "Standalone fractional paint review",
       "path": "tools/html-to-riv/validation/fractional-paint-review.md"

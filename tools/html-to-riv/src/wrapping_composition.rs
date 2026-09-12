@@ -13,6 +13,7 @@ pub(super) enum Unresolved {
     Epsilon,
     ResourceBudget,
     PaintOwnership,
+    OriginalPaint(super::wrapping_original_paint::Unresolved),
     BaseChanged,
     GeneratedRole { object: u32 },
     Arithmetic(super::wrapping_coordinates::Unresolved),
@@ -34,6 +35,7 @@ pub(super) struct Candidate {
     records: Vec<Record>,
     layout_authored: Option<super::wrapping_domains::LayoutAuthored>,
     integral: super::wrapping_integral::Proof,
+    original: Option<super::wrapping_integral::Nonoverlap>,
     trace: wrapping::Trace,
     paint_trace: wrapping_paint::Trace,
     viewport: [MachineInterval; 2],
@@ -47,6 +49,7 @@ pub(super) struct Candidate {
     paint_records: usize,
 }
 impl Candidate {
+    pub(super) fn original_paint(&self) -> Option<&super::wrapping_integral::Nonoverlap> { self.original.as_ref() }
     pub(super) fn integral(&self) -> &super::wrapping_integral::Proof { &self.integral }
     pub(super) fn layout_authored(&self) -> Option<&super::wrapping_domains::LayoutAuthored> { self.layout_authored.as_ref() }
     pub(super) fn records(&self) -> &[Record] { &self.records }
@@ -65,13 +68,18 @@ impl Candidate {
 /// A source-derived arithmetic analysis attached to the exact candidate it
 /// configured. Sizing, paint records and their numeric domains are checked
 /// together; actual native/Chrome visual qualification is not implied.
+#[derive(Debug)]
+pub(super) enum PaintProof {
+    Ordered(super::wrapping_paint_binding::Binding),
+    Original(super::wrapping_original_paint::Binding),
+}
 pub(super) struct Derived {
     candidate:Candidate,
     arithmetic:super::wrapping_coordinates::Proof,
     scalar:super::wrapping_scalar::Binding,
     position:super::wrapping_position::Proof,
     masks:super::wrapping_masks::Proof,
-    paint:super::wrapping_paint_binding::Binding,
+    paint:PaintProof,
     paint_box_domains:super::paint_box_domains::Proof,
 }
 impl Derived {
@@ -80,18 +88,21 @@ impl Derived {
     pub(super) fn scalar(&self)->&super::wrapping_scalar::Binding {&self.scalar}
     pub(super) fn position(&self)->&super::wrapping_position::Proof {&self.position}
     pub(super) fn masks(&self)->&super::wrapping_masks::Proof {&self.masks}
-    pub(super) fn paint(&self)->&super::wrapping_paint_binding::Binding {&self.paint}
+    pub(super) fn paint(&self)->&PaintProof {&self.paint}
     pub(super) fn paint_box_domains(&self)->&super::paint_box_domains::Proof {&self.paint_box_domains}
 }
 pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
-    compose_bounds(domains,alignments,record_budget,false)
+    compose_bounds(domains,alignments,record_budget,0)
 }
 /// Keep the same admission proofs and rounded fallback while selecting cheaper
 /// paint only for source-certified integer geometry.
 pub(super) fn compose_integral_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
-    compose_bounds(domains,alignments,record_budget,true)
+    compose_bounds(domains,alignments,record_budget,1)
 }
-fn compose_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize,optimize:bool)->Result<Derived,Unresolved> {
+pub(super) fn compose_original_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
+    compose_bounds(domains,alignments,record_budget,2)
+}
+fn compose_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize,optimize:u8)->Result<Derived,Unresolved> {
     let masks=super::wrapping_masks::prove(&domains).map_err(Unresolved::Masks)?;
     let arithmetic=super::wrapping_coordinates::prove(&domains).map_err(Unresolved::Arithmetic)?;
     let row=domains.base().row;
@@ -104,16 +115,23 @@ fn compose_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize,opti
     let paint_box_domains=super::paint_box_domains::prove(&arithmetic,&position,domains.slots(),domains.viewport(),row)
         .map_err(Unresolved::PaintBoxDomains)?;
     let base=domains.base().records();
-    let integral=if optimize { super::wrapping_integral::select(&domains,alignments) } else { Default::default() };
-    let candidate=compose_planned(domains,alignments,arithmetic.epsilon(),record_budget,integral)?;
+    let integral=if optimize>0 { super::wrapping_integral::select(&domains,alignments) } else { Default::default() };
+    let original=if optimize==2 {super::wrapping_integral::nonoverlap(&domains,alignments)} else {None};
+    let candidate=compose_planned(domains,alignments,arithmetic.epsilon(),record_budget,integral,original)?;
     let (start,sizing,_)=candidate.record_costs();
     let scalar=super::wrapping_scalar::bind(candidate.records(),start,start+sizing,&roles,alignments,
         row,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.trace()).map_err(Unresolved::Scalar)?;
-    let paint=super::wrapping_paint_binding::bind_with_integral(base,candidate.records(),start+sizing,candidate.records().len(),
-        &roles,row,reverse_main,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.integral().geometries()).map_err(Unresolved::PaintBinding)?;
-    if !paint.matches_trace(candidate.paint_trace()) {
-        return Err(Unresolved::PaintBinding(super::wrapping_paint_binding::Unresolved{position:start+sizing}));
-    }
+    let paint=if let Some(proof)=candidate.original_paint() {
+        PaintProof::Original(super::wrapping_original_paint::bind(base,candidate.records(),start+sizing,&roles,proof)
+            .map_err(Unresolved::OriginalPaint)?)
+    } else {
+        let bound=super::wrapping_paint_binding::bind_with_integral(base,candidate.records(),start+sizing,candidate.records().len(),
+            &roles,row,reverse_main,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.integral().geometries()).map_err(Unresolved::PaintBinding)?;
+        if !bound.matches_trace(candidate.paint_trace()) {
+            return Err(Unresolved::PaintBinding(super::wrapping_paint_binding::Unresolved{position:start+sizing}));
+        }
+        PaintProof::Ordered(bound)
+    };
     Ok(Derived{candidate,arithmetic,scalar,position,masks,paint,paint_box_domains})
 }
 fn parent(record: &Record) -> Option<u32> {
@@ -207,10 +225,10 @@ fn preserved(
 pub(super) fn compose(
     domains: Domains<'_>, alignments: &[f32], epsilon: f32, record_budget: usize,
 ) -> Result<Candidate, Unresolved> {
-    compose_planned(domains,alignments,epsilon,record_budget,Default::default())
+    compose_planned(domains,alignments,epsilon,record_budget,Default::default(),None)
 }
 fn compose_planned(domains: Domains<'_>, alignments: &[f32], epsilon:f32,record_budget:usize,
-    integral:super::wrapping_integral::Proof)->Result<Candidate,Unresolved> {
+    integral:super::wrapping_integral::Proof,original:Option<super::wrapping_integral::Nonoverlap>)->Result<Candidate,Unresolved> {
     if alignments.len() != domains.base().slots.len()
         || alignments.iter().any(|v| ![0., 0.5, 1.].contains(v)) {
         return Err(Unresolved::Alignment);
@@ -221,7 +239,7 @@ fn compose_planned(domains: Domains<'_>, alignments: &[f32], epsilon:f32,record_
     let sizing_records = wrapping::alignment_records(count).ok_or(Unresolved::ResourceBudget)?;
     let integral_replicas=domains.slots().iter().enumerate().filter(|(_,s)|integral.geometries().contains(&s.visible))
         .try_fold(0usize,|sum,(i,_)|sum.checked_add(i+1)).ok_or(Unresolved::ResourceBudget)?;
-    let paint_records = wrapping_paint::paint_records_with_integral_geometry(&vec![1;count],count,integral_replicas,integral.geometries().len()).ok_or(Unresolved::ResourceBudget)?;
+    let paint_records = if original.is_some(){0}else{wrapping_paint::paint_records_with_integral_geometry(&vec![1;count],count,integral_replicas,integral.geometries().len()).ok_or(Unresolved::ResourceBudget)?};
     let end = base.len().checked_add(sizing_records).and_then(|v| v.checked_add(paint_records))
         .filter(|v| *v <= record_budget && *v <= u32::MAX as usize).ok_or(Unresolved::ResourceBudget)?;
     let mut fills = BTreeMap::new();
@@ -241,12 +259,12 @@ fn compose_planned(domains: Domains<'_>, alignments: &[f32], epsilon:f32,record_
     let mut records = base.to_vec();
     let trace = wrapping::align_items(&mut records, &items, domains.base().row,
         domains.base().reverse_cross, domains.base().line_fraction, epsilon)?;
-    let paint_trace=wrapping_paint::paint_items_with_integral(&mut records, &paints, domains.base().row, domains.base().reverse_main,
-        domains.base().reverse_cross, domains.base().line_fraction, epsilon,integral.geometries())?;
+    let paint_trace=if original.is_some(){wrapping_paint::Trace{boxes:vec![],integral:BTreeSet::new()}}else{wrapping_paint::paint_items_with_integral(&mut records, &paints, domains.base().row, domains.base().reverse_main,
+        domains.base().reverse_cross, domains.base().line_fraction, epsilon,integral.geometries())?};
     if records.len() != end { return Err(Unresolved::ResourceBudget); }
-    preserved(base, &records, &paints.iter().map(|p|p.paints[0].color).collect::<Vec<_>>(),
+    preserved(base, &records, &if original.is_some(){vec![]}else{paints.iter().map(|p|p.paints[0].color).collect::<Vec<_>>()},
         &items.iter().map(|i|i.visible).collect(),base.len()+sizing_records)?;
-    Ok(Candidate { records, integral, layout_authored: domains.layout_authored().cloned(), trace, paint_trace, viewport:domains.viewport(), parent_axes:domains.parent_axes(),
+    Ok(Candidate { records, integral, original, layout_authored: domains.layout_authored().cloned(), trace, paint_trace, viewport:domains.viewport(), parent_axes:domains.parent_axes(),
         slots:domains.slots().to_vec(), cross_extents:domains.cross_extents(), epsilon, alignments:alignments.to_vec(),
         base_records:base.len(), sizing_records, paint_records })
 }
@@ -290,6 +308,25 @@ mod tests {
     fn domains<'a>(records:&'a[Record],roles:&[(u32,u32)])->Domains<'a> {
         let n=numeric();let values=roles.iter().map(|&(id,_)|(id,&n)).collect::<Vec<_>>();
         wrapping_domains::resolve(records,2,roles,&n,&values,[MachineInterval::new(0.,16384.).unwrap();2]).unwrap()
+    }
+    #[test]
+    fn nonoverlap_retains_base_paint_and_eliminates_entire_paint_suffix() {
+        let (records,roles)=fixture(3,2,0,1);
+        let layout=super::super::fixed_layout::LayoutStyle::from_numeric(&numeric()).unwrap();
+        let authored=roles.iter().flat_map(|&(s,v)|[(s,&layout),(v,&layout)]).collect::<Vec<_>>();
+        let resolve=||wrapping_domains::resolve_layout(&records,2,&roles,&layout,&authored,
+            [MachineInterval::new(0.,16384.).unwrap();2]).unwrap();
+        let optimized=compose_original_with_bounds(resolve(),&[0.;3],100_000).unwrap();
+        let c=optimized.candidate();assert!(c.original_paint().is_some());
+        assert!(matches!(optimized.paint(),PaintProof::Original(_)));
+        assert_eq!(c.record_costs(),(23,141,0));assert_eq!(c.records().len(),164);
+        assert_eq!(wire::encode(&c.records()[..records.len()]).unwrap(),wire::encode(&records).unwrap());
+        assert!(compose_original_with_bounds(resolve(),&[0.;3],164).is_ok());
+        assert!(matches!(compose_original_with_bounds(resolve(),&[0.;3],163),Err(Unresolved::ResourceBudget)));
+        let fallback=compose_original_with_bounds(resolve(),&[0.,0.5,0.],100_000).unwrap();
+        assert!(fallback.candidate().original_paint().is_none());
+        let previous=compose_integral_with_bounds(resolve(),&[0.,0.5,0.],100_000).unwrap();
+        assert_eq!(wire::encode(fallback.candidate().records()).unwrap(),wire::encode(previous.candidate().records()).unwrap());
     }
     #[test]
     fn certified_integral_composition_saves_exact_records_and_preserves_fallback() {
@@ -408,7 +445,7 @@ mod tests {
         let derived=compose_with_bounds(domains(&records,&roles),&[0.,0.5,1.],100_000).unwrap();
         assert_eq!(wire::encode(&derived.candidate().records()[id as usize+1..id as usize+3]).unwrap(),
             wire::encode(&records[id as usize+1..id as usize+3]).unwrap());
-        assert_eq!(derived.paint().replicas,6);
+        assert!(matches!(derived.paint(),PaintProof::Ordered(p) if p.replicas==6));
         assert_eq!(derived.candidate().records().iter().filter(|r|r.kind=="Fill"
             && matches!(r.get("parentId"),Some(Value::Uint(0)))).count(),1);
         let duplicate_id=records.len() as u32-1;

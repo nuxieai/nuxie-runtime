@@ -1,0 +1,614 @@
+[
+  {
+    "name": "original-resource-1",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/recipe.json",
+        "sha256": "54d0c135a5b1a0adb91a1e4db223301dd10e540d3ea70011e0d13b6a53607bd3"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/construction-receipt.json",
+        "sha256": "2fa2b70d6655535378ce8ba4fb1cc0e438d2bd1013d98601ab0a2a486f07790c"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/base.riv",
+          "sha256": "6674ddf8b3118ba5a1f355d1679f8ac08978b58b3d95419cb616beae07aeddc9"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/scene.riv",
+          "sha256": "1a417e814cd8228242d32e1c6c6ad9fb60c572794744a2ff73c49ea716eb8e96"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/scene.map.json",
+          "sha256": "29ce9bcacf49b063e611670aa018c67d3e7c13c6932bc38a45c2cca7bda9bf24"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/trace.json",
+          "sha256": "9b0ffe6e5aee6311525ad2ca67121ee3aeb7a261d71b1081d9095e4dbd50c04d"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/proof.json",
+          "sha256": "11e9e16bb4c959506e025d10749649b8cab3b8d74cb0737fd69f65577552c715"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-resource-3",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:20px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/recipe.json",
+        "sha256": "e631cd274497a8d2b15c335b2e8ac0b6bcf9e5dbdf4a9c682bdb0d5d02a34406"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/construction-receipt.json",
+        "sha256": "2fa2b70d6655535378ce8ba4fb1cc0e438d2bd1013d98601ab0a2a486f07790c"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/base.riv",
+          "sha256": "8a7679b6aaf933fe9d532fed4016d8debf140c357874d9099ef4ac1c5196e644"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/scene.riv",
+          "sha256": "e05a0bdf8595678693ca85edd2e1481ef35f366322896b558c78e4b4424ca82b"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/proof.json",
+          "sha256": "ab1d782b81d98acb82436368aa9d2b131581455beb1e3b93107a9b2f27f32e3b"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-resource-8",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div><div class=\"s3\"><div id=\"v3\"></div></div><div class=\"s4\"><div id=\"v4\"></div></div><div class=\"s5\"><div id=\"v5\"></div></div><div class=\"s6\"><div id=\"v6\"></div></div><div class=\"s7\"><div id=\"v7\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:20px;background:rgba(238,238,34,1);}.s3{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v3{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s4{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v4{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s5{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v5{width:20px;height:20px;background:rgba(238,238,34,1);}.s6{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v6{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s7{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v7{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/recipe.json",
+        "sha256": "5883fe6c16addddea240a8ab8df4dcb9570943a1d8e5dc0931db86f4dad1f53e"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/construction-receipt.json",
+        "sha256": "2fa2b70d6655535378ce8ba4fb1cc0e438d2bd1013d98601ab0a2a486f07790c"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/base.riv",
+          "sha256": "689db119228cb152d5b8f893fb5752917f6c1b24dc725184e9dd31b3f6303a41"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/scene.riv",
+          "sha256": "52806abbd9cf65f21fa13faa02ec1d7410a368d7b42d0fa293d8189bd1391ebb"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/scene.map.json",
+          "sha256": "814778abbf115b6569f34f6b038fada7ad673a3c555d37de025a4ba9717212ef"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/trace.json",
+          "sha256": "e07aa06e8e5908097d5a35515e185101c9f6ac29dddf9c53ed60d8b5865021ef"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/proof.json",
+          "sha256": "e522e3656eb70202e388393b0874a92d9ea1291f01366cf74e2d7bfaa75250e2"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-resource-34",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div><div class=\"s3\"><div id=\"v3\"></div></div><div class=\"s4\"><div id=\"v4\"></div></div><div class=\"s5\"><div id=\"v5\"></div></div><div class=\"s6\"><div id=\"v6\"></div></div><div class=\"s7\"><div id=\"v7\"></div></div><div class=\"s8\"><div id=\"v8\"></div></div><div class=\"s9\"><div id=\"v9\"></div></div><div class=\"s10\"><div id=\"v10\"></div></div><div class=\"s11\"><div id=\"v11\"></div></div><div class=\"s12\"><div id=\"v12\"></div></div><div class=\"s13\"><div id=\"v13\"></div></div><div class=\"s14\"><div id=\"v14\"></div></div><div class=\"s15\"><div id=\"v15\"></div></div><div class=\"s16\"><div id=\"v16\"></div></div><div class=\"s17\"><div id=\"v17\"></div></div><div class=\"s18\"><div id=\"v18\"></div></div><div class=\"s19\"><div id=\"v19\"></div></div><div class=\"s20\"><div id=\"v20\"></div></div><div class=\"s21\"><div id=\"v21\"></div></div><div class=\"s22\"><div id=\"v22\"></div></div><div class=\"s23\"><div id=\"v23\"></div></div><div class=\"s24\"><div id=\"v24\"></div></div><div class=\"s25\"><div id=\"v25\"></div></div><div class=\"s26\"><div id=\"v26\"></div></div><div class=\"s27\"><div id=\"v27\"></div></div><div class=\"s28\"><div id=\"v28\"></div></div><div class=\"s29\"><div id=\"v29\"></div></div><div class=\"s30\"><div id=\"v30\"></div></div><div class=\"s31\"><div id=\"v31\"></div></div><div class=\"s32\"><div id=\"v32\"></div></div><div class=\"s33\"><div id=\"v33\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:20px;background:rgba(238,238,34,1);}.s3{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v3{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s4{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v4{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s5{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v5{width:20px;height:20px;background:rgba(238,238,34,1);}.s6{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v6{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s7{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v7{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s8{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v8{width:20px;height:20px;background:rgba(238,238,34,1);}.s9{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v9{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s10{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v10{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s11{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v11{width:20px;height:20px;background:rgba(238,238,34,1);}.s12{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v12{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s13{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v13{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s14{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v14{width:20px;height:20px;background:rgba(238,238,34,1);}.s15{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v15{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s16{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v16{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s17{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v17{width:20px;height:20px;background:rgba(238,238,34,1);}.s18{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v18{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s19{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v19{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s20{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v20{width:20px;height:20px;background:rgba(238,238,34,1);}.s21{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v21{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s22{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v22{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s23{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v23{width:20px;height:20px;background:rgba(238,238,34,1);}.s24{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v24{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s25{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v25{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s26{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v26{width:20px;height:20px;background:rgba(238,238,34,1);}.s27{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v27{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s28{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v28{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s29{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v29{width:20px;height:20px;background:rgba(238,238,34,1);}.s30{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v30{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s31{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v31{width:20px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s32{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v32{width:20px;height:20px;background:rgba(238,238,34,1);}.s33{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v33{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/recipe.json",
+        "sha256": "1301bcbbfb25114c70a3df83802f0e38b34af8cfd46cd7fceff9ed860044d2d5"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/construction-receipt.json",
+        "sha256": "2fa2b70d6655535378ce8ba4fb1cc0e438d2bd1013d98601ab0a2a486f07790c"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/base.riv",
+          "sha256": "f0bfc24d7730dc870bf4726b4b12f67af4e43247d39d615161cfc1b818f354e6"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/scene.riv",
+          "sha256": "13563dfb21a595a7437f8af79d0900ed023be4ad901a46953071519108552caa"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/scene.map.json",
+          "sha256": "167191fef586b90e070a2b49347eddbf5f2fe2b11209e28329e69135d7e7de8f"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/trace.json",
+          "sha256": "c1eec7bcc8b6a4a57110a511ec1a4cb61860478ba32d19098f87ca191a92677e"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/proof.json",
+          "sha256": "5726afc5bf94606393c2d0b177f688b4e59684494ff41a2674d167e2a61f445c"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-mixed-row",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:19.5px;height:20px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:30px;height:20px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-row/recipe.json",
+        "sha256": "156ebeea0abbc422f867f1ed14cd9e432a719dbfb5f565338e3ab8006769a662"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/construction-receipt.json",
+        "sha256": "4002fe6738d1839f5be56b07849cdab9b412ddc0e703ae63af894eaa72c93853"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-row/base.riv",
+          "sha256": "e3087ac6af87ec32450fc216800a2b853f64543ac0c04086943777615fabf06d"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-row/scene.riv",
+          "sha256": "697eb7b2bfc6f5d056a177130b8518b87664cb7e9ac16400dc3367d062c2060c"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-row/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-row/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-row/proof.json",
+          "sha256": "61cc3c44888ef52578fd55e58e5d153b8df2802035d80af3dd4be9b293cae052"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-mixed-column",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:20px;height:19.5px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:30px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-column/recipe.json",
+        "sha256": "ec738554a4823a6d83ee30122b41bc85b5775471fd8a65bd5165a5ad09986cce"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/construction-receipt.json",
+        "sha256": "4002fe6738d1839f5be56b07849cdab9b412ddc0e703ae63af894eaa72c93853"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-column/base.riv",
+          "sha256": "1eb238ba297adbd24d2aea5c1a4280f371de0a5c47db560a98b9e4a1f0d50da2"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-column/scene.riv",
+          "sha256": "d9970a21ac62a7858124a6cc88e9f76f2404d1e907783dd00206cc7507ea1312"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-column/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-column/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-mixed-column/proof.json",
+          "sha256": "229a840bc59fa2c60cd34585f2bdc2332936d0dc90326397ccf9ea7743b98c43"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-contained-row",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:10px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:15px;height:10px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:15px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        40,
+        120
+      ],
+      [
+        19,
+        120
+      ],
+      [
+        61,
+        120
+      ],
+      [
+        40,
+        120
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row/recipe.json",
+        "sha256": "7d1473c583c7d71281cba38b36ea95fb20737e5f14d1cd56350be3ae163efeb7"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/construction-receipt.json",
+        "sha256": "4002fe6738d1839f5be56b07849cdab9b412ddc0e703ae63af894eaa72c93853"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row/base.riv",
+          "sha256": "2892a2a6c763ca7e2b87404b9b6d78d02cebac3d8acb5b8bd9a67aa9701d30c3"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row/scene.riv",
+          "sha256": "1ccc4a1272f034f15e651cdab7e7c2b93550a09356cfbd0d43f4a37a42b4be5b"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row/proof.json",
+          "sha256": "b8a7be8f22d5db65116fbd260d56d9ecff96844ecc574adb04bc3acb43b84ae0"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-contained-column",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:20px;height:10px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:10px;height:15px;background:rgba(0,168,150,0.80000000000000004);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:15px;height:20px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        120,
+        40
+      ],
+      [
+        120,
+        19
+      ],
+      [
+        120,
+        61
+      ],
+      [
+        120,
+        40
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-column/recipe.json",
+        "sha256": "d848f437fa5c2a2e208157454b2094e35cdf83fec0cbe8649114bd4eebd4b6be"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/construction-receipt.json",
+        "sha256": "4002fe6738d1839f5be56b07849cdab9b412ddc0e703ae63af894eaa72c93853"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-column/base.riv",
+          "sha256": "2630fa47cb57ee80ad5ba45ab8ba8db7ab21af3114935eb5ae23b243c9eb4123"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-column/scene.riv",
+          "sha256": "7f66d0340e87d069213ae6bc2e83043c9e9cece5f07ffc41611a7f82d3ccb8b1"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-column/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-column/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-column/proof.json",
+          "sha256": "5eaa29e2e8d35d5d9983eb36591e013edee624ec1cb20244ec378ed2c6e57326"
+        }
+      }
+    }
+  },
+  {
+    "name": "original-contained-row-transparent",
+    "html": "<div id=\"p\"><div class=\"s0\"><div id=\"v0\"></div></div><div class=\"s1\"><div id=\"v1\"></div></div><div class=\"s2\"><div id=\"v2\"></div></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;flex-wrap:wrap;align-content:flex-start;justify-content:flex-start;align-items:flex-start;}.s0{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v0{width:10px;height:20px;background:rgba(255,96,48,0.50196078431372548);}.s1{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v1{width:15px;height:10px;background:rgba(0,0,0,0);}.s2{width:20px;height:20px;flex-direction:column;align-items:flex-start;justify-content:flex-start;}#v2{width:20px;height:15px;background:rgba(238,238,34,1);}",
+    "compileViewport": [
+      320,
+      240
+    ],
+    "viewports": [
+      [
+        40,
+        120
+      ],
+      [
+        19,
+        120
+      ],
+      [
+        61,
+        120
+      ],
+      [
+        40,
+        120
+      ]
+    ],
+    "features": [
+      "certified original paint or mixed rounded fallback",
+      "same original/clone resize",
+      "authored fixed sizes and alpha overlap"
+    ],
+    "construction": {
+      "recipe": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row-transparent/recipe.json",
+        "sha256": "0f0811d1b10b03033105ba5836a80f164a844b158b4a3af883eff374d1e096d0"
+      },
+      "constructor": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/candidate",
+        "sha256": "f0541ba0bc20caea222e8c323058145a4f4712e7219c82012873ebcb4bef7c8b"
+      },
+      "reference": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/construction-receipt.json",
+        "sha256": "4002fe6738d1839f5be56b07849cdab9b412ddc0e703ae63af894eaa72c93853"
+      },
+      "artifacts": {
+        "base.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row-transparent/base.riv",
+          "sha256": "1c19232daf111140134465cc0b53db401da3da5149440ab376376fc4690bb015"
+        },
+        "scene.riv": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row-transparent/scene.riv",
+          "sha256": "03ee39d7e5184ef116ca99cc355d7b299d240a31b298a91a5a9bee457c304073"
+        },
+        "scene.map.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row-transparent/scene.map.json",
+          "sha256": "0b571b3dfd25cd2892a43013b0781b1ced1be22f9286ba69b97bd21e93f78fd8"
+        },
+        "trace.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row-transparent/trace.json",
+          "sha256": "2d073ff863922ca47be6ea4677b1ad55f322bfb43afe694586fc8229b2cdc351"
+        },
+        "proof.json": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-visual-constructor-r2/original-contained-row-transparent/proof.json",
+          "sha256": "b8a7be8f22d5db65116fbd260d56d9ecff96844ecc574adb04bc3acb43b84ae0"
+        }
+      }
+    }
+  }
+]

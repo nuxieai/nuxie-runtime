@@ -1,5 +1,7 @@
 # Current admission on the unchanged runtime
 
+Latest private checkpoint: proven nonoverlap retains original paints and removes their helper suffix. The 34-owner scene now uses 2,150 records; 72 fresh native/Chrome frames pass. Public wrapping remains unadmitted and backlog counts are unchanged. See [original-paint review](validation/wrapped-original-review.md).
+
 Latest private checkpoint: source-certified integral paint reduces34-owner graphs from99247to17732records;688native/Chrome geometry+pixel frames pass. Public wrapping remains unadmitted; all99backlog items retain their evidence states. See [integral optimization review](validation/wrapped-integral-review.md).
 
 Latest private checkpoint: fixed layout normalization repairs all28boundary pixel failures;32boundary and48regression scenes pass640geometry/pixel frames. Public wrapping remains unadmitted and backlog counts remain13qualified/23partial/4investigating/59pending. See [normalization review](validation/wrapped-normalized-review.md).

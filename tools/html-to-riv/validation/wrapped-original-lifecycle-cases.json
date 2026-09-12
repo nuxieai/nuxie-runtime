@@ -1,0 +1,90 @@
+[
+  {
+    "name": "owners-1",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-1/scene.riv",
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ]
+  },
+  {
+    "name": "owners-3",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-3/scene.riv",
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ]
+  },
+  {
+    "name": "owners-8",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-8/scene.riv",
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ]
+  },
+  {
+    "name": "owners-34",
+    "scene": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-original-resource-r2/cases/owners-34/scene.riv",
+    "viewports": [
+      [
+        320,
+        200
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        96,
+        240
+      ],
+      [
+        320,
+        200
+      ]
+    ]
+  }
+]

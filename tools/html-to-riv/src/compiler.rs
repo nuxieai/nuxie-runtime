@@ -1022,3 +1022,7 @@ mod paint_box_domains;
 #[allow(dead_code)] // Private source-certified paint optimization.
 #[path = "wrapping_integral.rs"]
 mod wrapping_integral;
+
+#[allow(dead_code)] // Private original-paint ownership binding.
+#[path = "wrapping_original_paint.rs"]
+mod wrapping_original_paint;

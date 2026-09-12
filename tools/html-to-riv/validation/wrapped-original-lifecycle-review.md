@@ -1,0 +1,22 @@
+# Matched original-paint lifecycle measurements
+
+The private original-paint optimization reduces the 34-owner scene from 17,732 records / 229,490 bytes to 2,150 records / 31,615 bytes. Its measured median import is 1.460334 ms versus 71.163333 ms for the integral-replica graph (48.73× ratio); resize/update is 0.485438 ms versus 4.506376 ms (9.28×), and CPU draw recording is 0.100417 ms versus 3.500792 ms (34.86×). These are measurements of the same numeric recipes with different compiler-produced graphs on the same immutable runtime, not a public performance guarantee.
+
+The comparison binds `output/wrapped-integral-lifecycle-release-r1` and `output/wrapped-original-lifecycle-release-r1` to their respective frozen `wrapped-integral-resource-r1` and `wrapped-original-resource-r2` construction artifacts. The offline checker recomputes every minimum, median, nearest-rank p95 and maximum from the raw trials; checks process RSS against each `/usr/bin/time -l` log; verifies original and repeated construction artifacts; and checks numeric recipe equality while omitting only source strings and null metadata. No native measurements were rerun for this review.
+
+| Owners | Records, integral → original | Bytes, integral → original | Import ms | Resize/update ms | CPU recording ms |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 44 → 38 | 597 → 558 | 0.023708 → 0.019584 | 0.007417 → 0.006980 | 0.006500 → 0.006458 |
+| 3 | 279 → 166 | 3,714 → 2,344 | 0.134750 → 0.078625 | 0.040105 → 0.025355 | 0.027459 → 0.011896 |
+| 8 | 1,339 → 486 | 17,666 → 7,051 | 0.814125 → 0.278916 | 0.188250 → 0.087688 | 0.171187 → 0.027166 |
+| 34 | 17,732 → 2,150 | 229,490 → 31,615 | 71.163333 → 1.460334 | 4.506376 → 0.485438 | 3.500792 → 0.100417 |
+
+At 34 owners the other stage medians are initial settle 74.682291 → 1.868708 ms, clone 69.571834 → 1.135292 ms, and release 6.108042 → 0.532041 ms. Process peak RSS is 171,933,696 → 27,541,504 bytes. All distributions, including factory setup, remain in the machine-readable receipt rather than being reduced to these selected medians.
+
+The probe binary, runner, release toolchain manifest and hardware JSON hashes match across campaigns. The probe is SHA-256 `d7b5ab700580ede370992258374b2e037083adfdef375665b20cbfcb53af3f64`; the runtime baseline is `6c7ac16617835b5f581784ff08a9e779bb52faf3`. The checker also binds linked-library files, release artifacts, root Cargo manifest and lockfile. Hardware is Apple M5 Max, 18 logical CPUs, 128 GiB RAM, arm64 macOS 26.6.2. The optimized probe uses the same release/fat-LTO build in both campaigns.
+
+Each campaign has four cases, two warmups and nine measured trials per case: 88 total trials, 72 measured trials across the comparison. Each trial exercises original and cloned artboards with the sequence 320×200, 160×320, 96×240, 320×200: 704 total resize/draw samples, 576 measured samples. A case has nine measured stage samples and 72 correlated frame samples. The nine-sample nearest-rank p95 is the maximum, not a robust population estimate. Timing stages exclude file reads and JSON serialization. CPU recording measures RecordingFactory command creation, not GPU submission, rasterization or presentation. Release measures explicit drops; process RSS includes buffers and allocator high-water and does not establish retained memory or leak freedom. Campaigns were sequential, not randomized interleaved trials.
+
+The new four cases independently report costs `[7+6N, 58N−33, 0]`, total `64N−26`, with every visible owner in the original-paint certificate and no rounded paint boxes. This optimization is restricted to fully certified integral, nonoverlapping original paint. Other scenes retain integral-replica or rounded fallback costs. The resource receipt deliberately has `maxOwners: null`: 84 is the largest accepted tested case; 1,562/1,563 are theoretical record-budget endpoints, not demonstrated accepted capacities (both are rejected by arithmetic separation). These lifecycle measurements do not change that limitation.
+
+Reproduce the offline verification with `python3 validation/wrapped-original-lifecycle-evidence.py` from `tools/html-to-riv`. It writes `output/wrapped-original-lifecycle-verification-r1.json` and the tracked `validation/wrapped-original-lifecycle-receipt.json`, including complete distributions and SHA-256 bindings. Visual equivalence and fractional viewport geometry have separate receipts; this comparison itself makes no browser-pixel claim.

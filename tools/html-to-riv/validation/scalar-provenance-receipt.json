@@ -1,0 +1,40 @@
+{
+  "status": "private-scalar-provenance-carrier-validated",
+  "scope": "Registered production module, not yet attached to typed computed fields or flex admission. Exact-rational oracle samples do not establish browser/pixel equivalence.",
+  "sourceHashes": {
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "78194f15beafaf30b6e91545769504468074ebe803abf88a16cae72a1c9f69ad",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "compiler.rs": "e8b4069486e81a38bcad47c9c9833e8eb2ce61504717d39239ff6e7ae99473c3",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "74901f508eddfd778f7660b5482ae32764db547a357964a371881b2b201224f6",
+    "flex_descriptor.rs": "9ba775b03f92b25a51edba80201904c15cefae0ba396d02bde6843918e7f5ea3",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "70c12ac308d4b833d20e39f7e8cc68cb8e29931be68caba58f08b8d63774cb06",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  },
+  "checks": {
+    "rust": 172,
+    "node": 35,
+    "independentDecimalCases": 1010,
+    "independentProductDivisionCases": 1004
+  },
+  "artifacts": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/receipt.json": "2ea47d044259141ca7aa501f4c171b5035333bc5cf91bd06a27be2979ba01725",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/arithmetic-receipt.json": "f49aee5ba715d5ae963bbb17f0d2e17d06719d2f624795a51ac2b4c3600a234f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/rust-tests.log": "cf5acc706c46170b403bbaae95f7b7dd958802646a0e153f4c296f31a1fe2d03",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/native-build.log": "b3158ce8589ee656fd9472f07c70ef632abe0267fbcf169137b3f72627a93d36",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/wasm-build.log": "df53f5da79af05af3e6f1cb9b36c6966b91e6bb031daa21c468526816a6ab062",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/transport.log": "6ff8ffc596804c0896652e15f8d4b9b7894de2d917f8ff82fc5b2c96313b5114",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/scalar-independent-r2/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+  }
+}

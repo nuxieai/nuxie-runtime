@@ -1,0 +1,9 @@
+# Binding numerical inputs to final emitted records
+
+Private Item::numeric_input now converts actual descriptors to the registered analyzer input type. It preserves ideal scalar identity while checking direct participant identity, linked native fractions, fixed main size or explicit point basis, scale, units and point bounds. Authored shrink remains separate from linked runtime shrink: only the group analyzer may prove that difference irrelevant for exact-zero basis. Conversion is not a numerical or structural admission certificate.
+
+Finalization now refreshes each native descriptor from completed records. Earlier capture preceded descendant/ancestor helper emission; using that snapshot for a proof could miss later mutations. A test mutates the emitted size after initial capture and verifies final binding rejects the mismatch. Additional tests reject altered fractions, basis and minimum units; the four-direction actual pipeline verifies fixed and flexible inputs.
+
+Across48 retained private scenes,224 inputs bind;24 fixed-main intrinsic/percentage inputs,24 wrapper inputs and16 nonpoint-basis inputs remain unresolved. These counts concern conversion only, not supported CSS. Omitted zero minima and absent maxima are recognized as compiler encodings; pinned importer default qualification remains a separate premise. No parent/world envelopes or whole-group structural assumptions are supplied implicitly.
+
+Validation passes191 Rust tests,35 Node tests and WASM build. All482 public regression outputs and48 private scene bytes/maps remain exact. Final source hashes and immutable-source guard pass. No fresh Chrome/native rendering or pixel qualification is claimed. See flex-input-binding-receipt.json for source/artifact bindings and flex-descriptor-admission-plan.md for remaining integration.

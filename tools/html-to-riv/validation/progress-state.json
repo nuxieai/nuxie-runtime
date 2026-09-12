@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Typed flex provenance and actual descriptor metadata integrated",
+  "focus": "Numerical inputs bound to final emitted records",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
   "current": "Public padding implemented:152Rust/35Node tests;53 controls pass,482 public and48 private flex outputs remain exact. Native padding and interaction evidence retains ten fractional pixel failures.",
-  "next": "Establish structural premises and parent/world error domains from actual emission, then connect the conditional analyzer before public flex admission.",
+  "next": "Implement parent-first structural and error-domain qualification; prepare physical gap parsing as independent compiler coverage.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Final-record numerical input binding",
+      "path": "tools/html-to-riv/validation/flex-input-binding-receipt.json"
+    },
     {
       "label": "Typed flex provenance and actual emitted descriptor metadata",
       "path": "tools/html-to-riv/validation/flex-provenance-receipt.json"

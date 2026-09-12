@@ -149,7 +149,52 @@ fn native(records:&[Record],id:u32,direction:Direction)->Native {
         cross:RecordLength{value:float(record,cross),units:style.and_then(|s|uint(s,&format!("{cross}UnitsValue")))},
         minimum:read(if direction.is_row(){"minWidth"}else{"minHeight"}),maximum:read(if direction.is_row(){"maxWidth"}else{"maxHeight"})}
 }
+/// Failure to bind a typed value to the actual emitted participant. This is
+/// separate from structural/numerical qualification of the whole group.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum InputIssue { Wrapper, MissingScalar(&'static str), NonPoint(&'static str), NativeMismatch(&'static str) }
+fn scalar(value:&Scalar,name:&'static str)->Result<super::scalar_provenance::ScalarProvenance,InputIssue> {
+    value.clone().map_err(|_|InputIssue::MissingScalar(name))
+}
+fn point(value:&NumericSize,name:&'static str)->Result<super::scalar_provenance::ScalarProvenance,InputIssue> {
+    match value {NumericSize::Pixels(v)=>scalar(v,name),_=>Err(InputIssue::NonPoint(name))}
+}
+fn same_bits(actual:Option<f32>,expected:f32)->bool {actual.is_some_and(|v|v.to_bits()==expected.to_bits())}
+fn point_binding(record:&RecordLength,value:f32)->bool {record.units==Some(1) && same_bits(record.value,value)}
 impl Item {
+    #[allow(dead_code)] // Used by the next record-indexed group qualification stage.
+    pub(crate) fn numeric_input(&self)->Result<super::flex_numeric::Item,InputIssue> {
+        if self.authored_id!=self.native.participant_id {return Err(InputIssue::Wrapper);}
+        let c=&self.computed;let n=&c.numeric;let native=&self.native;
+        let grow=scalar(&n.grow,"grow")?;let shrink=scalar(&n.shrink,"shrink")?;
+        if !same_bits(native.linked_grow,grow.native()) || !same_bits(native.linked_shrink,grow.native()) {
+            return Err(InputIssue::NativeMismatch("linked factors"));
+        }
+        // Keep authored shrink even where the runtime links it to grow. The
+        // analyzer must prove equality or whole-group zero-basis irrelevance.
+        let legacy=c.grow==0. && c.shrink==0. && matches!(c.basis,Length::Auto);
+        let basis=if legacy {
+            let value=point(&n.main,"fixed main size")?;
+            if native.main_scale!=Some(0) || !point_binding(&native.main,value.native()) {return Err(InputIssue::NativeMismatch("fixed main size"));}
+            value
+        } else {
+            let value=point(&n.basis,"basis")?;
+            if native.main_scale!=Some(1) || !matches!(c.main,Length::Auto) || !point_binding(&native.stored_basis,value.native()) {return Err(InputIssue::NativeMismatch("basis"));}
+            value
+        };
+        let minimum=point(&n.minimum,"minimum")?;
+        // Emitter omits zero minima and absent maxima. These bindings describe
+        // that compiler encoding; importer default qualification remains a
+        // separate group premise, not something this conversion establishes.
+        let omitted_min=native.minimum.units.is_none() && native.minimum.value.is_none() && minimum.native()==0.;
+        if !omitted_min && !point_binding(&native.minimum,minimum.native()) {return Err(InputIssue::NativeMismatch("minimum"));}
+        let maximum=match &n.maximum {
+            NumericSize::Auto if native.maximum.units.is_none() && native.maximum.value.is_none()=>None,
+            NumericSize::Pixels(v)=>{let value=scalar(v,"maximum")?;if !point_binding(&native.maximum,value.native()){return Err(InputIssue::NativeMismatch("maximum"));}Some(value)},
+            _=>return Err(InputIssue::NonPoint("maximum")),
+        };
+        Ok(super::flex_numeric::Item{basis,grow,shrink,min:minimum,max:maximum})
+    }
     pub fn extract(style:&Style,direction:Direction,records:&[Record],source_id:&str,source_path:&str,authored_id:u32,participant_id:u32,dom_index:usize,css_order:i32)->Self {
         Self{source_id:source_id.into(),source_path:source_path.into(),authored_id,dom_index,css_order,
             computed:Computed::extract(style,direction),native:native(records,participant_id,direction),descendant_target_preservation:None}
@@ -158,6 +203,9 @@ impl Item {
 impl Group {
     fn extract(parent:&Parent,parent_id:u32,path:&str,records:&[Record],record_start:usize,record_end:usize,mut items:Vec<Item>,constraint_owners:&std::collections::BTreeSet<u32>)->Self {
         let direction=parent.direction;
+        // Capture happens before descendant/ancestor helpers finish mutating the
+        // scene. Bind inputs to final records, never an earlier native snapshot.
+        for item in &mut items {item.native=native(records,item.native.participant_id,direction);}
         let parent_record=&records[parent_id as usize+1];
         let parent_style=uint(parent_record,"styleId").and_then(|id|records.get(id as usize+1));
         let flow=parent_style.and_then(|s|uint(s,"flexDirectionValue"));
@@ -204,7 +252,7 @@ impl Group {
 
 #[cfg(test)]
 mod tests {
-    use super::NumericSize;
+    use super::{NumericSize,InputIssue};
     use super::super::{compile_profile,compile_profile_with_descriptors,FlexPolicy};
     use crate::CompileInput;
     fn request(css:&str)->CompileInput {CompileInput {html:"<div id=p><div id=a></div><div id=b></div><div id=c></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b,#c{{height:20px}}{css}"),width:240.,height:160.}}
@@ -219,6 +267,7 @@ mod tests {
             let parent=output.source_map[0].object_id;
             let group=groups.iter().find(|g|g.parent_id==parent).unwrap();
             assert_eq!(group.items.iter().map(|i|i.source_id.as_str()).collect::<Vec<_>>(),["b","a","c"]);
+            for item in &group.items { assert!(item.numeric_input().is_ok(),"{:?}",item.numeric_input()); }
             let a=&group.items[1];assert_eq!(a.computed.shrink,7.);assert_eq!(a.native.linked_grow,Some(0.25));assert_eq!(a.native.linked_shrink,Some(0.25));
             assert_eq!(a.native.stored_basis.value,Some(0.));assert_eq!(a.native.stored_basis.units,Some(1));
             assert_eq!(group.items[0].native.main.value,Some(40.));assert_eq!(group.items[0].native.cross.value,Some(20.));
@@ -249,6 +298,39 @@ mod tests {
         assert!(!group.numerical_admission);
         assert!(group.unresolved_premises.contains(&"parent_size_error"));
         assert!(!group.unresolved_premises.contains(&"missing_exact_literal_provenance"));
+    }
+    #[test]
+    fn numeric_inputs_reject_tampered_bindings_and_keep_authored_shrink() {
+        let (_,mut groups)=compile_profile_with_descriptors(&request("#a{flex:.25 7 0px}#b,#c{width:20px}"),FlexPolicy::Candidate).unwrap();
+        let group=groups.iter_mut().find(|g|g.items.len()==3).unwrap();
+        let item=group.items.iter_mut().find(|i|i.source_id=="a").unwrap();
+        let input=item.numeric_input().unwrap();assert_eq!(input.grow.native(),0.25);assert_eq!(input.shrink.native(),7.);
+        item.native.linked_shrink=Some(7.);
+        assert_eq!(item.numeric_input().unwrap_err(),InputIssue::NativeMismatch("linked factors"));
+        item.native.linked_shrink=Some(0.25);item.native.stored_basis.value=Some(1.);
+        assert_eq!(item.numeric_input().unwrap_err(),InputIssue::NativeMismatch("basis"));
+        item.native.stored_basis.value=Some(0.);item.native.minimum.units=Some(2);
+        assert_eq!(item.numeric_input().unwrap_err(),InputIssue::NativeMismatch("minimum"));
+    }
+    #[test]
+    fn finalization_refreshes_native_values_after_capture() {
+        use super::super::{Style,Direction,Size};
+        use super::{Record,Value,Item,Parent,Group};
+        let mut records=vec![Record::new("Backboard"),Record::new("Artboard"),Record::new("LayoutComponent"),Record::new("LayoutComponentStyle")];
+        records[2].set("parentId",Value::Uint(0)).unwrap();
+        records[2].set("styleId",Value::Uint(2)).unwrap();
+        records[2].set("width",Value::Float(20.)).unwrap();
+        records[3].set("widthUnitsValue",Value::Uint(1)).unwrap();
+        records[3].set("layoutWidthScaleType",Value::Uint(0)).unwrap();
+        let mut style=Style{width:Size::Pixels(20.),..Style::default()};
+        style.numeric.width=NumericSize::Pixels(Ok(super::super::scalar_provenance::ScalarProvenance::exact_constant(20.).unwrap()));
+        let item=Item::extract(&style,Direction::Row,&records,"a","a",1,1,0,0);
+        assert!(item.numeric_input().is_ok());
+        records[2].set("width",Value::Float(25.)).unwrap();
+        let parent=Parent::extract(&Style{direction:Direction::Row,..Style::default()});
+        let group=Group::extract(&parent,0,"",&records,2,4,vec![item],&Default::default());
+        assert_eq!(group.items[0].native.main.value,Some(25.));
+        assert_eq!(group.items[0].numeric_input().unwrap_err(),InputIssue::NativeMismatch("fixed main size"));
     }
     #[test]
     fn emitted_wrappers_and_spacing_helpers_remain_explicit() {

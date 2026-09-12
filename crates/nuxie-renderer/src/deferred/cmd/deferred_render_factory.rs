@@ -12,7 +12,8 @@ use super::{
 use nuxie_render_api::*;
 use std::{
     cell::RefCell,
-    rc::Rc,
+    collections::HashMap,
+    rc::{Rc, Weak},
     sync::{
         atomic::{AtomicUsize, Ordering},
         Arc, Mutex,
@@ -26,6 +27,13 @@ pub struct DeferredFactory {
     shader_ids: SharedIdAllocator,
     image_ids: SharedIdAllocator,
     buffer_ids: SharedIdAllocator,
+    images: HashMap<Vec<u8>, LiveImage>,
+}
+
+struct LiveImage {
+    resource: Weak<DeferredResourceBase>,
+    width: u32,
+    height: u32,
 }
 impl Default for DeferredFactory {
     fn default() -> Self {
@@ -41,6 +49,7 @@ impl DeferredFactory {
             shader_ids: Arc::new(Mutex::new(IdAllocator::default())),
             image_ids: Arc::new(Mutex::new(IdAllocator::default())),
             buffer_ids: Arc::new(Mutex::new(IdAllocator::default())),
+            images: HashMap::new(),
         }
     }
     pub fn make_renderer(
@@ -50,6 +59,8 @@ impl DeferredFactory {
         DeferredRenderer::new(self.buffer.clone(), canvases, None, SCREEN_TARGET)
     }
     pub fn reset_frame(&mut self) {
+        self.images
+            .retain(|_, image| image.resource.strong_count() > 0);
         let mut buffer = self.buffer.lock().unwrap();
         buffer.reset();
         buffer.drain_destroys();
@@ -214,13 +225,35 @@ impl Factory for DeferredFactory {
         ))
     }
     fn decode_image(&mut self, data: &[u8]) -> Result<Box<dyn RenderImage>, ImageDecodeError> {
+        if let Some(image) = self.images.get(data) {
+            if let Some(base) = image.resource.upgrade() {
+                return Ok(Box::new(DeferredRenderImage {
+                    base,
+                    width: image.width,
+                    height: image.height,
+                }));
+            }
+        }
+        // Retain only lookup metadata, not ownership of decoded/GPU resources.
+        self.images
+            .retain(|_, image| image.resource.strong_count() > 0);
         let base = self.allocate(ResourceKind::Image, &self.image_ids);
         let mut width = 0;
         let mut height = 0;
         #[cfg(feature = "rive-decoders")]
-        if let Some(bitmap) = nuxie_image_codec::decode_image_rgba_unbounded(data) {
-            width = bitmap.width;
-            height = bitmap.height;
+        if let Some(dimensions) = nuxie_image_codec::preflight_encoded_image(data).or_else(|| {
+            // Only dimensions are needed to record the deferred command. Pixel
+            // decoding belongs to replay; retain it here solely for formats
+            // whose dimensions cannot be read by the header inspector.
+            nuxie_image_codec::decode_image_rgba_unbounded(data).map(|bitmap| {
+                nuxie_image_codec::DecodedImageDimensions {
+                    width: bitmap.width,
+                    height: bitmap.height,
+                }
+            })
+        }) {
+            width = dimensions.width;
+            height = dimensions.height;
         }
         if width == 0 || height == 0 {
             if let Some((w, h)) = sniff_image_size(data) {
@@ -252,8 +285,17 @@ impl Factory for DeferredFactory {
             },
         );
         drop(buffer);
+        let base = Rc::new(base);
+        self.images.insert(
+            data.to_vec(),
+            LiveImage {
+                resource: Rc::downgrade(&base),
+                width,
+                height,
+            },
+        );
         Ok(Box::new(DeferredRenderImage {
-            base: Rc::new(base),
+            base,
             width,
             height,
         }))

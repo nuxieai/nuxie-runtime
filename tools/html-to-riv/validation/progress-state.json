@@ -7,6 +7,10 @@
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
     {
+      "label": "Seven-pass clamp cascade and preserved literal-model failure",
+      "path": "tools/html-to-riv/validation/flex-freeze-cascade-receipt.json"
+    },
+    {
       "label": "Native clamp-boundary redistribution model",
       "path": "tools/html-to-riv/validation/flex-freeze-boundaries-receipt.json"
     },

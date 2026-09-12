@@ -1,0 +1,47 @@
+[
+  {
+    "name": "proposed-mixed-width",
+    "request": {
+      "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+      "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;width:50%;padding:5px}",
+      "width": 390,
+      "height": 160
+    }
+  },
+  {
+    "name": "proposed-mixed-height",
+    "request": {
+      "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+      "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;height:50%;padding:5px}",
+      "width": 390,
+      "height": 160
+    }
+  },
+  {
+    "name": "proposed-mixed-minimum",
+    "request": {
+      "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+      "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;min-width:50%;padding:5px}",
+      "width": 390,
+      "height": 160
+    }
+  },
+  {
+    "name": "proposed-mixed-maximum",
+    "request": {
+      "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+      "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;max-height:50%;padding:5px}",
+      "width": 390,
+      "height": 160
+    }
+  },
+  {
+    "name": "proposed-percentage-padding",
+    "request": {
+      "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+      "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;padding:5%}",
+      "width": 390,
+      "height": 160
+    }
+  }
+]

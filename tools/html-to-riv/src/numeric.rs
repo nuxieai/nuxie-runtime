@@ -1,6 +1,17 @@
 //! Focused exponent guard for resolved definite size chains. Unknown intrinsic
 //! measurements and aggregate layout/position arithmetic are not proven here.
-use super::{Diagnostic, Size, Style, unsupported};
+use super::{Diagnostic, Direction, Size, Style, unsupported};
+
+/// Only the ordinary sizing inputs consumed by this exponent guard. Synthetic
+/// owners do not clone inherited variables, paint or numerical provenance.
+struct Layout {
+    sizes: [Size; 2],
+    bounds: [Size; 4],
+    padding: super::padding::Padding,
+    parent_direction: Direction,
+    flexible: bool,
+    cross_stretch: bool,
+}
 
 #[derive(Clone, Copy)]
 pub(super) struct Bounds {
@@ -40,16 +51,26 @@ impl Bounds {
         self.child_with_sizing(style, &super::box_sizing::lower(style, source)?, parent, source)
     }
     pub fn child_with_sizing(self, style: &Style, sizing: &super::box_sizing::Lowered, parent: &Style, source: &str) -> Result<Self, Diagnostic> {
-        if style.padding.has_percentage() && self.upper[0].is_none() {
+        self.child_layout(Layout { sizes: sizing.sizes, bounds: sizing.bounds, padding: style.padding,
+            parent_direction: parent.direction, flexible: !style.flex.legacy(),
+            cross_stretch: style.self_alignment.stretches() && !style.margins.cross(parent.direction) }, source)
+    }
+    pub fn content_owner(self, owner: &super::box_sizing::ContentOwner, source: &str) -> Result<Self, Diagnostic> {
+        self.child_layout(Layout { sizes: owner.sizes, bounds: owner.bounds,
+            padding: super::padding::Padding::default(), parent_direction: owner.packing,
+            flexible: false, cross_stretch: true }, source)
+    }
+    fn child_layout(self, layout: Layout, source: &str) -> Result<Self, Diagnostic> {
+        if layout.padding.has_percentage() && self.upper[0].is_none() {
             return Err(unsupported(source, "Percentage padding requires a bounded containing content width; intrinsic percentage-padding bases need separate qualification"));
         }
-        let sizes = sizing.sizes;
-        let minima = [sizing.bounds[0], sizing.bounds[1]];
-        let maxima = [sizing.bounds[2], sizing.bounds[3]];
+        let sizes = layout.sizes;
+        let minima = [layout.bounds[0], layout.bounds[1]];
+        let maxima = [layout.bounds[2], layout.bounds[3]];
         let mut bounds = [None; 2];
         let mut witnesses = [None; 2];
         let mut lowers = [None; 2];
-        let parent_main = if parent.direction.is_row() { 0 } else { 1 };
+        let parent_main = if layout.parent_direction.is_row() { 0 } else { 1 };
         for axis in 0..2 {
             // Preserve overflow as an upper-bound infinity until native min/max
             // clamping. Native boundary probes establish a finite maximum can
@@ -57,12 +78,12 @@ impl Bounds {
             let preferred = resolve(sizes[axis], self.upper[axis]);
             let minimum = resolve(minima[axis], self.upper[axis]);
             let maximum = resolve(maxima[axis], self.upper[axis]);
-            let used = if axis == parent_main && !style.flex.legacy() {
+            let used = if axis == parent_main && layout.flexible {
                 // Neither the authored main dimension nor basis is the used
                 // flex size. A candidate flex plan needs a separate bound.
                 None
             } else if matches!(sizes[axis], Size::Auto) && axis != parent_main
-                && style.self_alignment.stretches() && !style.margins.cross(parent.direction) {
+                && layout.cross_stretch {
                 // Ordinary cross-axis stretch uses the parent's definite size.
                 self.upper[axis]
             } else { preferred };
@@ -76,17 +97,17 @@ impl Bounds {
             let preferred_lower = resolve_witness(sizes[axis], self.lower[axis]);
             let minimum_lower = resolve_witness(minima[axis], self.lower[axis]);
             let maximum_lower = resolve_witness(maxima[axis], self.lower[axis]);
-            let used_lower = if axis == parent_main && !style.flex.legacy() { None }
+            let used_lower = if axis == parent_main && layout.flexible { None }
                 else if matches!(sizes[axis], Size::Auto) && axis != parent_main
-                    && style.self_alignment.stretches() && !style.margins.cross(parent.direction) { self.lower[axis] }
+                    && layout.cross_stretch { self.lower[axis] }
                 else { preferred_lower };
             lowers[axis] = cap_lower(used_lower, minimum_lower, maximum_lower, maxima[axis]);
             let preferred_witness = resolve_witness(sizes[axis], self.witness[axis]);
             let minimum_witness = resolve_witness(minima[axis], self.witness[axis]);
             let maximum_witness = resolve_witness(maxima[axis], self.witness[axis]);
-            let used_witness = if axis == parent_main && !style.flex.legacy() { None }
+            let used_witness = if axis == parent_main && layout.flexible { None }
                 else if matches!(sizes[axis], Size::Auto) && axis != parent_main
-                    && style.self_alignment.stretches() && !style.margins.cross(parent.direction) { self.witness[axis] }
+                    && layout.cross_stretch { self.witness[axis] }
                 else { preferred_witness };
             let capped_witness = match (used_witness, maximum_witness) {
                 (Some(used), Some(maximum)) => Some(used.min(maximum)),
@@ -101,8 +122,8 @@ impl Bounds {
                 return Err(unsupported(source, "Resolved percentage size may exceed finite binary32 geometry within the supported viewport domain (0,16384], after native min/max clamping"));
             }
         }
-        if !style.padding.is_zero() {
-            let sides = style.padding.sides();
+        if !layout.padding.is_zero() {
+            let sides = layout.padding.sides();
             for axis in 0..2 {
                 // All four percentages use containing CONTENT width, including
                 // top/bottom. Padding uses ordinary percent/100 conversion,

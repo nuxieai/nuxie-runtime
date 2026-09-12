@@ -1,0 +1,23 @@
+# Public content-owner native qualification
+
+The frozen public compiler covers all **75 changed reference requests** on the unchanged runtime. All 600 original/clone geometry comparisons pass; 594/600 pixel comparisons pass. The six failures are the previously retained fractional paint control, not newly hidden or reclassified results. No tolerance, renderer, runtime, reset or pixel gate changed.
+
+| Evidence | Cases / frames | Geometry passes | Pixel passes | Clear checks |
+| --- | ---: | ---: | ---: | ---: |
+| Exact core evidence transfer | 34 / 272 | 272 | 266 | 544 |
+| Fresh changed-reference captures | 41 / 328 | 328 | 328 | 656 |
+| Separate 128-level resource control | 1 / 8 | 8 | 8 | 16 |
+
+The public compiler is SHA-256 `746caad8f78f251acbf188f75d10bdc9340c6cd7d48a994a844e6b0898b30ad5`. The probe and Rust Metal RasterOrdering renderer are the unchanged immutable-baseline tools. Chrome is pinned to 153.0.8010.12. Each file is emitted once at its exact original request viewport, then the original and independent clone resize through 240×160 → 390×200 → 768×120 → 240×160. No browser measurements enter emission.
+
+For the core 34, the newly emitted public requests, complete Rive files and maps match private r3 and the native-tested r2 files exactly. The transfer verifies all bound streams, geometry, Chrome/native PNGs, cyan/transparent clears and the completed 15-sheet review. It transfers that finite evidence, including its failures. The remaining 41 requests were freshly compiled, imported, cloned, resized, rendered and compared with Chrome. Their actual files/maps match the frozen output-regression results; source equality is checked independently of output equality. The aggregate receipt maps every changed reference to its evidence.
+
+I directly inspected all **16 new unscaled comparison sheets**, covering 94 complete Chrome/native pairs. Another 242 frames have complete decoded-RGBA identity proofs within the same exact source/file/map after extending both versions to white canvases. Every original pixel and viewport remainder is included; there are no cropped or approximate visual transfers. Source and geometry evidence remains separate. The sheets show intact padding bands, percentage descendants, all four flow directions, responsive distributed spacing, inherited sizes and numeric-boundary paint. No additional gate failure was observed.
+
+Passing gates do not mean exact pixels. Of the 336 fresh frames including the depth control, 16 are exact Chrome/native RGBA matches, 294 differ by at most one channel value, and 26 contain larger edge-coverage differences. For example, reference 651 at 390×200 has pixel (122,10) `[102,153,51,255]` in Chrome and `[162,196,154,255]` natively; its mismatch ratio is 0.0013333 and its existing gates pass. References 652, 712 and 713 also retain visible fractional-edge coverage differences within the gates. No antialiasing exclusion was introduced.
+
+The transferred fractional control still fails the mismatch-ratio gate in frames 0,2,3,4,6,7. The large rounded-outer child remains offscreen: its native binary32 width is 999999.8125px, while Chrome's projected rectangle is 999999.75px. The 0.0625px residual passes the existing 0.1px geometry gate; the screenshot does not prove that offscreen measurement.
+
+The 128-level unpainted control preserves 128 authored identities and 257 observed layout objects, with finite geometry and all eight Chrome/native frames passing. Its white images exercise host paint and clear handling, not painted descendant complexity. A separate **8,192-element** unpainted control imports, clones and resizes successfully in eight native probe frames: all 8,192 authored identities and 16,385 layout objects remain present and finite. Authored geometry is identical across original/clone resizes. Its observed compile/probe times were approximately 0.77s/3.31s, with no timing threshold. This larger control checks resource handling and native geometry only; it makes no Chrome or renderer pixel claim.
+
+The durable aggregate is `output/public-content-owner-native-r1/receipt.json`. It binds `core-transfer-receipt.json`, `render/receipt.json`, both resource receipts, `visual/coverage.json`, the inspected sheets and the frozen source/output regression. `render/gallery.html` presents the fresh pairs. Five proposed percentage/point mixtures and the compile-only overflow negatives remain outside this native corpus. These results qualify this bounded composition and its preserved controls; they do not complete L12 or admit broader percentage, flex, padding or paint semantics.

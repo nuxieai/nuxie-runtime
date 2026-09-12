@@ -24,7 +24,11 @@ try{const page=await browser.newPage({deviceScaleFactor:1,colorScheme:'light',lo
   for(const size of sizes)assert(Array.isArray(size)&&size.length===2&&size.every(v=>Number.isInteger(v)&&v>0&&v<=16384),'viewport must be a positive bounded integer pair');
   if(fixture.swatches){assert(Number.isInteger(fixture.swatchHeight)&&fixture.swatchHeight>0);assert(fixture.swatches.length>0);assert.equal(new Set(fixture.swatches.map(s=>s.id)).size,fixture.swatches.length);for(const[,height]of sizes)assert(height>=fixture.swatches.length*fixture.swatchHeight,'entire palette must fit vertically');}
   const dir=path.join(out,fixture.name);fs.mkdirSync(dir);const request=path.join(dir,'request.json'),riv=path.join(dir,'scene.riv'),map=path.join(dir,'scene.map.json'),observed=path.join(dir,'probe');
-  fs.writeFileSync(request,JSON.stringify({html:fixture.html,css:fixture.css,width:390,height:160},null,2));
+  // Regression references may have been compiled at another initial size.
+  // Preserve that request exactly, then resize the same emitted file below.
+  const compileViewport=fixture.compileViewport??[390,160];
+  assert(Array.isArray(compileViewport)&&compileViewport.length===2&&compileViewport.every(v=>Number.isFinite(v)&&v>0&&v<=16384),'bounded compile viewport required');
+  fs.writeFileSync(request,JSON.stringify({html:fixture.html,css:fixture.css,width:compileViewport[0],height:compileViewport[1]},null,2));
   run([compiler,request,riv],path.join(dir,'compile.log'));assert(!fs.existsSync(path.join(dir,'scene.requirements.json')),'ordinary file must not depend on a requirements sidecar');
   const sourceMap=read(map);assert(Array.isArray(sourceMap));assert.equal(new Set(sourceMap.map(n=>n.object_id)).size,sourceMap.length);
   // The observer receives only RIV and resize sizes. Source IDs are read later,

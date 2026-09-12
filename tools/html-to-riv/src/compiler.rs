@@ -509,7 +509,7 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { numeric: Box::new(computed_provenance::NumericStyle::host()), width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
-    output.children(body, 0, &host_style, &rules, "", 0, [true; 2], numeric::Bounds::VIEWPORT)?;
+    output.children(body, 0, &host_style, &rules, "", 0, [true; 2], numeric::Bounds::VIEWPORT, None)?;
     // File object order serves native drawing; public identities stay in DOM
     // preorder, with numeric path components (so /2 precedes /10).
     output.map.sort_by_cached_key(|node| node.path.split('/').skip(1)
@@ -530,7 +530,7 @@ struct ChildrenFrame<'a> {
     count: usize,
 }
 struct PreparedChild<'a> {
-    element: ElementRef<'a>, object_id: u32, path: String, style: Style,
+    element: ElementRef<'a>, object_id: u32, content_id: u32, content_owner: Option<box_sizing::ContentOwner>, path: String, style: Style,
     index: usize, order: i32, effective_alignment: SelfAlignment,
     margin_after: bool, vertical_flex: bool,
     child_chain: [bool; 2], child_bounds: numeric::Bounds,
@@ -580,19 +580,19 @@ impl Emitter {
             self.records.push(layout);self.records.push(layout_style);
         Ok(object_id)
     }
-    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2], numeric_bounds: numeric::Bounds) -> Result<Vec<baseline::Child>, Diagnostic> {
+    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2], numeric_bounds: numeric::Bounds, content_owner: Option<&box_sizing::ContentOwner>) -> Result<Vec<baseline::Child>, Diagnostic> {
         // Recursion retains only heap-backed frame/child state. Large style,
         // record and diagnostic temporaries live in nonrecursive helpers, so
         // the public depth limit also fits the default WASM stack.
         let mut frame = self.prepare_children(parent, parent_id, parent_style, rules, path, depth, definite_chain, numeric_bounds)?;
         while let Some(item) = frame.elements.next() {
             let child = self.start_child(item, parent_id, parent_style, rules, definite_chain, numeric_bounds, &mut frame.descriptor_items)?;
-            let descendants = self.children(child.element, child.object_id, &child.style, rules, &child.path, depth + 1, child.child_chain, child.child_bounds)?;
+            let descendants = self.children(child.element, child.content_id, &child.style, rules, &child.path, depth + 1, child.child_chain, child.child_bounds, child.content_owner.as_ref())?;
             let result = self.finish_child(&child, &descendants, parent_id, parent_style, frame.children.len() + 1 == frame.count)?;
             frame.children.push(result);
         }
         baseline::emit(self, parent_id, parent_style, &frame.children, path)?;
-        if frame.count != 0 { self.capture_parent(parent_style, parent_id, path, frame.descriptor_start, frame.descriptor_items)?; }
+        if frame.count != 0 { self.capture_parent(parent_style, parent_id, path, frame.descriptor_start, frame.descriptor_items, content_owner)?; }
         Ok(frame.children)
     }
     fn prepare_children<'a>(&mut self, parent: ElementRef<'a>, parent_id: u32, parent_style: &Style,
@@ -741,10 +741,16 @@ impl Emitter {
         }
         let alignment_margins = effective_alignment.auto_margins(parent_style.direction);
         for (margin, synthetic) in authored_margins.iter_mut().zip(alignment_margins) { *margin |= synthetic; }
-        let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
+        let content_owner = box_sizing::content_owner(&style, native_parent_direction);
+        // Evaluate both actual owners. Rounded outer content bounds alone can
+        // erase a tiny fixed inner size and miss overflow in its descendants.
+        let child_bounds = if let Some(owner) = &content_owner { child_bounds.content_owner(owner, &path)? } else { child_bounds };
+        let outer_direction = content_owner.map_or(style.direction, |owner| owner.packing);
+        let outer_alignment = content_owner.map_or_else(|| style.spacing.alignment(style.direction), |owner| owner.packing.alignment());
+        let object_id = self.layout_box(&id, authored_parent, outer_direction, outer_alignment,
             native_parent_direction, sizes, bounds, stretch, authored_margins)?;
         style.padding.emit(&mut self.records[object_id as usize + 2])?;
-        style.gap.emit(&mut self.records[object_id as usize + 2])?;
+        if content_owner.is_none() { style.gap.emit(&mut self.records[object_id as usize + 2])?; }
         if let Some(plan) = flex_plan {
             // Cross-alignment wrappers are the actual flex participants.
             // Keep the authored box identity and its inner stretch sizing.
@@ -757,11 +763,17 @@ impl Emitter {
             let mut paint = Record::new("SolidColor");paint.set("parentId", Value::Uint(fill_id))?;
             paint.set("colorValue", Value::Color(background))?;self.records.push(paint);
         }
+        let content_id = if let Some(owner) = &content_owner {
+            let inner = self.layout_box("", object_id, style.direction, style.spacing.alignment(style.direction),
+                owner.packing, owner.sizes, owner.bounds, true, [false; 4])?;
+            style.gap.emit(&mut self.records[inner as usize + 2])?;
+            inner
+        } else { object_id };
         self.capture_item(descriptor_items, &style, &lowered, parent_style.direction, &id, &path,
             object_id, if authored_parent == parent_id { object_id } else { authored_parent }, index, order);
         self.map.push(SourceNode { id, path: path.clone(), object_id });
         let child_chain = flex::child_chain(definite_chain, &style);
-        Ok(Box::new(PreparedChild { element, object_id, path, style, index, order, effective_alignment,
+        Ok(Box::new(PreparedChild { element, object_id, content_id, content_owner, path, style, index, order, effective_alignment,
             margin_after, vertical_flex: flex_plan.is_some() && !parent_style.direction.is_row(), child_chain, child_bounds }))
     }
     fn finish_child(&mut self, child: &PreparedChild<'_>, descendants: &[baseline::Child], parent_id: u32,
@@ -795,10 +807,11 @@ impl Emitter {
             sizing, direction, &self.records, id, path, object, participant, index, order)); }
     }
     fn capture_parent(&mut self, style: &Style, parent_id: u32, path: &str,
-        record_start: usize, items: Vec<flex_descriptor::Item>) -> Result<(), Diagnostic> {
+        record_start: usize, items: Vec<flex_descriptor::Item>, content_owner: Option<&box_sizing::ContentOwner>) -> Result<(), Diagnostic> {
         if self.descriptor_capture {
-            self.descriptors.push(flex_descriptor::Pending {parent:flex_descriptor::Parent::extract_lowered(style,
-                &box_sizing::lower(style, path)?),parent_id,path:path.into(),record_start,record_end:self.records.len(),items});
+            let parent = if let Some(owner) = content_owner { flex_descriptor::Parent::extract_content_owner(style, owner) }
+                else { flex_descriptor::Parent::extract_lowered(style, &box_sizing::lower(style, path)?) };
+            self.descriptors.push(flex_descriptor::Pending {parent,parent_id,path:path.into(),record_start,record_end:self.records.len(),items});
         }
         Ok(())
     }

@@ -4,7 +4,7 @@ use nuxie_html_to_riv::{CompileInput, compile};
 fn input(html:&str,css:&str)->CompileInput {CompileInput{html:html.into(),css:css.into(),width:240.,height:160.}}
 
 #[test]
-fn content_box_corpus_matches_independent_border_box_controls_and_repeats() {
+fn content_box_corpus_and_original_border_box_controls_preserve_source_identities() {
     let cases:serde_json::Value=serde_json::from_str(include_str!("../validation/public-content-box-cases.json")).unwrap();
     assert_eq!(cases.as_array().unwrap().len(),34);
     for case in cases.as_array().unwrap() {
@@ -17,7 +17,14 @@ fn content_box_corpus_matches_independent_border_box_controls_and_repeats() {
             // declaration intentionally cannot enter the public source grammar.
             if case["classification"]!="numeric-boundary" {
                 request.css=case["controlCss"].as_str().unwrap().into();
-                assert_eq!(output,compile(&request).unwrap(),"control {}",case["name"]);
+                let control=compile(&request).unwrap();
+                // The new content owner deliberately changes file topology.
+                // Keep the original authored controls, deterministic behavior
+                // and DOM identities; native-validated files have their own
+                // public regression references in the content-owner corpus.
+                assert_eq!(control,compile(&request).unwrap(),"control repeat {}",case["name"]);
+                assert_eq!(output.source_map.iter().map(|n|(&n.id,&n.path)).collect::<Vec<_>>(),
+                    control.source_map.iter().map(|n|(&n.id,&n.path)).collect::<Vec<_>>(),"control identities {}",case["name"]);
             }
         }
     }

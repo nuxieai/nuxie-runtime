@@ -1,11 +1,27 @@
 {
   "updated": "2026-09-12",
-  "focus": "Ordinary content-owner composition repairs retained sizing failure",
-  "status": "Private experiment; runtime and public compiler unchanged",
-  "current": "The revised wrapper passes all 272 geometry comparisons and exactly preserves public pixels, including six fractional-edge failures. Fixed-column packing exposed 16 stretch regressions; parent-axis packing repairs them. A two-owner numeric guard rejects six newly exposed overflow inputs across 20 compile-only controls, while retaining all 34 rendered files/maps. Full visual coverage: 50 inspected triples and 222 complete-RGBA transfers.",
-  "next": "Integrate the ordinary content owner into the public compiler with small explicit sizing views, final-topology numeric bounds and honest descriptor provenance. Validate public transports, depth/resource limits and changed historical outputs. Continue independent backlog items; percentage-plus-point owners and fractional painting remain open.",
+  "focus": "Public content-box composition preserves authored content sizing",
+  "status": "Public integration validated; six existing pixel failures retained",
+  "current": "270 Rust tests and 46 Node tests pass. All 794 prior requests compile: 719 exact files/maps and 75 reviewed ordinary composition changes. Those 75 files pass 600/600 geometry and 594/600 pixel frames, with full visual coverage and 1,200 clear checks. The measured large-coordinate geometry failure is repaired. Depth and element-boundary controls preserve their separate evidence scopes.",
+  "next": "Advance typography prerequisites and independent backlog work. Unitless line-height is being tested against ordinary text/layout objects, and a deterministic malformed-input campaign is checking public CLI/WASM robustness. Percentage content-owner mixtures and fractional painting remain open.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public content-owner checkpoint and intentional limits",
+      "path": "tools/html-to-riv/validation/public-content-owner-checkpoint-review.md"
+    },
+    {
+      "label": "All 75 changed outputs: native coverage and retained pixels",
+      "path": "tools/html-to-riv/validation/public-content-owner-native-review.md"
+    },
+    {
+      "label": "Fresh public content-owner Chrome/native gallery",
+      "path": "tools/html-to-riv/output/public-content-owner-native-r1/render/gallery.html"
+    },
+    {
+      "label": "794 prior outputs and ordinary-record disposition",
+      "path": "tools/html-to-riv/validation/public-content-owner-regression-review.md"
+    },
     {
       "label": "Content-owner composition checkpoint and remaining integration work",
       "path": "tools/html-to-riv/validation/content-owner-checkpoint-review.md"
@@ -473,12 +489,12 @@
   ],
   "activeWork": [
     {
-      "name": "Content-owner experiment complete",
-      "work": "Independent Chrome references, frozen public baseline, retained failed candidate, corrected packing, numeric controls and complete visual evidence are recorded."
+      "name": "Unitless line-height prerequisite",
+      "work": "Independent ordinary text/layout composition experiment; no public text admission yet."
     },
     {
-      "name": "Next implementation",
-      "work": "Public content-owner lowering and integration checks; all 99 items remain in scope."
+      "name": "Malformed-input robustness",
+      "work": "Reproducible mutations check frozen CLI/WASM parity, crashes and recovery after failures."
     }
   ],
   "publication": {

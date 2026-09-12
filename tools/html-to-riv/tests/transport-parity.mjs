@@ -536,3 +536,106 @@ test('public value token boundaries preserve CLI/WASM recovery and retained diag
   assert.deepEqual(compiler.compile(document).riv,retained,'compiler remains usable after the corpus');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+// Small tracked exact references; normal tests never read ignored experiments.
+function contentOwnerFixture(file) {
+ return JSON.parse(fs.readFileSync(new URL(`./fixtures/content-owner/${file}.json`,import.meta.url)));
+}
+async function contentOwnerTransport(callback) {
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-content-owner-'));
+ let sequence=0;
+ const run=(request,accepted,label)=>{
+  const prefix=path.join(dir,String(sequence++));fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+  const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8',maxBuffer:8*1024*1024});
+  const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+  assert.equal(cli.status,accepted?0:1,`${label}: ${cli.stderr}`);
+  assert.equal(result.ok,accepted,`${label}: ${JSON.stringify(result.ok?{ok:result.ok}:result)}`);
+  if(accepted){
+   assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'),`${label}: CLI/WASM complete bytes`);
+   assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json')),`${label}: CLI/WASM map`);
+   assert.equal(new Set(result.sourceMap.map(n=>n.object_id)).size,result.sourceMap.length);
+  }else{
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),`${label}: CLI/WASM diagnostics`);
+   assert(!('riv' in result));assert(!('sourceMap' in result));
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+  assert(!fs.existsSync(prefix+'.requirements.json'));
+  return result;
+ };
+ try {await callback(run,compiler);} finally {fs.rmSync(dir,{recursive:true,force:true});}
+}
+function contentOwnerNested(depth) {
+ return Array.from({length:depth},(_,i)=>`<div id="n${i}">`).join('')+'</div>'.repeat(depth);
+}
+function contentOwnerIdentities(result,count,nested) {
+ assert.equal(result.sourceMap.length,count,'ordinary helpers never add authored identities');
+ const identities=new Map(result.sourceMap.map(n=>[n.id,n.path]));assert.equal(identities.size,count);
+ for(let i=0;i<count;i++)assert.equal(identities.get(`n${i}`),nested?'/0'.repeat(i+1):`/${i}`);
+}
+const contentOwnerPadded='div{box-sizing:content-box;width:8px;height:1px;padding:1px}';
+
+test('public content owner preserves all34 native-qualified Rive files and authored inheritance through CLI/WASM',async()=>{
+ const scenes=contentOwnerFixture('scenes');assert.equal(scenes.length,34);
+ await contentOwnerTransport((run,compiler)=>{
+  let controls=0;
+  for(const scene of scenes){
+   const output=run(scene.request,true,scene.name);
+   assert.deepEqual(Buffer.from(output.riv),Buffer.from(scene.rivHex,'hex'),`${scene.name}: complete r3 native-qualified bytes`);
+   assert.deepEqual(output.sourceMap,scene.sourceMap,`${scene.name}: authored reference map`);
+   assert.deepEqual(compiler.compile({languageVersion:LANGUAGE_VERSION,...scene.request}),output,`${scene.name}: deterministic repeat`);
+   if(scene.controlCss){
+    for(const [width,height]of [[240,160],[390,200],[768,120]]){
+     const original=run({...scene.request,width,height},true,scene.name);
+     const control=run({...scene.request,width,height,css:scene.controlCss},true,`${scene.name}: explicit inheritance`);
+     assert.deepEqual(original,control,`${scene.name}: authored computed values, not lowered outer dimensions`);
+    }
+    controls++;
+   }
+  }
+  assert.equal(controls,3);
+ });
+});
+
+test('public content owner retains all20 numeric controls and five mixed-unit diagnostics through CLI/WASM',async()=>{
+ const bounds=contentOwnerFixture('bounds'),rejections=contentOwnerFixture('rejections');
+ assert.equal(bounds.length,20);assert.equal(bounds.filter(c=>c.accepted).length,12);assert.equal(rejections.length,5);
+ await contentOwnerTransport((run,compiler)=>{
+  const retained=compiler.compile(document);assert.equal(retained.ok,true);
+  for(const control of bounds){
+   assert.equal(control.renderAllowed,false,'large overflow controls are never rendered');
+   const result=run(control.request,control.accepted,control.name);
+   if(!control.accepted){
+    assert.equal(result.diagnostics[0].code,'unsupported-target-semantics');
+    assert.match(result.diagnostics[0].message,/Resolved percentage size may exceed finite binary32 geometry/);
+   }
+  }
+  for(const control of rejections)assert.equal(run(control.request,false,control.name).diagnostics[0].code,'unsupported-target-semantics');
+  assert.deepEqual(compiler.compile(document),retained,'failures leave a reusable compiler and no stale output');
+ });
+});
+
+test('public content owner keeps authored128/129 depth and8192/8193 object boundaries through CLI/WASM',async()=>{
+ await contentOwnerTransport((run,compiler)=>{
+  const request={html:contentOwnerNested(128),css:contentOwnerPadded,width:390,height:160};
+  contentOwnerIdentities(run(request,true,'128 padded levels'),128,true);
+  assert.equal(run({...request,html:contentOwnerNested(129)},false,'129 padded levels').diagnostics[0].code,'depth-limit');
+  const html=Array.from({length:8192},(_,i)=>`<div id="n${i}"></div>`).join('');
+  contentOwnerIdentities(run({...request,html},true,'8192 padded authored elements'),8192,false);
+  assert.equal(run({...request,html:html+'<div id="n8192"></div>'},false,'8193 padded authored elements').diagnostics[0].code,'object-limit');
+  assert.equal(compiler.compile(document).ok,true,'compiler remains usable after boundary diagnostics');
+ });
+});
+
+test('public content owner handles substantial inherited custom-value context at depth128 through CLI/WASM',async(t)=>{
+ const variables=Array.from({length:64},(_,i)=>`--unused${i}:${'x'.repeat(4096)};`).join('');
+ const css=`div{box-sizing:content-box;width:var(--size,8px);height:1px;padding:1px}#n0{--size:8px;${variables}}#n127{width:inherit;padding:inherit}`;
+ const request={html:contentOwnerNested(128),css,width:390,height:160};
+ const started=performance.now();
+ await contentOwnerTransport((run,compiler)=>{
+  const actual=run(request,true,'256KiB inherited context at128 levels');
+  const explicit=run({...request,css:contentOwnerPadded+'#n127{width:inherit;padding:inherit}'},true,'literal context-free control');
+  contentOwnerIdentities(actual,128,true);assert.deepEqual(actual,explicit,'unused inherited values do not change bytes/identities');
+  assert.deepEqual(compiler.compile({languageVersion:LANGUAGE_VERSION,...request}),actual,'context-bearing repeat');
+ });
+ t.diagnostic(`64 x4096-byte custom values,128 levels, CLI/WASM/control/repeat completed in ${(performance.now()-started).toFixed(1)}ms; observation, no timing or invented memory ceiling`);
+});

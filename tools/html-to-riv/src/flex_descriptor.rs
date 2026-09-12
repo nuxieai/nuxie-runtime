@@ -7,11 +7,18 @@ use serde::{Serialize, Serializer};
 use super::computed_provenance::{NumericSize, Scalar};
 
 pub(super) struct Parent {
-    direction:Direction,width:Size,height:Size,numeric_width:NumericSize,numeric_height:NumericSize,padding_zero:bool,distributed:bool,
+    direction:Direction,width:Size,height:Size,numeric_width:NumericSize,numeric_height:NumericSize,padding_zero:bool,distributed:bool,content_owner:bool,
 }
 #[cfg(test)]
-impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,numeric_width:style.numeric.width.clone(),numeric_height:style.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes()}}}
-impl Parent {pub fn extract_lowered(style:&Style,sizing:&super::box_sizing::Lowered)->Self {Self{direction:style.direction,width:sizing.sizes[0],height:sizing.sizes[1],numeric_width:sizing.numeric.width.clone(),numeric_height:sizing.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes()}}}
+impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,numeric_width:style.numeric.width.clone(),numeric_height:style.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes(),content_owner:false}}}
+impl Parent {pub fn extract_lowered(style:&Style,sizing:&super::box_sizing::Lowered)->Self {Self{direction:style.direction,width:sizing.sizes[0],height:sizing.sizes[1],numeric_width:sizing.numeric.width.clone(),numeric_height:sizing.numeric.height.clone(),padding_zero:style.padding.is_zero() && style.gap.is_zero(),distributed:style.spacing.distributes(),content_owner:false}}}
+impl Parent {
+    pub fn extract_content_owner(style: &Style, owner: &super::box_sizing::ContentOwner) -> Self {
+        Self { direction: style.direction, width: owner.sizes[0], height: owner.sizes[1],
+            numeric_width: style.numeric.width.clone(), numeric_height: style.numeric.height.clone(),
+            padding_zero: style.gap.is_zero(), distributed: style.spacing.distributes(), content_owner: true }
+    }
+}
 pub(super) struct Pending {
     pub parent:Parent,pub parent_id:u32,pub path:String,pub record_start:usize,pub record_end:usize,pub items:Vec<Item>,
 }
@@ -128,6 +135,7 @@ pub(crate) struct Item {
 }
 #[derive(Debug, Serialize)]
 pub(crate) struct Group {
+    pub content_owner: bool,
     pub parent_id:u32,pub parent_path:String,pub row:bool,pub logical_reverse:bool,
     pub native_flow:Option<u32>,pub native_alignment:Option<u32>,
     pub parent_local_facts:super::flex_structure::LocalFacts,
@@ -260,6 +268,7 @@ impl Group {
         let wrappers=items.iter().filter(|i|i.authored_id!=i.native.participant_id).map(|i|i.native.participant_id).collect::<Vec<_>>();
         let parent_local_facts=super::flex_structure::LocalFacts::inspect(parent_record,parent_style,native_order.is_empty());
         let mut issues=Vec::new();
+        if parent.content_owner { issues.push("content-owner composition requires a separate arithmetic model".into()); }
         if !parent_local_facts.direct_box_defaults(){issues.push("parent native local defaults/overrides require separate proof".into());}
         if native_order!=expected {issues.push("actual native participants differ from authored participant emission order".into());}
         if !helpers.is_empty(){issues.push("generated helper participants require a different arithmetic model".into());}
@@ -289,7 +298,8 @@ impl Group {
         let metadata_available=size_known(&parent.numeric_width) && size_known(&parent.numeric_height) && items.iter().all(|item|item.computed.numeric.available());
         let mut unresolved_premises=vec!["parent_size_error","ancestor_world_error","native_default_transform_provenance","descendant_target_preservation"];
         if !metadata_available {unresolved_premises.push("missing_exact_literal_provenance");}
-        Self{parent_id,parent_path:path.into(),row:direction.is_row(),logical_reverse:!direction.reverses_emission(),native_flow:flow,native_alignment:alignment,
+        if parent.content_owner { unresolved_premises.push("content_owner_composition"); }
+        Self{content_owner:parent.content_owner,parent_id,parent_path:path.into(),row:direction.is_row(),logical_reverse:!direction.reverses_emission(),native_flow:flow,native_alignment:alignment,
             parent_local_facts,parent_main:main.into(),parent_cross:cross.into(),
             parent_numeric_main:if direction.is_row(){parent.numeric_width.clone()}else{parent.numeric_height.clone()},
             parent_numeric_cross:if direction.is_row(){parent.numeric_height.clone()}else{parent.numeric_width.clone()},native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,no_local_constraint_or_origin,

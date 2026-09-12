@@ -1,7 +1,7 @@
 //! CSS sizing interpretation is distinct from the ordinary border-box fields.
 //! Keep this view out of inherited computed styles: it belongs to emitted boxes.
 use super::{computed_provenance::{NumericSize, NumericStyle, Scalar, Unresolved},
-    padding::Inset, Diagnostic, Size, Style, unsupported};
+    padding::Inset, Diagnostic, Direction, Size, Style, unsupported};
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum BoxSizing { #[default] BorderBox, ContentBox }
@@ -18,6 +18,28 @@ pub(super) struct Lowered {
     pub sizes: [Size; 2],
     pub bounds: [Size; 4],
     pub numeric: Box<NumericStyle>,
+}
+
+/// A separate ordinary content object preserves authored point precision when
+/// the outer border-box addition and padding subtraction would cancel it.
+/// This is an emission plan, never an inherited computed style.
+#[derive(Clone, Copy)]
+pub(super) struct ContentOwner {
+    pub packing: Direction,
+    pub sizes: [Size; 2],
+    pub bounds: [Size; 4],
+}
+pub(super) fn content_owner(style: &Style, parent_direction: Direction) -> Option<ContentOwner> {
+    let sizes = [style.width, style.height];
+    let bounds = [style.min_width, style.min_height, style.max_width, style.max_height];
+    if style.box_sizing != BoxSizing::ContentBox || style.padding.is_zero()
+        || style.padding.has_percentage()
+        || sizes.iter().chain(&bounds).any(|size| matches!(size, Size::Percent(_))) {
+        return None;
+    }
+    // Keeping the participant's parent axis preserves automatic cross stretch;
+    // the inner container still lays out its children in the authored direction.
+    Some(ContentOwner { packing: if parent_direction.is_row() { Direction::Row } else { Direction::Column }, sizes, bounds })
 }
 fn add(a: &Scalar, b: &Scalar) -> Scalar {
     a.as_ref().map_err(Clone::clone)?.add_nonnegative(b.as_ref().map_err(Clone::clone)?).map_err(Into::into)
@@ -154,7 +176,10 @@ mod tests {
         let id=|name|output.source_map.iter().find(|n|n.id==name).unwrap().object_id;
         let p=groups.iter().flat_map(|g|g.items.iter()).find(|i|i.source_id=="p").unwrap();
         encloses(&p.computed.numeric.cross,120.);assert_eq!(p.native.cross.value,Some(120.));assert!(!p.computed.padding_zero);
-        let inner=groups.iter().find(|g|g.parent_id==id("p")).unwrap();encloses(&inner.parent_numeric_cross,120.);
+        let inner=groups.iter().find(|g|g.items.iter().any(|i|i.source_id=="c")).unwrap();
+        assert!(inner.content_owner);assert_ne!(inner.parent_id,id("p"));
+        encloses(&inner.parent_numeric_cross,100.);
+        assert!(inner.structural_issues.iter().any(|issue|issue.contains("content-owner")));
         let domains=flex_sizes::propagate(&groups,[ErrorEnvelope::new(0.,16384.,0.001).unwrap();2]);
         for name in ["p","c"] {assert!(domains[&id(name)].axes.iter().all(Result::is_err));}
     }

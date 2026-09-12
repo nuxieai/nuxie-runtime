@@ -1,0 +1,24 @@
+{
+  "status": "validated-output-regression-driver",
+  "positiveControl": {
+    "total": 482,
+    "passed": 482
+  },
+  "compilerFailureControl": {
+    "total": 2,
+    "passed": 0,
+    "exitCode": 1
+  },
+  "wrongOutputControl": {
+    "total": 2,
+    "passed": 1,
+    "exitCode": 1
+  },
+  "scope": "Artifact equality only; no new visual qualification or source/build provenance",
+  "bindings": {
+    "tools/html-to-riv/validation/check-output-regression.py": "a64969b877cc50fd63c064b28f11c0de981eb75fa2edeeb004575cef98d4540b",
+    "tools/html-to-riv/output/output-regression-driver-r2/manifest.json": "d14e781f2a688d3127e788c6dbc46e6d2e07bfcba72bde1c21603ed3ad9c2317",
+    "tools/html-to-riv/output/output-regression-driver-negative-r2/manifest.json": "86e6e8202ed43d69a4939aa04703c1231b4990c3ba58d2e7424f52fc67eaf508",
+    "tools/html-to-riv/output/output-regression-driver-mismatch-r1/manifest.json": "d1001d74bab5258e75d2ce702600700291d044db63ae3270c4dda88c5e68d887"
+  }
+}

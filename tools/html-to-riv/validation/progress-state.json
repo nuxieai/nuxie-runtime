@@ -2,10 +2,14 @@
   "updated": "2026-09-11",
   "focus": "Flex factors and guarded wrapping integration",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
-  "current": "Automatic margins retain8pixel failures. Private snapped paint lowering now reproduces48dynamic experiment files exactly, twice;112Rust tests pass. Public wrapping remains unadmitted pending coordinate/separation and sizing proofs.",
+  "current": "Flex computed values are staged. Direct native flex experiments pass192geometry/184pixels with8retained thin alpha-paint failures. Public contextual integration is in progress. Private snapped wrapping paint reproduces48files exactly.",
   "next": "Qualify flex factor/basis native profiles and retain pixel failures; integrate computed values with parent/intrinsic guards. Continue wrapping coordinate and sizing proofs.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Native flex factors, point basis and retained failures",
+      "path": "tools/html-to-riv/validation/flex-factors-native-receipt.json"
+    },
     {
       "label": "Flex computed-value parser and integration plan",
       "path": "tools/html-to-riv/validation/flex-computed-values-review.md"

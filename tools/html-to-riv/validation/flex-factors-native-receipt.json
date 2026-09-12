@@ -1,0 +1,639 @@
+{
+  "status": "experimental-geometry-passed-with-eight-preserved-pixel-failures",
+  "publicAdmission": false,
+  "scope": "Ordinary immutable LayoutComponent factor/basis mapping only; overrides raw driver public labels.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-factors-native-r1",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "b254b119cd5ad7bf9513734e25a98d7bab9573f84107b9051f0c18dde110ae47",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-factors-native-r1/src/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-factors-native-r1/augment"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345"
+  },
+  "hashes": {
+    "review.md": "0230067182c25620962185e193439ea6ac75c32f3aaf141347c41333c7291e93",
+    "src/main.rs": "a963959c62127f00674fc936e509cc8efc0fb70d899be50abcbec89e25124553",
+    "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "augment": "ad69602d8a7abf91fba1b9f841593fd956af96744167df145e9375ba405fc84c",
+    "adapter.py": "b254b119cd5ad7bf9513734e25a98d7bab9573f84107b9051f0c18dde110ae47",
+    "build-command.json": "3c7a9936d456a88b39ec7caf24d0bcfcdd77256d44a7a6ae8b8ec9c27597a249",
+    "cases.json": "515c237b0ff90970e6d7545f77f08076acb0a4d6e716ebb8b3a385dae487b316",
+    "collect.py": "9ea24ef59d30204c2000ddf0114bab500d264f0fdf430099a7bec9ce24a61098",
+    "matrix.json": "3967f5ef2cdf4a9e81a805f491063b8c8db1f53a55b97031cc1af838b4396106",
+    "reproductions.json": "e461a40e4662a09613ad19fc95cd529d429ba0a4442de7612873d2f3f2f2546c",
+    "visual-direct.json": "0918465eff3a5c8cd3a8a7ba426928dfa5e5d4c17332cfd9f0e9c477b2ae7600",
+    "visual-transfers.json": "363c347f19d6d740f3bd783b86d5da0e0b215200e5ddcd128226df61d4a41490",
+    "render/receipt.json": "1714331b170151b780958259aa56d98c2a3e3ab1e065890ff402386ddb264452",
+    "probe-shorthand.mjs": "8fe8600723d8bcf798b2f255c4cad6880bed9a2fd614bf17f51ba5b051b8c2aa",
+    "shorthand-chrome.json": "21a19784430cba80cd374e08a03c9ee75400180aee100546ac47696b6a56fde3",
+    "visual-0.png": "700d75740c299af59cfe8d2f239106d29952cff042300cd40b0df5d2218bc0fb",
+    "visual-4.png": "f51d479a612af5efdba316141e41cfb9f4e897ab8f28faebc15eca6b5ca40411",
+    "visual-8.png": "11342a95aaf37a13f907f10bb8d6046dad21bd2b462e82b4f88fe2cbb3adf73f",
+    "visual-12.png": "4b1646bd4efa77e5a0fde03a84819e6d0d2c69159b43f7943353890f04a51c48",
+    "visual-16.png": "1f14a43292fa135a1edb0173f5cfd461580b7dc4f1ec14f9afe23c674a061db4",
+    "visual-20.png": "a466552b8c0e6d8f25c80a43b0665f494ca889fd18b9bd30dc23810565465c59",
+    "visual-24.png": "b01b9df99fcd734a2cb49695358f0a883f009f55a05da67560bc063ae8a86285",
+    "visual-28.png": "52da51989abd5f6e1af8cad8dfd6c6c29a01df7272baec518557bc2ecc4e6373",
+    "visual-32.png": "f53dce6c31ef5360e39cc82c9440c704536e7dd515d467c7563e5d66a43be1f5",
+    "visual-36.png": "94d74bb1b5cebd4c8c5c2007e5fa44b771a6b4908ab37336870983735ee90e2c",
+    "visual-40.png": "7a3f90baf99d1ce7dcb63a29ce0d5e1472f6c0de470f6379dcc9aca6ebcb1827",
+    "visual-44.png": "cabefd46d1892f46bf77f7bbd3fe49d2273d9c2cbe97b8e048ffc0b4eebac505",
+    "visual-48.png": "f64113b8f80aab2477d8f670d1751e8544a586454744d1323a80112911149d89",
+    "visual-52.png": "97435fca223a9d533424678c062da92c9a29da805e676a4b040d20d289c98e5e",
+    "visual-56.png": "26bbc9372a5634b50425d2a2f4a7579916d9e531e95957f32c38b156c89fd460",
+    "visual-60.png": "0bec1d6455f38cb9b2444a4610ba2c30f7a4519920754af397ecede315dcb4bb",
+    "visual-64.png": "9f76b191a2608a113827e6da81ca3260ffd7a10199f9d523ff691f28c76c91e8",
+    "visual-68.png": "2acbd829446c2086d8c94606c51d12dc69e2000a2dd3a04aa395243ad784e305"
+  },
+  "externalBindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/manifest.json": "37e4c78de5e36684a2f798b66965002f9ee43863b0e222930eb63d5684df5ce9",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/flex-factors-audit.md": "092cf2c4aaf8380a46463eea003380afb248c5e28da12eb8de5c50698019f0d7"
+  },
+  "totals": {
+    "scenes": 24,
+    "frames": 192,
+    "geometryPassed": 192,
+    "pixelsPassed": 184,
+    "pixelsFailed": 8,
+    "clearPassed": 384,
+    "exactRivAndParsedMapReproductions": 24
+  },
+  "matrix": [
+    {
+      "name": "flex-native-row-equal-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-equal-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-equal-clamped",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-zero-unequal",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-zero-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flex-native-row-zero-minimum",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-reverse-equal-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-reverse-equal-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-reverse-equal-clamped",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-reverse-zero-unequal",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-row-reverse-zero-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flex-native-row-reverse-zero-minimum",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-equal-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-equal-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-equal-clamped",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-zero-unequal",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-zero-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flex-native-column-zero-minimum",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-reverse-equal-basic",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-reverse-equal-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-reverse-equal-clamped",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-reverse-zero-unequal",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "flex-native-column-reverse-zero-partial",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "a: local RGB error",
+            "b: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "flex-native-column-reverse-zero-minimum",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    }
+  ],
+  "reproductions": [
+    {
+      "name": "flex-native-row-equal-basic",
+      "rivSha256": "eaa8ae785e8c932878811cfb9dc0390d2c4a441e7f97216209c4db71c51b59e2",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-equal-partial",
+      "rivSha256": "adbfa11efc8fe288bb0a4b0ca288ff1acad09272146e30474453bd7aee620aa9",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-equal-clamped",
+      "rivSha256": "d89c72f44d5d04d729f584ad90f5b2896e9cef7a30311022ae4fb76edead79b7",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-zero-unequal",
+      "rivSha256": "7100e7ffe8f8255a6a1d4eee482a075e006ae829d32a8c7fb689e2e79d516206",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-zero-partial",
+      "rivSha256": "5531e6f44ea2d1af8a811d047547d5214945697ec50fccf6822accf3e5d16a09",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-zero-minimum",
+      "rivSha256": "db19f7f237dbbde3919a3eea50fea2008d2ab36c012a47e7166805ae56ade1d5",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-reverse-equal-basic",
+      "rivSha256": "d714ce2efc01d22889731655c8ca151df509714ba5a90411e3ca8e4506b17e86",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-reverse-equal-partial",
+      "rivSha256": "61907058ec1f005982b89a975b50cdcfd86871cc8b3b3914f097e3bf2eb586df",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-reverse-equal-clamped",
+      "rivSha256": "27bda618428eb2c3bdb89deae8798ef6ea337c93e331c699a642374a721813cd",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-reverse-zero-unequal",
+      "rivSha256": "a2a1d1d943a564349793519a9a1065d7c4aa2b5ebf73bc6a344c689f8407a123",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-reverse-zero-partial",
+      "rivSha256": "b258c46b90ebe0e308abdd9a66e19429a993adfbf46e7b13cbb76fd4ac2858c9",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-row-reverse-zero-minimum",
+      "rivSha256": "030abd38ff1864955af59cc855e35cc879650b78621e6c8cc5fb831a15724ede",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-equal-basic",
+      "rivSha256": "bf495670776e87af05ef7ddec6b71f4941947b490d325c1481a92f543ada1f40",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-equal-partial",
+      "rivSha256": "26f59f8fe013c70c96da31199b09398e1e075918468ca2e3b62c6359292e5df5",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-equal-clamped",
+      "rivSha256": "6d66cc8cd69e320fe1d780ed7b081184e1389aab15cc8a490638a3c110565236",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-zero-unequal",
+      "rivSha256": "7839c9319c31dc1c1454be12b964ad0c201c0156342e2da080dff3754dac1c02",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-zero-partial",
+      "rivSha256": "37c91a5e4a9a1e396f27719d715c0bbb8cc74e453739bb23e06585ea5373cbfd",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-zero-minimum",
+      "rivSha256": "a5584a745015f974d2d46f96dddd5f704206b9d268c820f0e67e7daf5c16f021",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-reverse-equal-basic",
+      "rivSha256": "2af9dd1245e9243f60d4efd609eb17e13b7a37f71c3181ebd74387cc343665a9",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-reverse-equal-partial",
+      "rivSha256": "ce36fc588cc7f4f86cf59153e799b6a4a8f445ce749382d8acdff6e8b5a34705",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-reverse-equal-clamped",
+      "rivSha256": "b7713e0dbec3b78d24592454597c498a1c1dba69b5064ce41b291320b9999dec",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-reverse-zero-unequal",
+      "rivSha256": "01b7419fbfef9545d892b53baa57e4058ed3bc1db70efe2a5ce164e5b5cae00f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-reverse-zero-partial",
+      "rivSha256": "7ed8dcf001e8fe3a67e9293d7e7a096cfabe387ebddce6ef05fa352897f7eb7b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "flex-native-column-reverse-zero-minimum",
+      "rivSha256": "5ceefc9f92503a81d121782a290806d12a91732ee226fd54d7af52ed2b92a97e",
+      "exactRiv": true,
+      "exactParsedMap": true
+    }
+  ],
+  "visual": {
+    "directPairs": 72,
+    "transferredPairs": 120,
+    "independentTransferChecks": 240,
+    "completePairs": 192,
+    "directSheets": [
+      "visual-0.png",
+      "visual-4.png",
+      "visual-8.png",
+      "visual-12.png",
+      "visual-16.png",
+      "visual-20.png",
+      "visual-24.png",
+      "visual-28.png",
+      "visual-32.png",
+      "visual-36.png",
+      "visual-40.png",
+      "visual-44.png",
+      "visual-48.png",
+      "visual-52.png",
+      "visual-56.png",
+      "visual-60.png",
+      "visual-64.png",
+      "visual-68.png"
+    ],
+    "rule": "Each repeated Chrome/native decoded fullRGBA image equals its independently directly reviewed source frame.",
+    "observation": "No visible divergence in passing pairs. Eight failed thin fractional alpha cases preserve local RGB errors; failures not waived."
+  },
+  "shorthand": {
+    "scope": "Pinned Chrome CSSStyleDeclaration grammar and serialization only",
+    "browser": "153.0.8010.12",
+    "results": [
+      {
+        "input": "1 auto 2",
+        "accepted": false,
+        "serialized": "",
+        "grow": "",
+        "shrink": "",
+        "basis": "",
+        "computed": {
+          "grow": "0",
+          "shrink": "1",
+          "basis": "auto"
+        },
+        "supports": false
+      },
+      {
+        "input": "10px 2 .25",
+        "accepted": true,
+        "serialized": "2 0.25 10px",
+        "grow": "2",
+        "shrink": "0.25",
+        "basis": "10px",
+        "computed": {
+          "grow": "2",
+          "shrink": "0.25",
+          "basis": "10px"
+        },
+        "supports": true
+      },
+      {
+        "input": "2 .25 10px",
+        "accepted": true,
+        "serialized": "2 0.25 10px",
+        "grow": "2",
+        "shrink": "0.25",
+        "basis": "10px",
+        "computed": {
+          "grow": "2",
+          "shrink": "0.25",
+          "basis": "10px"
+        },
+        "supports": true
+      },
+      {
+        "input": "2",
+        "accepted": true,
+        "serialized": "2 1 0%",
+        "grow": "2",
+        "shrink": "1",
+        "basis": "0%",
+        "computed": {
+          "grow": "2",
+          "shrink": "1",
+          "basis": "0%"
+        },
+        "supports": true
+      },
+      {
+        "input": "2 1",
+        "accepted": true,
+        "serialized": "2 1 0%",
+        "grow": "2",
+        "shrink": "1",
+        "basis": "0%",
+        "computed": {
+          "grow": "2",
+          "shrink": "1",
+          "basis": "0%"
+        },
+        "supports": true
+      },
+      {
+        "input": "2 1 0",
+        "accepted": true,
+        "serialized": "2 1 0px",
+        "grow": "2",
+        "shrink": "1",
+        "basis": "0px",
+        "computed": {
+          "grow": "2",
+          "shrink": "1",
+          "basis": "0px"
+        },
+        "supports": true
+      },
+      {
+        "input": "2 1 0%",
+        "accepted": true,
+        "serialized": "2 1 0%",
+        "grow": "2",
+        "shrink": "1",
+        "basis": "0%",
+        "computed": {
+          "grow": "2",
+          "shrink": "1",
+          "basis": "0%"
+        },
+        "supports": true
+      },
+      {
+        "input": "2/**/1/**/10px",
+        "accepted": true,
+        "serialized": "2 1 10px",
+        "grow": "2",
+        "shrink": "1",
+        "basis": "10px",
+        "computed": {
+          "grow": "2",
+          "shrink": "1",
+          "basis": "10px"
+        },
+        "supports": true
+      },
+      {
+        "input": "auto",
+        "accepted": true,
+        "serialized": "1 1 auto",
+        "grow": "1",
+        "shrink": "1",
+        "basis": "auto",
+        "computed": {
+          "grow": "1",
+          "shrink": "1",
+          "basis": "auto"
+        },
+        "supports": true
+      },
+      {
+        "input": "none",
+        "accepted": true,
+        "serialized": "0 0 auto",
+        "grow": "0",
+        "shrink": "0",
+        "basis": "auto",
+        "computed": {
+          "grow": "0",
+          "shrink": "0",
+          "basis": "auto"
+        },
+        "supports": true
+      },
+      {
+        "input": "initial",
+        "accepted": true,
+        "serialized": "initial",
+        "grow": "initial",
+        "shrink": "initial",
+        "basis": "initial",
+        "computed": {
+          "grow": "0",
+          "shrink": "1",
+          "basis": "auto"
+        },
+        "supports": true
+      }
+    ]
+  },
+  "limitations": [
+    "No public routing or broad qualification.",
+    "Eight local pixel failures persist although all geometry passes.",
+    "Explicit point bases, auto preferred main, definite parents, fixed nonshrinking siblings; no wrapper/helper interactions."
+  ]
+}

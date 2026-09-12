@@ -187,3 +187,7 @@ Automatic margin implementation:86scenes/688geometry passes/680pixel passes/1376
 Snapped private paint checkpoint:48exact experimental file matches and48deterministic repeats;112Rust tests pass. The implementation inherits only the bound dynamic corpus evidence, not general wrapping qualification. See `validation/wrapping-paint-snapped-module-review.md` and its receipt.
 
 Private flex computed-value staging adds four tests;116Rust tests pass. Pinned Chrome shorthand checks are bound by `validation/flex-computed-values-receipt.json`. Public flex-factor declarations remain unadmitted pending native and contextual proof.
+
+Reusable byte regression: `python3 tools/html-to-riv/validation/check-output-regression.py COMPILER PRIOR_MANIFEST FRESH_OUTPUT` verifies bound inputs and expected files, freezes the executable, and retains every compilation failure or byte/map mismatch. The control compiler preserves482outputs; rejecting and wrong-output controls verify failure reporting. See `validation/output-regression-driver-receipt.json`. This does not rerender or establish compiler source provenance.
+
+Direct flex-factor experiment:24scenes pass192geometry/184pixel comparisons and384clear checks. All24files/maps reproduce, with72direct visual pairs and120exact transfers. Eight thin fractional alpha-paint failures remain; see `validation/flex-factors-native-review.md`. Public parser/emission integration remains a separate qualification.

@@ -17,7 +17,7 @@ fn decoded(output:&CompileOutput)->Vec<(String,BTreeMap<String,Value>)> {
         FieldKind::Uint=>json!(uint(bytes,&mut i)),FieldKind::Double=>{let value=f32::from_le_bytes(bytes[i..i+4].try_into().unwrap());i+=4;assert!(value.is_finite());json!(f64::from(value))},FieldKind::Color=>{let value=u32::from_le_bytes(bytes[i..i+4].try_into().unwrap());i+=4;json!(value)},FieldKind::String|FieldKind::Bytes=>{let len=uint(bytes,&mut i)as usize;let value=&bytes[i..i+len];i+=len;json!(String::from_utf8_lossy(value))},FieldKind::Bool=>{let value=bytes[i]!=0;i+=1;json!(value)},other=>panic!("unexpected {other:?}")};values.insert(property.name.to_owned(),value);}result.push((definition.name.to_owned(),values));}
     result
 }
-fn input(case:&Value,width:f32)->CompileInput {CompileInput{html:case["html"].as_str().unwrap().into(),css:case["css"].as_str().unwrap().into(),width,height:160.}}
+fn input(case:&Value,width:f32)->CompileInput {CompileInput{ assets: Default::default(),html:case["html"].as_str().unwrap().into(),css:case["css"].as_str().unwrap().into(),width,height:160.}}
 fn check_group(group:&str) {
     let cases:Vec<Value>=serde_json::from_str(include_str!("../validation/public-numeric-token-cases.json")).unwrap();
     let mut failures=Vec::new();let mut checked=0;
@@ -62,6 +62,6 @@ fn token_categories_and_invalid_integer_lexemes_cannot_be_repaired_by_serializat
 }
 #[test]
 fn exact_signed_integer_order_still_preserves_large_values(){
-    let request=CompileInput{html:"<div id=p><div id=a></div><div id=b></div><div id=c></div></div>".into(),css:"#p{flex-direction:row-reverse;--n:16777217}#a{order:var(--n)}#b{order:16777216}#c{order:-2147483648}".into(),width:240.,height:160.};
+    let request=CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div><div id=b></div><div id=c></div></div>".into(),css:"#p{flex-direction:row-reverse;--n:16777217}#a{order:var(--n)}#b{order:16777216}#c{order:-2147483648}".into(),width:240.,height:160.};
     let output=compile(&request).unwrap();let mut nodes:Vec<_>=output.source_map.iter().filter(|n|n.id!="p").collect();nodes.sort_by_key(|n|n.object_id);assert_eq!(nodes.iter().map(|n|n.id.as_str()).collect::<Vec<_>>(),["c","b","a"]);
 }

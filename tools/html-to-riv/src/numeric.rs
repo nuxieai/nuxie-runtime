@@ -25,6 +25,22 @@ pub(super) struct Bounds {
 impl Bounds {
     // This is the documented complete viewport domain, not the input viewport.
     pub const VIEWPORT: Self = Self { upper: [Some(16384.); 2], lower: [Some(0.); 2], witness: [Some(16384.); 2] };
+    pub fn image(mut self, width:u32, height:u32, aspect_axis:Option<usize>, source:&str)->Result<Self,Diagnostic> {
+        let ratio = width as f32 / height as f32;
+        if let Some(axis) = aspect_axis {
+            let scale = if axis == 0 { ratio } else { 1. / ratio };
+            self.upper[axis] = self.upper[1-axis].map(|v| multiply_upper(v, scale));
+            self.lower[axis] = Some(0.);
+            self.witness[axis] = None;
+        }
+        let [Some(w),Some(h)] = self.upper else {
+            return Err(unsupported(source,"Image sizing requires bounded containing dimensions; intrinsic flex-container cycles need separate qualification"));
+        };
+        if !w.is_finite() || !h.is_finite() || !multiply_upper(w, 1. / ratio).is_finite() || !multiply_upper(h, ratio).is_finite() {
+            return Err(unsupported(source,"Image aspect ratio or fit can exceed finite geometry within the supported viewport range"));
+        }
+        Ok(self)
+    }
     pub fn gap(self, gap:super::gap::Gap, children:usize, source:&str)->Result<(),Diagnostic> {
         if children<2 {return Ok(());}
         // Physical row gap depends on own content height, column on width.

@@ -26,6 +26,17 @@ impl Record {
             properties: BTreeMap::new(),
         }
     }
+    /// The immutable consumer registers Image.samplerFilter at key 1076, while
+    /// its older authoring-schema table omits that field. Emit only the two
+    /// existing explicit filters; this does not add a runtime/schema field.
+    /// See baseline generated/shapes/image_base.rs and generated/core_registry.rs.
+    pub(crate) fn set_image_sampler_filter(&mut self, nearest: bool) -> Result<(), Diagnostic> {
+        if self.kind != "Image" {
+            return Err(Diagnostic::new("schema-mismatch", self.kind, "Image sampler requires an Image record"));
+        }
+        self.properties.insert(1076, Value::Uint(if nearest { 2 } else { 1 }));
+        Ok(())
+    }
     pub fn get(&self, name: &str) -> Option<&Value> {
         let mut definition = definition_by_name(self.kind);
         while let Some(d) = definition {

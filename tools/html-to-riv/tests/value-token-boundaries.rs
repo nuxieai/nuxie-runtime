@@ -25,7 +25,7 @@ fn check(groups: &[&str]) {
     for case in cases().into_iter().filter(|c| groups.contains(&c.group.as_str())) {
         count += 1;
         for (width, height) in [(240., 160.), (768., 120.)] {
-            let request = |css: &str| CompileInput {
+            let request = |css: &str| CompileInput { assets: Default::default(),
                 html: case.html.clone(), css: css.into(), width, height,
             };
             let actual = compile(&request(&case.css));

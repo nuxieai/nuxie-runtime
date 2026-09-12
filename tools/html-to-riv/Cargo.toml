@@ -17,7 +17,12 @@ path = "src/main.rs"
 
 [dependencies]
 cssparser = "0.37"
+# Compiler-only admission uses the immutable baseline's portable decoders.
+flate2 = { version = "=1.1.9", default-features = false, features = ["rust_backend"] }
+image-webp = "=0.2.4"
+jpeg-decoder = { path = "../../vendor/jpeg-decoder-0.3.2-rive-v9f", default-features = false, features = ["rive_v9f"] }
 nuxie-schema = { path = "../../crates/nuxie-schema" }
+png = "=0.18.1"
 scraper = { version = "0.27", default-features = false, features = ["errors", "deterministic"] }
 selectors = "0.38"
 serde = { version = "1", features = ["derive"] }

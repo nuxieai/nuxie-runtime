@@ -2,7 +2,9 @@
 
 The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.
 
-Current public checkpoint: [ordinary content-owner integration](validation/public-content-owner-checkpoint-review.md) passes 270 Rust tests, 46 Node tests, strict TypeScript and native/WASM builds. All 794 prior requests compile: 719 exact files/maps and 75 reviewed ordinary composition changes with preserved source identities. All changed files have native coverage: 600/600 geometry, 594/600 pixels and 1,200 clear checks. Six known fractional-edge failures remain. Complete visual review covers fresh captures and exact source/file/map transfers. The separate 128-level control adds eight passing native/Chrome frames; 8,192 authored elements pass native import/clone/resize with finite geometry, without a Chrome/pixel claim. Numeric controls exercise both actual owners. Percentage mixtures and broader paint/numeric support remain open; L12 stays partial.
+Current public checkpoint: [authored images](validation/public-image-checkpoint-review.md), with [bound evidence](validation/public-image-receipt.json). Public APIs and resource/ownership checks pass; native geometry passes all216 frames and pixels pass198, with18 failures retained. The image section below records the full scope and reproducible workflow.
+
+Earlier public checkpoint: [ordinary content-owner integration](validation/public-content-owner-checkpoint-review.md) passes 270 Rust tests, 46 Node tests, strict TypeScript and native/WASM builds. All 794 prior requests compile: 719 exact files/maps and 75 reviewed ordinary composition changes with preserved source identities. All changed files have native coverage: 600/600 geometry, 594/600 pixels and 1,200 clear checks. Six known fractional-edge failures remain. Complete visual review covers fresh captures and exact source/file/map transfers. The separate 128-level control adds eight passing native/Chrome frames; 8,192 authored elements pass native import/clone/resize with finite geometry, without a Chrome/pixel claim. Numeric controls exercise both actual owners. Percentage mixtures and broader paint/numeric support remain open; L12 stays partial.
 
 The [earlier private experiment](validation/content-owner-checkpoint-review.md) preserves the initial stretch regression, parent-axis repair and guard failure that motivated this integration. Its evidence remains historical; the public checkpoint binds the actual public files, transports and changed-reference coverage.
 
@@ -36,6 +38,14 @@ Current gap checkpoint: [public-gap-review.md](validation/public-gap-review.md) 
 
 Current padding checkpoint: [public-padding-review.md](validation/public-padding-review.md) binds public native reproduction, independently rerendered inheritance cases, numeric controls and regression evidence. Known pixel failures remain preserved.
 
+## Public authored-image checkpoint
+
+[The image integration review](validation/public-image-checkpoint-review.md) binds the final public compiler, exact regression outputs, portable asset admission and real native/Chrome evidence. Full301 Rust/56 Node tests, strict TypeScript and native/WASM builds pass. All794 prior files/maps remain exact. The40-case public image corpus has27 successes and13 intended diagnostics; all40 also match through raw ABI/public JS. Its86-case asset campaign passes252 interface observations around actual limits, malformed data, duplicates and recovery. Semantic limits do not establish peak process memory or worst-case CPU bounds.
+
+The final compiler reproduces all measured image files/maps exactly. Four ordinary-file stretch repairs add32 fresh frames to184 verified unchanged frames, giving216/216 geometry,198/216 pixels and216/216 presence passes. Direct visual inspection covers45 representative full pairs and four before/after triples;171 repeats have exact RGBA or opaque-white-extension proofs. All18 fractional paint failures remain visible. Thirty-two alternate-clear checks pass for alpha and overlapping images. The original contaminated Chrome image-cache run is retained; corrected per-case/per-run URLs serve exact assets without changing authored src selectors. Runtime, renderer, schema, root resolution and shared sources remain unchanged.
+
+Use `validation/public-value-build.py FRESH_BUILD` for the full source freeze, then `validation/public-image-compile.py FRESH_CASES --build FRESH_BUILD`. `validation/public-image-parity.mjs CASES FROZEN_BUILD FRESH_OUTPUT` checks the entire public case set through raw ABI/JS. Native capture uses `validation/public-image-native.mjs CASES BASELINE_PROBE RENDERER`; `--changed-only` needs a previous compile comparison. `validation/public-image-transfer.py CASES PREVIOUS_NATIVE_RECEIPT` verifies unchanged joins. The image visual and asset campaign scripts retain their exact commands and artifact identities in receipts. Read the linked review for failed controls, scope and remaining work before changing qualification claims.
+
 ## Reproducible checks
 
 Run from repository root unless stated otherwise. Authoring dependencies are resolved only by this module's standalone Cargo.lock/package-lock.json.
@@ -55,10 +65,10 @@ RUSTC="$(rustup which rustc)" cargo build \
   --manifest-path tools/html-to-riv/Cargo.toml --locked \
   --target wasm32-unknown-unknown --lib
 npm ci --prefix tools/html-to-riv
-node --test tools/html-to-riv/tests/transport-parity.mjs
+node --test tools/html-to-riv/tests/transport-parity.mjs tools/html-to-riv/tests/image-transport.mjs
 node tools/html-to-riv/node_modules/typescript/bin/tsc \
   --noEmit --strict --module nodenext --moduleResolution nodenext \
-  --target es2022 --lib es2022,dom tools/html-to-riv/tests/types.mts
+  --target es2022 --lib es2022,dom tools/html-to-riv/tests/types.mts tools/html-to-riv/tests/image-types.ts
 python3 tools/html-to-riv/validation/check-target-runtime.py
 ```
 

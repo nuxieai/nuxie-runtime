@@ -313,7 +313,7 @@ mod tests {
     use super::{NumericSize,InputIssue};
     use super::super::{compile_profile,compile_profile_with_descriptors,FlexPolicy};
     use crate::CompileInput;
-    fn request(css:&str)->CompileInput {CompileInput {html:"<div id=p><div id=a></div><div id=b></div><div id=c></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b,#c{{height:20px}}{css}"),width:240.,height:160.}}
+    fn request(css:&str)->CompileInput {CompileInput { assets: Default::default(),html:"<div id=p><div id=a></div><div id=b></div><div id=c></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b,#c{{height:20px}}{css}"),width:240.,height:160.}}
     #[test]
     fn actual_pipeline_extracts_ordered_native_facts_without_changing_bytes() {
         for direction in ["row","row-reverse","column","column-reverse"] {

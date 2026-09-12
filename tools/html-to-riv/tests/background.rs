@@ -1,7 +1,7 @@
 //! Shorthand cascade lowering only; ordinary-runtime visual proof is separate.
 use nuxie_html_to_riv::{CompileInput, compile};
 fn output(html: &str, css: &str) -> nuxie_html_to_riv::CompileOutput {
-    compile(&CompileInput {
+    compile(&CompileInput { assets: Default::default(),
         html: html.into(),
         css: css.into(),
         width: 390.,
@@ -152,7 +152,7 @@ fn unsupported_constituents_are_rejected_with_authored_sources() {
                     format!("#unmatched{{background:{value}}}"),
                 )
             };
-            let errors = compile(&CompileInput {
+            let errors = compile(&CompileInput { assets: Default::default(),
                 html,
                 css,
                 width: 390.,

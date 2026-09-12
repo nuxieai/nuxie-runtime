@@ -1,7 +1,7 @@
 //! Public content-box output, cascade isolation, diagnostics and resource bounds.
 use nuxie_html_to_riv::{CompileInput, compile};
 #[path = "support/value_token_history.rs"] mod value_token_history;
-fn input(html:&str,css:&str)->CompileInput {CompileInput{html:html.into(),css:css.into(),width:240.,height:160.}}
+fn input(html:&str,css:&str)->CompileInput {CompileInput{ assets: Default::default(),html:html.into(),css:css.into(),width:240.,height:160.}}
 
 #[test]
 fn content_box_corpus_and_original_border_box_controls_preserve_source_identities() {

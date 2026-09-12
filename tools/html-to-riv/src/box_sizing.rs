@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn transformed_descriptors_bind_native_values_but_do_not_certify_padded_layouts() {
         use super::super::{compile_profile_with_descriptors,FlexPolicy,flex_sizes,flex_numeric::ErrorEnvelope};
-        let input=crate::CompileInput {html:"<div id=p><div id=c></div></div>".into(),css:"#p{box-sizing:content-box;width:100px;height:40px;padding:10px}#c{width:50%;height:20px}".into(),width:240.,height:160.};
+        let input=crate::CompileInput { assets: Default::default(),html:"<div id=p><div id=c></div></div>".into(),css:"#p{box-sizing:content-box;width:100px;height:40px;padding:10px}#c{width:50%;height:20px}".into(),width:240.,height:160.};
         let (output,groups)=compile_profile_with_descriptors(&input,FlexPolicy::Guarded).unwrap();
         let id=|name|output.source_map.iter().find(|n|n.id==name).unwrap().object_id;
         let p=groups.iter().flat_map(|g|g.items.iter()).find(|i|i.source_id=="p").unwrap();

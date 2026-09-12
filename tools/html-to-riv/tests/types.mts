@@ -27,7 +27,6 @@ function verify(compiler: Compiler) {
  }
  // @ts-expect-error old language contract is incompatible
  compiler.compile({...input,languageVersion:'nuxie-html-v1'});
- // @ts-expect-error assets are not an admitted input
  compiler.compile({...document,assets:{}});
  // @ts-expect-error viewport values must be numbers
  compiler.compile({...document,width:'240'});

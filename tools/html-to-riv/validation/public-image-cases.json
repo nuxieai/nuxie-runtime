@@ -1,0 +1,969 @@
+[
+  {
+    "name": "root-intrinsic-opaque-png",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-intrinsic-alpha-png",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/alpha.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-intrinsic-baseline-jpg",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-intrinsic-progressive-jpg",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-intrinsic-lossless-webp",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/lossless.webp"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-intrinsic-lossy-webp",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/lossy.webp"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-intrinsic-alpha-webp",
+    "group": "asset-format-and-intrinsic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/alpha.webp"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Both authored dimensions are auto; nonstretch cross alignment should retain the encoded 96 by 64 intrinsic size. Tail observes the used main size.",
+      "Each exact format needs its own embedded-byte, decoder and full-pixel evidence."
+    ]
+  },
+  {
+    "name": "root-auto-stretch",
+    "group": "public-reset",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Root column stretch supplies width; automatic main height follows intrinsic ratio. Existing Chrome-only reset control measures 240 by 160 at width 240."
+    ]
+  },
+  {
+    "name": "root-percent-width",
+    "group": "public-reset",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div>",
+      "css": "#image{width:50%;background:#e9f0f6}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Percentage width stays responsive after import and clone; height remains auto. Chrome-only reset control measures 120 by 80 at width 240."
+    ]
+  },
+  {
+    "name": "column-auto-stretch",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:column;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Chrome-only reset control measures 200 by 133.328125; tail must follow overflowing image height.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "column-fixed-main-cross-stretch",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:column;background:#dce6ee}#image{background:#e9f0f6;height:80px}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed main height plus automatic stretched cross width measures 200 by 80; unconditional aspect ratio would be wrong.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "column-fixed-main-cross-start",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:column;background:#dce6ee}#image{background:#e9f0f6;height:80px;align-self:flex-start}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed height with nonstretch automatic width should use intrinsic ratio, giving 120 by 80.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "row-auto-stretch",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Chrome-only reset control measures 180 by 120; tail must follow the resulting width.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "row-auto-start",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;align-self:flex-start}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Two automatic nonstretch axes should use intrinsic 96 by 64.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "row-fixed-main-cross-stretch",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;width:80px}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed main width plus automatic stretched cross height measures 80 by 120; unconditional aspect ratio would be wrong.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "row-fixed-main-cross-start",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;width:80px;align-self:flex-start}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed width with nonstretch automatic height should use intrinsic ratio, giving approximately 80 by 53.328125.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "row-reverse-auto",
+    "group": "axis-and-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row-reverse;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:24px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Reversed row must preserve intrinsic ratio and source DOM identities while reversing layout and paint order.",
+      "These source contexts need fresh public native evidence; nearby Chrome-only controls do not transfer PNG qualification."
+    ]
+  },
+  {
+    "name": "fractional-linear",
+    "group": "retained-fractional-paint",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"frame\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#frame{width:100%;height:100%;padding:20px}#image{width:192.5px;height:127.5px;background:#e9f0f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "frame",
+      "image"
+    ],
+    "notes": [
+      "Preserves the private 192.5 by 127.5 size and 20px position; public reset is independently qualified.",
+      "Private corresponding candidate failed 4 of 8 original/clone pixel frames at 240 by 240; retain failures and existing thresholds."
+    ]
+  },
+  {
+    "name": "fractional-nearest",
+    "group": "retained-fractional-paint",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"frame\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#frame{width:100%;height:100%;padding:20px}#image{width:192.5px;height:127.5px;background:#e9f0f6;image-rendering:pixelated}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "frame",
+      "image"
+    ],
+    "notes": [
+      "Preserves the private 192.5 by 127.5 size and 20px position; public reset is independently qualified.",
+      "Private corresponding candidate failed 4 of 8 original/clone pixel frames at 240 by 240; retain failures and existing thresholds.",
+      "Current nearest sampler mapping is an experimental pixelated candidate; its noninteger CSS equivalence is not qualified."
+    ]
+  },
+  {
+    "name": "contain-centered",
+    "group": "fit-position-and-clip",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"frame\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#frame{width:100%;height:100%;padding:20px}#image{width:100%;height:120px;object-fit:contain;object-position:50% 50%;background:#e9f0f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "frame",
+      "image"
+    ],
+    "notes": [
+      "Responsive centered contain leaves background visible and uses the image content clip."
+    ]
+  },
+  {
+    "name": "cover-quarter",
+    "group": "fit-position-and-clip",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"frame\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#frame{width:100%;height:100%;padding:20px}#image{width:100%;height:120px;object-fit:cover;object-position:25% 75%;background:#e9f0f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "frame",
+      "image"
+    ],
+    "notes": [
+      "Responsive crop with percentage positioning must use object-minus-content free space, including negative space."
+    ]
+  },
+  {
+    "name": "none-left-bottom",
+    "group": "fit-position-and-clip",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"frame\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#frame{width:100%;height:100%;padding:20px}#image{width:80px;height:48px;object-fit:none;object-position:left bottom;background:#e9f0f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "frame",
+      "image"
+    ],
+    "notes": [
+      "Unscaled 96 by 64 image overflows both axes; clip and keyword axis assignment are observable."
+    ]
+  },
+  {
+    "name": "contain-quarter-fractional-alignment",
+    "group": "fit-position-and-clip",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"frame\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#frame{width:100%;height:100%;padding:20px}#image{width:100%;height:120px;object-fit:contain;object-position:25% 75%;background:#e9f0f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "frame",
+      "image"
+    ],
+    "notes": [
+      "Private corresponding candidate failed 2 of 8 pixel frames at 390 by 320; preserve fractional alignment failure, including native/Chrome left-edge disagreement."
+    ]
+  },
+  {
+    "name": "scale-down-pair",
+    "group": "fit-position-and-clip",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"large\" src=\"picture\"><img id=\"small\" src=\"picture\"></div>",
+      "css": "#parent{width:240px;height:160px}#large{width:200px;height:120px;object-fit:scale-down;background:#e9f0f6}#small{width:40px;height:20px;object-fit:scale-down;background:#cfe4f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "large",
+      "small"
+    ],
+    "notes": [
+      "Large owner keeps intrinsic image pixels; small owner contains with downscaling. Owner dimensions and rendered content differ."
+    ]
+  },
+  {
+    "name": "paint-inheritance",
+    "group": "cascade-and-paint",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"defaults\" src=\"picture\"><img id=\"inherited\" src=\"picture\"><img id=\"reset\" src=\"picture\"></div>",
+      "css": "#parent{width:320px;height:64px;flex-direction:row;object-fit:cover;object-position:right bottom;image-rendering:pixelated}#defaults,#inherited,#reset{width:96px;height:32px;background:#e9f0f6}#inherited{object-fit:inherit;object-position:inherit;image-rendering:inherit}#reset{object-fit:unset;object-position:initial;image-rendering:initial}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "defaults",
+      "inherited",
+      "reset"
+    ],
+    "notes": [
+      "Fit and position are noninherited: defaults remains fill/center. Explicit inherit adopts cover/right-bottom. image-rendering inherits; initial restores auto.",
+      "Nearest downsampling is a candidate pending fresh pixels, not a claim that all pixelated scales are CSS-equivalent."
+    ]
+  },
+  {
+    "name": "images-box-siblings-overlap-order",
+    "group": "cascade-and-paint",
+    "assetFiles": {
+      "opaque": "fixtures/images/ordinary-r1/opaque.png",
+      "alpha": "fixtures/images/ordinary-r1/alpha.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><div id=\"front\"><img id=\"frontImage\" src=\"alpha\"></div><div id=\"middle\"></div><div id=\"back\"><img id=\"backImage\" src=\"opaque\"></div></div>",
+      "css": "#parent{width:96px;height:96px;background:#334455}#front,#back{height:0px}#front{order:2}#back{order:0}#middle{order:1;width:96px;height:32px;background:rgba(40,200,80,0.5)}#frontImage,#backImage{width:96px;height:64px}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "front",
+      "frontImage",
+      "middle",
+      "back",
+      "backImage"
+    ],
+    "notes": [
+      "Source order is front/middle/back; CSS order is back/middle/front. Zero-height ordinary containers allow image overflow and overlap without new positioning semantics.",
+      "Observe alpha compositing with the intervening translucent box and authored source IDs in DOM preorder."
+    ]
+  },
+  {
+    "name": "exact-key-aliases-unused",
+    "group": "source-and-assets",
+    "assetFiles": {
+      "opaque": "fixtures/images/ordinary-r1/opaque.png",
+      "alias": "fixtures/images/ordinary-r1/opaque.png",
+      "__proto__": "fixtures/images/ordinary-r1/alpha.png",
+      "unused": "fixtures/images/ordinary-r1/lossy.webp"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"first\" src=\"opaque\"><img id=\"alias\" src=\"alias\"><img id=\"prototypeName\" src=\"__proto__\"></div>",
+      "css": "#parent{width:320px;height:80px;flex-direction:row}#first,#alias,#prototypeName{width:96px;height:64px;background:#e9f0f6}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "first",
+      "alias",
+      "prototypeName"
+    ],
+    "notes": [
+      "Three referenced keys resolve to two exact byte strings; the third distinct supplied byte string is unused. Current contract validates and emits all three unique assets.",
+      "Own __proto__ key must survive transport. Alias deduplication is by exact encoded bytes; key insertion order must not change output. Renaming keys can change first-sorted-key asset indices."
+    ]
+  },
+  {
+    "name": "missing-src",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\">",
+      "css": "",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "missing-image-source",
+      "messageIncludes": "requires a nonempty src"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "unresolved-exact-key",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "opaque": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"asset:opaque\">",
+      "css": "",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "missing-image",
+      "messageIncludes": "No supplied image asset matches"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": [
+      "No historical asset: prefix interpretation, URL fetch or path fallback."
+    ]
+  },
+  {
+    "name": "image-padding",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;padding:1px}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "image-minimum",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;min-width:10px}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "image-maximum",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;max-height:100px}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "image-auto-margin",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;margin-left:auto}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "image-center-alignment",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;align-self:center}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "image-baseline-alignment",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row}#image{width:96px;height:64px;align-self:baseline}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "require separate replaced-element qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image"
+    ],
+    "notes": []
+  },
+  {
+    "name": "ancestor-baseline-auto-image",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><div id=\"owner\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div><div id=\"peer\"></div></div>",
+      "css": "#parent{flex-direction:row}#owner{width:96px;align-self:baseline}#peer{width:20px;height:20px;align-self:baseline}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "baseline"
+    },
+    "observeIds": [
+      "parent",
+      "owner",
+      "image",
+      "peer"
+    ],
+    "notes": [
+      "Regression control for image-as-empty-box scalar summaries. Image metrics must remain unknown through ancestor baseline admission until replaced baseline semantics are qualified."
+    ]
+  },
+  {
+    "name": "percentage-height-auto-parent",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#parent{width:200px}#image{width:96px;height:50%}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Percentage height"
+    },
+    "observeIds": [
+      "parent",
+      "image"
+    ],
+    "notes": [
+      "Existing unresolved automatic containing-height restriction remains diagnostic."
+    ]
+  },
+  {
+    "name": "image-flex-growth",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored colored image\"></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row}#image{flex:1 1 0px}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Nonlegacy flex declarations await"
+    },
+    "observeIds": [
+      "parent",
+      "image"
+    ],
+    "notes": [
+      "Uses point zero basis to reach current public nonlegacy-flex gate rather than the independent percentage-basis restriction."
+    ]
+  },
+  {
+    "name": "object-position-lengths",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;object-position:10px 20px}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "lengths, offsets and outside positions need qualification"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": [
+      "Valid CSS remains diagnostic; do not recover as an invalid computed value."
+    ]
+  },
+  {
+    "name": "object-position-authored-range",
+    "group": "intentional-diagnostic",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored colored image\">",
+      "css": "#image{width:96px;height:64px;object-position:100.000001% 50%}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "before float rounding"
+    },
+    "observeIds": [
+      "image"
+    ],
+    "notes": [
+      "Authored coefficient exceeds 100 although cssparser f32 unit_value rounds to 1. Existing scalar provenance must establish the range before native rounding."
+    ]
+  }
+]

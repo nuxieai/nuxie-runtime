@@ -1,0 +1,564 @@
+[
+  {
+    "name": "object-fit-1",
+    "property": "object-fit",
+    "value": "bogus",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-2",
+    "property": "object-fit",
+    "value": "cover cover",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-3",
+    "property": "object-fit",
+    "value": "cover fill",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-4",
+    "property": "object-fit",
+    "value": "1",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-5",
+    "property": "object-fit",
+    "value": "1px",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-6",
+    "property": "object-fit",
+    "value": "\"cover\"",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-7",
+    "property": "object-fit",
+    "value": "cover\u00a0",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-8",
+    "property": "object-fit",
+    "value": "cover\u000b",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-9",
+    "property": "object-fit",
+    "value": "\\63 over\\20 none",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-1",
+    "property": "object-position",
+    "value": "bogus",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-2",
+    "property": "object-position",
+    "value": "left right",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-3",
+    "property": "object-position",
+    "value": "top bottom",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-4",
+    "property": "object-position",
+    "value": "top 50%",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-5",
+    "property": "object-position",
+    "value": "50% left",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-6",
+    "property": "object-position",
+    "value": "1",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-7",
+    "property": "object-position",
+    "value": "1e-50",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-8",
+    "property": "object-position",
+    "value": "10deg",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-9",
+    "property": "object-position",
+    "value": "\"left\"",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-10",
+    "property": "object-position",
+    "value": "left, top",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-11",
+    "property": "object-position",
+    "value": "left\u00a0 top",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-12",
+    "property": "object-position",
+    "value": "left\u000btop",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-13",
+    "property": "object-position",
+    "value": "left center top",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-14",
+    "property": "object-position",
+    "value": "left 1px top",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-position-15",
+    "property": "object-position",
+    "value": "left 1px left 2px",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-1",
+    "property": "image-rendering",
+    "value": "bogus",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-2",
+    "property": "image-rendering",
+    "value": "auto pixelated",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-3",
+    "property": "image-rendering",
+    "value": "0",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-4",
+    "property": "image-rendering",
+    "value": "1px",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-5",
+    "property": "image-rendering",
+    "value": "\"auto\"",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-6",
+    "property": "image-rendering",
+    "value": "auto\u00a0",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "image-rendering-7",
+    "property": "image-rendering",
+    "value": "auto\u000b",
+    "validity": "invalid",
+    "target": "unset",
+    "browserSupports": false
+  },
+  {
+    "name": "object-fit-10",
+    "property": "object-fit",
+    "value": "fill",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-11",
+    "property": "object-fit",
+    "value": "contain",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-12",
+    "property": "object-fit",
+    "value": "cover",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-13",
+    "property": "object-fit",
+    "value": "none",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-14",
+    "property": "object-fit",
+    "value": "scale-down",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-15",
+    "property": "object-fit",
+    "value": "CoVeR",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-16",
+    "property": "object-fit",
+    "value": "\\63 over",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-17",
+    "property": "object-fit",
+    "value": "/*a*/cover/*b*/",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-position-16",
+    "property": "object-position",
+    "value": "center",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-position-17",
+    "property": "object-position",
+    "value": "top left",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-position-18",
+    "property": "object-position",
+    "value": "center left",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-position-19",
+    "property": "object-position",
+    "value": "left 50%",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-position-20",
+    "property": "object-position",
+    "value": "25% 75%",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-position-21",
+    "property": "object-position",
+    "value": "-0% 100%",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "image-rendering-8",
+    "property": "image-rendering",
+    "value": "auto",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "image-rendering-9",
+    "property": "image-rendering",
+    "value": "pixelated",
+    "validity": "valid",
+    "target": "literal",
+    "browserSupports": true
+  },
+  {
+    "name": "object-fit-18",
+    "property": "object-fit",
+    "value": "contain scale-down",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-fit-19",
+    "property": "object-fit",
+    "value": "scale-down cover",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-22",
+    "property": "object-position",
+    "value": "10px 20px",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-23",
+    "property": "object-position",
+    "value": "-10px 150%",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-24",
+    "property": "object-position",
+    "value": "100.000001%",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-25",
+    "property": "object-position",
+    "value": "right 10px bottom 20px",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-26",
+    "property": "object-position",
+    "value": "top 20% left 10px",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-27",
+    "property": "object-position",
+    "value": "0",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-28",
+    "property": "object-position",
+    "value": "1e-500",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-29",
+    "property": "object-position",
+    "value": "x-start",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-30",
+    "property": "object-position",
+    "value": "inline-start block-end",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-31",
+    "property": "object-position",
+    "value": "start end",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-32",
+    "property": "object-position",
+    "value": "calc(10% + 2px) 50%",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "image-rendering-10",
+    "property": "image-rendering",
+    "value": "smooth",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "image-rendering-11",
+    "property": "image-rendering",
+    "value": "high-quality",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "image-rendering-12",
+    "property": "image-rendering",
+    "value": "crisp-edges",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "image-rendering-13",
+    "property": "image-rendering",
+    "value": "optimizeSpeed",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "image-rendering-14",
+    "property": "image-rendering",
+    "value": "optimizeQuality",
+    "validity": "valid",
+    "target": "diagnostic",
+    "note": "Valid receiving grammar does not imply target admission; logical/function forms may remain conservatively unclassified."
+  },
+  {
+    "name": "object-position-33",
+    "property": "object-position",
+    "value": "1newunit",
+    "validity": "unclassified",
+    "target": "diagnostic"
+  },
+  {
+    "name": "object-position-34",
+    "property": "object-position",
+    "value": "mystery(1px)",
+    "validity": "unclassified",
+    "target": "diagnostic"
+  },
+  {
+    "name": "object-position-35",
+    "property": "object-position",
+    "value": "-vendor-position",
+    "validity": "unclassified",
+    "target": "diagnostic"
+  },
+  {
+    "name": "object-position-36",
+    "property": "object-position",
+    "value": "1e999%",
+    "validity": "unclassified",
+    "target": "diagnostic"
+  },
+  {
+    "name": "object-fit-20",
+    "property": "object-fit",
+    "value": "-vendor-fit",
+    "validity": "unclassified",
+    "target": "diagnostic"
+  },
+  {
+    "name": "image-rendering-15",
+    "property": "image-rendering",
+    "value": "-webkit-optimize-contrast",
+    "validity": "unclassified",
+    "target": "diagnostic"
+  }
+]

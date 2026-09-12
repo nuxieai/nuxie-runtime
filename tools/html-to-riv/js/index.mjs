@@ -29,8 +29,37 @@ export async function createCompiler(bytesOrModule) {
         if (!document || typeof document !== 'object' || Array.isArray(document)) return failure('invalid-request','Expected a versioned design document');
         const {languageVersion, ...input} = document;
         if (languageVersion !== LANGUAGE_VERSION) return failure('unsupported-language-version',`Expected ${LANGUAGE_VERSION}`,'languageVersion');
-        if (Object.keys(input).some(k => !['html','css','width','height'].includes(k))) return failure('invalid-request','Unknown input field; assets and runtime policies are not supported');
+        if (Object.keys(input).some(k => !['html','css','width','height','assets'].includes(k))) return failure('invalid-request','Unknown input field; expected html, css, width, height and optional assets');
         if (typeof input.html !== 'string' || typeof input.css !== 'string' || typeof input.width !== 'number' || typeof input.height !== 'number' || !Number.isFinite(input.width) || !Number.isFinite(input.height)) return failure('invalid-request','Expected html/css strings and finite width/height numbers');
+        if (Object.hasOwn(input,'assets') && input.assets === undefined) delete input.assets;
+        if (Object.hasOwn(input,'assets')) {
+          if (!input.assets || typeof input.assets !== 'object' || Array.isArray(input.assets)) return failure('invalid-request','Expected assets to be an object map','assets');
+          const normalized = [];
+          for (const [name,asset] of Object.entries(input.assets)) {
+            const source = `assets[${JSON.stringify(name)}]`;
+            if (!asset || typeof asset !== 'object' || Array.isArray(asset)) return failure('invalid-request','Expected an image asset object',source);
+            const keys = Object.keys(asset);
+            if (keys.length !== 2 || !keys.includes('kind') || !keys.includes('bytes')) return failure('invalid-request','Image assets require only kind and bytes fields',source);
+            if (asset.kind !== 'image') return failure('invalid-request','Expected asset kind image',source);
+            const bytes = asset.bytes;
+            if (!(bytes instanceof Uint8Array) && !Array.isArray(bytes)) return failure('invalid-request','Image bytes must be a Uint8Array or byte array',source);
+            // Read indexed values once rather than invoking input iterators or
+            // toJSON methods. A fresh array preserves typed subarray boundaries
+            // and prevents caller mutation from changing the serialized request.
+            const copy = new Array(bytes.length);
+            for (let i=0;i<copy.length;i++) {
+              if (!Object.hasOwn(bytes,i)) return failure('invalid-request','Image byte arrays require integers from 0 to 255',source);
+              const value = bytes[i];
+              if (!Number.isInteger(value) || value < 0 || value > 255) return failure('invalid-request','Image byte arrays require integers from 0 to 255',source);
+              copy[i] = value;
+            }
+            normalized.push([name,{kind:'image',bytes:copy}]);
+          }
+          // Own properties preserve names such as __proto__; assigning into a
+          // normal object by key would invoke that legacy prototype setter.
+          if (normalized.length) input.assets = Object.fromEntries(normalized);
+          else delete input.assets;
+        }
         request = encoder.encode(JSON.stringify({languageVersion,input}));
       } catch (error) { return failure('invalid-request',requestError(error)); }
       if (request.byteLength > MAX_REQUEST_BYTES) return failure('input-limit','Serialized request exceeds 192 MiB');

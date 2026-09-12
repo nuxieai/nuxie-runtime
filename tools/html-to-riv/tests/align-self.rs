@@ -1,6 +1,6 @@
 //! Ordinary-file alignment candidates. Native/browser qualification is separate.
 use nuxie_html_to_riv::{compile, CompileInput, CompileOutput};
-fn input(css:&str)->CompileInput {CompileInput{html:"<div id=p><div id=a><div id=b></div></div><div id=c></div></div>".into(),css:css.into(),width:240.,height:160.}}
+fn input(css:&str)->CompileInput {CompileInput{ assets: Default::default(),html:"<div id=p><div id=a><div id=b></div></div><div id=c></div></div>".into(),css:css.into(),width:240.,height:160.}}
 fn scene(css:&str)->CompileOutput {compile(&input(css)).unwrap()}
 #[test]
 fn auto_stretch_and_css_wide_defaults_preserve_existing_bytes() {

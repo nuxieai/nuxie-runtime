@@ -4,7 +4,7 @@ fn equivalent(html: &str, selector: &str, expected: &[&str]) {
     let base = "#root{width:100px;height:100px}#root div{width:80px;height:10px;background:navy}";
     let css = format!("{base}{selector}{{background:coral}}");
     let direct = format!("{base}{}", expected.iter().map(|id| format!("#root #{id}{{background:coral}}")).collect::<String>());
-    let input = |css| CompileInput {html: html.into(),css,width:240.,height:160.};
+    let input = |css| CompileInput { assets: Default::default(),html: html.into(),css,width:240.,height:160.};
     assert_eq!(compile(&input(css)).unwrap(), compile(&input(direct)).unwrap(), "{selector}");
 }
 const TREE: &str = "<section id=root><div id=a class='one tag'></div><!-- gap --><div id=b class='two'></div><div id=c class='one tag-more'><div id=e class=one></div></div><div id=d class=ONE></div></section>";

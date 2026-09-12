@@ -5,6 +5,7 @@ mod css;
 mod css_whitespace;
 mod numeric_tokens;
 mod request;
+mod assets;
 mod compiler;
 mod variables;
 #[allow(dead_code)]
@@ -12,6 +13,7 @@ mod wire;
 #[cfg(target_arch = "wasm32")]
 mod wasm;
 use serde::{Deserialize, Serialize};
+pub use assets::{Asset, AssetMap};
 
 pub const BROWSER_RESET_CSS: &str = include_str!("reset.css");
 
@@ -23,15 +25,19 @@ pub struct CompileInput {
     pub css: String,
     pub width: f32,
     pub height: f32,
+    /// Explicit source-name to encoded-image mapping. Compilation performs no I/O.
+    #[serde(skip_serializing_if = "AssetMap::is_empty")]
+    pub assets: AssetMap,
 }
 
 impl<'de> Deserialize<'de> for CompileInput {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
-        struct Fields { html: String, css: String, width: f32, height: f32 }
-        let Fields { html, css, width, height } = request::object(deserializer, "struct CompileInput")?;
-        Ok(Self { html, css, width, height })
+        struct Fields { html: String, css: String, width: f32, height: f32,
+            #[serde(default, deserialize_with = "assets::deserialize_asset_map")] assets: AssetMap }
+        let Fields { html, css, width, height, assets } = request::object(deserializer, "struct CompileInput")?;
+        Ok(Self { html, css, width, height, assets })
     }
 }
 

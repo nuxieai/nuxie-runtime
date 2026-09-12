@@ -1,5 +1,5 @@
 use nuxie_html_to_riv::{compile,CompileInput};
-fn input(css:&str)->CompileInput {CompileInput {html:"<div id=a></div>".into(),css:css.into(),width:240.,height:160.}}
+fn input(css:&str)->CompileInput {CompileInput { assets: Default::default(),html:"<div id=a></div>".into(),css:css.into(),width:240.,height:160.}}
 #[test]
 fn public_zero_padding_preserves_prior_bytes_and_maps() {
     let plain=compile(&input("")).unwrap();
@@ -18,7 +18,7 @@ fn public_nonzero_padding_admits_ordinary_border_box_profiles() {
 }
 #[test]
 fn padding_numeric_guards_check_floors_and_sums_without_baking_viewport() {
-    let mut request=CompileInput {html:format!("{}{}",(0..9).map(|i|format!("<div id=n{i}>")).collect::<String>(),"</div>".repeat(9)),css:"div{width:1000000%;height:1px;padding:1px}".into(),width:1.,height:32.};
+    let mut request=CompileInput { assets: Default::default(),html:format!("{}{}",(0..9).map(|i|format!("<div id=n{i}>")).collect::<String>(),"</div>".repeat(9)),css:"div{width:1000000%;height:1px;padding:1px}".into(),width:1.,height:32.};
     assert!(compile(&request).is_err());
     request.css.push_str("#n0{width:0px}");assert!(compile(&request).is_ok());
     request.css="div{width:1000000%;height:1px}#n8{width:1px;padding-left:10500%;padding-right:10500%;max-width:1px}".into();

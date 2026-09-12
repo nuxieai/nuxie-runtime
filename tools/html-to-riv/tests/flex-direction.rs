@@ -1,7 +1,7 @@
 //! Public direction/cascade tests. Native geometry and pixels are a separate gate.
 use nuxie_html_to_riv::{compile, CompileInput, CompileOutput};
 fn compiled(css: &str) -> CompileOutput {
-    compile(&CompileInput { html: "<section id=p><div id=c><div id=g></div></div><div id=s></div></section>".into(), css: css.into(), width: 240., height: 160. }).unwrap()
+    compile(&CompileInput { assets: Default::default(), html: "<section id=p><div id=c><div id=g></div></div><div id=s></div></section>".into(), css: css.into(), width: 240., height: 160. }).unwrap()
 }
 fn equivalent(actual: &str, expected: &str) { assert_eq!(compiled(actual), compiled(expected)); }
 #[test]
@@ -45,7 +45,7 @@ fn auto_is_preserved_for_native_intrinsic_measurement() {
 fn invalid_directions_are_diagnosed_even_when_unmatched_or_overridden() {
     for css in ["#never{flex-direction:diagonal}", "#p{flex-direction:row column}",
         "#p{flex-direction:revert}", "#p{flex-direction:row-reverse;flex-direction:inherit row}"] {
-        let errors=compile(&CompileInput{html:"<div id=p></div>".into(),css:css.into(),width:240.,height:160.}).unwrap_err();
+        let errors=compile(&CompileInput{ assets: Default::default(),html:"<div id=p></div>".into(),css:css.into(),width:240.,height:160.}).unwrap_err();
         assert_eq!(errors[0].code,"unsupported-target-semantics", "{css}");
         assert!(!errors[0].source.is_empty());
     }
@@ -55,7 +55,7 @@ fn invalid_directions_are_diagnosed_even_when_unmatched_or_overridden() {
 #[test]
 fn paint_order_lowering_preserves_numeric_dom_preorder_and_selectors() {
     let html = (0..12).map(|i| format!("<div id=n{i}><div id=c{i}></div></div>")).collect::<String>();
-    let input = |css: &str| CompileInput { html:html.clone(),css:css.into(),width:240.,height:160. };
+    let input = |css: &str| CompileInput { assets: Default::default(), html:html.clone(),css:css.into(),width:240.,height:160. };
     let actual=compile(&input("body>div:nth-child(3){background:red}body>div:last-child{height:10px}")).unwrap();
     let expected=compile(&input("#n2{background:red}#n11{height:10px}")).unwrap();
     assert_eq!(actual, expected);

@@ -53,6 +53,9 @@ const PROPERTIES: &[&str] = &[
     "gap",
     "row-gap",
     "column-gap",
+    "object-fit",
+    "object-position",
+    "image-rendering",
 ];
 
 pub(super) fn classify(property: &str, text: &str) -> Validity {
@@ -180,10 +183,74 @@ pub(super) fn classify(property: &str, text: &str) -> Validity {
             })
         }
         "flex" => flex(&tokens),
+        "object-fit" => object_fit(&tokens),
+        "object-position" => object_position(&tokens),
+        "image-rendering" => one(|t| keyword(t, &[
+            "auto", "smooth", "high-quality", "pixelated", "crisp-edges",
+            // CSS Images retains these deprecated values as valid grammar.
+            "optimizespeed", "optimizequality",
+        ])),
         "display" => display(&tokens),
         "align-self" | "justify-content" => alignment(property, &tokens),
         _ => Unclassified,
     }
+}
+
+fn object_fit(tokens: &[Component<'_>]) -> Validity {
+    // Do not reinterpret vendor extensions as invalid substitutions.
+    if tokens.iter().any(|t| matches!(&t.token, Token::Ident(s) if s.starts_with('-'))) {
+        return Unclassified;
+    }
+    match tokens {
+        [t] => keyword(t, &["fill", "contain", "cover", "none", "scale-down"]),
+        // CSS Images 4 allows either ordering, even though these combinations
+        // remain outside the target and the pinned browser's current admission.
+        [a, b] if (ident(a, "scale-down") && (ident(b, "contain") || ident(b, "cover")))
+            || (ident(b, "scale-down") && (ident(a, "contain") || ident(a, "cover"))) => Valid,
+        _ => Invalid,
+    }
+}
+
+fn object_position(tokens: &[Component<'_>]) -> Validity {
+    // Logical positions have newer grammar. Preserve target diagnostics rather
+    // than applying physical-axis rules to unqualified logical combinations.
+    if tokens.iter().any(|t| {
+        matches!(&t.token, Token::Ident(s) if s.starts_with('-'))
+            || ["x-start", "x-end", "y-start", "y-end", "block-start", "block-end",
+                "inline-start", "inline-end", "start", "end"].iter().any(|s| ident(t, s))
+    }) {
+        return Unclassified;
+    }
+    let horizontal = |t: &Component<'_>| ident(t, "left") || ident(t, "right");
+    let vertical = |t: &Component<'_>| ident(t, "top") || ident(t, "bottom");
+    let center = |t: &Component<'_>| ident(t, "center");
+    // Percentages outside 0..100 and negative lengths are valid CSS positions;
+    // target range/resource checks must still see them. Unknown units stay
+    // unclassified, and nonzero unitless numbers are not rounded into zero.
+    for t in tokens {
+        if horizontal(t) || vertical(t) || center(t) { continue; }
+        match length(t, false) {
+            Valid => (),
+            other => return other,
+        }
+    }
+    let offset = |t: &Component<'_>| length(t, false) == Valid;
+    let valid = match tokens {
+        [_] => true,
+        [a, b] => {
+            // Two physical keywords may swap axes. A length/percentage cannot.
+            ((horizontal(a) || center(a)) && (vertical(b) || center(b)))
+                || ((vertical(a) || center(a)) && (horizontal(b) || center(b)))
+                || ((horizontal(a) || center(a) || offset(a))
+                    && (vertical(b) || center(b) || offset(b)))
+        }
+        [a, b, c, d] => offset(b) && offset(d)
+            && ((horizontal(a) && vertical(c)) || (vertical(a) && horizontal(c))),
+        // The generic <position> production permits one, two or four values.
+        // Background-position's three-value extension does not apply here.
+        _ => false,
+    };
+    if valid { Valid } else { Invalid }
 }
 
 fn ident(t: &Component<'_>, expected: &str) -> bool {

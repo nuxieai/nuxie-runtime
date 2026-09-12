@@ -52,6 +52,8 @@ mod wrapping;
 #[allow(dead_code)]
 #[path = "wrapping_paint.rs"]
 mod wrapping_paint;
+#[path = "images.rs"]
+mod images;
 
 #[derive(Clone, Copy)]
 enum Size { Auto, Pixels(f32), Percent(f32) }
@@ -172,9 +174,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { box_sizing: box_sizing::BoxSizing, gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { image_paint: images::Paint, box_sizing: box_sizing::BoxSizing, gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { box_sizing: box_sizing::BoxSizing::default(), gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { image_paint: images::Paint::default(), box_sizing: box_sizing::BoxSizing::default(), gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -287,7 +289,7 @@ fn validate_target(d: &css::Declaration, candidate: bool, padding_candidate: boo
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "box-sizing", "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap"].contains(&d.name.as_str()) {
+             "box-sizing", "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap", "object-fit", "object-position", "image-rendering"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -299,6 +301,7 @@ fn validate_target(d: &css::Declaration, candidate: bool, padding_candidate: boo
     }
     let value = css_whitespace::trim(&css::ordinary_value(&d.value)?).to_ascii_lowercase();
     match d.name.as_str() {
+        "object-fit" | "object-position" | "image-rendering" => { images::Paint::default().apply(&d.name, &value, images::Paint::default(), &d.source)?; }
         "box-sizing" => { box_sizing::computed(&value, box_sizing::BoxSizing::default(), &d.source)?; }
         "width" | "height" => {
             if !["inherit", "initial", "unset"].contains(&value.as_str()) { size(&value, &d.source)?; }
@@ -316,7 +319,7 @@ fn validate_target(d: &css::Declaration, candidate: bool, padding_candidate: boo
             if !["currentcolor", "inherit", "initial", "unset"].contains(&value.as_str()) { color::parse(&value, &d.source)?; }
         }
         // Display remains flex; direction is independent of the column authoring reset.
-        "display" if matches!(value.as_str(), "flex" | "inherit") => {}
+        "display" if matches!(value.as_str(), "flex" | "block" | "inherit") => {}
         "margin" | "margin-left" | "margin-top" | "margin-right" | "margin-bottom" => { margins::Margins::default().apply(&d.name, &value, margins::Margins::default(), &d.source)?; }
         "padding" | "padding-left" | "padding-top" | "padding-right" | "padding-bottom" => {
             let mut descriptor = padding::Padding::default();
@@ -402,7 +405,10 @@ fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style
 }
 fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool, padding_candidate: bool) -> Result<Style, Diagnostic> {
     let (declarations, variable_values) = resolved_declarations(css::cascade(rules, element)?, parent, candidate, padding_candidate)?;
-    let mut style = Style { numeric: Box::new(computed_provenance::NumericStyle {font:parent.numeric.font.clone(),..computed_provenance::NumericStyle::default()}), variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
+    if element.value().name() != "img" && declarations.iter().any(|d| d.name == "display" && d.value.eq_ignore_ascii_case("block")) {
+        return Err(unsupported(element.attr("id").unwrap_or(element.value().name()), "display:block is currently admitted only for replaced img elements; block container layout needs separate qualification"));
+    }
+    let mut style = Style { image_paint: images::Paint::inherited(parent.image_paint), numeric: Box::new(computed_provenance::NumericStyle {font:parent.numeric.font.clone(),..computed_provenance::NumericStyle::default()}), variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
     // Font-size-relative units use the parent for font-size itself, but the final
     // computed element font size for other lengths, regardless of source order.
     for d in declarations.iter().filter(|d| d.name == "font-size") {
@@ -437,6 +443,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
             "min-height" => { style.min_height = computed_bound(&d.value, parent.min_height, style.font_size, true, &d.source)?; style.numeric.min_height = computed_provenance::dimension(d,style.min_height,&parent.numeric.min_height,&style.numeric.font); },
             "max-width" => { style.max_width = computed_bound(&d.value, parent.max_width, style.font_size, false, &d.source)?; style.numeric.max_width = computed_provenance::dimension(d,style.max_width,&parent.numeric.max_width,&style.numeric.font); },
             "max-height" => { style.max_height = computed_bound(&d.value, parent.max_height, style.font_size, false, &d.source)?; style.numeric.max_height = computed_provenance::dimension(d,style.max_height,&parent.numeric.max_height,&style.numeric.font); },
+            "object-fit" | "object-position" | "image-rendering" => style.image_paint.apply(&d.name, &d.value, parent.image_paint, &d.source)?,
             "background" => apply_background_shorthand(&mut style, parent, &d.value, &d.source)?,
             "background-color" => {
                 style.background = match css_whitespace::trim(&d.value).to_ascii_lowercase().as_str() {
@@ -475,6 +482,7 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     if input.html.len().saturating_add(input.css.len()) > 1_048_576 {
         return Err(Diagnostic::new("input-limit", "document", "HTML and CSS exceed 1 MiB"));
     }
+    let assets = crate::assets::AssetTable::validate(&input.assets)?;
     let fragment = Html::parse_fragment(&input.html);
     if !fragment.errors.is_empty() { return Err(Diagnostic::new("html-syntax", "html", "Malformed HTML fragment")); }
     let document = Html::parse_document(&format!("<!doctype html><html><head></head><body>{}</body></html>", input.html));
@@ -505,7 +513,7 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     host_paint.set("parentId", Value::Uint(host_fill_id))?;
     host_paint.set("colorValue", Value::Color(0xffffffff))?;
     records.push(host_paint);
-    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), descriptor_capture: capture, descriptors: Vec::new() };
+    let mut output = Emitter { assets, records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), descriptor_capture: capture, descriptors: Vec::new() };
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { numeric: Box::new(computed_provenance::NumericStyle::host()), width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
@@ -517,10 +525,12 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     if output.map.is_empty() { return Err(Diagnostic::new("empty-document", "html", "At least one box element is required")); }
     let scene_index = if capture { flex_descriptor::scene_index(&output.records) } else { Default::default() };
     let descriptors = output.descriptors.into_iter().map(|pending| pending.finish(&output.records, &scene_index)).collect();
+    let assets = output.assets.global_records()?;
+    output.records.splice(1..1, assets);
     Ok((CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map }, descriptors))
 }
 
-struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool, candidate_padding: bool, descriptor_capture: bool, descriptors: Vec<flex_descriptor::Pending> }
+struct Emitter { assets: crate::assets::AssetTable, records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool, candidate_padding: bool, descriptor_capture: bool, descriptors: Vec<flex_descriptor::Pending> }
 type AuthoredElement<'a> = (usize, ElementRef<'a>, String, String, i32);
 struct ChildrenFrame<'a> {
     elements: std::vec::IntoIter<AuthoredElement<'a>>,
@@ -619,14 +629,15 @@ impl Emitter {
         let mut ordered_elements = Vec::with_capacity(elements.len());
         for (index, element) in elements.into_iter().enumerate() {
             let path = format!("{path}/{index}");
-            if !["div", "section", "article", "main", "header", "footer", "aside", "nav"].contains(&element.value().name()) {
+            if !["div", "section", "article", "main", "header", "footer", "aside", "nav", "img"].contains(&element.value().name()) {
                 return Err(unsupported(&path, format!("Element {} is not admitted", element.value().name())));
             }
             for (name, _) in element.value().attrs() {
                 // HTML parsing has normalized ASCII attribute names. Custom data
                 // remains on the source DOM for selectors; it adds no file state.
                 let static_data = name.strip_prefix("data-").is_some_and(|suffix| !suffix.is_empty());
-                if !["id", "class", "style"].contains(&name) && !static_data { return Err(unsupported(&path, format!("Attribute {name} is not admitted"))); }
+                let image_attribute = element.value().name() == "img" && ["src", "alt"].contains(&name);
+                if !["id", "class", "style"].contains(&name) && !static_data && !image_attribute { return Err(unsupported(&path, format!("Attribute {name} is not admitted"))); }
             }
             if self.map.len() >= 8192 { return Err(Diagnostic::new("object-limit", &path, "Document exceeds 8192 authored elements")); }
             let id = element.attr("id").map(str::to_owned).unwrap_or_else(|| format!("node{path}"));
@@ -666,12 +677,14 @@ impl Emitter {
         rules: &[css::Rule], definite_chain: [bool; 2], numeric_bounds: numeric::Bounds,
         descriptor_items: &mut Vec<flex_descriptor::Item>) -> Result<Box<PreparedChild<'a>>, Diagnostic> {
         let (index, element, path, id, order) = item;
-        let style = computed(element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
+        let mut style = computed(element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
+        let image = images::plan(element, &mut style, parent_style, &self.assets, &path)?;
         if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
             return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
         }
         let lowered = box_sizing::lower(&style, &path)?;
         let child_bounds = numeric_bounds.child_with_sizing(&style, &lowered, parent_style, &path)?;
+        let child_bounds = if let Some(image) = &image { child_bounds.image(image.metadata.width, image.metadata.height, image.aspect_axis, &path)? } else { child_bounds };
         let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
         let cross_auto_margin = style.margins.cross(parent_style.direction);
         let effective_alignment = if cross_auto_margin {
@@ -769,6 +782,7 @@ impl Emitter {
             style.gap.emit(&mut self.records[inner as usize + 2])?;
             inner
         } else { object_id };
+        if let Some(image) = &image { image.emit(&mut self.records, content_id, style.image_paint)?; }
         self.capture_item(descriptor_items, &style, &lowered, parent_style.direction, &id, &path,
             object_id, if authored_parent == parent_id { object_id } else { authored_parent }, index, order);
         self.map.push(SourceNode { id, path: path.clone(), object_id });
@@ -783,9 +797,12 @@ impl Emitter {
         // A flexible vertical main size is not the authored intrinsic height.
         // Unknown scalar summaries prevent unsound ancestor baseline admission.
         let vertical_flex = child.vertical_flex;
-        let metric = if vertical_flex { None } else { baseline::summarize(&style, &descendants) };
-        let used_height = if vertical_flex { None } else { baseline::used_height(&style, &descendants) };
-        let last_metric = if vertical_flex { None } else { baseline::summarize_last(&style, &descendants, used_height) };
+        // An image is replaced content, not an empty box. Until replaced
+        // baselines are qualified, propagate unknown metrics to ancestor groups.
+        let unknown_metric = vertical_flex || child.element.value().name() == "img";
+        let metric = if unknown_metric { None } else { baseline::summarize(&style, &descendants) };
+        let used_height = if unknown_metric { None } else { baseline::used_height(&style, &descendants) };
+        let last_metric = if unknown_metric { None } else { baseline::summarize_last(&style, &descendants, used_height) };
         let last = effective_alignment.is_last_baseline();
         if last && last_metric.is_none() {
             return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics, distributed columns and non-column nested topology require further ordinary-file validation"));
@@ -821,7 +838,7 @@ impl Emitter {
 mod padding_pipeline_tests {
     use super::*;
     fn input(css: &str) -> CompileInput {
-        CompileInput {html:"<div id=p><div id=a><div id=leaf></div></div></div>".into(),css:format!("#p{{width:160px;height:120px}}#a{{width:40px;height:30px}}#leaf{{width:10px;height:10px}}{css}"),width:240.,height:160.}
+        CompileInput { assets: Default::default(),html:"<div id=p><div id=a><div id=leaf></div></div></div>".into(),css:format!("#p{{width:160px;height:120px}}#a{{width:40px;height:30px}}#leaf{{width:10px;height:10px}}{css}"),width:240.,height:160.}
     }
     fn candidate(css:&str)->CompileOutput {compile_profile(&input(css),FlexPolicy::PaddingCandidate).unwrap()}
     #[test]
@@ -891,7 +908,7 @@ mod declaration_provenance_tests {
     }
     #[test]
     fn production_computation_keeps_fonts_first_and_strict_loser_validation() {
-        let mut input=CompileInput {html:"<div id=a></div>".into(),css:"#a{--w:2em;width:var(--w);font-size:20px}".into(),width:240.,height:160.};
+        let mut input=CompileInput { assets: Default::default(),html:"<div id=a></div>".into(),css:"#a{--w:2em;width:var(--w);font-size:20px}".into(),width:240.,height:160.};
         let actual=compile(&input).unwrap();input.css="#a{width:40px;font-size:20px}".into();assert_eq!(actual,compile(&input).unwrap());
         for css in ["#a{--bad:calc(1px);width:var(--bad);width:1px}","#a{--f:1;flex:var(--f);flex:none}"] {assert!(declarations(css,&Style::default()).is_err());}
     }
@@ -900,7 +917,7 @@ mod declaration_provenance_tests {
 #[cfg(test)]
 mod gap_pipeline_tests {
     use super::*;
-    fn request(css:&str)->CompileInput {CompileInput{html:"<div id=p><div id=a></div><div id=b></div></div>".into(),css:format!("#p{{width:200px;height:100px}}#a,#b{{width:20px;height:10px}}{css}"),width:400.,height:200.}}
+    fn request(css:&str)->CompileInput {CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div><div id=b></div></div>".into(),css:format!("#p{{width:200px;height:100px}}#a,#b{{width:20px;height:10px}}{css}"),width:400.,height:200.}}
     #[test]
     fn public_gap_uses_computed_inheritance() {
         let css="#p{--g:.5em 1em;font-size:20px;gap:var(--g)}#a{font-size:10px;gap:inherit}";

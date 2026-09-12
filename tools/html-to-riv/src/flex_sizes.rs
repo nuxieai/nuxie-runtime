@@ -60,7 +60,7 @@ mod tests {
     use crate::CompileInput;
     #[test]
     fn final_cross_bounds_and_constraints_cannot_be_hidden_by_computed_style() {
-        let input=CompileInput{html:"<div id=p><div id=a></div></div>".into(),css:"#p{width:100px;height:100px}#a{width:20px;height:30px}".into(),width:400.,height:200.};
+        let input=CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div></div>".into(),css:"#p{width:100px;height:100px}#a{width:20px;height:30px}".into(),width:400.,height:200.};
         let (output,mut groups)=compile_profile_with_descriptors(&input,FlexPolicy::Candidate).unwrap();
         let id=output.source_map.iter().find(|n|n.id=="a").unwrap().object_id;
         let viewport=[ErrorEnvelope::new(0.,16384.,0.001).unwrap();2];
@@ -74,14 +74,14 @@ mod tests {
     }
     #[test]
     fn real_child_first_groups_propagate_percentages_and_keep_flexible_targets_unknown() {
-        let input=CompileInput{html:"<div id=p><div id=a><div id=b></div></div></div>".into(),css:"#p{width:50%;height:100px}#a{width:33.333333333%;height:20px}#b{width:2px;height:3px}".into(),width:400.,height:200.};
+        let input=CompileInput{ assets: Default::default(),html:"<div id=p><div id=a><div id=b></div></div></div>".into(),css:"#p{width:50%;height:100px}#a{width:33.333333333%;height:20px}#b{width:2px;height:3px}".into(),width:400.,height:200.};
         let (output,groups)=compile_profile_with_descriptors(&input,FlexPolicy::Candidate).unwrap();
         let viewport=[ErrorEnvelope::new(0.,16384.,0.001).unwrap();2];
         let domains=propagate(&groups,viewport);
         let id=|name|output.source_map.iter().find(|n|n.id==name).unwrap().object_id;
         let a=domains[&id("a")].axes[0].as_ref().unwrap();assert!(a.upper()>=16384.*0.5*0.33333333333);assert!(a.error_upper()>0.001);
         assert_eq!(domains[&id("b")].axes[0].as_ref().unwrap().lower(),2.);
-        let changed=CompileInput{css:format!("{}#p{{flex-direction:row}}#a{{width:auto;flex:1 1 0px}}",input.css),..input};
+        let changed=CompileInput{ assets: Default::default(),css:format!("{}#p{{flex-direction:row}}#a{{width:auto;flex:1 1 0px}}",input.css),..input};
         let (_,groups)=compile_profile_with_descriptors(&changed,FlexPolicy::Candidate).unwrap();
         assert!(propagate(&groups,viewport).values().any(|v|v.axes.iter().any(|d|matches!(d,Err(Unresolved::FlexibleTarget)))));
     }

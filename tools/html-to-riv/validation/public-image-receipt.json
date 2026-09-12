@@ -1,0 +1,142 @@
+{
+  "status": "public-images-implemented-partial-visual-qualification",
+  "scope": "Standalone compiler only; immutable baseline native consumer; all 99 backlog items remain in scope",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-build-r2/frozen/html-to-riv",
+    "sha256": "8f49ac9a7272f0770cc3ae67eb29755830219ff5af0716741b2f77735aa218df"
+  },
+  "wasm": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-build-r2/frozen/compiler.wasm",
+    "sha256": "2e636686877bdebf9e8c70352ae28a98f3ecba4cb00f224386267f0363c899bf"
+  },
+  "sourceBindingsVerified": 153,
+  "rustTests": 301,
+  "nodeTests": 56,
+  "priorExactOutputs": 794,
+  "publicImageCases": 40,
+  "rawAbiJsParityObservations": 80,
+  "assetCases": 86,
+  "assetInterfaceObservations": 252,
+  "native": {
+    "frames": 216,
+    "freshFrames": 32,
+    "transferredFrames": 184,
+    "geometryPass": 216,
+    "pixelPass": 198,
+    "presencePass": 216
+  },
+  "clearChecks": 32,
+  "visualReviewCompleted": true,
+  "limitations": "18 fractional pixel failures; broader codec/layout/asset representations and numeric domains remain open. No blanket browser fidelity or total memory/CPU guarantee.",
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-build-r2/summary.json",
+      "sha256": "9a99eea422b6f41aefa73741062adbd3a2331dd34b28c83aed28a2981d10808e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-build-r2/checks.json",
+      "sha256": "8a4af01e986450d0bebbe80896fcb910340ec0d4c1b63e5a71db96e0d6389f5c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-build-r2/frozen/source-bindings.json",
+      "sha256": "45702ec210a79e543637afae033dfe5986e9b9894d4fa6f8369e7595f5cbacee"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r3/build-receipt.json",
+      "sha256": "e20d5b8bd2d3582ecf9fe0a0d8dea45ad72a7108f6a4651d8d1735998d9bb149"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r3/compile-receipt.json",
+      "sha256": "2794dc8af5ea5d705b5b98440fbc22328ba3640aab55e1426680f1793aa67087"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-parity-r1/receipt.json",
+      "sha256": "1c69ef9fb6d084203f9458683172c673c8d23096c0b86f402f3f97340760abb0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/combined-receipt.json",
+      "sha256": "fd60701251976027b112416983aa5148733267194ec5741fd402d5ba24dcebfb"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/visual/review-receipt.json",
+      "sha256": "8ffc18a27ca92d18f3591beb3ca41f826f7b1ef0ea3e3414b4f914b7c9c73212"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/visual/artifact-bindings.json",
+      "sha256": "35da6617bc04744611c48f04dac104ee2f5f8d06247c5d21c4b950e2181cd871"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-clear-r1/receipt.json",
+      "sha256": "31774997bf828934ea1e3f2ce27735d8e0fdac63fc5b6129215ba956a18356c8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-assets-r1/receipt.json",
+      "sha256": "e1fd1d32cbfc72c2484017b015bfdbc29fe44cd84cf2f2cc9fc949ca584330f4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-assets-r1/verification.json",
+      "sha256": "9cce8b3a39a0debc5136442b8b7b662c0b7aff519067083968d9fce955dc2ba4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-image-regression-r1/receipt.json",
+      "sha256": "ca170023f99a0d835ff4b4a5bb6358eb21a8a0ac66ed1d9723dc0d2631311f1f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-review-r2/receipt.json",
+      "sha256": "0dde583ca98d9eaced6e3cff84d4e8780a17a73695ab99d2a60e981ced1d233a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-variable-recovery-r1/receipt.json",
+      "sha256": "6fd27a8a65f411a737b0b1b2e5a059123d7c86275b6e72b659a689cd7129cd41"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/recovered-reference-driver/receipt.json",
+      "sha256": "e9422870fac20c883143383a11090d74687e3713b457a053557f8e8c840ab696"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-evidence.py",
+      "sha256": "fa84ee26018ac3014a61b61581eb1b392391c9a92f89d5fff24a53b8ad355935"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-checkpoint-review.md",
+      "sha256": "b59f176313102b84ba6a9a494e1593ced92ddf5e9f65d5f7fc44051f5d7ea125"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-assets-review.md",
+      "sha256": "810a82f1c0c0737f2df9120199a3fcbe6933ce900ee358fc9ae529f0b268fc17"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-jpeg-review.md",
+      "sha256": "60cb65c39b8e2210d78dc402c2a47ae9d6294e7c02f3a72068c407ab72a650b1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-visual-review.md",
+      "sha256": "fb1ade42fcd2939a946671e45e3adf9cc2d5d1833aa52af8b6ce68eac8bf2462"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-variable-recovery-review.md",
+      "sha256": "adff5e48fba42076bbd25c734d9c37886f4ae151aec99d511e972c79fbb28413"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-compile.py",
+      "sha256": "b6112ff7536c178d38462474c395978922ab1ee3eb98fddb4927be11c1b82bba"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-native.mjs",
+      "sha256": "b8a0375f2e654257903f20ec1aed71972feff9f3e8048e2aa0aa441e830c2b31"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-transfer.py",
+      "sha256": "415e6bbfaa25dfbe8e567d6c9049d58f70d08a5646cd412a02bbfd55dcfa6296"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-parity.mjs",
+      "sha256": "4fe39bf07dec1918c7f5ba5167f7bdaefafc7db092cf4c201cb184acaf5ef408"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-clear.mjs",
+      "sha256": "f5536703820c272cff8a6687cd631f51710119f0625f4843a10d59b29c485a68"
+    }
+  ]
+}

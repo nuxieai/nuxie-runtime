@@ -1,0 +1,102 @@
+{
+  "scope": "Programmatic authored image fixtures; no HTML/CSS screenshot or target-driven pixel adjustment.",
+  "pillow": "12.2.0",
+  "jpegVersion": "6.2",
+  "webpVersion": "1.6.0",
+  "generatorSha256": "691f21b19502a1a444f99aee07d0738203536a81026ed7e00c1bccc79a03f296",
+  "files": [
+    {
+      "name": "opaque.png",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGB",
+      "encodeOptions": {
+        "format": "PNG",
+        "compress_level": 9
+      },
+      "bytes": 296,
+      "sha256": "ba8108f30fabb47e6b6220fcc6f5d7cb56a393b71522b02bba3beca85eb9f682"
+    },
+    {
+      "name": "alpha.png",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGBA",
+      "encodeOptions": {
+        "format": "PNG",
+        "compress_level": 9
+      },
+      "bytes": 305,
+      "sha256": "beb17558ac0813d53df9dc32434d96924b930ff9922fada3cc327254dbba9085"
+    },
+    {
+      "name": "baseline.jpg",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGB",
+      "encodeOptions": {
+        "format": "JPEG",
+        "quality": 90,
+        "subsampling": 0,
+        "progressive": false,
+        "optimize": false
+      },
+      "bytes": 955,
+      "sha256": "8f2ca6f1bda191aa2448fdb0160c9b2711822e07cc6b17a4320a5ab5dd27fbcf"
+    },
+    {
+      "name": "progressive.jpg",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGB",
+      "encodeOptions": {
+        "format": "JPEG",
+        "quality": 90,
+        "subsampling": 0,
+        "progressive": true,
+        "optimize": false
+      },
+      "bytes": 724,
+      "sha256": "2e7c06ea0586ca422fea6aabf86595d05da2b3b39ec8385b05e53a0103c4cb90"
+    },
+    {
+      "name": "lossless.webp",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGB",
+      "encodeOptions": {
+        "format": "WEBP",
+        "lossless": true,
+        "method": 6
+      },
+      "bytes": 142,
+      "sha256": "c884fabf219f2d5c2b948bd0ce235317d2c29614ac68396e9501e3f582228bae"
+    },
+    {
+      "name": "lossy.webp",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGB",
+      "encodeOptions": {
+        "format": "WEBP",
+        "quality": 80,
+        "method": 6
+      },
+      "bytes": 292,
+      "sha256": "0ec09ff5bf7bf991a85992984efdd2ace2ea3966a3a80d80becdbb5fc7337151"
+    },
+    {
+      "name": "alpha.webp",
+      "width": 96,
+      "height": 64,
+      "sourceMode": "RGBA",
+      "encodeOptions": {
+        "format": "WEBP",
+        "lossless": true,
+        "method": 6
+      },
+      "bytes": 172,
+      "sha256": "cc54b525cdddb673b111d6a43ba439f2960095d47e3588a8575095a19deeaf1b"
+    }
+  ]
+}

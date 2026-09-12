@@ -1,6 +1,6 @@
 use nuxie_html_to_riv::{compile,CompileInput};
 fn nested(depth:usize,css:&str,width:f32)->CompileInput {
-    CompileInput {html:format!("{}{}",(0..depth).map(|i|format!("<div id=n{i}>")).collect::<String>(),"</div>".repeat(depth)),css:format!("div{{width:1000000%;height:1px}}{css}"),width,height:32.}
+    CompileInput { assets: Default::default(),html:format!("{}{}",(0..depth).map(|i|format!("<div id=n{i}>")).collect::<String>(),"</div>".repeat(depth)),css:format!("div{{width:1000000%;height:1px}}{css}"),width,height:32.}
 }
 #[test]
 fn reproduced_nested_overflow_rejects_across_the_entire_viewport_domain() {

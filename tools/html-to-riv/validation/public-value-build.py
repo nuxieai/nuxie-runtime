@@ -27,7 +27,7 @@ def write(name, value):
 
 
 paths = sorted({
-    *(p for directory in ['src', 'js', 'tests', 'examples']
+    *(p for directory in ['src', 'js', 'tests', 'examples', 'fixtures/images']
       for p in (module / directory).rglob('*') if p.is_file()),
     *(module / name for name in ['Cargo.toml', 'Cargo.lock', 'package.json', 'package-lock.json']),
     *(p for pattern in ['*-cases.json', '*-rejections.json'] for p in (module / 'validation').glob(pattern)),
@@ -60,7 +60,7 @@ wasm_env = os.environ.copy()
 wasm_env['RUSTC'] = subprocess.check_output(['rustup', 'which', 'rustc'], text=True).strip()
 run('wasm-build', ['cargo', 'build', '--manifest-path', manifest, '--locked', '--target', 'wasm32-unknown-unknown', '--lib'], wasm_env)
 run('typescript', ['node', str(module / 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--module', 'nodenext',
-                   '--moduleResolution', 'nodenext', '--target', 'es2022', '--lib', 'es2022,dom', str(module / 'tests/types.mts')])
+                   '--moduleResolution', 'nodenext', '--target', 'es2022', '--lib', 'es2022,dom', str(module / 'tests/types.mts'), str(module / 'tests/image-types.ts')])
 assert all(sha(Path(row['path'])) == row['sha256'] for row in before), 'Source changed during build/tests'
 frozen = out / 'frozen'
 frozen.mkdir()
@@ -80,7 +80,7 @@ for original, name in [(module / 'target/debug/html-to-riv', 'html-to-riv'),
 print(json.dumps(dict(frozen=str(frozen), compilerSha256=sha(frozen / 'html-to-riv'), wasmSha256=sha(frozen / 'compiler.wasm'))), flush=True)
 node_env = os.environ.copy()
 node_env.update(HTML_TO_RIV_BIN=str(frozen / 'html-to-riv'), HTML_TO_RIV_WASM=str(frozen / 'compiler.wasm'))
-run('full-node', ['node', '--test', str(module / 'tests/transport-parity.mjs')], node_env)
+run('full-node', ['node', '--test', str(module / 'tests/transport-parity.mjs'), str(module / 'tests/image-transport.mjs')], node_env)
 run('runtime-guard', ['python3', str(module / 'validation/check-target-runtime.py')])
 assert all(sha(Path(row['path'])) == row['sha256'] for row in before), 'Source changed during transport validation'
 rust = (out / 'full-rust.log').read_text()

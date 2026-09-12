@@ -2,7 +2,7 @@
 use nuxie_html_to_riv::{CompileInput, compile};
 
 fn input(html: &str, css: &str) -> CompileInput {
-    CompileInput { html: html.into(), css: css.into(), width: 240., height: 160. }
+    CompileInput { assets: Default::default(), html: html.into(), css: css.into(), width: 240., height: 160. }
 }
 
 #[test]

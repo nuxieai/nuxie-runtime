@@ -1,7 +1,7 @@
 //! Public bounds semantics; pixel/layout qualification is recorded separately.
 use nuxie_html_to_riv::{CompileInput, compile};
 fn input(css: &str) -> CompileInput {
-    CompileInput { html:"<section id=p><div id=c></div></section>".into(), css:css.into(), width:240., height:160. }
+    CompileInput { assets: Default::default(), html:"<section id=p><div id=c></div></section>".into(), css:css.into(), width:240., height:160. }
 }
 fn equivalent(actual: &str, expected: &str) {
     assert_eq!(compile(&input(actual)).unwrap(), compile(&input(expected)).unwrap());

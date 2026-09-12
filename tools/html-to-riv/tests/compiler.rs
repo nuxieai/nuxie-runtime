@@ -1,7 +1,7 @@
 use nuxie_html_to_riv::{compile, CompileInput};
 
 fn input(html: &str, css: &str) -> CompileInput {
-    CompileInput { html: html.into(), css: css.into(), width: 390., height: 160. }
+    CompileInput { assets: Default::default(), html: html.into(), css: css.into(), width: 390., height: 160. }
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn inherited_current_color_resolves_at_each_descendant_not_at_parent() {
 
 #[test]
 fn top_level_background_inherits_the_explicit_host_reset() {
-    let input = CompileInput { html: "<div id=box></div>".into(),
+    let input = CompileInput { assets: Default::default(), html: "<div id=box></div>".into(),
         css: "#box{width:100px;height:40px;background-color:inherit}".into(), width:240.,height:160. };
     let inherited = compile(&input).unwrap();
     let literal = compile(&CompileInput { css:input.css.replace("inherit", "white"), ..input }).unwrap();

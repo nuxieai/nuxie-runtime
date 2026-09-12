@@ -283,7 +283,7 @@ mod tests {
     use crate::CompileInput;
     #[test]
     fn content_owner_marker_blocks_each_proof_even_with_otherwise_valid_domains() {
-        let input = CompileInput { html:"<div id=p><div id=a></div></div>".into(),
+        let input = CompileInput { assets: Default::default(), html:"<div id=p><div id=a></div></div>".into(),
             css:"#p{width:100px;height:80px;flex-direction:row}#a{width:20px;height:10px}".into(),width:240.,height:160. };
         let (output,mut groups)=compile_profile_with_descriptors(&input,FlexPolicy::Guarded).unwrap();
         let id=|name|output.source_map.iter().find(|n|n.id==name).unwrap().object_id;
@@ -301,7 +301,7 @@ mod tests {
     }
     #[test]
     fn actual_leaf_group_uses_ancestor_domains_and_explicit_guards() {
-        let input = CompileInput {
+        let input = CompileInput { assets: Default::default(),
             html: "<div id=p><div id=a></div><div id=b></div></div>".into(),
             css: "#p{width:50%;height:80px;flex-direction:row}#a,#b{height:20px;flex:.25 .25 20px}"
                 .into(),
@@ -332,7 +332,7 @@ mod tests {
         for direction in ["row", "row-reverse", "column", "column-reverse"] {
             let row = direction.starts_with("row");
             let cross = if row { "height" } else { "width" };
-            let input = CompileInput {
+            let input = CompileInput { assets: Default::default(),
                 html: "<div id=p><div id=a></div><div id=b></div></div>".into(),
                 css: format!(
                     "#p{{width:50%;height:50%;flex-direction:{direction}}}#a,#b{{{cross}:20px;flex:.25 .25 20px;background:#ff000080}}#a{{order:1}}"

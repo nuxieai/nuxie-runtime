@@ -8,7 +8,7 @@ struct Case { name:String,html:String,css:String,literal_css:String,#[serde(defa
 fn admitted()->bool{true}
 fn compare(case:&Case) {
     for (width,height) in [(240.,160.),(390.,200.),(768.,120.)] {
-        let input=|css:&str|CompileInput{html:case.html.clone(),css:css.into(),width,height};
+        let input=|css:&str|CompileInput{ assets: Default::default(),html:case.html.clone(),css:css.into(),width,height};
         let actual=compile(&input(&case.css));
         let expected=compile(&input(&case.literal_css));
         if case.accepted {
@@ -43,7 +43,7 @@ fn historical_nonempty_tokens_recover_only_with_explicit_unset_controls(){
     let cases:Vec<Rejection>=serde_json::from_str(include_str!("../validation/public-empty-variable-rejections.json")).unwrap();
     assert_eq!(cases.len(),27);
     for case in cases {
-        let request=CompileInput{html:case.html,css:case.css,width:240.,height:160.};
+        let request=CompileInput{ assets: Default::default(),html:case.html,css:case.css,width:240.,height:160.};
         if value_token_history::assert_recovery("public-empty-variable-rejections.json",&case.name,&request) { continue; }
         assert!(compile(&request).is_err(),"{}",case.name);
     }
@@ -53,10 +53,10 @@ fn historical_nonempty_tokens_recover_only_with_explicit_unset_controls(){
 fn empty_first_component_does_not_hide_excessive_later_expansion(){
     let environment=format!("--empty:;--large:{};","x".repeat(40_000));
     for empty in ["var(--empty)","var(--missing,)"] {
-        let request=|suffix:&str|CompileInput{html:"<div id=a></div>".into(),css:format!("#a{{{environment}width:{empty} {suffix}}}"),width:240.,height:160.};
+        let request=|suffix:&str|CompileInput{ assets: Default::default(),html:"<div id=a></div>".into(),css:format!("#a{{{environment}width:{empty} {suffix}}}"),width:240.,height:160.};
         assert!(compile(&request("")).is_ok(),"empty control");
         let nonempty=request("var(--large)");
-        let unset=CompileInput{html:nonempty.html.clone(),css:format!("#a{{{environment}width:unset}}"),width:240.,height:160.};
+        let unset=CompileInput{ assets: Default::default(),html:nonempty.html.clone(),css:format!("#a{{{environment}width:unset}}"),width:240.,height:160.};
         assert_eq!(compile(&nonempty).unwrap(),compile(&unset).unwrap(),"one bounded expansion has a definite wrong width keyword and computes unset");
         let excess=compile(&request("var(--large) var(--large)")).unwrap_err();
         assert!(excess.iter().any(|d|d.code=="input-limit"),"excess must propagate after empty first component: {excess:?}");

@@ -1,7 +1,7 @@
 //! Compiler descriptor and admission tests; visual resize proof is separate.
 use nuxie_html_to_riv::{CompileInput, compile};
 fn request(html: &str, css: &str, width: f32) -> CompileInput {
-    CompileInput {
+    CompileInput { assets: Default::default(),
         html: html.into(),
         css: css.into(),
         width,

@@ -1,6 +1,6 @@
 use nuxie_html_to_riv::{compile, CompileInput, CompileOutput};
 fn input(css: &str) -> CompileInput {
-    CompileInput { html: "<div id=p><div id=a></div><div id=b></div></div>".into(), css: format!("#p{{width:160px;height:100px;flex-direction:row}}#a,#b{{width:30px;height:20px;background:red}}{css}"), width: 240., height: 160. }
+    CompileInput { assets: Default::default(), html: "<div id=p><div id=a></div><div id=b></div></div>".into(), css: format!("#p{{width:160px;height:100px;flex-direction:row}}#a,#b{{width:30px;height:20px;background:red}}{css}"), width: 240., height: 160. }
 }
 fn scene(css: &str) -> CompileOutput { compile(&input(css)).unwrap() }
 #[test]

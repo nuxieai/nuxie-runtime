@@ -3,7 +3,7 @@ use nuxie_html_to_riv::{CompileInput, compile};
 
 fn equivalent(html: &str, actual: &str, expected: &str) {
     for width in [240., 390., 768.] {
-        let input = |css: &str| CompileInput { html: html.into(), css: css.into(), width, height:160. };
+        let input = |css: &str| CompileInput { assets: Default::default(), html: html.into(), css: css.into(), width, height:160. };
         assert_eq!(compile(&input(actual)).unwrap(), compile(&input(expected)).unwrap(), "{actual}");
     }
 }
@@ -68,7 +68,7 @@ fn invalid_values_and_contextual_overflow_fail_with_diagnostics() {
         "#p{font-size:1000000px}#c{font-size:200%}",
         "#p{font-size:1000000px}#c{font-size:2em}",
     ] {
-        let input = CompileInput { html:"<div id=p><div id=c></div></div>".into(), css:css.into(), width:240., height:160. };
+        let input = CompileInput { assets: Default::default(), html:"<div id=p><div id=c></div></div>".into(), css:css.into(), width:240., height:160. };
         let errors=compile(&input).unwrap_err();
         assert!(!errors[0].source.is_empty(), "{css}");
         assert_eq!(errors[0].code,"unsupported-target-semantics", "{css}");
@@ -81,6 +81,6 @@ fn font_context_does_not_admit_glyphs_or_bypass_percentage_height_guard() {
         ("<div>hello</div>", "div{font-size:16px}"),
         ("<div id=p><div id=c></div></div>", "#p{font-size:16px;height:auto}#c{height:50%}"),
     ] {
-        assert!(compile(&CompileInput {html:html.into(),css:css.into(),width:240.,height:160.}).is_err());
+        assert!(compile(&CompileInput { assets: Default::default(),html:html.into(),css:css.into(),width:240.,height:160.}).is_err());
     }
 }

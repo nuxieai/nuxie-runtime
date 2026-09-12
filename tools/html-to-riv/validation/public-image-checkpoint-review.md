@@ -1,0 +1,50 @@
+# Public authored images on the immutable runtime
+
+The public compiler now accepts explicitly supplied static image bytes and produces ordinary self-contained Rive scenes. It handles intrinsic and declared image dimensions, fit, position, clipping, sampling, cascade and exact-byte asset deduplication through existing file objects. The runtime, renderer, schema, root Cargo configuration and shared dependency sources remain unchanged.
+
+This is a usable, partially qualified image profile, not general browser-image equivalence. Its public corpus passes **216/216 geometry, 198/216 pixel and 216/216 presence comparisons**. Eighteen fractional-paint failures remain documented and visible. Broader image layouts and codec representations remain backlog work; [SUPPORT.md](../SUPPORT.md) defines the actual accepted input and exclusions.
+
+## Implementation and boundaries
+
+Rust `CompileInput` gains a default-empty `assets` map; existing Rust struct constructors must supply that field. CLI/raw WASM JSON can omit it. Entries are `{kind:"image",bytes:[...]}` and public JavaScript additionally accepts Uint8Array/subarrays. `img src` resolves an exact, case-sensitive key, never a URL or path loader. The compiler validates every supplied asset, including unused ones, and embeds original encoded bytes unchanged. Byte-identical aliases share one asset; distinct encodings remain distinct even when their decoded pixels match. Empty assets preserve existing box-only files.
+
+Portable compiler decoding uses baseline-version PNG, WebP and JPEG libraries from the isolated compiler manifest. No dependency override, vendor edit or host decoder hook is installed. Container checks reject unqualified metadata and representations. A compiler-owned JPEG entropy validator prevents the demonstrated missing-data recovery mismatch; the existing library still performs pixel decoding. See the [codec/source plan](public-image-plan.md), [independent JPEG review](public-image-jpeg-review.md) and [asset-boundary review](public-image-assets-review.md). The initial JPEG profile is three-component 4:4:4 only; subsampling and other listed representations remain explicit diagnostics.
+
+The emitted file uses existing ImageAsset/FileAssetContents records plus Image and LayoutParticipant children of ordinary layout owners. Global asset records are inserted after descriptor extraction to preserve artboard-local object indices and authored source maps. The narrow nearest-sampler writer uses baseline consumer property 1076; it does not change the schema or add a runtime field. Optional source maps remain observational and are never installed as rendering policy.
+
+Both-auto start-aligned images use dimensions derived from encoded bytes. Both-auto stretch uses an ordinary 100% cross-axis owner and the existing aspect ratio, allowing the native engine to resolve the ratio before measuring the main axis. This repairs all four retained root/column/row/reverse-row stretch failures and remains responsive inside the same file. A fixed main size with an automatic stretched cross size deliberately preserves CSS stretch distortion. Own padding, nondefault min/max, automatic margins, alignment wrappers/baselines, unresolved containing dimensions and broader flex growth still diagnose.
+
+Object fit supports fill/contain/cover/none/scale-down; position supports the documented one/two-value keyword/percentage profile; sampling supports auto/pixelated through the existing linear/nearest modes. Fractional pixelated equivalence is not established. The new [receiving-value grammar](image-variable-recovery-review.md) recovers definite-invalid variable substitutions as unset without rolling back cascade priority or accepting valid unsupported CSS.
+
+## Final public compiler and regression evidence
+
+The final [build](../output/public-image-build-r2/summary.json) passes **301 Rust tests, 56 Node tests, strict TypeScript, native and WASM compilation**, plus the immutable source guard. Source remained stable throughout the build and transport run; 153 frozen bindings are retained. The first full run's obsolete empty-assets rejection fixture is preserved in `output/public-image-build-r1/full-rust.log`; the fixture now tests an invalid array-shaped asset map instead.
+
+- CLI SHA-256: `8f49ac9a7272f0770cc3ae67eb29755830219ff5af0716741b2f77735aa218df`.
+- WASM SHA-256: `2e636686877bdebf9e8c70352ae28a98f3ecba4cb00f224386267f0363c899bf`.
+- [794 prior public outputs](../output/public-transport-malformed-image-regression-r1/receipt.json) remain exact Rive bytes and source maps.
+- The [final 40-case compilation](../output/public-image-layout-r3/compile-receipt.json) has 27 successes and 13 intended diagnostics; all expected outcomes match. All 27 final files/maps and all 40 requests match the measured r2 candidate exactly.
+- [All 40 cases through raw ABI and public JS](../output/public-image-parity-r1/receipt.json) match CLI outputs or diagnostics: 80 additional interface observations. The ordinary Node suite also compares all seven codec fixtures at three compile viewports and tests ownership, special keys, typed arrays, errors and recovery.
+- The [86-case asset campaign](../output/public-image-assets-r1/receipt.json) passes 252 observations: 86 CLI, 86 raw ABI and 80 JS. Six raw JSON spelling/duplicate-key controls have no JS object equivalent. Limits, malformed PNG/JPEG/WebP, unused invalid assets, exact encoded deduplication boundaries, preserved output and subsequent recovery are covered. It verifies 2,373 case artifacts, 62 encoded fixtures and all 153 compiler bindings. It does not establish peak process memory, aggregate decoded/GPU resource use or worst-case CPU behavior.
+
+The public input diagnostic for unknown JS fields now accurately lists optional assets. Omitted/empty assets are newly valid; malformed named values remain structured errors. These intentional contract changes supersede older asset-rejection expectations, not the unchanged 794 valid-output references.
+
+## Chrome/native and visual evidence
+
+Pinned Chrome is **153.0.8010.12**. The native tools are the unchanged baseline importer and Rust Metal renderer in effective RasterOrdering mode (`clockwise-atomic` is the CLI token). Each file is compiled once, imported without a runtime policy, cloned, resized through 240×240 → 390×320 → 768×560 → 240×240 on original and clone, and rendered from ordinary native streams.
+
+The private 31-scene campaign remains prerequisite evidence only: 28 candidates pass 224 geometry and 214 pixel comparisons; three direct controls retain 24 geometry/pixel failures. Its body layout differs from the public reset. The public run therefore captured its own browser and native output.
+
+The first public browser capture reused image URLs across cases, permitting Chrome's decoded-image cache to substitute an earlier asset. That invalid reference run is preserved. The corrected capture namespaces URLs by case and run while preserving authored src attributes; it serves the exact supplied bytes. Its native renders are reused only through verified Rive/stream/geometry/PNG identity. The original corrected driver was subsequently recovered byte-for-byte against its capture-time SHA-256; see `output/public-image-layout-r1/recovered-reference-driver/receipt.json`.
+
+The stretch change modifies exactly four ordinary files. Their 32 fresh frames join 184 verified unchanged frames in the [combined receipt](../output/public-image-layout-r2/combined-receipt.json). Final compiler integration reproduces those measured files exactly, so no additional native rerender is warranted. The [visual review](public-image-visual-review.md) directly inspects 45 representative full pairs on 12 unscaled sheets and all four before/after stretch triples. Another 171 frames have verified complete-RGBA or opaque-white-extension proofs. All 216 frames are covered; no failing frame is dropped. The root reviewer also inspected the stretch triples and image inheritance/alias sheet.
+
+The [32 alternate-clear checks](../output/public-image-clear-r1/receipt.json) pass for alpha and overlapping-image scenes on original and clone. Cyan and transparent clears produce exactly the same complete RGBA images as the default clear, demonstrating that these scenes paint their own white host background. This is a targeted composition check, not new browser or arbitrary image qualification.
+
+Remaining pixel failures are eight column-tail frames at proportional height, four fractional-linear frames, four fractional-nearest frames, and two fractional contain-position frames. The column's Chrome/native used heights are 133.328125 and 133.33333; geometry passes the existing 0.1px gate, while the small tail exposes a real boundary-paint mismatch. Larger white viewports can change whole-frame ratios without eliminating visible edge differences. All existing tolerances, local-region gates and failures are retained.
+
+## Reproduction and next work
+
+Run the full build helper with a fresh directory; compile the corpus with `public-image-compile.py --build BUILD_DIR`; run `public-image-parity.mjs` against that frozen build. `public-image-native.mjs` performs fresh public capture and optionally selects changed cases; `public-image-transfer.py` verifies unchanged joins. `public-image-visual.py` produces the review gallery; direct inspection is a separate recorded step. `public-image-assets.mjs` runs the finite new asset campaign. Exact commands, source hashes and tool identities are retained in their receipts.
+
+L14 and I01–I05/I09 now have public partial-support evidence. Next work includes broader intrinsic/layout combinations, additional aspect ratios, fractional sampling/positioning, common JPEG subsampling and extended image representations. Orientation, color-managed images, SVG, CSS aspect-ratio declarations, fonts/text, other painting/layout features and the rest of the 99-item backlog remain open. This checkpoint neither finishes the goal nor establishes that unresolved ordinary-file compositions are impossible.

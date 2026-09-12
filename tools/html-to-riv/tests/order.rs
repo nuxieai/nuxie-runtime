@@ -1,6 +1,6 @@
 //! Compiler ordering semantics; browser/native qualification is separate.
 use nuxie_html_to_riv::{compile, CompileInput, CompileOutput};
-fn input(css:&str)->CompileInput { CompileInput{html:"<div id=p><div id=a></div><div id=b></div><div id=c></div><div id=d></div></div>".into(),css:css.into(),width:240.,height:160.} }
+fn input(css:&str)->CompileInput { CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div><div id=b></div><div id=c></div><div id=d></div></div>".into(),css:css.into(),width:240.,height:160.} }
 fn scene(css:&str)->CompileOutput {compile(&input(css)).unwrap()}
 fn file_order(scene:&CompileOutput)->Vec<&str> {
     let mut nodes:Vec<_>=scene.source_map.iter().filter(|n|n.id!="p").collect();nodes.sort_by_key(|n|n.object_id);nodes.into_iter().map(|n|n.id.as_str()).collect()
@@ -54,7 +54,7 @@ fn invalid_lexemes_and_overflow_reject_even_when_overridden_or_unmatched() {
 #[test]
 fn sibling_precomputation_keeps_global_element_limit() {
     for html in ["<div></div>".repeat(8193), format!("<div>{}</div><div></div>", "<div></div>".repeat(8191))] {
-        let errors=compile(&CompileInput{html,css:String::new(),width:240.,height:160.}).unwrap_err();
+        let errors=compile(&CompileInput{ assets: Default::default(),html,css:String::new(),width:240.,height:160.}).unwrap_err();
         assert_eq!(errors[0].code,"object-limit");
     }
 }

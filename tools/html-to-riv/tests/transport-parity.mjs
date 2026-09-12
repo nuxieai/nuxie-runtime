@@ -55,17 +55,17 @@ test('CLI and WASM produce exact ordinary Rive bytes and source map',async()=>{
 
 test('strict document contract and owned output survive failures and subsequent calls',async()=>{
  const compiler=await createCompiler(new WebAssembly.Module(wasm));const first=compiler.compile(document);assert.equal(first.ok,true);const retained=first.riv.slice();
- for(const bad of [null,[],{...document,languageVersion:'nuxie-html-v1'},{...document,assets:{}},{...document,runtimeRequirements:{}},{...document,width:NaN},{...document,css:undefined}])assert.equal(compiler.compile(bad).ok,false);
+ for(const bad of [null,[],{...document,languageVersion:'nuxie-html-v1'},{...document,assets:[]},{...document,runtimeRequirements:{}},{...document,width:NaN},{...document,css:undefined}])assert.equal(compiler.compile(bad).ok,false);
  const rejected=compiler.compile({...document,css:'#box{display:grid;}'});assert.equal(rejected.ok,false);
  const next=compiler.compile(document);assert.equal(next.ok,true);assert.deepEqual(first.riv,retained);assert.deepEqual(next.riv,retained);
  first.riv[0]^=255;assert.deepEqual(compiler.compile(document).riv,retained);
 });
 
-test('raw ABI version2 rejects old language and unknown assets without stale output',async()=>{
+test('raw ABI version2 rejects old language and malformed assets without stale output',async()=>{
  const {instance}=await WebAssembly.instantiate(wasm,{});const w=instance.exports;assert.equal(w.html_compiler_abi_version(),2);
  const compile=request=>{const bytes=new TextEncoder().encode(JSON.stringify(request));const ptr=w.html_compiler_request_alloc(bytes.length)>>>0;assert(ptr);new Uint8Array(w.memory.buffer,ptr,bytes.length).set(bytes);const status=w.html_compiler_compile();const metadata=JSON.parse(new TextDecoder().decode(new Uint8Array(w.memory.buffer,w.html_compiler_metadata_ptr()>>>0,w.html_compiler_metadata_len()>>>0)));return{status,metadata};};
  assert.equal(compile({languageVersion:LANGUAGE_VERSION,input}).status,0);assert(w.html_compiler_riv_len()>0);
- for(const request of [{languageVersion:'nuxie-html-v1',input},{languageVersion:LANGUAGE_VERSION,input:{...input,assets:{}}}]){assert.equal(compile(request).status,1);assert.equal(w.html_compiler_riv_len(),0);}
+ for(const request of [{languageVersion:'nuxie-html-v1',input},{languageVersion:LANGUAGE_VERSION,input:{...input,assets:[]}}]){assert.equal(compile(request).status,1);assert.equal(w.html_compiler_riv_len(),0);}
  assert.equal(w.html_compiler_request_alloc(0),0);assert.equal(w.html_compiler_request_alloc(0xffffffff),0);w.html_compiler_reset();assert.equal(w.html_compiler_metadata_len(),0);assert.equal(w.html_compiler_riv_len(),0);
 });
 

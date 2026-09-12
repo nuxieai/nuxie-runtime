@@ -3,7 +3,7 @@ use nuxie_html_to_riv::{compile, CompileInput, CompileOutput};
 use nuxie_schema::{definition_by_type_key,FieldKind};
 use serde_json::{Value,json};
 use std::collections::BTreeMap;
-fn input(css:&str)->CompileInput {CompileInput{html:"<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div>".into(),css:css.into(),width:240.,height:160.}}
+fn input(css:&str)->CompileInput {CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div><div id=b><div id=leaf></div></div><div id=c></div></div>".into(),css:css.into(),width:240.,height:160.}}
 fn scene(css:&str)->CompileOutput {compile(&input(css)).unwrap()}
 const FIXED:&str="#p{flex-direction:row;height:100px}#a,#b,#c{align-self:baseline}#a{height:20px}#b{height:60px}#leaf{height:10px}#c{height:40px}";
 fn uint(bytes:&[u8],i:&mut usize)->u32 {let mut result=0;for shift in (0..35).step_by(7){let b=bytes[*i];*i+=1;result|=((b&127)as u32)<<shift;if b<128{return result}}panic!("bad varuint")}
@@ -77,7 +77,7 @@ fn intrinsic_empty_and_column_metrics_use_fixed_used_heights() {
         ("max-height:30px", 50., 40.),
         ("min-height:90px;max-height:30px", 110., 40.),
     ] {
-        let request = CompileInput {
+        let request = CompileInput { assets: Default::default(),
             html: "<div id=p><div id=a><div id=x></div><div id=y></div></div><div id=b></div></div>".into(),
             css: format!("#p{{flex-direction:row}}#a{{align-self:baseline;{bounds}}}#x{{height:20px;order:-1}}#y{{height:40px}}#b{{height:40px;align-self:first baseline}}"),
             width:240., height:160.,
@@ -90,7 +90,7 @@ fn intrinsic_empty_and_column_metrics_use_fixed_used_heights() {
         assert!((target.1["originY"].as_f64().unwrap()-expected_ascent/expected_extent).abs()<1e-6);
     }
     for (bounds, height) in [("",0.), ("min-height:30px",30.), ("min-height:30px;max-height:10px",30.)] {
-        let request = CompileInput { html:"<div id=p><div id=a></div></div>".into(), css:format!("#p{{flex-direction:row}}#a{{align-self:baseline;{bounds}}}"),width:240.,height:160. };
+        let request = CompileInput { assets: Default::default(), html:"<div id=p><div id=a></div></div>".into(), css:format!("#p{{flex-direction:row}}#a{{align-self:baseline;{bounds}}}"),width:240.,height:160. };
         let records=decoded(&compile(&request).unwrap());
         assert_eq!(records.iter().filter(|(kind,_)|kind=="LayoutComponent").last().unwrap().1["height"],json!(height));
     }
@@ -106,14 +106,14 @@ fn unresolved_intrinsic_metrics_and_oversized_sums_reject() {
         "#x{height:600000px}#y{height:600000px}#a{max-height:100px}",
         "#a{flex-direction:column-reverse}",
     ] {
-        let request=CompileInput {html:"<div id=p><div id=a><div id=x></div><div id=y></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{align-self:baseline}}#x{{height:20px}}#y{{height:40px}}{extra}"),width:240.,height:160.};
+        let request=CompileInput { assets: Default::default(),html:"<div id=p><div id=a><div id=x></div><div id=y></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{align-self:baseline}}#x{{height:20px}}#y{{height:40px}}{extra}"),width:240.,height:160.};
         assert!(compile(&request).is_err(),"{extra}");
     }
 }
 
 #[test]
 fn intrinsic_column_baseline_uses_first_order_modified_descendant() {
-    let request=CompileInput {html:"<div id=p><div id=a><div id=x></div><div id=y></div></div><div id=b></div></div>".into(),css:"#p{flex-direction:row}#a,#b{align-self:baseline}#x{height:20px}#y{height:40px;order:-1}#b{height:40px}".into(),width:240.,height:160.};
+    let request=CompileInput { assets: Default::default(),html:"<div id=p><div id=a><div id=x></div><div id=y></div></div><div id=b></div></div>".into(),css:"#p{flex-direction:row}#a,#b{align-self:baseline}#x{height:20px}#y{height:40px;order:-1}#b{height:40px}".into(),width:240.,height:160.};
     let output=compile(&request).unwrap();let records=decoded(&output);
     assert_eq!(records.iter().filter(|(kind,_)|kind=="LayoutComponent").last().unwrap().1["height"],json!(60.));
     let anchor=records.iter().find(|(kind,values)|kind=="ComponentOrigin" && values["parentId"]==json!(output.source_map[1].object_id)).unwrap();
@@ -138,7 +138,7 @@ fn last_baseline_targets_parent_bottom_with_derived_descent() {
     assert_eq!(output,scene(&css));
     assert_eq!(output,scene(&css.replace("align-self:last baseline","--v:last baseline;align-self:var(--v)")));
     for value in ["initial","unset"] {assert_eq!(scene(&format!("{css}#a{{align-self:{value}}}")),scene(&format!("{css}#a{{align-self:auto}}")));}
-    let nested=CompileInput {html:"<div id=p><div id=a><div id=b></div></div></div>".into(),css:"#p{flex-direction:row;height:100px}#a{align-self:last baseline;flex-direction:row;height:60px}#b{align-self:inherit;height:10px}".into(),width:240.,height:160.};
+    let nested=CompileInput { assets: Default::default(),html:"<div id=p><div id=a><div id=b></div></div></div>".into(),css:"#p{flex-direction:row;height:100px}#a{align-self:last baseline;flex-direction:row;height:60px}#b{align-self:inherit;height:10px}".into(),width:240.,height:160.};
     // Grammar preserves inherited last-baseline identity; the outer row
     // participant itself still requires a separately proven nested metric.
     assert!(compile(&nested).is_err());
@@ -148,7 +148,7 @@ fn last_baseline_targets_parent_bottom_with_derived_descent() {
 #[test]
 fn last_metrics_follow_deep_order_modified_descendants() {
     for (extra,ascent) in [("",35.),("#x{order:2}",50.)] {
-        let request=CompileInput {html:"<div id=p><div id=a><div id=x></div><div id=y><div id=z></div></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{height:100px;align-self:last baseline}}#x{{height:30px}}#y{{height:20px}}#z{{height:5px}}{extra}"),width:240.,height:160.};
+        let request=CompileInput { assets: Default::default(),html:"<div id=p><div id=a><div id=x></div><div id=y><div id=z></div></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{height:100px;align-self:last baseline}}#x{{height:30px}}#y{{height:20px}}#z{{height:5px}}{extra}"),width:240.,height:160.};
         let output=compile(&request).unwrap();let records=decoded(&output);
         let anchor=records.iter().find(|(kind,values)|kind=="ComponentOrigin" && values["parentId"]==json!(output.source_map[1].object_id)).unwrap();
         assert!((anchor.1["originY"].as_f64().unwrap()-ascent/100.).abs()<1e-6);
@@ -158,7 +158,7 @@ fn last_metrics_follow_deep_order_modified_descendants() {
 
 #[test]
 fn first_and_last_groups_measure_independent_extents() {
-    let request=CompileInput {html:"<div id=p><div id=a><div id=x></div></div><div id=b></div><div id=c><div id=y></div></div><div id=d></div></div>".into(),css:"#p{flex-direction:row}#a,#b{align-self:first baseline}#c,#d{align-self:last baseline}#a{height:60px}#x{height:10px}#b{height:20px}#c{height:30px}#y{height:10px}#d{height:40px}".into(),width:240.,height:160.};
+    let request=CompileInput { assets: Default::default(),html:"<div id=p><div id=a><div id=x></div></div><div id=b></div><div id=c><div id=y></div></div><div id=d></div></div>".into(),css:"#p{flex-direction:row}#a,#b{align-self:first baseline}#c,#d{align-self:last baseline}#a{height:60px}#x{height:10px}#b{height:20px}#c{height:30px}#y{height:10px}#d{height:40px}".into(),width:240.,height:160.};
     let records=decoded(&compile(&request).unwrap());
     let layouts:Vec<_>=records.iter().filter(|(kind,_)|kind=="LayoutComponent").collect();
     let helpers=&layouts[layouts.len()-2..];
@@ -170,11 +170,11 @@ fn first_and_last_groups_measure_independent_extents() {
 #[test]
 fn last_intrinsic_bounds_zero_and_unresolved_profiles() {
     for (bounds,descent) in [("",0.),("min-height:90px",30.),("max-height:90px",0.),("min-height:90px;max-height:20px",30.)] {
-        let request=CompileInput{html:"<div id=p><div id=a><div id=x></div><div id=y></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{align-self:last baseline;{bounds}}}#x{{height:20px}}#y{{height:40px}}"),width:240.,height:160.};
+        let request=CompileInput{ assets: Default::default(),html:"<div id=p><div id=a><div id=x></div><div id=y></div></div></div>".into(),css:format!("#p{{flex-direction:row}}#a{{align-self:last baseline;{bounds}}}#x{{height:20px}}#y{{height:40px}}"),width:240.,height:160.};
         let records=decoded(&compile(&request).unwrap());
         assert_eq!(records.iter().find(|(kind,values)|kind=="Node" && values.contains_key("y")).unwrap().1["y"],json!(-descent));
     }
-    let zero=CompileInput{html:"<div id=p><div id=a></div></div>".into(),css:"#p{flex-direction:row}#a{align-self:last baseline;height:0}".into(),width:240.,height:160.};
+    let zero=CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div></div>".into(),css:"#p{flex-direction:row}#a{align-self:last baseline;height:0}".into(),width:240.,height:160.};
     let records=decoded(&compile(&zero).unwrap());
     assert_eq!(records.iter().find(|(kind,_)|kind=="ComponentOrigin").unwrap().1["originY"],json!(0.));
     for css in [
@@ -188,7 +188,7 @@ fn last_intrinsic_bounds_zero_and_unresolved_profiles() {
 
 #[test]
 fn last_group_record_growth_is_bounded_per_authored_participant() {
-    let mut request=CompileInput{html:"<main>".into(),css:"section{flex-direction:row;height:1px}div{height:1px;align-self:last baseline}".into(),width:240.,height:160.};
+    let mut request=CompileInput{ assets: Default::default(),html:"<main>".into(),css:"section{flex-direction:row;height:1px}div{height:1px;align-self:last baseline}".into(),width:240.,height:160.};
     for _ in 0..128 {request.html.push_str("<section><div></div></section>");}request.html.push_str("</main>");
     let aligned=compile(&request).unwrap();
     request.css=request.css.replace("last baseline","flex-start");let unaligned=compile(&request).unwrap();

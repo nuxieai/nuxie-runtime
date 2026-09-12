@@ -1,0 +1,29 @@
+# Receiving-value recovery for image properties
+
+`object-fit`, `object-position` and `image-rendering` now participate in the existing conservative variable-recovery pipeline. A definitely invalid substituted value computes as unset at its original cascade priority. Literal invalid CSS still diagnoses; valid unsupported and unclassified values still reach target diagnostics. This change adds no image layout, asset, renderer or runtime capability.
+
+The production diff is confined to [value_grammar.rs](../src/value_grammar.rs): three property registrations and two focused grammar helpers. Existing primitive productions, numeric token parsing and global syntax/resource behavior are unchanged. [image-variable-recovery.rs](../tests/image-variable-recovery.rs) tests the public API against independently authored literal/unset controls and compares complete RIV bytes and source maps.
+
+## Deliberate grammar boundary
+
+| Property | Classified grammar | Preserved diagnostic boundary |
+| --- | --- | --- |
+| object-fit | Five single keywords; contain/cover paired with scale-down in either order | CSS Images 4 combinations and vendor extensions are never mistaken for invalid values merely because target admission rejects them |
+| object-position | Physical one/two/four-component positions; signed lengths and unrestricted percentages; nonzero unitless numbers are invalid | Logical positions, unknown units, opaque functions and numeric overflow remain conservatively unclassified; valid lengths, offsets and outside percentages remain target diagnostics |
+| image-rendering | auto, smooth, high-quality, pixelated, crisp-edges and legacy optimizeSpeed/optimizeQuality | Recognition is receiving grammar only; it does not qualify their sampling implementation |
+
+The physical position grammar distinguishes reorderable axis keywords from ordered length/percentage components. For example, `top left` is valid while `top 50%` and `50% left` are invalid. The generic position production excludes the three-value extension used by background-position. [CSS Values 4, position](https://drafts.csswg.org/css-values-4/#position). New logical positions are retained without applying physical-axis rules to them. [CSS Values 5, position](https://drafts.csswg.org/css-values-5/#position).
+
+Two-keyword object-fit combinations remain valid receiving grammar even though the pinned browser and current target reject them. [CSS Images 4, object-fit](https://drafts.csswg.org/css-images-4/#the-object-fit). The image-rendering grammar includes newer/deprecated values; only image-rendering inherits, while object-fit and object-position reset on unset. [CSS Images 3, image rendering](https://drafts.csswg.org/css-images-3/#the-image-rendering), [object positioning](https://drafts.csswg.org/css-images-3/#the-object-position).
+
+## Evidence
+
+The [71-case corpus](image-variable-recovery-cases.json) is shared by the new public tests and [browser driver](image-variable-recovery-browser.mjs). It contains 31 invalid/unset cases, 16 admitted literal-equivalence cases and 24 retained-diagnostic forms. Cases include wrong keywords/types/arity, non-CSS whitespace, escaped token contents, physical axes, signed/outside offsets, raw numeric underflow, modern grammar, vendor extensions and opaque functions. This is a bounded representative matrix, not a complete CSS grammar campaign.
+
+The [Chrome receipt](../output/playwright/image-variable-recovery-r1/receipt.json) records **71 cases, zero expectation failures, Chrome 153.0.8010.12**. For every invalid value, its literal declaration retained the previous computed value, while its variable declaration matched explicit unset. Each previous/unset pair differed, exposing accidental cascade rollback. Supported valid variable values matched their literal controls. The receipt also records CSS.supports results for spec-valid forms unsupported by this Chrome; those results are not used to justify recovery. It binds the exact corpus, driver, reset and source image; the reference HTML is retained beside the receipt.
+
+Before production changes, the focused public suite recorded **2 tests passing and 2 failing**, including all 31 requested primitive recoveries still diagnosing. [Red log](../output/image-variable-recovery-r1/red.log), [red source/command receipt](../output/image-variable-recovery-r1/red-receipt.json). After the change, **all 4 new tests, all 9 existing public primitive-grammar tests, and all 133 library tests passed**. [Green log](../output/image-variable-recovery-r1/green.log), [green receipt](../output/image-variable-recovery-r1/green-receipt.json). The additional public tests cover inherited custom-property aliases, present-invalid values ignoring fallback, important priority, CSS-wide fallback and deterministic source identities. Existing vendor decoder/compiler warnings are retained in these logs.
+
+The [aggregate receipt](../output/image-variable-recovery-r1/receipt.json) binds source, corpus, driver and logs. Production and tests were held stable for the parent-owned final build. Source SHA256 is `05cd845efdabfc755346a57e61b8dc5a31baf5595844224c5871b22e1117eb11`; test SHA256 is `8e21ccfbd2f9047565ce0a5b29beaa68e392dfe6b672bd129c7e9f5c48144557`; corpus SHA256 is `cf3f4e40b16e7c2cd210e8d8bd4bc1c295de3dbc483af2e2c3ebc2f99637ecd1`. Red and green source snapshots are preserved beside their receipts.
+
+No native rendering or visual evidence transfer was performed by this subtask. Exact public byte/map equivalence proves that the repaired inputs select the same ordinary scene as their controls; the browser receipt separately establishes the selected receiving-value semantics. It does not remove retained image sampling failures or confer broad image-layout qualification. The parent owns final transport/full-build checks and public native image qualification.

@@ -254,7 +254,7 @@ fn compile(input: &CompileInput) -> Result<CompileOutput, Vec<crate::Diagnostic>
 use nuxie_schema::{definition_by_type_key, FieldKind};
 use serde_json::{Value,json};
 use std::collections::BTreeMap;
-fn input(css: &str)->CompileInput { CompileInput { html:"<div id=p><div id=a><div id=leaf></div></div><div id=b></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b{{height:20px}}#leaf{{width:10px;height:10px}}{css}"),width:240.,height:160. } }
+fn input(css: &str)->CompileInput { CompileInput { assets: Default::default(), html:"<div id=p><div id=a><div id=leaf></div></div><div id=b></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b{{height:20px}}#leaf{{width:10px;height:10px}}{css}"),width:240.,height:160. } }
 fn scene(css:&str)->CompileOutput {compile(&input(css)).unwrap()}
 fn uint(bytes:&[u8],i:&mut usize)->u32 {let mut result=0;for shift in (0..35).step_by(7){let b=bytes[*i];*i+=1;result|=((b&127)as u32)<<shift;if b<128{return result}}panic!("bad varuint")}
 fn decoded(output:&CompileOutput)->Vec<(String,BTreeMap<String,Value>)> {

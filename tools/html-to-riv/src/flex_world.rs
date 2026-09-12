@@ -50,7 +50,7 @@ mod tests {
     #[test]
     fn nested_actual_groups_account_for_parent_translation_and_far_corners() {
         for direction in ["row","row-reverse","column","column-reverse"] {
-            let input=CompileInput{html:"<div id=p><div id=a></div><div id=b><div id=c></div></div></div>".into(),css:format!("#p{{width:100px;height:100px;flex-direction:{direction}}}#a{{width:20px;height:20px}}#b{{width:30px;height:30px}}#c{{width:5px;height:5px}}"),width:200.,height:200.};
+            let input=CompileInput{ assets: Default::default(),html:"<div id=p><div id=a></div><div id=b><div id=c></div></div></div>".into(),css:format!("#p{{width:100px;height:100px;flex-direction:{direction}}}#a{{width:20px;height:20px}}#b{{width:30px;height:30px}}#c{{width:5px;height:5px}}"),width:200.,height:200.};
             let (output,groups)=compile_profile_with_descriptors(&input,FlexPolicy::Candidate).unwrap();
             let size=flex_sizes::propagate(&groups,[ErrorEnvelope::new(200.,200.,0.).unwrap();2]);
             let roots=[ErrorEnvelope::new(1_000_000.,1_000_000.,0.1).unwrap();2];

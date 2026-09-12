@@ -1,6 +1,6 @@
 //! Only legacy computed flex is publicly admitted until candidate qualification.
 use nuxie_html_to_riv::{compile, CompileInput};
-fn input(css: &str) -> CompileInput { CompileInput { html:"<div id=p><div id=a></div><div id=b></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}{css}"),width:240.,height:160. } }
+fn input(css: &str) -> CompileInput { CompileInput { assets: Default::default(), html:"<div id=p><div id=a></div><div id=b></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}{css}"),width:240.,height:160. } }
 #[test]
 fn explicit_legacy_values_preserve_bytes_and_source_maps() {
     let expected=compile(&input("")).unwrap();

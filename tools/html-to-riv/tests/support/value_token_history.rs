@@ -12,7 +12,7 @@ pub fn assert_recovery(file: &str, name: &str, request: &CompileInput) -> bool {
     assert_eq!(case["outcome"], "equivalent");
     assert_eq!(case["html"], request.html, "historical HTML changed: {file}/{name}");
     assert_eq!(case["css"], request.css, "historical CSS changed: {file}/{name}");
-    let expected = CompileInput {
+    let expected = CompileInput { assets: Default::default(),
         html: request.html.clone(), css: case["literalCss"].as_str().unwrap().into(),
         width: request.width, height: request.height,
     };

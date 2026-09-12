@@ -69,12 +69,30 @@ fn translated(value: Size, numeric: &mut NumericSize, padding: f32, provenance: 
     }
 }
 pub(super) fn lower(style: &Style, source: &str) -> Result<Lowered, Diagnostic> {
+    lower_impl(style, source, false)
+}
+/// Padded images retain exact point content on a separate ordinary owner.
+pub(super) fn lower_image(style: &Style, source: &str) -> Result<Lowered, Diagnostic> {
+    lower_impl(style, source, true)
+}
+fn lower_impl(style: &Style, source: &str, image: bool) -> Result<Lowered, Diagnostic> {
     let mut result = Lowered {sizes: [style.width, style.height],
         bounds: [style.min_width, style.min_height, style.max_width, style.max_height],
         numeric: style.numeric.clone()};
     if style.box_sizing == BoxSizing::BorderBox { return Ok(result); }
     let sides = style.padding.sides();
     for axis in 0..2 {
+        if image && [axis, axis + 2].iter().any(|&i| matches!(sides[i], Inset::Percent(v) if v != 0.)) {
+            if matches!(result.sizes[axis], Size::Percent(_)) {
+                return Err(unsupported(source, "Image content-box percentage size with nonzero same-axis padding requires a separate original-containing-size composition"));
+            }
+            // Only image defaults (zero minima and absent maxima) reach this
+            // path. Responsive padding supplies its own native border floor.
+            result.sizes[axis] = Size::Auto;
+            if axis == 0 { result.numeric.width = NumericSize::Auto; }
+            else { result.numeric.height = NumericSize::Auto; }
+            continue;
+        }
         let points = |side| match side { Inset::Pixels(v) | Inset::Percent(v) if v == 0. => Some(v),
             Inset::Pixels(v) => Some(v), _ => None };
         let (Some(start), Some(end)) = (points(sides[axis]), points(sides[axis+2])) else {

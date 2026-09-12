@@ -288,3 +288,10 @@ Percentage overflow guard:18native boundary decisions match retained evidence, w
 Padding investigation:20border-box candidates pass160geometry/158pixels;2fractional leaf failures remain. Fourcontent-box controls intentionally fail32geometry/pixel frames; all384clear checks pass. All24files/maps reproduce with complete visual coverage. See `validation/padding-native-review.md`; this does not enable public padding.
 
 Private padding integration:20candidate files/parsed maps and24primitive files reproduce exactly.147Rust/35Node tests, builds, TypeScript and source guard pass;482public outputs and48private flex outputs remain unchanged. Public nonzero padding remains diagnostic. See `validation/padding-integration-review.md`.
+
+
+## Public percentage-padding image checkpoint
+
+See [scope and evidence](validation/public-image-percent-padding-review.md). Final frozen build is `output/public-image-percent-padding-build-r2`; primary corpus is `output/public-image-percent-padding-r3`, with the row padding-floor control at `output/public-image-percent-padding-row-floor-r2`. Use the existing public-image compile/parity/native/transfer/visual commands. Reuse actual earlier frames only after exact request/file/map/reset/tool and frame-result verification. The complete main review remains at `output/public-image-percent-padding-r2/visual-r1`, and the floor review at `output/public-image-percent-padding-row-floor-r1/visual-r1`; final files and measured rows must match those reviewed artifacts before transferring the review.
+
+Keep the private main/additional/row-admission campaigns, including every rejected row failure. The public candidate's 208 geometry/presence passes coexist with 62 pixel failures. The numerical overflow test is compile-only and must never be rendered at its extreme dimensions. A diagnostic wording correction changes final compiler identity without changing emitted successful files.

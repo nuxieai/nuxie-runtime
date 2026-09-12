@@ -125,9 +125,12 @@ def gallery(coverage,out,reviewed=False,supplementary=()):
     supplementary_links=''.join(f'<p><a href="{rel(b["path"])}">{html.escape(Path(b["path"]).name)}</a>: {html.escape(b["observation"])}</p>' for b in supplementary)
     counts=coverage['counts'];text=f"{counts['sourceCases']} cases; {counts['frames']} frames; {counts['representatives']} directly reviewed pairs; {counts['visualTransfers']} exact visual transfers. Geometry {counts['geometryPass']}/{counts['frames']}, pixels {counts['pixelPass']}/{counts['frames']}, presence {counts['presencePass']}/{counts['frames']}." if reviewed else f"Prepared coverage: {counts}. Direct inspection pending."
     page='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public image corpus · visual review</title><style>body{font:15px system-ui;margin:0;background:#f3f4f5;color:#17212b}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:28px}h2{font-size:17px}a{color:#125bc7}p{line-height:1.55}article{background:white;border:1px solid #ccd1d6;border-radius:8px;margin:20px 0;padding:16px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0;overflow:auto}figcaption{margin-bottom:6px}img{display:block;max-width:100%;height:auto}pre{overflow:auto;font-size:12px;max-height:600px;background:#f6f7f8;padding:12px}.fail{color:#a02020}.pass{color:#165930}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}.controls{position:sticky;top:0;background:#f3f4f5;padding:12px 0}input,select{font:inherit;padding:6px}.hidden{display:none}</style><main><h1>Public image compiler corpus</h1><p>'''+html.escape(text)+'''</p><p>This is visual evidence for frozen emitted scenes, not a claim of complete public API qualification. Fractional failures are retained. Exact white-canvas extensions transfer complete visible RGBA evidence only; each frame retains its own geometry, pixel and presence gates and viewport. Recorded background-chain borderBox metadata may differ; those exact per-frame values are recorded in transfer proofs and are not transferred. Gallery previews fit the panel; linked PNGs and sheets are unscaled.</p><p><a href="coverage.json">Coverage</a> · <a href="review-receipt.json">Review receipt</a> · <a href="../combined-receipt.json">Combined native receipt</a></p><details><summary>All retained pixel failures</summary><table><tr><th>Case</th><th>Frame</th><th>Failure</th><th>Evidence</th></tr>'''+failures+'''</table></details><details><summary>Optional exact-source before and after</summary>'''+comparisons+'''</details><details><summary>Supplementary inspected evidence</summary>'''+supplementary_links+'''</details><div class="controls"><input id="search" placeholder="Filter case"><select id="result"><option value="all">All representatives</option><option value="failed">Pixel failures</option><option value="geometry">Geometry failures</option><option value="presence">Presence failures</option></select><span id="count"></span></div>'''+''.join(cards)+'''</main><script>const cards=[...document.querySelectorAll('article')],search=document.querySelector('#search'),result=document.querySelector('#result');function filter(){let n=0;for(const c of cards){const show=c.dataset.name.includes(search.value.toLowerCase())&&(result.value==='all'||(result.value==='failed'?c.dataset.fail:c.dataset[result.value])==='true');c.classList.toggle('hidden',!show);n+=show}document.querySelector('#count').textContent=` ${n}/${cards.length} representatives`}search.oninput=result.onchange=filter;filter();</script></html>'''
+    if coverage.get('publicAdmission') is False:
+        page=page.replace('Public image corpus · visual review','Private image composition · visual review').replace('Public image compiler corpus','Private ordinary-file image composition')
+        page=page.replace('<p>This is visual evidence', '<p>The public compiler still rejects these authored requests. These scenes come from an explicit private source-recipe generator; they do not establish public feature support.</p><p>This is visual evidence')
     (out/'gallery.html').write_text(page)
 
-parser=argparse.ArgumentParser();parser.add_argument('--root',type=Path,default=BASE/'output/public-image-layout-r2');parser.add_argument('--complete',type=Path);parser.add_argument('--label',default='visual',help='Fresh review directory name inside the native root');parser.add_argument('--before-native',type=Path,help='Optional prior native receipt for exact-source before/after comparisons');args=parser.parse_args();assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',args.label),'Review label must be one directory name';root=args.root.resolve();out=root/args.label
+parser=argparse.ArgumentParser();parser.add_argument('--root',type=Path,default=BASE/'output/public-image-layout-r2');parser.add_argument('--complete',type=Path);parser.add_argument('--label',default='visual',help='Fresh review directory name inside the native root');parser.add_argument('--before-native',type=Path,help='Optional prior native receipt for exact-source before/after comparisons');parser.add_argument('--private-candidate',action='store_true',help='Explicitly review source-recipe scenes whose public requests remain rejected');args=parser.parse_args();assert re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*',args.label),'Review label must be one directory name';root=args.root.resolve();out=root/args.label
 if args.complete:
     coverage=read(out/'coverage.json');notes=read(args.complete)
     completion_helper=out/'completion-helper.py';assert not completion_helper.exists();completion_helper.write_bytes(Path(__file__).read_bytes())
@@ -153,8 +156,25 @@ if authoring_bindings:extra_bindings.append(bind(authoring_path))
 if 'bindingsSha256' in build:assert sha(source_bindings_path)==build['bindingsSha256']
 if 'summarySha256' in build:
     summary=Path(build['build'])/'summary.json';assert sha(summary)==build['summarySha256'];extra_bindings.append(bind(summary))
-assert sha(root/'frozen/html-to-riv')==build['compilerSha256']
-assert all(r['matchesExpectation'] for r in compiled.values())
+if args.private_candidate:
+    assert build['scope']=='Private ordinary-file composition; no public admission or native qualification'
+    checked(build['seedCompiler']);checked(build['generator'])
+    assert sha(root/'frozen/html-to-riv')==build['seedCompiler']['sha256'] and build['browserGeometryConsumed'] is False
+    extra_bindings.extend([build['seedCompiler'],build['generator']])
+    for name,row in compiled.items():
+        directory=root/name;diagnostics=read(directory/'public.log')
+        assert diagnostics and all(d['code']=='unsupported-target-semantics' for d in diagnostics)
+        assert not (directory/'public.riv').exists() and not (directory/'public.map.json').exists()
+        extra_bindings.append(bind(directory/'public.log'))
+        if row['compiled']:
+            assert row['scope']=='Private source-recipe file composition; actual public request remains rejected'
+            assert row['publicDiagnostics']==diagnostics and row['browserGeometryConsumed'] is False
+            for key in ('changes','seedRequest','seedScene'):checked(row[key]);extra_bindings.append(row[key])
+        else:
+            assert row['diagnostics']==diagnostics and cases[name]['candidateExpectation']['status']=='unresolved'
+else:
+    assert sha(root/'frozen/html-to-riv')==build['compilerSha256']
+    assert all(r['matchesExpectation'] for r in compiled.values())
 assert len(native['rows'])==8*sum(r['compiled'] for r in compiled.values())
 asset_sources={Path(b['path']).resolve():Path(b.get('snapshot',b['path'])) for b in source_bindings+authoring_bindings}
 assert {r['name'] for r in native['rows']}=={name for name,c in compiled.items() if c['compiled']}
@@ -232,4 +252,7 @@ if args.before_native:
         before_rows.append(witness)
 counts={'sourceCases':len(sources),'frames':len(rows),'representatives':len(representatives),'visualTransfers':len(transfers),'backgroundBoxDifferenceTransfers':sum(bool(t['backgroundBoxMetadataDifferences']) for t in transfers),'geometryPass':sum(not r['metricFailures'] for r in rows),'pixelPass':sum(not r['pixelFailures'] for r in rows),'presencePass':sum(all(v['passed'] for v in r['imagePresence'].values()) for r in rows),'freshFrames':native['summary']['freshFrames'],'unchangedSceneTransfers':native['summary']['transferredFrames'],'beforeAfterFrames':len(before_after)}
 coverage={'scope':'Visual evidence for frozen public-image candidate scenes; full API qualification is separate. Complete opaque-white RGBA extension proves only visible pixel transfer, not offscreen content or shared numeric gates. Only background-chain borderBox metadata can differ: exact source/target values remain recorded and are not transferred; all other browser, native-box and presence metadata must match.','counts':counts,'bindings':[bind(p) for p in [root/'combined-receipt.json',root/'build-receipt.json',root/'compile-receipt.json',root/'cases.json',helper_snapshot]]+extra_bindings,'sources':sources,'artifacts':list(file_bindings.values()),'representatives':representatives,'transfers':transfers,'sheets':sheets(representatives,out,'review-sheet'),'beforeAfterSheets':sheets(before_rows,out,'before-after',('chrome','oldNative','newNative')),'beforeAfter':before_after,'pixelFailureRows':[r for r in rows if r['pixelFailures']],'reviewCompleted':False}
+if args.private_candidate:
+    coverage['publicAdmission']=False
+    coverage['scope']='Private source-recipe ordinary-file composition; every actual public request remains rejected. '+coverage['scope']
 save(out/'coverage.json',coverage);gallery(coverage,out);print(json.dumps(counts,indent=2));print('sheets',len(coverage['sheets']),'before/after sheets',len(coverage['beforeAfterSheets']))

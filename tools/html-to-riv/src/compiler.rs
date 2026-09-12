@@ -682,9 +682,14 @@ impl Emitter {
         if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
             return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
         }
-        let mut lowered = box_sizing::lower(&style, &path)?;
-        if let Some(image) = &image { image.adjust_outer(&mut lowered); }
-        let child_bounds = numeric_bounds.child_with_sizing(&style, &lowered, parent_style, &path)?;
+        let lowered = match &image {
+            Some(image) => image.lower_outer(&style, &path)?,
+            None => box_sizing::lower(&style, &path)?,
+        };
+        let outer_stretch = image.as_ref().map_or_else(
+            || style.self_alignment.stretches() && !style.margins.cross(parent_style.direction),
+            |image| image.outer_stretch(&style, parent_style, &lowered));
+        let child_bounds = numeric_bounds.child_with_stretch(&style, &lowered, parent_style, outer_stretch, &path)?;
         let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
         let cross_auto_margin = style.margins.cross(parent_style.direction);
         let effective_alignment = if cross_auto_margin {
@@ -731,7 +736,7 @@ impl Emitter {
         let mut bounds = lowered.bounds;
         let mut authored_parent = parent_id;
         let mut native_parent_direction = parent_style.direction;
-        let mut stretch = effective_alignment.stretches();
+        let mut stretch = outer_stretch;
         if let Some(alignment) = effective_alignment.wrapper_alignment(parent_style.direction) {
             let main = if parent_style.direction.is_row() { 0 } else { 1 };
             let mut outer_sizes = [Size::Auto; 2];

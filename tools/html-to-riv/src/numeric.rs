@@ -89,9 +89,13 @@ impl Bounds {
         self.child_with_sizing(style, &super::box_sizing::lower(style, source)?, parent, source)
     }
     pub fn child_with_sizing(self, style: &Style, sizing: &super::box_sizing::Lowered, parent: &Style, source: &str) -> Result<Self, Diagnostic> {
+        self.child_with_stretch(style, sizing, parent,
+            style.self_alignment.stretches() && !style.margins.cross(parent.direction), source)
+    }
+    pub fn child_with_stretch(self, style: &Style, sizing: &super::box_sizing::Lowered, parent: &Style,
+        cross_stretch: bool, source: &str) -> Result<Self, Diagnostic> {
         self.child_layout(Layout { sizes: sizing.sizes, bounds: sizing.bounds, padding: style.padding,
-            parent_direction: parent.direction, flexible: !style.flex.legacy(),
-            cross_stretch: style.self_alignment.stretches() && !style.margins.cross(parent.direction) }, source)
+            parent_direction: parent.direction, flexible: !style.flex.legacy(), cross_stretch }, source)
     }
     pub fn content_owner(self, owner: &super::box_sizing::ContentOwner, source: &str) -> Result<Self, Diagnostic> {
         self.child_layout(Layout { sizes: owner.sizes, bounds: owner.bounds,

@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-12",
-  "focus": "Public image point padding",
-  "status": "R2 padding checkpoint qualified in its finite matrix; retained pixel limitations; full goal active",
-  "current": "The percentage-sizing repair passes all 16 native/Chrome geometry, pixel and presence checks; all 16 original failures remain preserved. Final build: 311 Rust / 56 Node tests, strict TypeScript, native/WASM and 272 corpus parity comparisons pass. All 794 historical outputs and 98 R1 image files/maps remain exact. Primary padding retains 24 tail-edge pixel failures. Visual coverage: 33 inspected pairs and 183 exact transfers across 216 frames.",
-  "next": "Preserve the reviewed R2 padding checkpoint and advance image min/max constraints or a concrete percentage-padding composition with a finite public acceptance matrix. Keep all 99 backlog items in scope and continue independent work when an investigation has no new testable hypothesis.",
+  "focus": "Public percentage-padding image support",
+  "status": "Bounded partial checkpoint validated; runtime unchanged",
+  "current": "Shared sizing/stretch and image-owned lowering are implemented. 322 Rust and 56 Node tests pass; 36 requests have 72 exact public interface comparisons. All 208 native geometry/presence checks pass; 62 pixel failures remain. 794 historical outputs and 100 prior image files/maps remain exact.",
+  "next": "Advance image min/max sizing constraints with a finite public acceptance matrix. Keep row percentage-padding compositions and fractional painting unresolved; revisit them only with a concrete new hypothesis.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Public percentage-padding scope, validation and retained failures",
+      "path": "tools/html-to-riv/validation/public-image-percent-padding-review.md"
+    },
+    {
+      "label": "Committed content-derived image outer overflow guard",
+      "path": "tools/html-to-riv/validation/image-outer-bound-review.md"
+    },
+    {
+      "label": "Percentage-padding investigation and unresolved row sizing",
+      "path": "tools/html-to-riv/validation/image-percent-padding-row-sizing-review.md"
+    },
     {
       "label": "Reviewed goal and exact restart steps",
       "path": "tools/html-to-riv/GOAL-RESTART.md"
@@ -587,20 +599,7 @@
       "path": "tools/html-to-riv/output/immutable-layout-native-r3/gallery.html"
     }
   ],
-  "activeWork": [
-    {
-      "name": "R2 padding checkpoint",
-      "work": "Public build, parity, output regression, native/Chrome and complete visual review finished. Existing pixel failures remain explicit."
-    },
-    {
-      "name": "Image constraints and percentage padding",
-      "work": "Next: test concrete ordinary-file compositions and ratio/clamp/stretch interactions before public admission."
-    },
-    {
-      "name": "Remaining compiler backlog",
-      "work": "Typography paint, broader flex/painting/positioning, responsive expressions, assets and compiler quality remain in scope. Unresolved does not mean impossible."
-    }
-  ],
+  "activeWork": [],
   "publication": {
     "status": "reverted",
     "revertPr": "https://github.com/nuxieai/nuxie-runtime/pull/629",

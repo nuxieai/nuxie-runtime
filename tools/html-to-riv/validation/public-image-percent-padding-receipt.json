@@ -1,0 +1,21 @@
+{
+  "scope": "Bounded partial public percentage-padding image support; 62 pixel failures retained",
+  "rustTests": 322,
+  "nodeTests": 56,
+  "publicRequests": 36,
+  "publicInterfaceComparisons": 72,
+  "nativeFrames": 208,
+  "geometryPass": 208,
+  "pixelPass": 146,
+  "presencePass": 208,
+  "historicalOutputsExact": 794,
+  "existingImageFilesExact": 100,
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-percent-padding-checkpoint-r1/verification.json",
+    "sha256": "d75747cc9f0ba0b2c7bfec47e36987362f5d02779c7f233532d9ee9d4c5084c2"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-percent-padding-review.md",
+    "sha256": "92cda380ea8a0f61edaeb9c20ab2e31338307cdfa51e42b48679ac7e32626108"
+  }
+}

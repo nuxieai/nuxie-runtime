@@ -123,9 +123,6 @@ pub(super) fn plan(element: ElementRef<'_>, style: &mut Style, parent: &Style, a
 
 fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &str) -> Result<Plan, Diagnostic> {
     use super::{Direction, box_sizing::{BoxSizing, ContentOwner}};
-    if style.padding.has_percentage() {
-        return Err(unsupported(source, "Image percentage padding requires separate containing-width and content-ratio qualification"));
-    }
     let authored = [style.width, style.height];
     let auto = authored.map(|size| matches!(size, Size::Auto));
     let main = usize::from(!parent.direction.is_row());
@@ -135,6 +132,12 @@ fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &
         else if auto[main] { Some(main) }
         else if auto[1-main] && !stretches { Some(1-main) }
         else { None };
+    let horizontal_percent = [0, 2].iter().any(|&i|
+        matches!(style.padding.sides()[i], super::padding::Inset::Percent(v) if v != 0.));
+    if style.padding.has_percentage() && main == 0 && (aspect_axis == Some(0)
+        || (horizontal_percent && (auto[0] || style.box_sizing == BoxSizing::ContentBox))) {
+        return Err(unsupported(source, "Image row automatic width with percentage padding has unqualified intrinsic-main measurement: the immutable runtime measures padding without the original containing width; use a definite border-box width or remove percentage padding"));
+    }
     let packing = match aspect_axis {
         Some(0) => Direction::Row,
         Some(1) => Direction::Column,
@@ -159,6 +162,19 @@ fn padded_plan(metadata: ImageMetadata, style: &Style, parent: &Style, source: &
     }) })
 }
 impl Plan {
+    pub fn lower_outer(&self, style: &Style, source: &str) -> Result<super::box_sizing::Lowered, Diagnostic> {
+        let mut lowered = if self.padded.is_some() {
+            super::box_sizing::lower_image(style, source)?
+        } else { super::box_sizing::lower(style, source)? };
+        self.adjust_outer(&mut lowered);
+        Ok(lowered)
+    }
+    pub fn outer_stretch(&self, style: &Style, parent: &Style, lowered: &super::box_sizing::Lowered) -> bool {
+        let cross = usize::from(parent.direction.is_row());
+        let authored = [style.width, style.height];
+        style.self_alignment.stretches() && !(matches!(authored[cross], Size::Pixels(_))
+            && matches!(lowered.sizes[cross], Size::Auto))
+    }
     /// Synthetic stretch resolves the outer border box before the inner ratio
     /// is measured. It must not become an authored content-box percentage.
     pub fn adjust_outer(&self, lowered: &mut super::box_sizing::Lowered) {
@@ -196,5 +212,56 @@ impl Plan {
         }
         records.push(participant);
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use super::super::{box_sizing::BoxSizing, computed_provenance::NumericSize};
+    fn computed(css: &str, parent: &Style) -> Style {
+        let document = scraper::Html::parse_document("<img id=image>");
+        let selector = scraper::Selector::parse("#image").unwrap();
+        super::super::computed(document.select(&selector).next().unwrap(),
+            &crate::css::stylesheet(css).unwrap(), parent, false, true).unwrap()
+    }
+    fn layout(css: &str, row: bool) -> (Style, Style, Plan, super::super::box_sizing::Lowered) {
+        let mut parent = Style::default();
+        if row { parent.direction = super::super::Direction::Row; }
+        let style = computed(&format!("#image{{box-sizing:content-box;{css}}}"), &parent);
+        let plan = padded_plan(ImageMetadata { asset_index: 0, width: 96, height: 64 }, &style, &parent, "image").unwrap();
+        let lowered = plan.lower_outer(&style, "image").unwrap();
+        (style, parent, plan, lowered)
+    }
+    #[test]
+    fn synthetic_auto_definite_cross_is_hug_but_authored_auto_cross_still_stretches() {
+        let (style,parent,plan,lowered) = layout("width:120px;height:80px;padding:5%", false);
+        assert!(matches!(lowered.sizes, [Size::Auto, Size::Auto]));
+        assert!(!plan.outer_stretch(&style, &parent, &lowered));
+        assert!(matches!(plan.content_owner().unwrap().sizes, [Size::Pixels(120.), Size::Pixels(80.)]));
+        assert!(matches!(style.numeric.width, NumericSize::Pixels(Ok(_))));
+        assert!(matches!(lowered.numeric.width, NumericSize::Auto));
+        let (style,parent,plan,lowered) = layout("width:auto;height:80px;padding:5%", false);
+        assert!(plan.outer_stretch(&style, &parent, &lowered));
+        assert!(plan.aspect_axis.is_none());
+        let (style,parent,plan,lowered) = layout("width:120px;height:auto;padding:5% 0", true);
+        assert!(plan.outer_stretch(&style, &parent, &lowered));
+        assert!(matches!(lowered.sizes[0], Size::Pixels(120.)));
+        assert!(plan.aspect_axis.is_none());
+    }
+    #[test]
+    fn percentage_on_opposite_axis_is_resolved_once_without_laundering_padding_provenance() {
+        for (css,axis) in [("width:50%;height:80px;padding:5% 0",0), ("width:120px;height:50%;padding:0 5%",1)] {
+            let (style,_,plan,lowered) = layout(css,false);
+            assert!(matches!(lowered.sizes[axis], Size::Percent(50.)));
+            assert!(matches!(plan.content_owner().unwrap().sizes[axis], Size::Percent(100.)));
+            for (before,after) in style.numeric.padding.iter().zip(&lowered.numeric.padding) {
+                assert!(before.as_ref().unwrap().proves_equal(after.as_ref().unwrap()));
+            }
+            assert!(style.box_sizing == BoxSizing::ContentBox);
+        }
+        let (style,_,_,lowered) = layout("width:50%;height:80px;padding:5% 1e-50%",false);
+        assert!(matches!(lowered.numeric.width, NumericSize::Percent(Err(_))));
+        assert!(!style.numeric.padding[0].as_ref().unwrap().is_exact_zero());
     }
 }

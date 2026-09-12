@@ -1,0 +1,67 @@
+{
+  "scope": "Historical private percentage-padding investigation at point-padding checkpoint; main visual review complete. Subsequent public support is recorded separately.",
+  "runtimeChanged": false,
+  "main": {
+    "frames": 192,
+    "geometryPass": 160,
+    "pixelPass": 108,
+    "presencePass": 192,
+    "visualReviewCompleted": true
+  },
+  "rowDiscriminators": {
+    "frames": 24,
+    "geometryPass": 24,
+    "pixelPass": 20,
+    "presencePass": 24
+  },
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-percent-padding-cases.json",
+      "sha256": "0ed15e47779a13aa310b990dd680392a7d3d13297c39c6b55a1e8b0f08a17909"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-percent-padding-candidate.py",
+      "sha256": "70019687001106baca7b0f82c2af76193bcc5c95b210ff4f560a3184b9181a15"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-percent-padding-plan.md",
+      "sha256": "e08e438912250e6862992496af7c329c2959a4b0b30cf5d2259d741e056f2bb1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-percent-padding-row-sizing-review.md",
+      "sha256": "ab23073412b625d3ffe1e883698d50747cf7a64e601d0454d79e29dc2b3f7a46"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-candidate-r2/combined-receipt.json",
+      "sha256": "35d8a13a19c0871ee356b848e112762643375191b55eb16776fea160bd9f19d4"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-row-controls-r1/combined-receipt.json",
+      "sha256": "26c5c1e6f168459b65ad21baedf9389ef48b38644acc955955da8cfb82d151bc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-row-controls-r1/visual-r1/review-receipt.json",
+      "sha256": "dd271d07c7107abf613edea2bc5911ca4cb931bbaff7e00604272d727363c17e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-stretch-control-r1/visual-r1/review-receipt.json",
+      "sha256": "a3f42bc89a9162b56c2d3a23daff1a400c7a030bfc350ad6b7fda9671b1c80fe"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-chrome-r1/receipt.json",
+      "sha256": "00b791a09fc245181b32efc2c689743a45b0ac66b443860ab835263b23ee8b34"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-candidate-r2/visual-r1/review-receipt.json",
+      "sha256": "d92a2b53bf6f55be3b32700e28e2ce42f26ecdc32c59d58229be53f24d3d0710"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-percent-padding-chrome-r1/verification.json",
+      "sha256": "1bfa55fba6d8e8f638ad5d239dd3ef756bd5fd3b9a66d09988e04aff05dcd84a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-percent-padding-chrome-evidence.py",
+      "sha256": "c3f5ad1c9091eb306e18eda97f3505f062a5c890877f117043e1a808ff0ac0bb"
+    }
+  ]
+}

@@ -1,0 +1,3655 @@
+[
+  {
+    "name": "image-percent-padding-intrinsic-border-start",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Intrinsic 96x64 content plus percentage padding, with start alignment."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-intrinsic-content-asymmetric",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 2.5
+          },
+          "left": {
+            "unit": "%",
+            "value": 7.5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:10%;padding-bottom:2.5%;padding-left:7.5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:10%;padding-bottom:2.5%;padding-left:7.5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Intrinsic content size and distinct percentage insets on all four sides."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-both-fixed-border",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "px",
+          "value": 160
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:160px;height:120px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:160px;height:120px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Fixed border-box dimensions subtract percentage insets before image fill."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-both-fixed-content",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "px",
+          "value": 80
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:80px;padding-top:5%;padding-right:10%;padding-bottom:5%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:80px;padding-top:5%;padding-right:10%;padding-bottom:5%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Fixed content points plus responsive padding; the outer dimensions must sum them."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-width-border-auto-height",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "px",
+          "value": 160
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:160px;height:auto;padding-top:5%;padding-right:10%;padding-bottom:5%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:160px;height:auto;padding-top:5%;padding-right:10%;padding-bottom:5%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Definite border-box width with natural-ratio auto height; retain fractional content sizes."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-width-content-auto-height",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:10%;padding-bottom:5%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:10%;padding-bottom:5%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preserve the fixed content width before deriving content height and adding percentage padding."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-height-border-auto-width",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:120px;padding-top:10%;padding-right:5%;padding-bottom:10%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:120px;padding-top:10%;padding-right:5%;padding-bottom:10%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Vertical percentage padding must use parent width before deriving the automatic content width."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-height-content-auto-width",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "px",
+          "value": 80
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:80px;padding-top:10%;padding-right:5%;padding-bottom:10%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:80px;padding-top:10%;padding-right:5%;padding-bottom:10%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preserve fixed content height; add width-based percentage padding after natural-ratio sizing."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-column-auto-stretch-border",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Default stretch supplies the outer cross width; automatic main size follows inner ratio."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-column-auto-stretch-content",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Default stretch with both authored axes auto must not add padding outside the filled cross box."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-auto-stretch-border",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:120px;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Row default stretch uses definite parent height; vertical image padding still depends on responsive parent width."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-auto-stretch-content",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:120px;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Content-box auto row stretch, with parent height fixed and padding basis width changing."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-column-fixed-cross-content-default-stretch",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Critical control: authored fixed content cross width must not stretch merely because the emitted outer width is auto."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-fixed-cross-content-default-stretch",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "px",
+          "value": 80
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:80px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:80px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Mirrored critical control: authored fixed content cross height must remain fixed despite outer auto sizing."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-column-fixed-cross-border-default-stretch",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "px",
+          "value": 160
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:160px;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:160px;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Default alignment must respect a definite authored border-box cross width."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-fixed-cross-border-default-stretch",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:120px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:120px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Default alignment must respect a definite authored border-box cross height, with width-based vertical padding."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-border-percent-width",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 50
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:50%;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:50%;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Border-box percentage width and percentage padding share original parent content width; retain independent content ratio."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-border-percent-height",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "%",
+          "value": 50
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:50%;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:50%;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Border-box height percentage uses parent height while vertical padding uses parent width; these bases must stay distinct."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-border-padding-floor",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "px",
+          "value": 20
+        },
+        "height": {
+          "unit": "px",
+          "value": 20
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:20px;height:20px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:20px;height:20px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Padding exceeds both border-box dimensions across viewports: retain outer background/tail and intentional empty image content."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-content-padded-parent-basis",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 12
+          },
+          "right": {
+            "unit": "px",
+            "value": 20
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 12
+          },
+          "left": {
+            "unit": "px",
+            "value": 20
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 96
+        },
+        "height": {
+          "unit": "px",
+          "value": 64
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:96px;height:64px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:12px;padding-right:20px;padding-bottom:12px;padding-left:20px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:96px;height:64px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Parent border width is viewport width but its content width excludes 40px padding; all image percentages use that smaller content width."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-border-mixed-point-percent-sides",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "px",
+          "value": 160
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 8
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "px",
+            "value": 12
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:160px;height:120px;padding-top:8px;padding-right:10%;padding-bottom:5%;padding-left:12px;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:border-box;width:160px;height:120px;padding-top:8px;padding-right:10%;padding-bottom:5%;padding-left:12px;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Distinct mixed point/percentage sides expose side ordering and original-width percentage basis."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-content-mixed-sides-ratio-auto",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 96
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "px",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 6
+          },
+          "left": {
+            "unit": "%",
+            "value": 7.5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:96px;height:auto;padding-top:5%;padding-right:10px;padding-bottom:6px;padding-left:7.5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:96px;height:auto;padding-top:5%;padding-right:10px;padding-bottom:6px;padding-left:7.5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Fixed content cross width and auto ratio height with mixed side units; preserve fractional outer positions."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-alpha-contain-opaque-background",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/alpha.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 96
+        },
+        "height": {
+          "unit": "px",
+          "value": 96
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 8
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "px",
+            "value": 8
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "contain",
+        "position": {
+          "x": 0,
+          "y": 100
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:96px;height:96px;padding-top:8px;padding-right:10%;padding-bottom:10%;padding-left:8px;align-self:flex-start;object-fit:contain;object-position:0% 100%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:96px;height:96px;padding-top:8px;padding-right:10%;padding-bottom:10%;padding-left:8px;align-self:flex-start;object-fit:contain;object-position:0% 100%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Original alpha PNG at integral 1x contain placement, opaque outer background, and responsive right/bottom padding."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-alpha-cover-translucent-background",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/alpha.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#315d4d"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 96
+        },
+        "height": {
+          "unit": "px",
+          "value": 48
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 8
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "px",
+            "value": 8
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "cover",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "rgba(255,237,194,0.5)"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:96px;height:48px;padding-top:8px;padding-right:10%;padding-bottom:5%;padding-left:8px;align-self:flex-start;object-fit:cover;object-position:50% 50%;background:rgba(255,237,194,0.5)",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#315d4d}#image{box-sizing:content-box;width:96px;height:48px;padding-top:8px;padding-right:10%;padding-bottom:5%;padding-left:8px;align-self:flex-start;object-fit:cover;object-position:50% 50%;background:rgba(255,237,194,0.5)}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Original alpha PNG at integral 1x cover crop; translucent outer background composites once over the colored parent."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-content-percent-width-unresolved",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "%",
+          "value": 50
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:50%;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:50%;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "unresolved",
+      "reason": "Unresolved original-basis content percentage through an auto outer owner; an inner 50% must not apply to the newly padded content area."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-content-percent-height-unresolved",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "%",
+          "value": 50
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:50%;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:50%;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "unresolved",
+      "reason": "Unresolved mixed bases: authored content height percentage depends on parent height, while vertical percentage padding depends on parent width."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-content-percent-width-opposite-padding",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "%",
+          "value": 50
+        },
+        "height": {
+          "unit": "px",
+          "value": 80
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 0
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:50%;height:80px;padding-top:10%;padding-right:0%;padding-bottom:10%;padding-left:0%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:50%;height:80px;padding-top:10%;padding-right:0%;padding-bottom:10%;padding-left:0%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Additional sizing discriminator; candidate intent is not qualification."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-content-percent-height-opposite-padding",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "%",
+          "value": 50
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 0
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 0
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:50%;padding-top:0%;padding-right:5%;padding-bottom:0%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:50%;padding-top:0%;padding-right:5%;padding-bottom:0%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Additional sizing discriminator; candidate intent is not qualification."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-content-fixed-main-auto-cross",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Additional sizing discriminator; candidate intent is not qualification."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-column-content-fixed-main-auto-cross",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "column",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "px",
+          "value": 80
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:80px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:80px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Additional sizing discriminator; candidate intent is not qualification."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-content-both-fixed-default-stretch",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "px",
+          "value": 80
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:80px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:80px;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Additional sizing discriminator; candidate intent is not qualification."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-content-fixed-main-vertical-only",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "px",
+          "value": 120
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 0
+          }
+        },
+        "alignSelf": "auto",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:0%;padding-bottom:5%;padding-left:0%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;padding-top:5%;padding-right:0%;padding-bottom:5%;padding-left:0%;align-self:auto;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Additional sizing discriminator; candidate intent is not qualification."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-intrinsic-border-start",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 5
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 5
+          },
+          "left": {
+            "unit": "%",
+            "value": 5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:auto;height:auto;padding-top:5%;padding-right:5%;padding-bottom:5%;padding-left:5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Intrinsic 96x64 content plus percentage padding, with start alignment."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-intrinsic-content-start",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "content-box",
+        "width": {
+          "unit": "auto"
+        },
+        "height": {
+          "unit": "auto"
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 5
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 2.5
+          },
+          "left": {
+            "unit": "%",
+            "value": 7.5
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:10%;padding-bottom:2.5%;padding-left:7.5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:content-box;width:auto;height:auto;padding-top:5%;padding-right:10%;padding-bottom:2.5%;padding-left:7.5%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Intrinsic content size and distinct percentage insets on all four sides."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-percent-padding-row-both-fixed-border",
+    "group": "public-image-percent-padding-candidate",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "recipe": {
+      "parent": {
+        "direction": "row",
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "%",
+          "value": 100
+        },
+        "height": {
+          "unit": "%",
+          "value": 100
+        },
+        "padding": {
+          "top": {
+            "unit": "px",
+            "value": 0
+          },
+          "right": {
+            "unit": "px",
+            "value": 0
+          },
+          "bottom": {
+            "unit": "px",
+            "value": 0
+          },
+          "left": {
+            "unit": "px",
+            "value": 0
+          }
+        },
+        "background": "#dce6ee"
+      },
+      "image": {
+        "boxSizing": "border-box",
+        "width": {
+          "unit": "px",
+          "value": 160
+        },
+        "height": {
+          "unit": "px",
+          "value": 120
+        },
+        "padding": {
+          "top": {
+            "unit": "%",
+            "value": 10
+          },
+          "right": {
+            "unit": "%",
+            "value": 10
+          },
+          "bottom": {
+            "unit": "%",
+            "value": 10
+          },
+          "left": {
+            "unit": "%",
+            "value": 10
+          }
+        },
+        "alignSelf": "flex-start",
+        "fit": "fill",
+        "position": {
+          "x": 50,
+          "y": 50
+        },
+        "background": "#ffedc2"
+      }
+    },
+    "imageDeclarations": "box-sizing:border-box;width:160px;height:120px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2",
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{box-sizing:border-box;width:100%;height:100%;padding-top:0px;padding-right:0px;padding-bottom:0px;padding-left:0px;flex-direction:row;background:#dce6ee}#image{box-sizing:border-box;width:160px;height:120px;padding-top:10%;padding-right:10%;padding-bottom:10%;padding-left:10%;align-self:flex-start;object-fit:fill;object-position:50% 50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Fixed border-box dimensions subtract percentage insets before image fill."
+    },
+    "priorExpected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics",
+      "messageIncludes": "Image percentage padding requires separate containing-width and content-ratio qualification"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "All authored percentage padding sides use the original parent content width, including top and bottom.",
+      "The recipe and deterministic imageDeclarations are authoring inputs for an ordinary-file prototype; browser measurements must not become emitted dimensions.",
+      "Candidate intent is separate from current public admission and from native qualification."
+    ],
+    "expected": {
+      "outcome": "compile"
+    }
+  }
+]

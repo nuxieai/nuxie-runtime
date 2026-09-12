@@ -1,6 +1,8 @@
 //! Ordinary-file capability experiment, not public HTML/CSS admission.
 //! Emits only baseline schema objects. No sidecar controls rendering.
 use nuxie_html_to_riv::Diagnostic;
+#[path = "../src/css_whitespace.rs"]
+mod css_whitespace;
 #[allow(dead_code)]
 #[path = "../src/wire.rs"]
 mod wire;

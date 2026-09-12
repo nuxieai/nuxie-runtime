@@ -1,10 +1,10 @@
 //! Compiler-owned CSS sRGB literals, lowered to straight-alpha 0xAARRGGBB.
 //! currentColor and inheritance are resolved by computed style, not this parser.
 //! Restored from 20248ee6 without runtime or renderer dependencies.
-use crate::Diagnostic;
+use crate::{Diagnostic, css_whitespace};
 
 pub(crate) fn parse(value: &str, source: &str) -> Result<u32, Diagnostic> {
-    let value = value.trim().to_ascii_lowercase();
+    let value = css_whitespace::trim(value).to_ascii_lowercase();
     if value == "transparent" {
         return Ok(0);
     }
@@ -55,7 +55,7 @@ fn rgb_color(body: &str, source: &str) -> Result<u32, Diagnostic> {
         )
     };
     let component = |text: &str| -> Result<(f32, bool), Diagnostic> {
-        let mut input = ParserInput::new(text.trim());
+        let mut input = ParserInput::new(text);
         let mut parser = Parser::new(&mut input);
         let (value, percentage) = match parser.next().map_err(|_| invalid())? {
             Token::Number { value, .. } => (*value, false),
@@ -77,11 +77,7 @@ fn rgb_color(body: &str, source: &str) -> Result<u32, Diagnostic> {
         }
     } else {
         let mut parts = body.split('/');
-        let channels = parts
-            .next()
-            .unwrap_or("")
-            .split_ascii_whitespace()
-            .collect();
+        let channels = css_whitespace::words(parts.next().unwrap_or("")).collect();
         let alpha = parts.next();
         if parts.next().is_some() {
             return Err(invalid());
@@ -129,11 +125,7 @@ fn hsl_color(body: &str, source: &str) -> Result<u32, Diagnostic> {
         }
     } else {
         let mut slash = body.split('/');
-        let parts = slash
-            .next()
-            .unwrap_or("")
-            .split_ascii_whitespace()
-            .collect();
+        let parts = css_whitespace::words(slash.next().unwrap_or("")).collect();
         let alpha = slash.next();
         if slash.next().is_some() {
             return Err(invalid());
@@ -144,7 +136,7 @@ fn hsl_color(body: &str, source: &str) -> Result<u32, Diagnostic> {
         return Err(invalid());
     }
     let component = |text: &str, index: usize| -> Result<f64, Diagnostic> {
-        let mut input = ParserInput::new(text.trim());
+        let mut input = ParserInput::new(text);
         let mut parser = Parser::new(&mut input);
         let value = match parser.next().map_err(|_| invalid())? {
             Token::Number { value, .. } if index == 0 || index == 3 => f64::from(*value),

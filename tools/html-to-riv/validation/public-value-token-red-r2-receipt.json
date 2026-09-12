@@ -1,0 +1,237 @@
+{
+  "status": "corrected-red-bound-production-may-proceed",
+  "head": "57bf50fc1319505e0d5b21edd0081019da6ee501",
+  "publicCases": 551,
+  "viewports": [
+    [
+      240,
+      160
+    ],
+    [
+      768,
+      120
+    ]
+  ],
+  "tests": {
+    "total": 8,
+    "passed": 3,
+    "failed": 5,
+    "exitCode": 101
+  },
+  "sourceUnchangedDuringRun": true,
+  "supersedes": "validation/public-value-token-red-receipt.json",
+  "preservedPriorEvidence": "output/public-value-token-red-r1",
+  "corrections": [
+    {
+      "name": "invalid-important-background",
+      "change": "Use quoted wrong-type string; preserve literal/variable background:2px as separate diagnostic cases."
+    },
+    {
+      "name": "valid-variable-font-percentage",
+      "change": "Replace two erroneous diagnostic expectations with a supported variable/literal120% comparison and em width consumer."
+    }
+  ],
+  "groups": {
+    "cascade-recovery": 13,
+    "literal-boundary": 144,
+    "literal-function-boundary": 5,
+    "literal-primitive": 72,
+    "retained-diagnostic": 40,
+    "unclassified-function": 5,
+    "unicode-custom-name": 7,
+    "valid-boundary": 49,
+    "variable-boundary": 144,
+    "variable-primitive": 72
+  },
+  "failures": [
+    {
+      "test": "recovery_preserves_cascade_priority_inheritance_shorthands_and_order",
+      "failedViewportCases": 22,
+      "distinctFailingCases": 11
+    },
+    {
+      "test": "valid_unsupported_css_resources_and_unclassified_functions_stay_diagnostic",
+      "failedViewportCases": 6,
+      "distinctFailingCases": 3
+    },
+    {
+      "test": "non_css_whitespace_and_escaped_token_content_never_manufacture_literal_values",
+      "failedViewportCases": 156,
+      "distinctFailingCases": 78
+    },
+    {
+      "test": "primitive_wrong_types_arity_and_negative_nonnegative_values_compute_unset",
+      "failedViewportCases": 134,
+      "distinctFailingCases": 67
+    },
+    {
+      "test": "proven_invalid_variable_boundary_values_compute_unset",
+      "failedViewportCases": 194,
+      "distinctFailingCases": 97
+    }
+  ],
+  "nodeTransport": {
+    "status": "added-not-run-awaiting-parent-frozen-binaries",
+    "test": "public value token boundaries preserve CLI/WASM recovery and retained diagnostics",
+    "testFile": "tests/transport-parity.mjs",
+    "caseCount": 551,
+    "viewports": [
+      [
+        240,
+        160
+      ],
+      [
+        768,
+        120
+      ]
+    ]
+  },
+  "productionEditedByThisAgent": false,
+  "nativeOrVisualQualification": false,
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/command.json",
+      "sha256": "77ae438356f93426dc722cf345e60dec23d2c125f21c9cdde5ade5210710718d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/result.json",
+      "sha256": "986609f4dfe4f74642a19739aa135ec83096a2baa3fca09c770e397a4766ae60"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/test.log",
+      "sha256": "efd74da0597a8cbb591ccf3c93c3aa80d248e17cf147408281eed412b8020673"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/failures.json",
+      "sha256": "04740e46a66abb7a50804519583400931b3702b0ddaf07004a318c78bde7679a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/baseline.rs",
+      "sha256": "bf4f42624b6eb1b60f9ef0b3333d0b3cb4842d63de88e52de106a7e7507ac9a5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/box_sizing.rs",
+      "sha256": "6a6990acb4240265aa521719b51a97df2e2e7d3c2eb01943da62b5418b5600a6"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/color.rs",
+      "sha256": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/compiler.rs",
+      "sha256": "680fb5db76da6d72f3fb0676f61bd3a68c3e80528200a6657251a3b07868dea0"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/computed_provenance.rs",
+      "sha256": "d1e2642edd4453c32df535a55f3af5f623b8d3e0a76471a6692dba936859c785"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/css.rs",
+      "sha256": "7406e4df539c174c07b0be988a16d3737b6f1b5c35ed61a388af213d2707c6a8"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex.rs",
+      "sha256": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_descriptor.rs",
+      "sha256": "db21e9c579d4caa1db8cd2c49c51cbe077e3d4e9c1a673fe88cb4e241bdeff10"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_numeric.rs",
+      "sha256": "17f300df9ac25458a51540a23b389f9610e0e2b425a64550c1d7a931ca9ef615"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_proof.rs",
+      "sha256": "75da7238b2cefdfa945a61f3c6951385b7d3270e6ccaf3f94448dd24d0816f4f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_scene.rs",
+      "sha256": "c7dfe10de4e84e15afe0d918d689d90d208f1459515e18f8af22c4b6d293b99f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_sizes.rs",
+      "sha256": "1c8f76635f16a5b65e75927a7df35700bb79e6624f7b5d5b69459cbe0fb5d37f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_structure.rs",
+      "sha256": "d8c3d2a1aa2b861cfd0d4102e4d6c215643bb29ca282b5b079a072b4824d8bb4"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/flex_world.rs",
+      "sha256": "3c64ab1c8204cd4f6d8e52473b43300bb483c5a931c665c3e5745a0c7b7e813d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/gap.rs",
+      "sha256": "8b0848021dea9e2d1438e71ebf10ba2b7277a0ab10e41989ae14e7902686c67a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/lib.rs",
+      "sha256": "3e0d944bfe41682b40be4b5b8ab06deea027c14c1103739a6c383144d371fe9d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/main.rs",
+      "sha256": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/margins.rs",
+      "sha256": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/numeric.rs",
+      "sha256": "00d650f5a0b0926e002cd992953e1d901c5ab4de1c94a087e58f70ed1ffa90a9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/numeric_tokens.rs",
+      "sha256": "f0cd2b7f7b715f22e27381824b3a3dba307830c41acd8fc888cfedf0020b279d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/padding.rs",
+      "sha256": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/scalar_provenance.rs",
+      "sha256": "1212dff247920f8e50bd855d5f8f3cbba27d0966c484a720d1e380e5dfa01aa6"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/spacing.rs",
+      "sha256": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/variables.rs",
+      "sha256": "19869a19469a00dd6f94f5ed6d6a1642ae4db53344ed6493772b4aabad91d62f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/wasm.rs",
+      "sha256": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/wire.rs",
+      "sha256": "15c303837344c7649b9691dbce049e8ab4d77caae34ae5845a89c73828c18a29"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/wrapping.rs",
+      "sha256": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/src/wrapping_paint.rs",
+      "sha256": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/tests/value-token-boundaries.rs",
+      "sha256": "d06d7b49781b66df4cffefe954c5c67b404e0e58581da87f39221e82c2457ac5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/validation/public-value-token-cases.json",
+      "sha256": "cd65abb57b0b34c6192350c0e86724b2e3f87fded94d4b112b34865d3bfd1036"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/frozen/validation/public-value-token-fixtures.py",
+      "sha256": "e644582d0992e5b260ee631d06edae1ea3bc6a0828279dca5ee1641ab5ec784a"
+    },
+    {
+      "path": "tools/html-to-riv/tests/transport-parity.mjs",
+      "sha256": "317134d585c75575e0b9918eeeba96916dd1e91d4f2f76c1e94dfc7bdd019d6b"
+    }
+  ]
+}

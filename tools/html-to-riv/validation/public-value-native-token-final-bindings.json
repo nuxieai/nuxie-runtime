@@ -1,0 +1,43 @@
+{
+  "scope": "Six scene sources remain exact copies in the final frozen610-case public token corpus; earlier corpus binding remains historical.",
+  "source": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-tests-migration-r2/frozen/validation/public-value-token-cases.json",
+    "sha256": "547e361751cadcc7e0a03277c2826dd7c9c529ec91029a1358c99032e7535151"
+  },
+  "nativeCases": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-value-native-cases.json",
+    "sha256": "00f997f2b512a4ed5bcc1cfc6ee3500a4e87e28aacfcddcddc47f0ec5420d4b5"
+  },
+  "selected": [
+    {
+      "nativeName": "value-tiny-variable-f32-underflow-width-unitless",
+      "sourceCase": "variable-f32-underflow-width-unitless",
+      "exactHtmlCssAndControl": true
+    },
+    {
+      "nativeName": "value-tiny-variable-f32-underflow-font-unitless",
+      "sourceCase": "variable-f32-underflow-font-unitless",
+      "exactHtmlCssAndControl": true
+    },
+    {
+      "nativeName": "value-tiny-variable-f32-underflow-width-negative-length",
+      "sourceCase": "variable-f32-underflow-width-negative-length",
+      "exactHtmlCssAndControl": true
+    },
+    {
+      "nativeName": "value-tiny-variable-f32-underflow-font-negative-length",
+      "sourceCase": "variable-f32-underflow-font-negative-length",
+      "exactHtmlCssAndControl": true
+    },
+    {
+      "nativeName": "value-tiny-valid-variable-positive-length",
+      "sourceCase": "valid-variable-positive-length",
+      "exactHtmlCssAndControl": true
+    },
+    {
+      "nativeName": "value-tiny-valid-variable-f64-underflow-negative-length",
+      "sourceCase": "valid-variable-f64-underflow-negative-length",
+      "exactHtmlCssAndControl": true
+    }
+  ]
+}

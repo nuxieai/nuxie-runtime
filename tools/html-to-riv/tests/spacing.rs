@@ -63,7 +63,11 @@ fn nonempty_spaced_column_baseline_metrics_remain_explicitly_unresolved() {
 #[test]
 fn unsupported_values_reject_even_in_losing_or_unmatched_declarations() {
     for value in ["center","space-between","safe space-around","unsafe space-evenly","auto","space-around extra","revert"] {
-        for css in [format!("#never{{justify-content:{value}}}"),format!("#p{{justify-content:{value};justify-content:normal}}"),format!("#p{{--j:{value};justify-content:var(--j)}}")] {assert!(compile(&input(&css)).is_err(),"{css}");}
+        for css in [format!("#never{{justify-content:{value}}}"),format!("#p{{justify-content:{value};justify-content:normal}}")] {assert!(compile(&input(&css)).is_err(),"{css}");}
+        let variable=format!("#p{{--j:{value};justify-content:var(--j)}}");
+        if matches!(value,"safe space-around"|"unsafe space-evenly"|"auto"|"space-around extra") {
+            assert_eq!(compile(&input(&variable)).unwrap(),compile(&input(&format!("#p{{--j:{value};justify-content:unset}}"))).unwrap(),"{value}");
+        } else {assert!(compile(&input(&variable)).is_err(),"valid unsupported spacing: {variable}");}
     }
 }
 #[test]

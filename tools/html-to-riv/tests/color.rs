@@ -1,7 +1,32 @@
 //! Pure authoring color tests; importing this module does not render or mutate a runtime.
 use nuxie_html_to_riv::Diagnostic;
+#[path = "../src/css_whitespace.rs"]
+mod css_whitespace;
 #[path = "../src/color.rs"]
 mod color;
+
+#[test]
+fn only_css_whitespace_separates_color_components_or_pads_values() {
+    for separator in ['\t', '\n', '\u{c}', '\r', ' '] {
+        for text in [format!("{separator}red{separator}"),
+            format!("rgb(255{separator}0{separator}0)"),
+            format!("rgb({separator}255,0,0)"),
+            format!("hsl(0,100%,50%,{separator}1{separator})")] {
+            assert_eq!(color::parse(&text, "test").unwrap(), 0xffff0000, "{text:?}");
+        }
+    }
+    for separator in ['\u{b}', '\u{85}', '\u{a0}', '\u{1680}', '\u{2003}',
+        '\u{2028}', '\u{2029}', '\u{202f}', '\u{205f}', '\u{3000}', '\u{feff}'] {
+        for text in [format!("{separator}red"), format!("red{separator}"),
+            format!("#f00{separator}"), format!("rgb({separator}255,0,0)"),
+            format!("rgb(255{separator}0{separator}0)"),
+            format!("rgb(255 0 0 / {separator}1)"),
+            format!("hsl({separator}0,100%,50%)"),
+            format!("hsl(0,100%,50%,1{separator})")] {
+            assert!(color::parse(&text, "test").is_err(), "{text:?}");
+        }
+    }
+}
 
 #[test]
 fn named_colors_hex_alpha_and_case_are_preserved() {

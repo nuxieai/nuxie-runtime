@@ -7,7 +7,9 @@ fn public_zero_padding_preserves_prior_bytes_and_maps() {
 }
 #[test]
 fn public_padding_preserves_strict_unsupported_literal_diagnostics() {
-    for css in ["#a{padding:-2px}","#never{padding:auto}","#a{padding:calc(2px);padding:0}","#a{--p:-2px;padding:var(--p);padding:0}","#never{padding:1fr}"] {assert!(compile(&input(css)).is_err(),"{css}");}
+    for css in ["#a{padding:-2px}","#never{padding:auto}","#a{padding:calc(2px);padding:0}","#never{padding:1fr}"] {assert!(compile(&input(css)).is_err(),"{css}");}
+    assert_eq!(compile(&input("#a{--p:-2px;padding:var(--p);padding:0}")).unwrap(),
+        compile(&input("#a{--p:-2px;padding:unset;padding:0}")).unwrap());
 }
 #[test]
 fn public_nonzero_padding_admits_ordinary_border_box_profiles() {

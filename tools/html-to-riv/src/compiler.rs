@@ -1,7 +1,9 @@
 //! Ordinary layout/fill lowering. Admission grows only with baseline evidence.
-use crate::{color, css, variables, wire::{self, Record, Value}, CompileInput, CompileOutput, Diagnostic, SourceNode};
+use crate::{css_whitespace, color, css, variables, wire::{self, Record, Value}, CompileInput, CompileOutput, Diagnostic, SourceNode};
 use scraper::{ElementRef, Html};
 use std::collections::BTreeSet;
+#[path = "value_grammar.rs"]
+mod value_grammar;
 #[path = "baseline.rs"]
 mod baseline;
 #[path = "spacing.rs"]
@@ -70,7 +72,7 @@ impl Direction {
     fn is_row(self) -> bool { matches!(self, Self::Row | Self::RowReverse) }
 }
 fn computed_direction(text: &str, parent: Direction, source: &str) -> Result<Direction, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
+    match css_whitespace::trim(text).to_ascii_lowercase().as_str() {
         "column" => Ok(Direction::Column), "column-reverse" => Ok(Direction::ColumnReverse),
         "row" | "initial" | "unset" => Ok(Direction::Row), "row-reverse" => Ok(Direction::RowReverse),
         "inherit" => Ok(parent),
@@ -111,8 +113,8 @@ impl SelfAlignment {
     }
 }
 fn computed_alignment(text: &str, parent: SelfAlignment, source: &str) -> Result<SelfAlignment, Diagnostic> {
-    let text = text.trim().to_ascii_lowercase();
-    let tokens: Vec<_> = text.split_ascii_whitespace().collect();
+    let text = css_whitespace::trim(text).to_ascii_lowercase();
+    let tokens: Vec<_> = css_whitespace::words(&text).collect();
     let (word, overflow) = match tokens.as_slice() {
         ["inherit"] => return Ok(parent),
         ["initial" | "unset"] => return Ok(SelfAlignment::AUTO),
@@ -180,7 +182,7 @@ fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
 }
 
 fn size(text: &str, source: &str) -> Result<SpecifiedSize, Diagnostic> {
-    let text = text.trim().to_ascii_lowercase();
+    let text = css_whitespace::trim(text).to_ascii_lowercase();
     if text == "auto" { return Ok(SpecifiedSize::Auto); }
     let (number, unit): (&str, fn(f32) -> SpecifiedSize) =
         if let Some(v) = text.strip_suffix("rem") { (v, SpecifiedSize::Rem) }
@@ -206,7 +208,7 @@ fn resolved_length(value: f32, basis: f32, source: &str) -> Result<f32, Diagnost
 // parent's containing block. Percentages remain responsive at the receiving box;
 // font-relative lengths have already become absolute at the parent.
 fn computed_size(text: &str, inherited: Size, font_size: f32, source: &str) -> Result<Size, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
+    match css_whitespace::trim(text).to_ascii_lowercase().as_str() {
         "inherit" => Ok(inherited),
         "initial" | "unset" => Ok(Size::Auto),
         _ => Ok(match size(text, source)? {
@@ -222,7 +224,7 @@ fn computed_size(text: &str, inherited: Size, font_size: f32, source: &str) -> R
 // Auto represents an absent maximum or an automatic minimum, distinguished
 // when emitting ordinary units. The authoring reset minimum stays explicit zero.
 fn computed_bound(text: &str, inherited: Size, font_size: f32, minimum: bool, source: &str) -> Result<Size, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
+    match css_whitespace::trim(text).to_ascii_lowercase().as_str() {
         "inherit" => Ok(inherited),
         "none" | "initial" | "unset" if !minimum => Ok(Size::Auto),
         "auto" | "initial" | "unset" if minimum => Ok(Size::Auto),
@@ -232,7 +234,7 @@ fn computed_bound(text: &str, inherited: Size, font_size: f32, minimum: bool, so
 }
 
 fn computed_font_size(text: &str, parent: f32, source: &str) -> Result<f32, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
+    match css_whitespace::trim(text).to_ascii_lowercase().as_str() {
         "inherit" | "unset" => Ok(parent),
         "initial" => Ok(ROOT_FONT_SIZE),
         _ => match size(text, source)? {
@@ -248,7 +250,7 @@ fn computed_font_size(text: &str, parent: f32, source: &str) -> Result<f32, Diag
 fn background_shorthand(value: &str, parent: BackgroundColor, source: &str) -> Result<BackgroundColor, Diagnostic> {
     let value = css::ordinary_value(value).map_err(|_| unsupported(source,
         "background supports one solid color, none, inherit, initial or unset; other image/layer/position/size/repeat/box/attachment values are not admitted"))?;
-    match value.trim().to_ascii_lowercase().as_str() {
+    match css_whitespace::trim(&value).to_ascii_lowercase().as_str() {
         "inherit" => Ok(parent),
         "none" | "initial" | "unset" => Ok(BackgroundColor::Rgba(0)),
         "currentcolor" => Ok(BackgroundColor::CurrentColor),
@@ -270,6 +272,16 @@ fn apply_background_shorthand(style: &mut Style, parent: &Style, value: &str, so
 }
 
 fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inherited_flex: flex::Flex, inherited_padding: padding::Padding) -> Result<(), Diagnostic> {
+    validate_target(d, candidate, padding_candidate, inherited_flex, inherited_padding)?;
+    // Target parsers use binary32 fields; their rounding cannot make an invalid
+    // authored number (for example a tiny negative padding) into a valid zero.
+    if !d.name.starts_with("--") && !variables::contains_var(&d.value)
+        && value_grammar::classify(&d.name, &d.value) == value_grammar::Validity::Invalid {
+        return Err(unsupported(&d.source, format!("{} has an invalid CSS receiving value", d.name)));
+    }
+    Ok(())
+}
+fn validate_target(d: &css::Declaration, candidate: bool, padding_candidate: bool, inherited_flex: flex::Flex, inherited_padding: padding::Padding) -> Result<(), Diagnostic> {
     if d.name.starts_with("--") {
         return variables::validate_value(&d.value, &d.source);
     }
@@ -285,7 +297,7 @@ fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inhe
         background_shorthand(&d.value, BackgroundColor::Rgba(0), &d.source)?;
         return Ok(());
     }
-    let value = css::ordinary_value(&d.value)?.trim().to_ascii_lowercase();
+    let value = css_whitespace::trim(&css::ordinary_value(&d.value)?).to_ascii_lowercase();
     match d.name.as_str() {
         "box-sizing" => { box_sizing::computed(&value, box_sizing::BoxSizing::default(), &d.source)?; }
         "width" | "height" => {
@@ -342,19 +354,18 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
         return computed_order(&declaration.value, parent.order, &declaration.source);
     }
     let environment = variables::compute(&declarations, &parent.variables)?;
-    let value = substitute_ordinary(&declaration.value, &environment, &declaration.source)?;
+    let value = substitute_ordinary(&declaration.name, &declaration.value, &environment, &declaration.source)?;
     computed_order(&value.native, parent.order, &declaration.source)
 }
 
-// Guaranteed-invalid substitution and a successful empty ordinary value compute
-// as unset at the declaration's existing cascade priority. Custom empty values
-// stay valid in the resolver and suppress fallbacks. Complete resolution first
-// so syntax/resource errors cannot be hidden; nonempty values still undergo
-// property and target admission (including declarations that lose).
-fn substitute_ordinary(value: &str, variables: &variables::Variables, source: &str)
+// Failed substitution and values proven invalid by the receiving grammar
+// compute as unset at the same cascade priority. Complete resolution first so
+// syntax/resource failures cannot be hidden. Valid and unclassified values
+// still undergo target admission, including declarations that lose the cascade.
+fn substitute_ordinary(property: &str, value: &str, variables: &variables::Variables, source: &str)
     -> Result<variables::ResolvedValue, Diagnostic> {
     Ok(variables::substitute_with_provenance(value, variables, source)?
-        .filter(|value| !css::has_no_value_tokens(&value.native))
+        .filter(|value| value_grammar::classify(property, &value.native) != value_grammar::Validity::Invalid)
         .unwrap_or_else(|| variables::ResolvedValue { native: "unset".into(), original: None }))
 }
 
@@ -377,7 +388,7 @@ fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style
     let mut resolved = Vec::with_capacity(declarations.len());
     for mut d in declarations {
         let original = if variables::contains_var(&d.value) {
-            let selected = substitute_ordinary(&d.value, &variable_values, &d.source)?;
+            let selected = substitute_ordinary(&d.name, &d.value, &variable_values, &d.source)?;
             d.value = selected.native;
             // Substitution cannot bypass property admission, even for a declaration
             // that loses the cascade. Keep the compiler's strict diagnostics.
@@ -402,7 +413,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
     // declaration order. A background currentColor stays a computed keyword
     // through inheritance and resolves against the receiving element at emission.
     for d in declarations.iter().filter(|d| d.name == "color") {
-        let value = d.value.trim().to_ascii_lowercase();
+        let value = css_whitespace::trim(&d.value).to_ascii_lowercase();
         style.foreground = match value.as_str() {
             "inherit" | "unset" | "currentcolor" => parent.foreground,
             "initial" => 0xff000000,
@@ -428,7 +439,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
             "max-height" => { style.max_height = computed_bound(&d.value, parent.max_height, style.font_size, false, &d.source)?; style.numeric.max_height = computed_provenance::dimension(d,style.max_height,&parent.numeric.max_height,&style.numeric.font); },
             "background" => apply_background_shorthand(&mut style, parent, &d.value, &d.source)?,
             "background-color" => {
-                style.background = match d.value.trim().to_ascii_lowercase().as_str() {
+                style.background = match css_whitespace::trim(&d.value).to_ascii_lowercase().as_str() {
                     "currentcolor" => BackgroundColor::CurrentColor,
                     "inherit" => parent.background,
                     "initial" | "unset" => BackgroundColor::Rgba(0),
@@ -590,8 +601,8 @@ impl Emitter {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
         let mut elements = Vec::new();
         for node in parent.children() {
-            if node.value().as_text().is_some_and(|t| !t.trim().is_empty()) {
-                return Err(unsupported(path, "Text rendering is not yet requalified on the immutable runtime"));
+            if node.value().as_text().is_some_and(|t| !css_whitespace::trim(t).is_empty()) {
+                return Err(unsupported(if path.is_empty() { "html" } else { path }, "Text rendering is not yet requalified on the immutable runtime"));
             }
             let Some(element) = ElementRef::wrap(node) else { continue; };
             elements.push(element);

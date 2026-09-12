@@ -15,7 +15,7 @@ impl Spacing {
     }
 }
 pub(super) fn computed(text: &str, parent: Spacing, source: &str) -> Result<Spacing, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
+    match crate::css_whitespace::trim(text).to_ascii_lowercase().as_str() {
         "normal" | "initial" | "unset" => Ok(Spacing::Normal),
         "flex-start" => Ok(Spacing::FlexStart),
         "space-around" => Ok(Spacing::Around),

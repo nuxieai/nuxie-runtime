@@ -66,7 +66,7 @@ pub(super) fn padding(declaration: &ResolvedDeclaration, native: super::padding:
         "padding-left" => Some(0), "padding-top" => Some(1),
         "padding-right" => Some(2), "padding-bottom" => Some(3), _ => None,
     };
-    let value = declaration.value.trim().to_ascii_lowercase();
+    let value = crate::css_whitespace::trim(&declaration.value).to_ascii_lowercase();
     let result = (|| {
         if value == "inherit" { return Ok(parent.clone()); }
         if matches!(value.as_str(), "initial" | "unset") { return Ok(std::array::from_fn(|_| exact(0.))); }
@@ -160,7 +160,7 @@ fn known(value: &Scalar) -> Result<&ScalarProvenance, Unresolved> {
     value.as_ref().map_err(Clone::clone)
 }
 pub(super) fn font(declaration: &ResolvedDeclaration, native: f32, parent: &Scalar) -> Scalar {
-    let value = declaration.value.trim().to_ascii_lowercase();
+    let value = crate::css_whitespace::trim(&declaration.value).to_ascii_lowercase();
     let result = (|| {
         if matches!(value.as_str(), "inherit" | "unset") {
             return Ok(known(parent)?.clone());
@@ -184,7 +184,7 @@ pub(super) fn dimension(
     parent: &NumericSize,
     font: &Scalar,
 ) -> NumericSize {
-    if declaration.value.trim().eq_ignore_ascii_case("inherit") {
+    if crate::css_whitespace::trim(&declaration.value).eq_ignore_ascii_case("inherit") {
         return parent.clone();
     }
     if matches!(native, Size::Auto) {
@@ -594,7 +594,9 @@ mod flex_tests {
     }
     #[test]
     fn underflowed_authored_basis_is_not_proved_exact_zero_and_missing_metadata_stays_missing() {
-        let value = style("#a{flex:2 7 1e-50}", &Style::default());
+        // A nonzero unitless number is not a basis length even if f32
+        // underflows. A tiny positive px length exercises the intended premise.
+        let value = style("#a{flex:2 7 1e-50px}", &Style::default());
         assert_eq!(basis(&value.numeric.flex).native(), 0.);
         assert!(!basis(&value.numeric.flex).is_exact_zero());
         for token in ["-0", "+0", "0e0"] {

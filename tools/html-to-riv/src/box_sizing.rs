@@ -6,7 +6,7 @@ use super::{computed_provenance::{NumericSize, NumericStyle, Scalar, Unresolved}
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub(super) enum BoxSizing { #[default] BorderBox, ContentBox }
 pub(super) fn computed(text: &str, parent: BoxSizing, source: &str) -> Result<BoxSizing, Diagnostic> {
-    match text.trim().to_ascii_lowercase().as_str() {
+    match crate::css_whitespace::trim(text).to_ascii_lowercase().as_str() {
         "border-box" => Ok(BoxSizing::BorderBox),
         "content-box" | "initial" | "unset" => Ok(BoxSizing::ContentBox),
         "inherit" => Ok(parent),

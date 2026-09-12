@@ -74,7 +74,7 @@ fn value_text(p: &mut Parser<'_, '_>) -> Result<String, Diagnostic> {
 
 // Unicode whitespace such as NBSP is a CSS token, not declaration padding.
 fn trim_value_whitespace(text: &str) -> &str {
-    text.trim_matches(|c| matches!(c, ' ' | '\t' | '\n' | '\r' | '\u{c}'))
+    crate::css_whitespace::trim(text)
 }
 
 fn value_text_inner(p: &mut Parser<'_, '_>, allow_color: bool) -> Result<String, Diagnostic> {
@@ -163,13 +163,6 @@ fn consume_values<'i>(
 pub(crate) fn ordinary_value(text: &str) -> Result<String, Diagnostic> {
     let mut input = ParserInput::new(text);
     value_text(&mut Parser::new(&mut input))
-}
-
-// Empty after CSS whitespace/comments is different from a string, function,
-// delimiter or non-CSS whitespace token. This does not classify other grammar.
-pub(crate) fn has_no_value_tokens(text: &str) -> bool {
-    let mut input = ParserInput::new(text);
-    Parser::new(&mut input).is_exhausted()
 }
 
 pub(crate) fn declarations(text: &str, source: &str) -> Result<Vec<Declaration>, Diagnostic> {
@@ -515,7 +508,7 @@ fn selector_prelude_mode(
                         }
                     }
                 }
-                if text.trim().is_empty() {
+                if crate::css_whitespace::trim(&text).is_empty() {
                     return Err(p.new_custom_error(error("css", "Empty selector")));
                 }
                 Ok((text, specificity))

@@ -1,6 +1,7 @@
 //! Computed flex values, staged independently of immutable-target admission.
 //! Parsing a value here does not establish an ordinary-file encoding for it.
 use super::{Diagnostic, Size, computed_size, unsupported};
+use cssparser::ToCss;
 // Provisional compiler numeric admission limit, not a CSS grammar restriction
 // or proof of aggregate arithmetic safety. Revisit with resource qualification.
 const MAX_FACTOR: f32 = 1_000_000.;
@@ -39,8 +40,10 @@ fn words(text: &str, source: &str) -> Result<Vec<String>, Diagnostic> {
         let start = parser.position();
         let token = parser.next().map_err(|_| unsupported(source, "Invalid flex value"))?;
         match token {
-            cssparser::Token::Ident(value) => words.push(value.to_string()),
-            cssparser::Token::Number { .. } | cssparser::Token::Dimension { .. } | cssparser::Token::Percentage { .. } => words.push(parser.slice_from(start).trim().to_string()),
+            // Keep a single escaped identifier a single token. Decoding it to
+            // text could turn embedded spaces into shorthand components.
+            cssparser::Token::Ident(_) => words.push(token.to_css_string()),
+            cssparser::Token::Number { .. } | cssparser::Token::Dimension { .. } | cssparser::Token::Percentage { .. } => words.push(parser.slice_from(start).to_owned()),
             _ => return Err(unsupported(source, "Flex values require numbers, supported lengths or keywords")),
         }
         if words.len() > 3 { return Err(unsupported(source, "Flex value has too many components")); }
@@ -68,7 +71,7 @@ fn shorthand(text: &str, font_size: f32, source: &str) -> Result<Flex, Diagnosti
         "auto" => return Ok(Flex { grow: 1., shrink: 1., basis: Size::Auto }),
         _ => (),
     }
-    let parts: Vec<_> = text.split_ascii_whitespace().collect();
+    let parts: Vec<_> = crate::css_whitespace::words(text).collect();
     if parts.iter().any(|v| matches!(*v, "inherit" | "initial" | "unset" | "none")) {
         return Err(unsupported(source, "CSS-wide flex keywords must be the complete value"));
     }
@@ -93,6 +96,22 @@ fn shorthand(text: &str, font_size: f32, source: &str) -> Result<Flex, Diagnosti
 mod tests {
     use super::*;
     fn parse(text: &str) -> Flex { let mut f=Flex::default(); f.apply("flex",text,Flex::default(),20.,"test").unwrap(); f }
+    #[test]
+    fn escaped_identifier_spaces_cannot_manufacture_shorthand_components() {
+        for (raw, expected) in [(r"\30 \20 \30 \20 auto", "0 0 auto"),
+            (r"auto\a0", "auto\u{a0}"), (r"\30 \9 \30 \9 auto", "0\t0\tauto")] {
+            let serialized = words(raw, "test").unwrap();
+            assert_eq!(serialized.len(), 1);
+            let mut input = cssparser::ParserInput::new(&serialized[0]);
+            let mut parser = cssparser::Parser::new(&mut input);
+            assert!(matches!(parser.next(), Ok(cssparser::Token::Ident(value)) if *value == expected));
+            parser.expect_exhausted().unwrap();
+            assert!(Flex::default().apply("flex", raw, Flex::default(), 20., "test").is_err(), "{raw}");
+        }
+        assert!(parse(r"n\6f ne").legacy());
+        assert!(parse("0\t0\u{c}auto").legacy());
+        assert!(Flex::default().apply("flex", "0\u{b}0 auto", Flex::default(), 20., "test").is_err());
+    }
     #[test]
     fn reset_initial_and_inheritance_are_distinct() {
         assert_eq!(Flex::default().shrink,0.);

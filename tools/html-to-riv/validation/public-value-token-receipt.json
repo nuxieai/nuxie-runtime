@@ -1,0 +1,309 @@
+{
+  "status": "public-test-migration-and-transport-pass",
+  "scope": "Compiler public parsing/recovery and transport only; separate native/Chrome and prior-output receipts required.",
+  "immutableRuntimeBaseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "publicCases": 610,
+  "viewports": [
+    [
+      240,
+      160
+    ],
+    [
+      768,
+      120
+    ]
+  ],
+  "caseOutcomes": {
+    "diagnostic": 292,
+    "equivalent": 307,
+    "unset-diagnostic": 11
+  },
+  "caseGroups": {
+    "cascade-recovery": 13,
+    "historical-recovery": 25,
+    "literal-boundary": 152,
+    "literal-function-boundary": 5,
+    "literal-primitive": 76,
+    "retained-diagnostic": 54,
+    "unclassified-function": 5,
+    "unicode-custom-name": 7,
+    "valid-boundary": 53,
+    "variable-boundary": 144,
+    "variable-primitive": 76
+  },
+  "focusedRustTests": 9,
+  "migration": {
+    "testTargets": 12,
+    "passed": 73,
+    "failed": 0,
+    "sourceUnchangedDuringRun": true
+  },
+  "fullValidation": {
+    "status": "public-build-and-transport-pass",
+    "sourceUnchanged": true,
+    "rustTests": 262,
+    "nodeTests": 42,
+    "compilerSha256": "034084cd868e9b33ba849bc328ea4c540d63115192eba7918e7d7ec00c3c2b2d",
+    "wasmSha256": "02703fb84aef89ff60cfe49d7d2908b53e8317fd95299d368f85865b8bd3cad5",
+    "nativeQualification": "Separate native/Chrome and regression receipts required."
+  },
+  "checkResults": [
+    {
+      "name": "full-rust",
+      "exitCode": 0,
+      "log": "tools/html-to-riv/output/public-value-build-r1/full-rust.log",
+      "logSha256": "f1ce006d2efd11fbabf28b0afd174d4b644531107d9355619bddc4d570bed168"
+    },
+    {
+      "name": "native-build",
+      "exitCode": 0,
+      "log": "tools/html-to-riv/output/public-value-build-r1/native-build.log",
+      "logSha256": "edbebc55b819a92eb33eed2fb1f3413ee5c9c4f67add7c5042ef2341d6a64421"
+    },
+    {
+      "name": "wasm-build",
+      "exitCode": 0,
+      "log": "tools/html-to-riv/output/public-value-build-r1/wasm-build.log",
+      "logSha256": "63819e40bce2e751182f9961fa7ac2915c1cc12865b29d7bd3204d546f113274"
+    },
+    {
+      "name": "typescript",
+      "exitCode": 0,
+      "log": "tools/html-to-riv/output/public-value-build-r1/typescript.log",
+      "logSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "full-node",
+      "exitCode": 0,
+      "log": "tools/html-to-riv/output/public-value-build-r1/full-node.log",
+      "logSha256": "c272a2baf1f9b05e547b1d81f83d6a865a0a823e17aaf46bb3dbd86b801b8217"
+    },
+    {
+      "name": "runtime-guard",
+      "exitCode": 0,
+      "log": "tools/html-to-riv/output/public-value-build-r1/runtime-guard.log",
+      "logSha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    }
+  ],
+  "sourceBindingsVerified": {
+    "files": 118,
+    "snapshots": 116,
+    "binaries": 2
+  },
+  "historicalFixtures": [
+    {
+      "path": "tools/html-to-riv/validation/public-content-box-rejections.json",
+      "sha256": "8df5e51cb90df90e4eb1e5911f397470fc053b3cd2aca063993a6f9a5b5e05e0",
+      "byteIdenticalToHead": true,
+      "explicitNewControls": 1
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-empty-variable-rejections.json",
+      "sha256": "5c2bc4c8c77f9558e30c33308437e919eebf51ac8348e7db7b6b303c1dda6c56",
+      "byteIdenticalToHead": true,
+      "explicitNewControls": 12
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-numeric-token-rejections.json",
+      "sha256": "ee3eec4f32fa777adf483794930899b0e93612a6478013ad57d271d1bdb90ae2",
+      "byteIdenticalToHead": true,
+      "explicitNewControls": 9
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-variable-recovery-rejections.json",
+      "sha256": "eb5a1251b3c61d480055f2680be504b26d13dfacd02678e555d1bab574252f22",
+      "byteIdenticalToHead": true,
+      "explicitNewControls": 3
+    }
+  ],
+  "historicalRecoveryControls": 25,
+  "unsupportedUnsetProof": "Exact diagnostic code+message equality against explicit unset; source locations may differ. CLI/WASM still compare full diagnostics for identical inputs.",
+  "nativeOrVisualClaim": false,
+  "preservedFailures": [
+    "output/public-value-token-red-r1",
+    "output/public-value-token-red-r2",
+    "output/public-value-tests-migration-r1"
+  ],
+  "supersedesPendingTransportReceipts": [
+    "validation/public-value-token-red-r2-receipt.json",
+    "output/public-value-tests-migration-r2/receipt.json"
+  ],
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-review.md",
+      "sha256": "7809aa331ae4887c5f4859f86e3857c787aed6f10b4941d5dac6c1ddfcbc200c"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-fixtures.py",
+      "sha256": "9add71dc2e1eae5e57f3094d9beca39ce4d99aff6e01623c64fcd9a2210d0626"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-cases.json",
+      "sha256": "547e361751cadcc7e0a03277c2826dd7c9c529ec91029a1358c99032e7535151"
+    },
+    {
+      "path": "tools/html-to-riv/tests/value-token-boundaries.rs",
+      "sha256": "df8d6c7cc32664349a5b9fbc11f2cb6fd3d25384203c8e48a0d12ae8d9e23c1e"
+    },
+    {
+      "path": "tools/html-to-riv/tests/support/value_token_history.rs",
+      "sha256": "0d85d27b82d2e845991f7140a7259aecf9da4cd74d773099b7b423a9e92d91e5"
+    },
+    {
+      "path": "tools/html-to-riv/tests/transport-parity.mjs",
+      "sha256": "a329f2856154f86952b7120f382a70b1c806ba5edd0594530cc063c74a4503d2"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/summary.json",
+      "sha256": "b38a8fec73cffe3d109982b0675e104b6be4a92bb26b019a6e56ead801f9886b"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/checks.json",
+      "sha256": "6b026e0f59ee5f38119312b866fd3ca3c43a902bcedd20c4a2f1fa71447bd2c6"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/inputs-before.json",
+      "sha256": "7157c5d50ad2ba113f7b0f83d1d099e4a355c43bac07d26dca291d63a212db82"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/frozen/source-bindings.json",
+      "sha256": "10f37aa9d7c523873c912b2511fec9a7383ba65d6910548320df09033c7b6be6"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/frozen/html-to-riv",
+      "sha256": "034084cd868e9b33ba849bc328ea4c540d63115192eba7918e7d7ec00c3c2b2d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/frozen/compiler.wasm",
+      "sha256": "02703fb84aef89ff60cfe49d7d2908b53e8317fd95299d368f85865b8bd3cad5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/full-rust.log",
+      "sha256": "f1ce006d2efd11fbabf28b0afd174d4b644531107d9355619bddc4d570bed168"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/native-build.log",
+      "sha256": "edbebc55b819a92eb33eed2fb1f3413ee5c9c4f67add7c5042ef2341d6a64421"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/wasm-build.log",
+      "sha256": "63819e40bce2e751182f9961fa7ac2915c1cc12865b29d7bd3204d546f113274"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/typescript.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/full-node.log",
+      "sha256": "c272a2baf1f9b05e547b1d81f83d6a865a0a823e17aaf46bb3dbd86b801b8217"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-build-r1/runtime-guard.log",
+      "sha256": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r2/command.json",
+      "sha256": "2dc44307f21dcdd755aec90d7fdacecf0c9fa63d72c394de05c1f3b6e9d4ccfd"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r2/result.json",
+      "sha256": "91aac6a08fb807640a39af407add262714cd149651cc8e4877193638d282f2fb"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r2/test.log",
+      "sha256": "153bf0036b4733e4f85f5db8ad5a4c3d7bd4dcfd8951b9341853f57c6d3d13d4"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r2/receipt.json",
+      "sha256": "4800d5d02cf49c5ff6b502b1b85b9fd1e2d3d14084b46b517c5bc6af12a3414f"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-red-receipt.json",
+      "sha256": "78344ecd3d0c9c4a6abd9ccf4b9be41500b0bd52423b8e47e302c0f72dd1324b"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-red-r2-receipt.json",
+      "sha256": "9a71951b810a47ce0ca94c928fb8700eb5742194ac52be8b292ced6b0789bcc2"
+    },
+    {
+      "path": "tools/html-to-riv/tests/align-self.rs",
+      "sha256": "eee499c4147e7d2e6ed8326c6f6e1555af7ae50919cb06c52a6cdb268e6251cb"
+    },
+    {
+      "path": "tools/html-to-riv/tests/content-box.rs",
+      "sha256": "27560743ce11fe7e3f6ba55e6ee26f8813a8e095514b3585b23a9f496c5c741c"
+    },
+    {
+      "path": "tools/html-to-riv/tests/empty-variable.rs",
+      "sha256": "ff5b9099c589c994cf3798f6e58ff86e9ae86379f6a01ce36db9312b640fd69a"
+    },
+    {
+      "path": "tools/html-to-riv/tests/flex-direction.rs",
+      "sha256": "ba83048abe158beb575fedd15170ab35b56ebc51db62e565e9b7f5e7671b5262"
+    },
+    {
+      "path": "tools/html-to-riv/tests/margins.rs",
+      "sha256": "ee492ad94cdc9a011a126c9858a98ad57e2f673232c22839d9f81e9b4368133f"
+    },
+    {
+      "path": "tools/html-to-riv/tests/numeric-tokens.rs",
+      "sha256": "fc3d8ed6662ce0757a55fecf7f7792b660bcfe60ede1aa7e82dd4db946633f5a"
+    },
+    {
+      "path": "tools/html-to-riv/tests/order.rs",
+      "sha256": "c5d64fd1bee58729baa1d967389555d10bc59d5124b489f4a30eb4ae00061300"
+    },
+    {
+      "path": "tools/html-to-riv/tests/padding.rs",
+      "sha256": "f40a6f58a9ed771c50435c1b603bbb87f6b6acf5dafd7b5f0aa09e6ce57e4b68"
+    },
+    {
+      "path": "tools/html-to-riv/tests/spacing.rs",
+      "sha256": "24abc179864f563ab5242dbdcc80285dbd30e1cd64205b1da863f9b20fac3af1"
+    },
+    {
+      "path": "tools/html-to-riv/tests/variable-recovery.rs",
+      "sha256": "bd1e6bc3063e14721483a17c3aedb262db41f56b6fe127788a60a3916036da5c"
+    },
+    {
+      "path": "tools/html-to-riv/tests/variables-public.rs",
+      "sha256": "5c7f8d9d395acb375a487c0d326842bf0205d3c5b69c0db88a7abd2b72c45fd9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/command.json",
+      "sha256": "b0b743d2aaeff0064f267b1ad6bfa7b39bc443ef8034864cb3bed8e76641c3e8"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/result.json",
+      "sha256": "fba077f0bc1d90479d1bcc0b0764cda2fad8fa4cea55f816552fcb21a04b1ba5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/test.log",
+      "sha256": "bd003dffcef6e32922730d94fde4efbebf0b8f283e4a512bb117e1f49ebdcf56"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/command.json",
+      "sha256": "77ae438356f93426dc722cf345e60dec23d2c125f21c9cdde5ade5210710718d"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/result.json",
+      "sha256": "986609f4dfe4f74642a19739aa135ec83096a2baa3fca09c770e397a4766ae60"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r2/test.log",
+      "sha256": "efd74da0597a8cbb591ccf3c93c3aa80d248e17cf147408281eed412b8020673"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r1/command.json",
+      "sha256": "facde48c66af2876ecdb114943cdee883e5a4222d10265ddc6a323dae37be83b"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r1/result.json",
+      "sha256": "419ca947883354b03f0997b2454fe04f4db27453164ed717f3dc41c25fb3bb46"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-tests-migration-r1/test.log",
+      "sha256": "baee2fe63025360a5a5ed31b49db11f3ea07eacb7003d1a70363eef65791e906"
+    }
+  ]
+}

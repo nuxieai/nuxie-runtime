@@ -1,0 +1,122 @@
+{
+  "status": "red-test-only-paused-for-goal-review",
+  "head": "57bf50fc1319505e0d5b21edd0081019da6ee501",
+  "publicCases": 550,
+  "viewports": [
+    [
+      240,
+      160
+    ],
+    [
+      768,
+      120
+    ]
+  ],
+  "tests": {
+    "total": 8,
+    "passed": 3,
+    "failed": 5,
+    "exitCode": 101
+  },
+  "sourceUnchangedDuringRun": true,
+  "groups": {
+    "cascade-recovery": 13,
+    "literal-boundary": 144,
+    "literal-function-boundary": 5,
+    "literal-primitive": 72,
+    "retained-diagnostic": 40,
+    "unclassified-function": 5,
+    "unicode-custom-name": 7,
+    "valid-boundary": 48,
+    "variable-boundary": 144,
+    "variable-primitive": 72
+  },
+  "failures": [
+    {
+      "test": "recovery_preserves_cascade_priority_inheritance_shorthands_and_order",
+      "failedViewportCases": 22,
+      "distinctFailingCases": 11
+    },
+    {
+      "test": "valid_unsupported_css_resources_and_unclassified_functions_stay_diagnostic",
+      "failedViewportCases": 10,
+      "distinctFailingCases": 5
+    },
+    {
+      "test": "non_css_whitespace_and_escaped_token_content_never_manufacture_literal_values",
+      "failedViewportCases": 156,
+      "distinctFailingCases": 78
+    },
+    {
+      "test": "primitive_wrong_types_arity_and_negative_nonnegative_values_compute_unset",
+      "failedViewportCases": 134,
+      "distinctFailingCases": 67
+    },
+    {
+      "test": "proven_invalid_variable_boundary_values_compute_unset",
+      "failedViewportCases": 194,
+      "distinctFailingCases": 97
+    }
+  ],
+  "fixtureCorrectionsPending": [
+    {
+      "name": "invalid-important-background",
+      "reason": "A length is valid background-position syntax; replace intended wrong primitive with a string, retain a separate unsupported position control."
+    },
+    {
+      "names": [
+        "unsupported-literal-font-percentage",
+        "unsupported-variable-font-percentage"
+      ],
+      "reason": "font-size percentages already compile; these are not unsupported controls."
+    }
+  ],
+  "productionEdited": false,
+  "nativeOrVisualQualification": false,
+  "bindings": [
+    {
+      "path": "tools/html-to-riv/tests/value-token-boundaries.rs",
+      "sha256": "d06d7b49781b66df4cffefe954c5c67b404e0e58581da87f39221e82c2457ac5"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-fixtures.py",
+      "sha256": "63c8fe23d34383fa987f98c4a4fa615f7c2213505f74683e61712193e156311a"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-cases.json",
+      "sha256": "56ae874295fc45375f5f1525afa28c79471b678ec69e2235ffef361f6235640e"
+    },
+    {
+      "path": "tools/html-to-riv/validation/public-value-token-red-review.md",
+      "sha256": "97d9233789d819c86fe325741535485b045a23b0793b389cfa16d4ee3381c952"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/command.json",
+      "sha256": "b0b743d2aaeff0064f267b1ad6bfa7b39bc443ef8034864cb3bed8e76641c3e8"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/result.json",
+      "sha256": "fba077f0bc1d90479d1bcc0b0764cda2fad8fa4cea55f816552fcb21a04b1ba5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/test.log",
+      "sha256": "bd003dffcef6e32922730d94fde4efbebf0b8f283e4a512bb117e1f49ebdcf56"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/failures.json",
+      "sha256": "afc4553ce02c2fc67b2c03badc4b095f08a6c4533bf9bf48c277ab44f744acd9"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/frozen/tests/value-token-boundaries.rs",
+      "sha256": "d06d7b49781b66df4cffefe954c5c67b404e0e58581da87f39221e82c2457ac5"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/frozen/validation/public-value-token-cases.json",
+      "sha256": "56ae874295fc45375f5f1525afa28c79471b678ec69e2235ffef361f6235640e"
+    },
+    {
+      "path": "tools/html-to-riv/output/public-value-token-red-r1/frozen/validation/public-value-token-fixtures.py",
+      "sha256": "63c8fe23d34383fa987f98c4a4fa615f7c2213505f74683e61712193e156311a"
+    }
+  ]
+}

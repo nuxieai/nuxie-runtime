@@ -41,7 +41,7 @@ def build(out):
     assert frozen == source_hashes(), 'source changed before build'
     assert frozen == {str(p.relative_to(out / 'source')): sha(p) for p in (out / 'source').rglob('*') if p.is_file()}
     parts = ['use nuxie_html_to_riv::{CompileInput, CompileOutput, Diagnostic, SourceNode};']
-    for name in ['color', 'css', 'numeric_tokens', 'variables', 'wire', 'compiler']:
+    for name in ['color', 'css', 'css_whitespace', 'numeric_tokens', 'variables', 'wire', 'compiler']:
         parts.append(f'#[path="{out / "source" / (name + ".rs")}"] mod {name};')
     parts.append(r'''
 use compiler::flex_numeric::ErrorEnvelope as E;

@@ -39,9 +39,15 @@ fn selectors_still_use_original_dom_positions() {
 #[test]
 fn invalid_lexemes_and_overflow_reject_even_when_overridden_or_unmatched() {
     for value in ["2147483648","-2147483649","1.0","1e2",".5","1px","1%","+ 1","1 2","--1","auto","inherit 1"] {
-        for css in [format!("#never{{order:{value}}}"),format!("#a{{order:{value};order:0}}"),format!("#a{{--o:{value};order:var(--o)}}")] {
+        for css in [format!("#never{{order:{value}}}"),format!("#a{{order:{value};order:0}}")] {
             let errors=compile(&input(&css)).expect_err(&format!("unexpected success: {css}"));
             assert!(!errors[0].source.is_empty(),"{css}");
+        }
+        let variable=format!("#a{{--o:{value};order:var(--o)}}");
+        if matches!(value,"2147483648"|"-2147483649") {
+            assert!(compile(&input(&variable)).is_err(),"integer resource boundary: {variable}");
+        } else {
+            assert_eq!(scene(&variable),scene(&format!("#a{{--o:{value};order:unset}}")),"{value}");
         }
     }
 }
@@ -55,12 +61,13 @@ fn sibling_precomputation_keeps_global_element_limit() {
 #[test]
 fn lightweight_sorting_does_not_bypass_losing_declarations_or_custom_environments() {
     for css in [
-        "#a{--bad:1.5;order:var(--bad);order:0}",
         "#a{--bad:revert;order:0}",
         "#a{--bad:revert}",
     ] {
         assert!(compile(&input(css)).is_err(),"{css}");
     }
+    assert_eq!(scene("#a{--bad:1.5;order:var(--bad);order:0}"),
+        scene("#a{--bad:1.5;order:unset;order:0}"));
     for css in ["#a{order:var(--missing,);order:1}","#a{width:var(--missing,);order:0}"] {
         assert_eq!(compile(&input(css)).unwrap(),compile(&input(&css.replace("var(--missing,)","unset"))).unwrap());
     }

@@ -57,8 +57,14 @@ fn unresolved_margin_contexts_diagnose_without_disabling_unrelated_scopes() {
 #[test]
 fn invalid_or_unqualified_literals_reject_even_when_unmatched_or_overridden() {
     for value in ["1px","-1px","10%","auto auto auto auto auto","inherit auto","none"] {
-        for css in [format!("#never{{margin:{value}}}"),format!("#b{{margin:{value};margin:0}}"),format!("#b{{--m:{value};margin:var(--m)}}")] {
+        for css in [format!("#never{{margin:{value}}}"),format!("#b{{margin:{value};margin:0}}")] {
             assert!(compile(&input(&css)).is_err(),"{css}");
+        }
+        let variable=format!("#b{{--m:{value};margin:var(--m)}}");
+        if matches!(value,"auto auto auto auto auto"|"inherit auto"|"none") {
+            assert_eq!(scene(&variable),scene(&format!("#b{{--m:{value};margin:unset}}")),"{value}");
+        } else {
+            assert!(compile(&input(&variable)).is_err(),"valid unsupported margin: {variable}");
         }
     }
 }

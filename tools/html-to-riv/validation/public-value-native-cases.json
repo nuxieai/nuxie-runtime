@@ -1,0 +1,457 @@
+[
+  {
+    "name": "value-width-color-responsive",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{width:100%}#a{--v:red;width:31px;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{width:100%}#a{width:31px;width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-height-color-intrinsic",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:red;height:80px;height:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{height:80px;height:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-color-length-inherits",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:20px;color:red;color:var(--v);background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:red;color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-background-color-length-unsets",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:20px;background-color:red;background-color:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{background-color:red;background-color:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgba(0, 0, 0, 0)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-font-color-inherits",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:red;font-size:8px;font-size:var(--v);width:2em}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{font-size:8px;font-size:unset;width:2em}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-order-fraction-preserves-position",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#b{order:-1}#a{--v:1.5;order:-4;order:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#b{order:-1}#a{order:-4;order:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-direction-number-initial-row",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{--v:20px;flex-direction:column;flex-direction:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{flex-direction:column;flex-direction:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-self-alignment-number",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:20px;align-self:flex-end;align-self:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{align-self:flex-end;align-self:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-justify-number",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{--v:20px;justify-content:space-evenly;justify-content:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{justify-content:space-evenly;justify-content:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-gap-wrong-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{flex-direction:row}#p{--v:red;gap:8px 10px;gap:var(--v);column-gap:4px}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{flex-direction:row}#p{gap:8px 10px;gap:unset;column-gap:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-padding-wrong-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:auto}#p{--v:red;padding:8px;padding:var(--v);padding-right:4px}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:auto}#p{padding:8px;padding:unset;padding-right:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-margin-wrong-shorthand",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:red;margin:auto;margin:var(--v);margin-left:auto}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{margin:auto;margin:unset;margin-left:auto}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-min-width-color",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:red;min-width:120px;min-width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{min-width:120px;min-width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-max-width-color",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:red;max-width:40px;max-width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{max-width:40px;max-width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-box-sizing-color-initial-content",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:red;padding:4px;box-sizing:border-box;box-sizing:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{padding:4px;box-sizing:border-box;box-sizing:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-nbsp-color-primary",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:\u00a0red\u00a0;color:var(--v);background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-nbsp-color-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:var(--missing,\u00a0red\u00a0);background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-vertical-tab-color",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:\u000bred\u000b;color:var(--v);background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-em-space-width",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:\u200340px\u2003;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-escaped-nbsp-width",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:\\a0 40px;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-css-whitespace-positive",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v: \t\r\n\f40px \t\r\n\f;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:40px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-important-invalid-color",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:20px;color:var(--v)!important;color:red;background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:unset!important;color:red;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-losing-invalid-color",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:20px;color:var(--v);color:maroon}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:unset;color:maroon}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-shorthand-importance",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:auto}#p{--v:red;padding:8px!important;padding:var(--v)!important;padding-right:4px}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:auto}#p{padding:8px!important;padding:unset!important;padding-right:4px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-inherited-invalid-data",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{--v:20px;--alias:var(--v)}#a{--v:red;color:var(--alias,red);background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#p{--v:20px;--alias:var(--v)}#a{color:unset;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-unused-invalid-fallback",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:maroon;color:var(--v,20px)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:maroon}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-css-wide-fallback-inherit",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:var(--missing,inherit);background:currentColor}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{color:inherit;background:currentColor}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(0, 0, 128)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(0, 0, 128)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-negative-padding",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:-4px;padding:8px;padding:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{padding:8px;padding:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-negative-width",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"c\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{--v:-40px;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:100px;background:teal;color:navy;font-size:24px}#a{width:80px;height:30px;background:coral;color:maroon;font-size:12px}#b{width:30px;height:20px;background:gold}#c{width:10px;height:10px;background:currentColor}#a{width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)",
+      "c": "rgb(128, 0, 0)"
+    },
+    "classification": "candidate-painted-recovery-control"
+  },
+  {
+    "name": "value-tiny-variable-f32-underflow-width-unitless",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:1e-50;width:var(--bad)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:1e-50;width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "classification": "exact-public-underflow-source-control",
+    "sourceCase": "variable-f32-underflow-width-unitless"
+  },
+  {
+    "name": "value-tiny-variable-f32-underflow-font-unitless",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:1e-50;font-size:var(--bad);width:2em}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:1e-50;font-size:unset;width:2em}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "classification": "exact-public-underflow-source-control",
+    "sourceCase": "variable-f32-underflow-font-unitless"
+  },
+  {
+    "name": "value-tiny-variable-f32-underflow-width-negative-length",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:-1e-50px;width:var(--bad)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:-1e-50px;width:unset}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "classification": "exact-public-underflow-source-control",
+    "sourceCase": "variable-f32-underflow-width-negative-length"
+  },
+  {
+    "name": "value-tiny-variable-f32-underflow-font-negative-length",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:-1e-50px;font-size:var(--bad);width:2em}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--bad:-1e-50px;font-size:unset;width:2em}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "classification": "exact-public-underflow-source-control",
+    "sourceCase": "variable-f32-underflow-font-negative-length"
+  },
+  {
+    "name": "value-tiny-valid-variable-positive-length",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--v:1e-50px;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--v:1e-50px;width:0px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "classification": "exact-public-underflow-source-control",
+    "sourceCase": "valid-variable-positive-length"
+  },
+  {
+    "name": "value-tiny-valid-variable-f64-underflow-negative-length",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--v:-1e-500px;width:var(--v)}",
+    "literalCss": "#p{width:200px;height:80px;background:teal;color:navy;font-size:24px}#a{width:40px;height:20px;background:coral}#b{width:20px;height:20px;background:gold}#a{--v:-1e-500px;width:-0px}",
+    "expectedPaint": {
+      "p": "rgb(0, 128, 128)",
+      "a": "rgb(255, 127, 80)",
+      "b": "rgb(255, 215, 0)"
+    },
+    "classification": "exact-public-underflow-source-control",
+    "sourceCase": "valid-variable-f64-underflow-negative-length"
+  }
+]

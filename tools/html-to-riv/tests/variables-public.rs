@@ -37,14 +37,19 @@ fn public_variables_equal_independent_literal_controls() {
 fn public_variables_cannot_bypass_unsupported_semantics() {
     for css in [
         "#a{--mode:grid;display:var(--mode)}",
-        "#a{--n:10;width:var(--n)px}",
-        "#a{--n:teal;width:var(--n)}",
         "#a{--n:10px;width:var(n)}",
     ] {
         let input = CompileInput {html:"<div id=a></div>".into(),css:css.into(),width:240.,height:160.};
         let diagnostics = compile(&input).expect_err(css);
         assert!(!diagnostics.is_empty(), "{css}");
         assert!(diagnostics.iter().all(|d| !d.code.is_empty() && !d.message.is_empty()), "{css}: {diagnostics:?}");
+    }
+    for (css,control) in [
+        ("#a{--n:10;width:var(--n)px}","#a{--n:10;width:unset}"),
+        ("#a{--n:teal;width:var(--n)}","#a{--n:teal;width:unset}"),
+    ] {
+        let input=|css:&str|CompileInput{html:"<div id=a></div>".into(),css:css.into(),width:240.,height:160.};
+        assert_eq!(compile(&input(css)).unwrap(),compile(&input(control)).unwrap(),"{css}");
     }
 }
 

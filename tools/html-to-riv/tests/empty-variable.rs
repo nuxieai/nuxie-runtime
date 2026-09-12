@@ -1,5 +1,6 @@
 use nuxie_html_to_riv::{CompileInput,compile};
 use serde::Deserialize;
+#[path = "support/value_token_history.rs"] mod value_token_history;
 
 #[derive(Deserialize)]
 #[serde(rename_all="camelCase")]
@@ -37,12 +38,14 @@ fn empty_values_preserve_visible_cascade_inheritance_shorthands_and_order(){
 }
 
 #[test]
-fn nonempty_tokens_unsupported_semantics_and_literal_syntax_still_diagnose(){
+fn historical_nonempty_tokens_recover_only_with_explicit_unset_controls(){
     #[derive(Deserialize)]struct Rejection{name:String,html:String,css:String}
     let cases:Vec<Rejection>=serde_json::from_str(include_str!("../validation/public-empty-variable-rejections.json")).unwrap();
     assert_eq!(cases.len(),27);
     for case in cases {
-        assert!(compile(&CompileInput{html:case.html,css:case.css,width:240.,height:160.}).is_err(),"{}",case.name);
+        let request=CompileInput{html:case.html,css:case.css,width:240.,height:160.};
+        if value_token_history::assert_recovery("public-empty-variable-rejections.json",&case.name,&request) { continue; }
+        assert!(compile(&request).is_err(),"{}",case.name);
     }
 }
 
@@ -52,8 +55,9 @@ fn empty_first_component_does_not_hide_excessive_later_expansion(){
     for empty in ["var(--empty)","var(--missing,)"] {
         let request=|suffix:&str|CompileInput{html:"<div id=a></div>".into(),css:format!("#a{{{environment}width:{empty} {suffix}}}"),width:240.,height:160.};
         assert!(compile(&request("")).is_ok(),"empty control");
-        let nonempty=compile(&request("var(--large)")).unwrap_err();
-        assert!(!nonempty.iter().any(|d|d.code=="input-limit"),"one valid expansion only has wrong property type");
+        let nonempty=request("var(--large)");
+        let unset=CompileInput{html:nonempty.html.clone(),css:format!("#a{{{environment}width:unset}}"),width:240.,height:160.};
+        assert_eq!(compile(&nonempty).unwrap(),compile(&unset).unwrap(),"one bounded expansion has a definite wrong width keyword and computes unset");
         let excess=compile(&request("var(--large) var(--large)")).unwrap_err();
         assert!(excess.iter().any(|d|d.code=="input-limit"),"excess must propagate after empty first component: {excess:?}");
     }

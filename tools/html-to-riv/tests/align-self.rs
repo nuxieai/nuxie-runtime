@@ -33,11 +33,19 @@ fn variables_cascade_and_font_relative_bounds_compose() {
     assert_ne!(scene("#a{align-self:center}").riv,scene("#a{align-self:flex-end}").riv);
 }
 #[test]
-fn unresolved_alignments_and_invalid_losers_still_reject() {
+fn invalid_alignment_literals_reject_and_variable_losers_compute_unset() {
     for value in ["last baseline extra","safe stretch","unsafe normal","safe baseline","left","center end"] {
-        for css in [format!("#never{{align-self:{value}}}"),format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}")] {
-            assert!(compile(&input(&css)).is_err(),"{css}");
+        let literal=format!("#never{{align-self:{value}}}");
+        assert!(compile(&input(&literal)).is_err(),"{literal}");
+        let variable=format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}");
+        // The current Alignment draft and pinned Chrome disagree on overflow-
+        // position with normal; retain the unclassified target diagnostic.
+        if value=="unsafe normal" {
+            assert!(compile(&input(&variable)).is_err(),"{variable}");
+            continue;
         }
+        assert_eq!(scene(&variable),
+            scene(&format!("#a{{--v:{value};align-self:unset;align-self:auto}}")),"{value}");
     }
 }
 #[test]
@@ -70,8 +78,14 @@ fn safe_preferences_survive_cascade_variables_and_inheritance() {
 #[test]
 fn malformed_overflow_alignment_is_not_silently_normalized() {
     for value in ["safe","unsafe","center safe","safe unsafe center","safe center end","unsafe auto","safe normal","unsafe stretch","safe inherit","unsafe initial","safe unset","safe last baseline"] {
-        for css in [format!("#a{{align-self:{value}}}"),format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}")] {
-            assert!(compile(&input(&css)).is_err(),"{css}");
+        let literal=format!("#a{{align-self:{value}}}");
+        assert!(compile(&input(&literal)).is_err(),"{literal}");
+        let variable=format!("#a{{--v:{value};align-self:var(--v);align-self:auto}}");
+        if value=="safe normal" {
+            assert!(compile(&input(&variable)).is_err(),"{variable}");
+            continue;
         }
+        assert_eq!(scene(&variable),
+            scene(&format!("#a{{--v:{value};align-self:unset;align-self:auto}}")),"{value}");
     }
 }

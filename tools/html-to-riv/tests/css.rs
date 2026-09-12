@@ -2,6 +2,8 @@ use nuxie_html_to_riv::Diagnostic;
 use scraper::{Html, Selector};
 #[path = "../src/css.rs"]
 mod css;
+#[path = "../src/css_whitespace.rs"]
+mod css_whitespace;
 #[path = "../src/numeric_tokens.rs"]
 mod numeric_tokens;
 fn values(stylesheet: &str, html: &str) -> Vec<(String, String)> {

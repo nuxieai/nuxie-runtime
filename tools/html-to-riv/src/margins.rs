@@ -5,7 +5,7 @@ use super::{Diagnostic, Direction, unsupported};
 pub(super) struct Margins(pub [bool; 4]); // left, top, right, bottom
 impl Margins {
     pub fn apply(&mut self, name: &str, text: &str, parent: Self, source: &str) -> Result<(), Diagnostic> {
-        let text = text.trim().to_ascii_lowercase();
+        let text = crate::css_whitespace::trim(text).to_ascii_lowercase();
         let side = match name { "margin-left" => Some(0), "margin-top" => Some(1), "margin-right" => Some(2), "margin-bottom" => Some(3), _ => None };
         if let Some(side) = side {
             self.0[side] = value(&text, parent.0[side], source)?;
@@ -14,7 +14,7 @@ impl Margins {
         } else if matches!(text.as_str(), "initial" | "unset") {
             *self = Self::default();
         } else {
-            let tokens: Vec<_> = text.split_ascii_whitespace().collect();
+            let tokens: Vec<_> = crate::css_whitespace::words(&text).collect();
             if !(1..=4).contains(&tokens.len()) || tokens.iter().any(|v| matches!(*v, "inherit" | "initial" | "unset")) {
                 return Err(unsupported(source, "margin requires one to four auto/zero values or one CSS-wide keyword"));
             }

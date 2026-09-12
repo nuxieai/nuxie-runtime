@@ -1,0 +1,176 @@
+{
+  "status": "all-731-public-output-references-exact",
+  "scope": "Deterministic public compiler bytes/maps only; no new native/browser/visual qualification",
+  "cwd": "/Users/levi/.codex/worktrees/html-css-immutable",
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "tools/html-to-riv/validation/public-value-regression-references.py",
+        "tools/html-to-riv/output/public-value-regression-references-r1"
+      ],
+      "exitCode": 0
+    },
+    {
+      "argv": [
+        "python3",
+        "tools/html-to-riv/validation/check-output-regression.py",
+        "tools/html-to-riv/output/public-value-build-r1/frozen/html-to-riv",
+        "tools/html-to-riv/output/public-value-regression-references-r1/manifest.json",
+        "tools/html-to-riv/output/public-value-regression-r1"
+      ],
+      "exitCode": 0
+    },
+    {
+      "argv": [
+        "python3",
+        "tools/html-to-riv/validation/public-value-regression-evidence.py"
+      ],
+      "exitCode": 0
+    }
+  ],
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-regression-r1/html-to-riv",
+    "sha256": "034084cd868e9b33ba849bc328ea4c540d63115192eba7918e7d7ec00c3c2b2d"
+  },
+  "frozenCompiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-build-r1/frozen/html-to-riv",
+    "sha256": "034084cd868e9b33ba849bc328ea4c540d63115192eba7918e7d7ec00c3c2b2d"
+  },
+  "sourceFreeze": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-build-r1/frozen/source-bindings.json",
+    "sha256": "10f37aa9d7c523873c912b2511fec9a7383ba65d6910548320df09033c7b6be6"
+  },
+  "sourceFreezeCheck": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-regression-r1/source-freeze-check.json",
+    "sha256": "f69295c594e464f15c9936937dae3e191f09f7197874e3d6dc4c1333bdda7b84"
+  },
+  "verifiedFrozenBindings": 118,
+  "referenceManifest": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-regression-references-r1/manifest.json",
+    "sha256": "aa8da5bd4e7994f9d4185c3b926bd667b6424c236d3b94e9f94ff5e1b604aa7d"
+  },
+  "resultManifest": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-regression-r1/manifest.json",
+    "sha256": "0483742d0ddf0851c7ada09aa43eb7a23b3fea44f26950de516b91eae174061c"
+  },
+  "fullInputs": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-regression-r1/full-inputs.json",
+    "sha256": "5f7fe09094d027c8cd1e7163086eb241f8edeb7c10ddc2a4f50ebfd36dbc4df0"
+  },
+  "total": 731,
+  "compileSuccess": 731,
+  "exactRivFiles": 731,
+  "exactSourceMaps": 731,
+  "historicalRowsRetained": 694,
+  "correctedHistoricalRows": [
+    {
+      "historicalIndex": 557,
+      "referenceIndex": 557,
+      "supersededRivSha256": "48dfa3e8d541efe4ae2cdc9629f0bfd604597cdb4cfdafdb07aaf91601b46930",
+      "correctedRivSha256": "0f25ea91eeebab40e6d51c0d20e7a6beb21640753f897747910c22639fce674a",
+      "mapSha256": "e1159972c761ee21762235d3e49e1543303388e144b25ef582afc29d7e2f0815"
+    },
+    {
+      "historicalIndex": 558,
+      "referenceIndex": 558,
+      "supersededRivSha256": "48dfa3e8d541efe4ae2cdc9629f0bfd604597cdb4cfdafdb07aaf91601b46930",
+      "correctedRivSha256": "0f25ea91eeebab40e6d51c0d20e7a6beb21640753f897747910c22639fce674a",
+      "mapSha256": "e1159972c761ee21762235d3e49e1543303388e144b25ef582afc29d7e2f0815"
+    },
+    {
+      "historicalIndex": 560,
+      "referenceIndex": 560,
+      "supersededRivSha256": "48dfa3e8d541efe4ae2cdc9629f0bfd604597cdb4cfdafdb07aaf91601b46930",
+      "correctedRivSha256": "0f25ea91eeebab40e6d51c0d20e7a6beb21640753f897747910c22639fce674a",
+      "mapSha256": "e1159972c761ee21762235d3e49e1543303388e144b25ef582afc29d7e2f0815"
+    }
+  ],
+  "numericNativeScenesConsidered": 38,
+  "numericNativeScenesAdded": 37,
+  "deduplicationRule": "Retain all 694 historical rows. Add a native scene unless its complete parsed request object is exactly equal to an existing request (JSON formatting/key order ignored; HTML/CSS string spelling and every request field preserved). A duplicate must have identical bytes/maps and is recorded as an alias. Never deduplicate solely by output hash.",
+  "aliases": [
+    {
+      "origin": {
+        "suite": "public-numeric-native-r1",
+        "group": "large",
+        "name": "content-large-rounded-outer",
+        "receipt": {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/render/receipt.json",
+          "sha256": "073077dbd47389bc0469df8a768644e20a7d4ff5d3094d63980a333611d0e514"
+        },
+        "priorRenderStatus": "failed-public-baseline"
+      },
+      "request": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-value-regression-references-r1/aliases/0.request.json",
+        "sha256": "17a97a4da4e9781b5cd8b83f6e39caac4d0df1c653c55f59fdc3af876542e187"
+      },
+      "originalRequest": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/render/content-large-rounded-outer/request.json",
+        "sha256": "17a97a4da4e9781b5cd8b83f6e39caac4d0df1c653c55f59fdc3af876542e187"
+      },
+      "referenceIndex": 665,
+      "sameRequestObject": true,
+      "rivSha256": "51e64e7cf23b384616d761fedc58916a227d032ac3eeac14d5cb38fe100402d9",
+      "mapSha256": "82d5ae6df1e9f4102de765fc0f328772fa8b3389d49eb20b563ff9ef3ccfb77c"
+    }
+  ],
+  "whitespaceAudit": {
+    "scope": "Conservative direct Unicode whitespace, CSS-escaped code point, and HTML entity scan over all stored HTML/CSS sources. Findings stay in the reference set; a finding is a review flag, not proof of invalid CSS.",
+    "flaggedRequests": 0,
+    "findings": []
+  },
+  "nativeGroups": [
+    {
+      "group": "visible",
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/visible/render/receipt.json",
+        "sha256": "cc56cfb404bc46c72c6a12dd07188ba10c22961e07ca96824a2ed4b462c7ee8f"
+      },
+      "priorRenderStatus": "failed-public-baseline",
+      "sceneCount": 26
+    },
+    {
+      "group": "fractional",
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/fractional/render/receipt.json",
+        "sha256": "963c7b48c9251783783a3dca37ee3ed9dd87fdbea2d49c60ee8c9ab873082d30"
+      },
+      "priorRenderStatus": "failed-public-baseline",
+      "sceneCount": 2
+    },
+    {
+      "group": "large",
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-numeric-native-r1/large/render/receipt.json",
+        "sha256": "073077dbd47389bc0469df8a768644e20a7d4ff5d3094d63980a333611d0e514"
+      },
+      "priorRenderStatus": "failed-public-baseline",
+      "sceneCount": 10
+    }
+  ],
+  "referenceArtifactsRechecked": 2193,
+  "actualRequestRivMapArtifactsRechecked": 2193,
+  "compileLogsBound": 731,
+  "changedCases": 0,
+  "excludedHistoricalCases": 0,
+  "failures": [],
+  "sources": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-value-regression-references.py",
+      "sha256": "1e0e9339f9ff3165511ffcc16b17bee5530c3a8361f3942bf4a6ce2b256f26f3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/check-output-regression.py",
+      "sha256": "a64969b877cc50fd63c064b28f11c0de981eb75fa2edeeb004575cef98d4540b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-value-regression-evidence.py",
+      "sha256": "3b427007899988019bd3955d2b5a730d0a477c2f372e12b96352ceaf5dbf2973"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-value-regression-review.md",
+      "sha256": "191c523d68331c980031ed0339348524767ebaf5b59bcc5fe6218be845d54674"
+    }
+  ]
+}

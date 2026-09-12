@@ -11,6 +11,31 @@ const binary=path.resolve(process.env.HTML_TO_RIV_BIN ?? 'tools/html-to-riv/targ
 const wasm=fs.readFileSync(path.resolve(process.env.HTML_TO_RIV_WASM ?? 'tools/html-to-riv/target/wasm32-unknown-unknown/debug/nuxie_html_to_riv.wasm'));
 const input={html:'<div id="box"></div>',css:'#box{width:100px;height:40px;background-color:red;}',width:240,height:160};
 const document={languageVersion:LANGUAGE_VERSION,...input};
+const valueTokenCases=JSON.parse(fs.readFileSync(new URL('../validation/public-value-token-cases.json',import.meta.url)));
+
+// The source-identical controls enumerate only qualified historical changes;
+// neither this lookup nor the expected result consults the receiving classifier.
+function historicalControl(file,fixture){
+ const matches=valueTokenCases.filter(c=>c.historyFile===file&&c.historyName===fixture.name);
+ assert(matches.length<=1,`${file}/${fixture.name}: duplicate control`);
+ if(matches.length===0)return undefined;
+ const control=matches[0];
+ assert.equal(control.html,fixture.html,`${file}/${fixture.name}: original HTML`);
+ assert.equal(control.css,fixture.css,`${file}/${fixture.name}: original CSS`);
+ assert.equal(control.outcome,'equivalent');
+ return control.literalCss;
+}
+
+function assertRecoveredTransport(request,controlCss,cli,result,prefix,compiler,label){
+ assert.equal(cli.status,0,`${label}: ${cli.stderr}`);assert.equal(result.ok,true,`${label}: ${JSON.stringify(result)}`);
+ assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'),`${label}: CLI/WASM bytes`);
+ assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json')),`${label}: CLI/WASM map`);
+ const expected=compiler.compile({languageVersion:LANGUAGE_VERSION,...request,css:controlCss});
+ assert.equal(expected.ok,true,`${label}: independently authored unset ${JSON.stringify(expected)}`);
+ assert.deepEqual(result.riv,expected.riv,`${label}: unset bytes`);
+ assert.deepEqual(result.sourceMap,expected.sourceMap,`${label}: unset map`);
+ assert(!fs.existsSync(prefix+'.requirements.json'));
+}
 
 test('CLI and WASM produce exact ordinary Rive bytes and source map',async()=>{
  const compiler=await createCompiler(wasm);const dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-parity-'));
@@ -78,6 +103,10 @@ test('rejected styles produce identical native and WASM diagnostics and no outpu
    const value={...input,css},prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(value));
    const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'});
    const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...value});
+   if(css==='#box{background-color:var(--missing,"");}'){
+    assertRecoveredTransport(value,'#box{background-color:unset;}',cli,result,prefix,compiler,css);
+    continue;
+   }
    assert.equal(cli.status,1,css);assert.equal(result.ok,false,css);
    assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),css);
    assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
@@ -367,11 +396,11 @@ test('failed variable substitution preserves unset cascade and strict CLI/WASM d
  const rejections=JSON.parse(fs.readFileSync(new URL('../validation/public-variable-recovery-rejections.json',import.meta.url)));
  const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-variable-recovery-'));
  try{for(const [index,fixture] of rejections.entries()){
-  // Historical empty-value rejections are positively covered by the new corpus.
-  if(['typed-empty-fallback','typed-empty-primary'].includes(fixture.name))continue;
   const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
   fs.writeFileSync(prefix+'.json',JSON.stringify(request));
   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+  const control=historicalControl('public-variable-recovery-rejections.json',fixture);
+  if(control!==undefined){assertRecoveredTransport(request,control,cli,result,prefix,compiler,fixture.name);continue;}
   assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));
   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
  }}finally{fs.rmSync(dir,{recursive:true,force:true});}
@@ -386,6 +415,8 @@ test('content-box lowering preserves CLI/WASM bytes, inherited values and diagno
   for(const [index,fixture] of rejected.entries()){
    const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(request));
    const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   const control=historicalControl('public-content-box-rejections.json',fixture);
+   if(control!==undefined){assertRecoveredTransport(request,control,cli,result,prefix,compiler,fixture.name);continue;}
    assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));
    assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
   }
@@ -413,6 +444,8 @@ test('empty ordinary variable values preserve token boundaries and CLI/WASM sema
    const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
    fs.writeFileSync(prefix+'.json',JSON.stringify(request));
    const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   const control=historicalControl('public-empty-variable-rejections.json',fixture);
+   if(control!==undefined){assertRecoveredTransport(request,control,cli,result,prefix,compiler,fixture.name);continue;}
    assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);
    assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),fixture.name);
    assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
@@ -440,10 +473,66 @@ test('numeric token preservation has exact CLI/WASM output and diagnostic parity
    const request={html:fixture.html,css:fixture.css,width:240,height:160},prefix=path.join(dir,String(index));
    fs.writeFileSync(prefix+'.json',JSON.stringify(request));
    const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   const control=historicalControl('public-numeric-token-rejections.json',fixture);
+   if(control!==undefined){assertRecoveredTransport(request,control,cli,result,prefix,compiler,fixture.name);continue;}
    assert.equal(cli.status,1,fixture.name);assert.equal(result.ok,false,fixture.name);
    assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),fixture.name);
    if(fixture===resource)assert(result.diagnostics.some(d=>d.code==='input-limit'));
    assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
   }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});
+
+test('public value token boundaries preserve CLI/WASM recovery and retained diagnostics',async()=>{
+ const cases=valueTokenCases;
+ assert.equal(cases.length,610,'retain the complete public token-boundary corpus');
+ assert.equal(new Set(cases.map(c=>c.name)).size,cases.length);
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-value-token-'));
+ const first=compiler.compile(document);assert.equal(first.ok,true);
+ const retained=first.riv.slice();
+ let sequence=0;
+ const run=(fixture,css,width,height,label,accepted)=>{
+  const request={html:fixture.html,css,width,height},prefix=path.join(dir,String(sequence++));
+  fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+  const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8',maxBuffer:8*1024*1024});
+  const result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+  const context=`${fixture.name}/${width}/${label}`;
+  assert.equal(cli.status,accepted?0:1,`${context}: ${cli.stderr}`);
+  assert.equal(result.ok,accepted,`${context}: ${JSON.stringify(result)}`);
+  if(accepted){
+   assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'),`${context}: complete Rive bytes`);
+   assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json')),`${context}: complete source map`);
+  }else{
+   assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr),`${context}: complete diagnostics`);
+   assert(result.diagnostics.length>0);
+   assert(!('riv' in result));assert(!('sourceMap' in result));
+   assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+  assert(!fs.existsSync(prefix+'.requirements.json'));
+  return result;
+ };
+ try{
+  for(const fixture of cases)for(const [width,height] of [[240,160],[768,120]]){
+   assert(['equivalent','diagnostic','unset-diagnostic'].includes(fixture.outcome),fixture.name);
+   const accepted=fixture.outcome==='equivalent';
+   const actual=run(fixture,fixture.css,width,height,'actual',accepted);
+   if(fixture.outcome!=='diagnostic'){
+    assert.equal(typeof fixture.literalCss,'string',`${fixture.name}: independent control is required`);
+    const expected=run(fixture,fixture.literalCss,width,height,'control',accepted);
+    if(accepted){
+     assert.deepEqual(actual.riv,expected.riv,`${fixture.name}: independent literal/unset bytes`);
+     assert.deepEqual(actual.sourceMap,expected.sourceMap,`${fixture.name}: independent literal/unset map`);
+     if(fixture.rollbackCss){
+      const rollback=run(fixture,fixture.rollbackCss,width,height,'rollback',true);
+      assert.notDeepEqual({riv:expected.riv,map:expected.sourceMap},{riv:rollback.riv,map:rollback.sourceMap},`${fixture.name}: the control must expose cascade rollback`);
+     }
+    }else{
+     assert.deepEqual(actual.diagnostics.map(({code,message})=>({code,message})),
+      expected.diagnostics.map(({code,message})=>({code,message})),`${fixture.name}: recovered unsupported initial semantics`);
+    }
+   }
+  }
+  assert.deepEqual(first.riv,retained,'later successes and failures do not mutate owned output');
+  assert.deepEqual(compiler.compile(document).riv,retained,'compiler remains usable after the corpus');
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });

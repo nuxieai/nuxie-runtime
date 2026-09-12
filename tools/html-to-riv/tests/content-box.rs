@@ -1,5 +1,6 @@
 //! Public content-box output, cascade isolation, diagnostics and resource bounds.
 use nuxie_html_to_riv::{CompileInput, compile};
+#[path = "support/value_token_history.rs"] mod value_token_history;
 fn input(html:&str,css:&str)->CompileInput {CompileInput{html:html.into(),css:css.into(),width:240.,height:160.}}
 
 #[test]
@@ -26,7 +27,9 @@ fn unsupported_combinations_and_recursive_overflow_produce_diagnostics() {
     let cases:serde_json::Value=serde_json::from_str(include_str!("../validation/public-content-box-rejections.json")).unwrap();
     assert_eq!(cases.as_array().unwrap().len(),14);
     for case in cases.as_array().unwrap() {
-        let errors=compile(&input(case["html"].as_str().unwrap(),case["css"].as_str().unwrap())).unwrap_err();
+        let request=input(case["html"].as_str().unwrap(),case["css"].as_str().unwrap());
+        if value_token_history::assert_recovery("public-content-box-rejections.json",case["name"].as_str().unwrap(),&request) { continue; }
+        let errors=compile(&request).unwrap_err();
         assert_eq!(errors[0].code,"unsupported-target-semantics","{}: {errors:?}",case["name"]);
         if case["name"]=="lowered-content-overflow-chain" {assert!(errors[0].message.contains("finite binary32"));}
     }

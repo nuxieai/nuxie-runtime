@@ -1,0 +1,12 @@
+{
+  "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-value-token-cases.json",
+  "sha256": "21cfa3240db6a1328aefe2f74e785ffbad0a46f43b7b4607afbce9d0ad484ef0",
+  "selectedNames": [
+    "variable-f32-underflow-width-unitless",
+    "variable-f32-underflow-font-unitless",
+    "variable-f32-underflow-width-negative-length",
+    "variable-f32-underflow-font-negative-length",
+    "valid-variable-positive-length",
+    "valid-variable-f64-underflow-negative-length"
+  ]
+}

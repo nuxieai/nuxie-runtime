@@ -322,11 +322,11 @@ pub(crate) fn compute(
             Some("inherit" | "unset") => {
                 values.insert(name.clone(), parent.get(&name).cloned().unwrap_or(None));
             }
-            Some("revert" | "revert-layer") => {
+            Some("revert" | "revert-layer" | "revert-rule") => {
                 return Err(Diagnostic::new(
                     "unsupported-css-value",
                     &declaration.source,
-                    "Custom property revert/revert-layer is not supported",
+                    "Custom property revert/revert-layer/revert-rule is not supported",
                 ));
             }
             _ => {

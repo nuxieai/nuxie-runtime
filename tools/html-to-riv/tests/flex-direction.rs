@@ -44,12 +44,13 @@ fn auto_is_preserved_for_native_intrinsic_measurement() {
 #[test]
 fn invalid_directions_are_diagnosed_even_when_unmatched_or_overridden() {
     for css in ["#never{flex-direction:diagonal}", "#p{flex-direction:row column}",
-        "#p{flex-direction:revert}", "#p{flex-direction:row-reverse;flex-direction:inherit row}",
-        "#p{--axis:diagonal;flex-direction:var(--axis)}"] {
+        "#p{flex-direction:revert}", "#p{flex-direction:row-reverse;flex-direction:inherit row}"] {
         let errors=compile(&CompileInput{html:"<div id=p></div>".into(),css:css.into(),width:240.,height:160.}).unwrap_err();
         assert_eq!(errors[0].code,"unsupported-target-semantics", "{css}");
         assert!(!errors[0].source.is_empty());
     }
+    equivalent("#p{--axis:diagonal;flex-direction:var(--axis)}",
+        "#p{--axis:diagonal;flex-direction:unset}");
 }
 #[test]
 fn paint_order_lowering_preserves_numeric_dom_preorder_and_selectors() {

@@ -33,6 +33,8 @@ const PROPERTIES: &[&str] = &[
     "color",
     "display",
     "flex-direction",
+    "flex-wrap",
+    "align-content",
     "flex",
     "flex-grow",
     "flex-shrink",
@@ -157,6 +159,8 @@ pub(super) fn classify(property: &str, text: &str) -> Validity {
         "flex-direction" => {
             one(|t| keyword(t, &["row", "row-reverse", "column", "column-reverse"]))
         }
+        "flex-wrap" => one(|t| keyword(t, &["nowrap", "wrap", "wrap-reverse"])),
+        "align-content" => content_alignment(&tokens),
         "color" | "background-color" => one(color),
         "background" => background(&tokens),
         "margin" | "margin-left" | "margin-top" | "margin-right" | "margin-bottom" => {
@@ -193,6 +197,18 @@ pub(super) fn classify(property: &str, text: &str) -> Validity {
         "display" => display(&tokens),
         "align-self" | "justify-content" => alignment(property, &tokens),
         _ => Unclassified,
+    }
+}
+
+// Keep valid but unqualified alignment grammar out of invalid-variable recovery.
+fn content_alignment(tokens: &[Component<'_>]) -> Validity {
+    let positions = ["center", "start", "end", "flex-start", "flex-end"];
+    match tokens {
+        [a] if ["space-between", "space-around", "space-evenly", "baseline"].iter().any(|s| ident(a, s)) => Unclassified,
+        [a] => keyword(a, &["normal", "stretch", "center", "start", "end", "flex-start", "flex-end"]),
+        [a, b] if (ident(a, "first") || ident(a, "last")) && ident(b, "baseline") => Unclassified,
+        [a, b] if (ident(a, "safe") || ident(a, "unsafe")) && keyword(b, &positions) == Valid => Unclassified,
+        _ => Invalid,
     }
 }
 
@@ -646,6 +662,27 @@ fn alignment(property: &str, tokens: &[Component<'_>]) -> Validity {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wrapping_receiving_values_preserve_unsupported_valid_grammar() {
+        for value in ["nowrap", "wrap", "WRAP-REVERSE", "inherit", "initial", "unset"] {
+            assert_eq!(classify("flex-wrap", value), Valid, "{value}");
+        }
+        for value in ["normal", "stretch", "flex-start", "center", "flex-end", "start", "end", "inherit"] {
+            assert_eq!(classify("align-content", value), Valid, "{value}");
+        }
+        for property in ["flex-wrap", "align-content"] {
+            for value in ["", "12px", "unknown", "wrap center", "inherit center", "\"center\""] {
+                assert_eq!(classify(property, value), Invalid, "{property}:{value}");
+            }
+            for value in ["-vendor-value", "mystery(1)"] { assert_eq!(classify(property, value), Unclassified); }
+        }
+        for value in ["space-between", "space-around", "space-evenly", "baseline", "first baseline", "last baseline", "safe center", "unsafe flex-end"] {
+            assert_eq!(classify("align-content", value), Unclassified, "{value}");
+        }
+        for value in ["auto", "left", "right", "safe stretch", "center center", "first center", "space-between center"] {
+            assert_eq!(classify("align-content", value), Invalid, "{value}");
+        }
+    }
     #[test]
     fn grammar_validity_does_not_depend_on_target_or_resource_admission() {
         for (p, v) in [

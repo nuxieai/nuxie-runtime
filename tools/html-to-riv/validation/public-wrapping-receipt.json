@@ -1,0 +1,55 @@
+{
+  "status": "public-fixed-wrapping-campaign-pass",
+  "scope": "463 Rust /57 Node, 128 public CLI geometry and pixel frames,256 clear controls,1076 prior scenes exact through new CLI and raw WASM.48 representative pairs directly reviewed,80 exact repeats. Fixed root clipping on resize; broader qualification and resource boundaries remain. No native stream observer claim.",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-product-build-r1/summary.json",
+      "sha256": "98a4439c453dd677d488e5d45e3b57b676f8c69e6b3ec4cbb7f41c007f288346"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-product-build-r1/frozen/source-bindings.json",
+      "sha256": "15247280c83e6dcf1e03adc0f7ac6eb9c7682c2a865cac40512dd1a71a103c57"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-accepted-regression-r1/receipt.json",
+      "sha256": "e4246ea99247b5277d62a0ba160ba851664eb62fcba041bd32363bf467f360cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-r2/receipt.json",
+      "sha256": "994dee882ad8ab8efab4211c14b41ee0138825332142fbc98ac1f0999ff5b118"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-r2/public-visual/coverage.json",
+      "sha256": "70729dc1a41d7eaf88ce0d52fa2056ae181a7ab516d183afbcf4617306529b73"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-r1/setup-failure.json",
+      "sha256": "bb4519728b77532bd82a89ba500b272be330c9a692e35585d744b26e4272dc1c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/public-wrapping-r2/visual/setup-failure.txt",
+      "sha256": "1a263c26b7f88e4fa82e018f37df7e8fc39485f044a2aa8be743ea092bcafe1c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-visual-root.md",
+      "sha256": "9c0b83abf142a76387fa54905bbe5986ccf5d59e17c11d18013f75a63fc81ef2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-visual-agent.md",
+      "sha256": "9cc40306a5f622c4cbbc33db7a56bbc95b3cb35ab817392cdf9ea15bf1d85a34"
+    }
+  ],
+  "toolHashes": {
+    "compiler": "2cae98f4fbfb31cb9efe98feef9403255bfdb9155d36af509fc03bcdec8e673a",
+    "probe": "2831265baa244ae03a26389fd82daaaa79eb88b77f542f6e8bc617343ca15b53",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "visual": {
+    "frames": 128,
+    "representatives": 48,
+    "transfers": 80,
+    "sheets": 12,
+    "geometryPass": 128,
+    "pixelPass": 128
+  }
+}

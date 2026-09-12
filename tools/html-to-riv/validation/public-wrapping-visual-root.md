@@ -1,0 +1,10 @@
+# Public wrapping direct visual review: sheets 00–05
+
+Viewed all six full-size Chrome/native/diff sheets directly, covering 24 representative pairs. No missing paint, misplaced edges, reversal/alignment errors or clipping disagreement observed. The partial-alpha salmon regions match visually; faint filled-region residuals remain in the diff views. Transparent owners have no visible paint. These are visual observations, not pixel identity or native stream verification.
+
+- `sheet-00.png` SHA256 `87a3605f81cadbb3f613db66b5d5152ed313f023ce5f343780ec85380983b63b`: public-row-wrap-integer frame 0, public-row-wrap-reverse-integer frame 0, public-row-reverse-wrap-integer frame 0, public-row-reverse-wrap-reverse-integer frame 0.
+- `sheet-01.png` SHA256 `70e3a1e7cfd9c2f10cca8dd1ef4610bb01c8f80440fb6556b65f08ef85e76852`: public-column-wrap-integer frame 0, public-column-wrap-reverse-integer frame 0, public-column-reverse-wrap-integer frame 0, public-column-reverse-wrap-reverse-integer frame 0.
+- `sheet-02.png` SHA256 `d983a6e4c00f807811e48a01f428cf6398b8f0eba7bd4a5936c9c2e6e4183ffb`: public-row-wrap-dyadic frame 0, public-row-wrap-reverse-dyadic frame 0, public-row-reverse-wrap-dyadic frame 0, public-row-reverse-wrap-reverse-dyadic frame 0.
+- `sheet-03.png` SHA256 `5f7878c2c8973ffb15185d56d4748b0d09926101049ec979834a18fc774712b0`: public-column-wrap-dyadic frame 0, public-column-wrap-reverse-dyadic frame 0, public-column-reverse-wrap-dyadic frame 0, public-column-reverse-wrap-reverse-dyadic frame 0.
+- `sheet-04.png` SHA256 `91d9d89cff9c3e131e5674bac2e131aca51a83e45d8ee4cfa5fe7b36a10067c0`: public-row-wrap-integer frame 1, public-row-wrap-reverse-integer frame 1, public-row-reverse-wrap-integer frame 1, public-row-reverse-wrap-reverse-integer frame 1.
+- `sheet-05.png` SHA256 `7bc4a30206d6f12709b160ecfcb3eaeaef867393c3a0af98a87a4fc280431b13`: public-column-wrap-integer frame 1, public-column-wrap-reverse-integer frame 1, public-column-reverse-wrap-integer frame 1, public-column-reverse-wrap-reverse-integer frame 1.

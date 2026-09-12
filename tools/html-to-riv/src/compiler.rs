@@ -4,6 +4,10 @@ use scraper::{ElementRef, Html};
 use std::collections::BTreeSet;
 #[path = "value_grammar.rs"]
 mod value_grammar;
+#[path = "wrapping_style.rs"]
+mod wrapping_style;
+#[path = "public_wrapping.rs"]
+mod public_wrapping;
 #[path = "baseline.rs"]
 mod baseline;
 #[path = "spacing.rs"]
@@ -216,9 +220,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { image_paint: images::Paint, box_sizing: box_sizing::BoxSizing, gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { wrap: wrapping_style::Wrap, line_alignment: wrapping_style::Content, image_paint: images::Paint, box_sizing: box_sizing::BoxSizing, gap: gap::Gap, numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { image_paint: images::Paint::default(), box_sizing: box_sizing::BoxSizing::default(), gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { wrap: wrapping_style::Wrap::default(), line_alignment: wrapping_style::Content::default(), image_paint: images::Paint::default(), box_sizing: box_sizing::BoxSizing::default(), gap: gap::Gap::default(), numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -331,7 +335,7 @@ fn validate_target(d: &css::Declaration, candidate: bool, padding_candidate: boo
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "box-sizing", "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap", "object-fit", "object-position", "image-rendering"].contains(&d.name.as_str()) {
+             "box-sizing", "font-size", "background", "background-color", "color", "display", "flex-direction", "flex-wrap", "align-content", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom", "gap", "row-gap", "column-gap", "object-fit", "object-position", "image-rendering"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -383,6 +387,8 @@ fn validate_target(d: &css::Declaration, candidate: bool, padding_candidate: boo
             let mut gap=gap::Gap::default();
             gap.apply(&d.name,&value,gap::Gap::default(),0.,&d.source)?;
         }
+        "flex-wrap" => { wrapping_style::computed_wrap(&value, wrapping_style::Wrap::default(), &d.source)?; }
+        "align-content" => { wrapping_style::computed_content(&value, wrapping_style::Content::default(), &d.source)?; }
         "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
     }
@@ -478,6 +484,8 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
             "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => { style.flex.apply(&d.name, &d.value, parent.flex, style.font_size, &d.source)?; style.numeric.flex.apply(d,style.flex,&parent.numeric.flex,&style.numeric.font); },
             "gap" | "row-gap" | "column-gap" => style.gap.apply(&d.name,&d.value,parent.gap,style.font_size,&d.source)?,
+            "flex-wrap" => style.wrap = wrapping_style::computed_wrap(&d.value, parent.wrap, &d.source)?,
+            "align-content" => style.line_alignment = wrapping_style::computed_content(&d.value, parent.line_alignment, &d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => { style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?; style.numeric.width = computed_provenance::dimension(d,style.width,&parent.numeric.width,&style.numeric.font); },
             "height" => { style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?; style.numeric.height = computed_provenance::dimension(d,style.height,&parent.numeric.height,&style.numeric.font); },
@@ -537,6 +545,13 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
             return Err(unsupported("document", "Rules matching host html/body are not admitted yet; style authored box elements"));
         }
     }
+    // Match the fixed host body in reset.css for inherited computed values.
+    let host_style = Style { numeric: Box::new(computed_provenance::NumericStyle::host()), width: Size::Percent(100.), height: Size::Percent(100.),
+        background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
+    if let Some(output) = public_wrapping::compile(body, &rules, input, &host_style,
+        matches!(policy, FlexPolicy::Candidate), matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate))? {
+        return Ok((output, Vec::new()));
+    }
     let mut records = vec![Record::new("Backboard")];
     let mut artboard = Record::new("Artboard");
     artboard.set("name", Value::String("HTML".into()))?;
@@ -556,9 +571,6 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     host_paint.set("colorValue", Value::Color(0xffffffff))?;
     records.push(host_paint);
     let mut output = Emitter { assets, records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), descriptor_capture: capture, descriptors: Vec::new() };
-    // Match the fixed host body in reset.css for inherited computed values.
-    let host_style = Style { numeric: Box::new(computed_provenance::NumericStyle::host()), width: Size::Percent(100.), height: Size::Percent(100.),
-        background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
     output.children(body, 0, &host_style, &rules, "", 0, [true; 2], numeric::Bounds::VIEWPORT, None)?;
     // File object order serves native drawing; public identities stay in DOM
     // preorder, with numeric path components (so /2 precedes /10).
@@ -720,6 +732,9 @@ impl Emitter {
         descriptor_items: &mut Vec<flex_descriptor::Item>) -> Result<Box<PreparedChild<'a>>, Diagnostic> {
         let (index, element, path, id, order) = item;
         let mut style = computed(element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
+        if style.wrap.is_wrapped() {
+            return Err(unsupported(&path, "Wrapping in this nested or mixed context requires separate qualification"));
+        }
         let image = images::plan(element, &mut style, parent_style, &self.assets, &path)?;
         if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
             return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));

@@ -1,5 +1,7 @@
 # Current admission on the unchanged runtime
 
+Public wrapping integration is in progress: the compiler now routes a single transparent fixed-size wrapping root with direct empty fixed-size box children through the checked ordinary-file composition. Positional line alignment, directions, reverse wrap, item alignment and stable ordering are wired; focused public tests pass. Native/Chrome and full transport qualification of this new path are pending. Percentage/auto dimensions, normal/stretch line distribution, nested content and other unproved contexts diagnose. Earlier “public wrapping unadmitted” statements describe historical checkpoints; backlog evidence states remain unchanged until this path is qualified.
+
 Latest private checkpoint: proven nonoverlap retains original paints and removes their helper suffix. The 34-owner scene now uses 2,150 records; 72 fresh native/Chrome frames pass. Public wrapping remains unadmitted and backlog counts are unchanged. See [original-paint review](validation/wrapped-original-review.md).
 
 Latest private checkpoint: source-certified integral paint reduces34-owner graphs from99247to17732records;688native/Chrome geometry+pixel frames pass. Public wrapping remains unadmitted; all99backlog items retain their evidence states. See [integral optimization review](validation/wrapped-integral-review.md).

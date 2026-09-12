@@ -319,6 +319,19 @@ mod tests {
         assert!(child.image_preferred(96,64,1,unknown,&sizing,"image").is_err());
     }
     #[test]
+    fn folded_preferred_coefficients_keep_opposite_percentage_bases_and_minimum_priority() {
+        let style=Style::default();
+        let sizing=super::super::box_sizing::Lowered{sizes:[Size::Percent(75.),Size::Auto],
+            bounds:[Size::Pixels(0.),Size::Percent(80.),Size::Percent(75.),Size::Pixels(100.)],numeric:style.numeric};
+        let parent=Bounds{upper:[Some(800.),Some(200.)],lower:[Some(800.),Some(200.)],witness:[Some(800.),Some(200.)]};
+        let child=Bounds{upper:[Some(600.),None],lower:[Some(600.),None],witness:[Some(600.),None]};
+        let result=child.image_preferred(96,64,1,parent,&sizing,"image").unwrap();
+        assert_eq!(result.upper,[Some(600.),Some(160.)]);
+        assert_eq!(result.lower,result.upper);assert_eq!(result.witness,result.upper);
+        let unknown=Bounds{upper:[Some(800.),None],..parent};
+        assert!(child.image_preferred(96,64,1,unknown,&sizing,"image").is_err());
+    }
+    #[test]
     fn preferred_ratio_overflow_cannot_hide_behind_point_maximum() {
         let style=Style::default();
         let sizing=super::super::box_sizing::Lowered{sizes:[Size::Percent(100.),Size::Auto],

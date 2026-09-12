@@ -1,0 +1,194 @@
+[
+  {
+    "name": "image-mixed-diagnostic-reverse-mixed",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px}#image{align-self:flex-start;width:50%;min-width:40%;max-width:120px}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 150,
+      "maxWidth": "40%"
+    },
+    "preferredAxis": 0,
+    "preferredCoefficient": 50,
+    "composition": "point-min-percent-max",
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private source composition of compatible coefficients and point or independent opposite-axis bounds; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-mixed-diagnostic-point-both-axes",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px}#image{align-self:flex-start;width:50%;min-width:150px;max-height:100px}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 150,
+      "maxWidth": "40%"
+    },
+    "preferredAxis": 0,
+    "preferredCoefficient": 50,
+    "composition": "point-min-percent-max",
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private source composition of compatible coefficients and point or independent opposite-axis bounds; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-mixed-diagnostic-mixed-with-opposite",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px}#image{align-self:flex-start;width:50%;min-width:150px;max-width:40%;min-height:80%}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 150,
+      "maxWidth": "40%"
+    },
+    "preferredAxis": 0,
+    "preferredCoefficient": 50,
+    "composition": "point-min-percent-max",
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private source composition of compatible coefficients and point or independent opposite-axis bounds; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-mixed-diagnostic-image-padding",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px}#image{align-self:flex-start;width:50%;min-width:150px;max-width:40%;padding:8px}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 150,
+      "maxWidth": "40%"
+    },
+    "preferredAxis": 0,
+    "preferredCoefficient": 50,
+    "composition": "point-min-percent-max",
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private source composition of compatible coefficients and point or independent opposite-axis bounds; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-mixed-diagnostic-cross-stretch",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px}#image{align-self:flex-start;width:50%;min-width:150px;max-width:40%;align-self:stretch}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 150,
+      "maxWidth": "40%"
+    },
+    "preferredAxis": 0,
+    "preferredCoefficient": 50,
+    "composition": "point-min-percent-max",
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private source composition of compatible coefficients and point or independent opposite-axis bounds; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  },
+  {
+    "name": "image-mixed-diagnostic-automatic-minimum",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px}#image{align-self:flex-start;width:50%;min-width:75%;max-width:60%;min-height:auto}#tail{width:8px;height:8px}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 150,
+      "maxWidth": "40%"
+    },
+    "preferredAxis": 0,
+    "preferredCoefficient": 50,
+    "composition": "point-min-percent-max",
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private source composition of compatible coefficients and point or independent opposite-axis bounds; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-target-semantics"
+    }
+  }
+]

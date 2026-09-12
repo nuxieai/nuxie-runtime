@@ -176,5 +176,21 @@ fn preferred_point_bounds_keep_source_assets_and_reject_both_axis_or_mixed_bound
     let Asset::Image{bytes}=&input.assets["logo"];
     assert_eq!(output.riv.windows(bytes.len()).filter(|b|*b==bytes).count(),1);
     input.css.push_str("#image{max-height:100px}");assert!(compile(&input).is_err());
-    input.css=input.css.replace("max-height:100px","max-height:none;max-width:80%");assert!(compile(&input).is_err());
+    input.css=input.css.replace("max-height:100px","max-height:none;min-width:80%;max-width:120px");assert!(compile(&input).is_err());
+}
+
+#[test]
+fn mixed_and_both_axis_image_constraints_equal_independent_source_compositions() {
+    for (authored,composed) in [
+        ("width:50%;min-width:150px;max-width:40%","width:40%;min-width:150px"),
+        ("height:50%;min-height:150px;max-height:75%","height:50%;min-height:150px"),
+        ("width:50%;min-width:75%;max-width:60%;max-height:100px","width:75%;max-height:100px"),
+        ("height:50%;min-height:75%;max-height:60%;min-width:80%;max-width:100px","height:75%;min-width:80%;max-width:100px"),
+    ] {
+        let mut input=request("<div id=parent><img id=image src=logo></div>",
+            &format!("#parent{{width:100%;height:100%;padding:20px}}#image{{align-self:flex-start;{authored}}}"));
+        asset(&mut input,"logo","opaque.png");
+        let output=compile(&input).unwrap();input.css=input.css.replace(authored,composed);
+        assert_eq!(output,compile(&input).unwrap(),"{authored}");
+    }
 }

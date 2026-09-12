@@ -1,0 +1,184 @@
+{
+  "scope": "Partial public mixed image constraints; 18 pixel-failure frames preserved, including four mismatch-ratio failures.",
+  "rustTests": 359,
+  "nodeTests": 56,
+  "liveAndFrozenSourceBindings": 287,
+  "publicRequests": 50,
+  "successfulFiles": 26,
+  "expectedDiagnostics": 24,
+  "publicInterfaceComparisons": 100,
+  "nativeFrames": 208,
+  "geometryPass": 208,
+  "pixelPass": 190,
+  "presencePass": 208,
+  "pixelFailureFrames": 18,
+  "mismatchRatioFailureFrames": 4,
+  "tailOnlyFailureFrames": 14,
+  "historicalOutputsExact": 794,
+  "existingImageFilesExact": 256,
+  "exactReviewedPublicTransfers": 192,
+  "freshReviewedPriorFrames": 16,
+  "priorOutcomes": {
+    "requests": 20,
+    "newlyAdmitted": 2,
+    "remainDiagnostic": 18,
+    "diagnosticsUnchanged": 11,
+    "messageChangedWithSameCodeAndSource": 7
+  },
+  "visualReview": {
+    "donorInspectedSheets": 24,
+    "donorRepresentativePairs": 72,
+    "donorExactVisualTransfers": 120,
+    "donorFrames": 192,
+    "priorInspectedSheets": 3,
+    "priorRepresentativePairs": 6,
+    "priorExactVisualTransfers": 10
+  },
+  "pixelFailures": [
+    {
+      "case": "image-preferred-mixed-width-preferred-percent-auto-point-max-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-preferred-percent-auto-point-max-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-preferred-percent-auto-percent-min-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-preferred-percent-auto-percent-min-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-width-point-min-higher-percent-max-column",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-width-point-min-percent-max-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-width-point-min-percent-max-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-height-point-min-percent-max-row",
+      "frame": 1,
+      "failures": [
+        "mismatch ratio",
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-height-point-min-percent-max-row",
+      "frame": 5,
+      "failures": [
+        "mismatch ratio",
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-height-point-min-percent-max-column",
+      "frame": 1,
+      "failures": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-height-point-min-percent-max-column",
+      "frame": 5,
+      "failures": [
+        "mismatch ratio"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-width-percent-min-point-max-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-width-percent-min-point-max-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-height-percent-min-point-max-row",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "case": "image-preferred-mixed-combined-height-percent-min-point-max-row",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    }
+  ],
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-mixed-checkpoint-r1/verification.json",
+    "sha256": "e3709b4074778c9f85fd92c6315da1488462245453dc3f9cfb49904d2048f908"
+  },
+  "visualTransferProof": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-mixed-checkpoint-r1/visual-transfer-review.json",
+    "sha256": "c7fc1c1ff50d080d02d6328ea5d0643c9f4aa4c4d24474b7007898e62b668ed0"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-mixed-review.md",
+    "sha256": "f0ceed9a67ce259df758bf463b1f97908effede02d8098dcf6585345e6a321eb"
+  },
+  "verifier": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-mixed-evidence.py",
+    "sha256": "97c1994ccf5e2676785ada223533a293f25b08f99e891ee4423afe29191cec65"
+  },
+  "artifactBindings": 7791
+}

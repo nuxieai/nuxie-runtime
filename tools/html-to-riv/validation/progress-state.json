@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-12",
-  "focus": "Preferred-axis image constraints",
-  "status": "Preferred-axis public checkpoint committed; mixed/both-axis candidates visually reviewed",
-  "current": "Homogeneous point bounds propagate ratio limits; same-parent percentage bounds clamp source coefficients.53requests/106interface observations;264geometry/presence and222pixel passes.42fractional tail failures retained.223older image files/maps and794historical outputs exact.",
-  "next": "Integrate the reviewed16-file mixed/both-axis candidates with provenance and numeric checks, then public APIs and exact evidence transfer.128geometry/presence and120pixel passes retain eight tail failures. Reverse mixed ordering remains unresolved.",
+  "focus": "Mixed image bounds; returning to wrapped layout",
+  "status": "Mixed public checkpoint verified; next is wrapped sizing",
+  "current": "50requests/26files/100interface comparisons.208geometry/presence and190pixel passes.18failedframes include four image-paint mismatch cases.256priorimage files/maps and794historical outputs exact.",
+  "next": "Finish mixed public evidence checkpoint, then return to L04/L06 snapped sizing discriminator using validation/next-independent-checkpoint.md. Keep unresolved image combinations documented.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Mixed public constraints and image/tail pixel failures",
+      "path": "tools/html-to-riv/validation/public-image-mixed-review.md"
+    },
     {
       "label": "Next mixed and both-axis candidates, reviewed private evidence",
       "path": "tools/html-to-riv/validation/image-preferred-mixed-investigation.md"

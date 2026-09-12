@@ -1,0 +1,18 @@
+// Validation-only ordinary records; no wrapping helpers or browser measurements.
+pub(crate) fn validation_fractional_recipe(input:&str,out:&std::path::Path)->Result<(),String>{
+ use serde::Deserialize; use serde_json::json; use crate::wire::{Record,Value};
+ #[derive(Deserialize)] #[serde(rename_all="camelCase",deny_unknown_fields)] struct Recipe{initial_viewport:[f32;2],axis:String,route:String,offset:f32,percent:bool}
+ fn set(r:&mut Record,k:&str,v:Value)->Result<(),String>{r.set(k,v).map_err(|e|format!("{e:?}"))}
+ fn paint(r:&mut Vec<Record>,owner:u32,c:u32)->Result<(),String>{let id=r.len()as u32-1;let mut f=Record::new("Fill");set(&mut f,"parentId",Value::Uint(owner))?;let mut s=Record::new("SolidColor");set(&mut s,"parentId",Value::Uint(id))?;set(&mut s,"colorValue",Value::Color(c))?;r.extend([f,s]);Ok(())}
+ fn node(r:&mut Vec<Record>,parent:u32,dims:[f32;2],units:[u32;2],direction:u32)->Result<u32,String>{let id=r.len()as u32-1;let mut n=Record::new("LayoutComponent");set(&mut n,"parentId",Value::Uint(parent))?;set(&mut n,"styleId",Value::Uint(id+1))?;let mut s=Record::new("LayoutComponentStyle");set(&mut s,"flexDirectionValue",Value::Uint(direction))?;for (i,k)in["width","height"].into_iter().enumerate(){set(&mut n,k,Value::Float(dims[i]))?;set(&mut s,&format!("{k}UnitsValue"),Value::Uint(units[i]))?;}for k in["minWidthUnitsValue","minHeightUnitsValue"]{set(&mut s,k,Value::Uint(1))?;}r.extend([n,s]);Ok(id)}
+ let q:Recipe=serde_json::from_str(input).map_err(|e|e.to_string())?;let horizontal=match q.axis.as_str(){"x"=>true,"y"=>false,_=>return Err("axis".into())};if !["layout","shape"].contains(&q.route.as_str()){return Err("route".into());}
+ let direction=if horizontal{2}else{0};let mut r=vec![Record::new("Backboard"),Record::new("Artboard"),Record::new("LayoutComponentStyle")];set(&mut r[1],"styleId",Value::Uint(1))?;for(i,k)in["width","height"].into_iter().enumerate(){set(&mut r[1],k,Value::Float(q.initial_viewport[i]))?;}set(&mut r[2],"flexDirectionValue",Value::Uint(0))?;paint(&mut r,0,0xffffffff)?;
+ let parent=node(&mut r,0,[100.,100.],[2,2],direction)?;
+ let dims=if horizontal{[q.offset,80.]}else{[80.,q.offset]};let mut units=[1,1];if q.percent{units[if horizontal{0}else{1}]=2;}let spacer=node(&mut r,parent,dims,units,0)?;
+ let size=if horizontal{[45.,80.]}else{[80.,45.]};let owner=node(&mut r,parent,size,[1,1],0)?;
+ let mut shape_id=None;let mut rectangle_id=None;
+ if q.route=="layout"{paint(&mut r,owner,0x80ff6030)?;}else{let id=r.len()as u32-1;let mut s=Record::new("Shape");set(&mut s,"parentId",Value::Uint(owner))?;r.push(s);shape_id=Some(id);let id2=r.len()as u32-1;let mut rect=Record::new("Rectangle");set(&mut rect,"parentId",Value::Uint(id))?;for(i,k)in["width","height"].into_iter().enumerate(){set(&mut rect,k,Value::Float(size[i]))?;}set(&mut rect,"x",Value::Float(size[0]/2.))?;set(&mut rect,"y",Value::Float(size[1]/2.))?;r.push(rect);rectangle_id=Some(id2);paint(&mut r,id,0x80ff6030)?;}
+ std::fs::create_dir_all(out).map_err(|e|e.to_string())?;std::fs::write(out.join("scene.riv"),crate::wire::encode(&r).map_err(|e|format!("{e:?}"))?).map_err(|e|e.to_string())?;
+ for(name,value)in[("scene.map.json",json!([{"id":"p","object_id":parent},{"id":"spacer","object_id":spacer},{"id":"v","object_id":owner}])),("construction.json",json!({"route":q.route,"axis":q.axis,"offset":q.offset,"percent":q.percent,"owner":owner,"shape":shape_id,"rectangle":rectangle_id,"rectangleSize":size,"geometryScope":"DOM map describes ordinary layout owners. Shape Rectangle is a static same-size child path centered within owner; path geometry must additionally be checked in native stream."}))]{std::fs::write(out.join(name),serde_json::to_vec_pretty(&value).unwrap()).map_err(|e|e.to_string())?;}
+ Ok(())
+}

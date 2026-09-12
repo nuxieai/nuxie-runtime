@@ -2,6 +2,12 @@
 
 Reviewed 2026-09-12. The saved goal remains active and unlimited. Work only in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`. Confirm git HEAD/status before editing. This brief supersedes historical next-step instructions.
 
+## Latest completed paint isolation (supersedes standalone experiment instructions below)
+
+Read validation/fractional-paint-review.md and fractional-paint-chrome-rule.md. The standalone20-case experiment is finished:160geometry/136pixel passes,24retained failures,320clear checks,60directly inspected pairs and100exact transfers. All80LayoutComponent/Shape native route pairs are identical. An exact local band reproduces the prior wrapped edge discrepancy in both engines. Ordinary CSS background snapping explains the tested edge behavior; no direct paint-snap wire field was found, but arbitrary compositions are not proven impossible.
+
+**Next complete the native gain/clamp positive-predicate probe, then test a live paint-only edge composition if the predicate works.** The probe uses only existing TranslationConstraints: clamp input to[0,1], then three stages multiply by2^64 and clamp to[0,1]. Test minimum subnormal, negative/zero, positive and large values, both axes, dependency updates, original/clone and a live value crossingzero. Inspect current positive-clamp artifacts/process handles before resuming; do not infer a process is running from files. Keep all99items, runtime immutability and failures. Do not repeat the completed standalone or wrapping captures without a changed hypothesis.
+
 ## Contract and overall state
 
 Build the standalone HTML/CSS-to-Rive compiler across all99items in BACKLOG.md, following TARGET.md. Runtime, renderer, schema, shared dependencies and root build configuration stay immutable at `6c7ac16617835b5f581784ff08a9e779bb52faf3`, tree `25ccbb131d88dbd0fdde8f4c660919143b252edf`. Coupled PR628 was reverted by629. Source guard passes; effective build identity is checked separately.
@@ -46,6 +52,6 @@ Completion requires every scoped item qualified or an evidenced immutable-runtim
 
 ## Restart prompt
 
-> Resume the existing compiler goal using tools/html-to-riv/GOAL-RESTART.md in /Users/levi/.codex/worktrees/html-css-immutable. The actual Derived wrapping campaign and complete visual review are finished, with48pixel failures preserved. Next run the standalone fractional-paint experiment in validation/wrapped-derived-edge-audit.md. Preserve the immutable runtime and all99backlog items; continue the full compiler module. Do not repeat completed wrapping captures/proofs, admit private candidates as public support, or push the unfinished replacement to main.
+> Resume the existing compiler goal in /Users/levi/.codex/worktrees/html-css-immutable using GOAL-RESTART.md. Wrapped and standalone fractional-paint campaigns are complete with48and24pixel failures retained. Next finish the native gain/clamp positive-predicate probe and, if viable, test a live file-level paint-edge rounding composition. Keep the full99-item scope and immutable runtime; no data bindings, animation, host policy or recompilation on resize. Do not repeat completed captures; keep the unfinished replacement isolated.
 
 Earlier chronological notes are preserved in validation/history/GOAL-RESTART-before-derived-review-2026-09-12.md and checkpoint reviews. Their next steps are historical.

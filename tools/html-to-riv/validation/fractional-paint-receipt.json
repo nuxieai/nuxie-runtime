@@ -1,0 +1,37 @@
+{
+  "scope": "Standalone ordinary paint defect isolation, no public admission",
+  "counts": {
+    "frames": 160,
+    "representatives": 60,
+    "transfers": 100,
+    "sheets": 18,
+    "geometryPass": 160,
+    "pixelPass": 136
+  },
+  "artifacts": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/fractional-paint-verification-r1.json",
+      "sha256": "145bf1b9b6eadfe0fae269f873abcb02d0cc98e25aa3a3bb2e6bf028a77966a0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/fractional-paint-r1/receipt.json",
+      "sha256": "cbf63900d44db068f1a10705db71735dde499a52cb05ac7f48951c3ab97ee787"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/fractional-paint-r1/path-receipt.json",
+      "sha256": "7b2a3b63aa983d2f392a91e4e10e9f372e861d27b0df6c99b4b8468dfdd25841"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/fractional-paint-r1/visual/review-receipt.json",
+      "sha256": "8790aa3e3c5fedce35312171ba12c076ef4ae07a9765a2fbfffc3c2ccbfe58e3"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/fractional-paint-r1/wrapping-local-reproduction.json",
+      "sha256": "cf42e0e657e7e994d0be6f5f3f09a90f44ec5858703f1408e2432f7a3f109a88"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/fractional-paint-chrome-source-r1/manifest.json",
+      "sha256": "3062771e4d582e3596f3d95ca1aa4f4d4aae2304d036d5c21bc84da398e57782"
+    }
+  ]
+}

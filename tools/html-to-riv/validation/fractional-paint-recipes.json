@@ -1,0 +1,202 @@
+{
+  "fractional-layout-y-64d25-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "layout",
+    "offset": 64.25,
+    "percent": false
+  },
+  "fractional-layout-y-64d5-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "layout",
+    "offset": 64.5,
+    "percent": false
+  },
+  "fractional-layout-y-64d75-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "layout",
+    "offset": 64.75,
+    "percent": false
+  },
+  "fractional-layout-y-65-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "layout",
+    "offset": 65,
+    "percent": false
+  },
+  "fractional-layout-y-32d5-percent": {
+    "initialViewport": [
+      96,
+      241
+    ],
+    "axis": "y",
+    "route": "layout",
+    "offset": 32.5,
+    "percent": true
+  },
+  "fractional-layout-x-64d25-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "layout",
+    "offset": 64.25,
+    "percent": false
+  },
+  "fractional-layout-x-64d5-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "layout",
+    "offset": 64.5,
+    "percent": false
+  },
+  "fractional-layout-x-64d75-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "layout",
+    "offset": 64.75,
+    "percent": false
+  },
+  "fractional-layout-x-65-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "layout",
+    "offset": 65,
+    "percent": false
+  },
+  "fractional-layout-x-32d5-percent": {
+    "initialViewport": [
+      241,
+      96
+    ],
+    "axis": "x",
+    "route": "layout",
+    "offset": 32.5,
+    "percent": true
+  },
+  "fractional-shape-y-64d25-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "shape",
+    "offset": 64.25,
+    "percent": false
+  },
+  "fractional-shape-y-64d5-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "shape",
+    "offset": 64.5,
+    "percent": false
+  },
+  "fractional-shape-y-64d75-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "shape",
+    "offset": 64.75,
+    "percent": false
+  },
+  "fractional-shape-y-65-px": {
+    "initialViewport": [
+      96,
+      240
+    ],
+    "axis": "y",
+    "route": "shape",
+    "offset": 65,
+    "percent": false
+  },
+  "fractional-shape-y-32d5-percent": {
+    "initialViewport": [
+      96,
+      241
+    ],
+    "axis": "y",
+    "route": "shape",
+    "offset": 32.5,
+    "percent": true
+  },
+  "fractional-shape-x-64d25-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "shape",
+    "offset": 64.25,
+    "percent": false
+  },
+  "fractional-shape-x-64d5-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "shape",
+    "offset": 64.5,
+    "percent": false
+  },
+  "fractional-shape-x-64d75-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "shape",
+    "offset": 64.75,
+    "percent": false
+  },
+  "fractional-shape-x-65-px": {
+    "initialViewport": [
+      240,
+      96
+    ],
+    "axis": "x",
+    "route": "shape",
+    "offset": 65,
+    "percent": false
+  },
+  "fractional-shape-x-32d5-percent": {
+    "initialViewport": [
+      241,
+      96
+    ],
+    "axis": "x",
+    "route": "shape",
+    "offset": 32.5,
+    "percent": true
+  }
+}

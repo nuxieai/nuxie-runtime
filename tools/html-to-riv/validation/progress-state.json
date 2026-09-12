@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
-  "focus": "Actual wrapping candidate rendered and visually reviewed",
-  "status": "Private candidate: geometry passes; fractional paint failures retained",
-  "current": "48 actual Derived cases:384/384 geometry,336/384 pixels,768/768 clear checks.144 full pairs directly reviewed with240 exact repeat/clone transfers.48 fractional-edge failures remain.404 Rust/56 Node tests; immutable runtime and public compiler output unchanged.",
-  "next": "Isolate ordinary fractional rectangle paint using LayoutComponent and Shape/Rectangle controls, including responsive edges. Then resolve or document paint limitations before public wrapping admission; continue all99 backlog items.",
+  "focus": "Fractional paint isolated from wrapping",
+  "status": "Ordinary paint-route discrepancy reproduced",
+  "current": "20 standalone cases:160/160 geometry,136/160 pixels,320clear checks. All80 LayoutComponent/Shape route pairs match.60pairs visually reviewed with100exact transfers.24pixel failures retained alongside48wrapped failures. No product/runtime changes.",
+  "next": "Test a live positive predicate using ordinary gain/clamp TranslationConstraints before attempting paint-only edge rounding. Preserve all failures and continue the99-item compiler backlog.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Standalone fractional paint review",
+      "path": "tools/html-to-riv/validation/fractional-paint-review.md"
+    },
+    {
+      "label": "Standalone paint visual gallery",
+      "path": "tools/html-to-riv/output/playwright/fractional-paint-r1/visual/gallery.html"
+    },
     {
       "label": "Actual Derived campaign and retained edge failures",
       "path": "tools/html-to-riv/validation/wrapped-derived-review.md"

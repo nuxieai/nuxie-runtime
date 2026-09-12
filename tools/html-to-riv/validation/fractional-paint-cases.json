@@ -1,0 +1,642 @@
+[
+  {
+    "name": "fractional-layout-y-64d25-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:64.25px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-y-64d5-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:64.5px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-y-64d75-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:64.75px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-y-65-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:65px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-y-32d5-percent",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:32.5%;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      241
+    ],
+    "viewports": [
+      [
+        96,
+        241
+      ],
+      [
+        160,
+        321
+      ],
+      [
+        128,
+        203
+      ],
+      [
+        96,
+        241
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-x-64d25-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:64.25px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-x-64d5-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:64.5px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-x-64d75-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:64.75px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-x-65-px",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:65px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-layout-x-32d5-percent",
+    "html": "<div id=\"p\" class=\"layout\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:32.5%;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      241,
+      96
+    ],
+    "viewports": [
+      [
+        241,
+        96
+      ],
+      [
+        321,
+        160
+      ],
+      [
+        203,
+        128
+      ],
+      [
+        241,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary layout paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-y-64d25-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:64.25px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-y-64d5-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:64.5px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-y-64d75-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:64.75px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-y-65-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:65px;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      240
+    ],
+    "viewports": [
+      [
+        96,
+        240
+      ],
+      [
+        160,
+        320
+      ],
+      [
+        128,
+        200
+      ],
+      [
+        96,
+        240
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-y-32d5-percent",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:column;}#spacer{width:80px;height:32.5%;}#v{width:80px;height:45px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      96,
+      241
+    ],
+    "viewports": [
+      [
+        96,
+        241
+      ],
+      [
+        160,
+        321
+      ],
+      [
+        128,
+        203
+      ],
+      [
+        96,
+        241
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-x-64d25-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:64.25px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-x-64d5-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:64.5px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-x-64d75-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:64.75px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-x-65-px",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:65px;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      240,
+      96
+    ],
+    "viewports": [
+      [
+        240,
+        96
+      ],
+      [
+        320,
+        160
+      ],
+      [
+        200,
+        128
+      ],
+      [
+        240,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  },
+  {
+    "name": "fractional-shape-x-32d5-percent",
+    "html": "<div id=\"p\" class=\"shape\"><div id=\"spacer\"></div><div id=\"v\"></div></div>",
+    "css": "#p{width:100%;height:100%;flex-direction:row;}#spacer{width:32.5%;height:80px;}#v{width:45px;height:80px;background:rgba(255,96,48,0.5019607843137255);}",
+    "compileViewport": [
+      241,
+      96
+    ],
+    "viewports": [
+      [
+        241,
+        96
+      ],
+      [
+        321,
+        160
+      ],
+      [
+        203,
+        128
+      ],
+      [
+        241,
+        96
+      ]
+    ],
+    "features": [
+      "ordinary shape paint",
+      "static rectangle path on native layout owner",
+      "fractional position; original and clone resize"
+    ]
+  }
+]

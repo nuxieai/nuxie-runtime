@@ -1,0 +1,19 @@
+{
+  "scope": "Private authored domains, closed composition and conditional normalizer; no public wrapping or new pixel qualification",
+  "rustTests": 379,
+  "nodeTests": 56,
+  "imageOutputs": 282,
+  "historicalOutputs": 794,
+  "compilerSha256": "4202e0e145fbfa2103570dd6b6255401c65c6f5f95a814e2fc54f5f8764ab62f",
+  "wasmSha256": "c92d9224607d1ea5d023bd33869309bca528df094b2c98eac0e9f2882f064a4c",
+  "publicWrappingAdmitted": false,
+  "artifactBindings": 7853,
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-composition-verification-r1.json",
+    "sha256": "7d8cabd5a6b6c990bf440c7c7d85ffbeb74206996e72bef679114c82686c9688"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-composition-review.md",
+    "sha256": "355816118e8bee70bb5f11f9899d11d0487ab4c3bf0314c26877a4ef3a3c582e"
+  }
+}

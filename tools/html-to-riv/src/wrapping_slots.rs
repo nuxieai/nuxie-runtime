@@ -45,6 +45,9 @@ pub(super) struct Binding<'a> {
     pub line_fraction: f32,
     pub slots: Vec<Slot>,
 }
+impl<'a> Binding<'a> {
+    pub(super) fn records(&self) -> &'a [Record] { self._records }
+}
 fn uint(r: &Record, name: &str) -> Option<u32> {
     match r.get(name) { Some(Value::Uint(v)) => Some(*v), _ => None }
 }

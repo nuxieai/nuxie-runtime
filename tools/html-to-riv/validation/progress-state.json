@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
   "focus": "Wrapped sizing and admission proof",
-  "status": "Private machine size bounds and base slot binding implemented; full wrapping certificate remains open",
-  "current": "Machine size intervals and a closed base-scene slot binder are implemented with9new tests.370Rust/56Node, TypeScript, native/WASM and source guard pass;282priorimage+794historical outputs are exact.7,846artifact bindings verified. Public wrapping remains unadmitted; no new pixel campaign.",
-  "next": "Connect authored parent domains and prove final helper-graph preservation. Implement validated coordinate accumulation, line separation, rounded normalization, carry reconstruction error and mask bounds using wrapped-gap-normalizer-audit.md.",
+  "status": "Authored domains, closed private composition and conditional normalizer implemented",
+  "current": "Authored parent/slot domains now feed a closed private composition; generated layout inputs are checked after emission. A conditional normalizer proof includes interpolation cancellation.379Rust/56Node, TypeScript, native/WASM and source guard pass;282image+794historical outputs remain exact.7,853artifact bindings verified. No public wrapping or new pixel campaign.",
+  "next": "Implement coordinate accumulator and carry envelopes; derive source-dependent epsilon/dead intervals; bind scalar normalizer premises to the candidate and prove mask coverage. Public wrapping remains closed.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Authored domains, closed composition and conditional normalizer",
+      "path": "tools/html-to-riv/validation/wrapped-composition-review.md"
+    },
+    {
+      "label": "Generated helpers preserve the native layout tree",
+      "path": "tools/html-to-riv/validation/wrapped-composition-layout-isolation.md"
+    },
     {
       "label": "Machine size and base slot binding checkpoint",
       "path": "tools/html-to-riv/validation/wrapped-size-binding-review.md"

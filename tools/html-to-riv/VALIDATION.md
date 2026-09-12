@@ -1,5 +1,7 @@
 # Immutable-target validation
 
+Latest private integration checkpoint: [authored domains, closed composition and conditional normalizer](validation/wrapped-composition-review.md). The frozen build passes379Rust/56Node tests, TypeScript, native/WASM and immutable source guard. All282prior image and794historical outputs remain exact;7,853artifact bindings are checked. Generated layout isolation is source-audited, while coordinate/carry bounds, source-derived dead intervals, scalar graph premises and mask coverage remain open. No new pixel qualification or public wrapping admission is claimed.
+
 Latest private proof infrastructure: [machine sizes and base slot binding](validation/wrapped-size-binding-review.md). Nine new tests bring the frozen build to370Rust/56Node tests; strict TypeScript, native/WASM and source guard pass. All282prior image and794historical outputs reproduce exactly. The verifier checks7,846artifact bindings without new rendering. Public wrapping stays unadmitted: authored parent-domain integration, final helper-graph preservation and complete separation/normalizer/carry/mask bounds remain open. The [new arithmetic audit](validation/wrapped-gap-normalizer-audit.md) records line-stretch and carry-max rounding obligations.
 
 The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.

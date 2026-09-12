@@ -58,6 +58,15 @@ mod wrapping_sizes;
 #[allow(dead_code)] // Base scene binding; augmented wrapping graph proof follows.
 #[path = "wrapping_slots.rs"]
 mod wrapping_slots;
+#[allow(dead_code)] // Authored domains bound to base slots; full graph proof follows.
+#[path = "wrapping_domains.rs"]
+mod wrapping_domains;
+#[allow(dead_code)] // Conditional scalar normalizer proof; graph premises remain separate.
+#[path = "wrapping_normalizer.rs"]
+mod wrapping_normalizer;
+#[allow(dead_code)] // Closed private composition; no public wrapping admission.
+#[path = "wrapping_composition.rs"]
+mod wrapping_composition;
 #[path = "images.rs"]
 mod images;
 #[path = "image_constraints.rs"]

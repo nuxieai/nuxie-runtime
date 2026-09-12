@@ -10,6 +10,16 @@ This is a read-only implementation plan, not a completed proof or public admissi
 
 The newer `wrapped-gap-normalizer-audit.md` refines the proposed equations below. Exclude line stretch as well as item stretch; validate actual accumulator magnitude intervals before choosing R; check the rounded normalizer length; and propagate reconstruction error through carry maxima. In particular a local-space max constraint can exceed its selected operand by one ulp, so the old measured-extent bound alone does not establish reset safety. The conditional different-line operation count31+4N is sufficient only with the shared-machine-offset and validated-envelope premises in that audit. None of these prerequisites admits public wrapping yet.
 
+## Domain and composition integration
+
+`wrapping_domains.rs` now joins authored NumericStyle dimensions to the checked base: parent axes resolve against the explicit viewport domain, slot axes against those parent axes. It rejects missing/duplicate metadata, stale units/values, and an absent positive cross bound without introducing a viewport floor. Its fields are private and exposed read-only.
+
+`wrapping_composition.rs` consumes those domains, charges exact existing sizing/paint expansion before emission, and owns the generated candidate records. An independent prefix/role check preserves base layout inputs, allows only the identified original colors to be hidden, excludes layout participants, and validates typed helper parents/references. `wrapped-composition-layout-isolation.md` records the native source chain for layout isolation. This closes base-role preservation for this closed composition path; it does not validate every scalar constraint parameter or prove numerical or pixel correctness.
+
+`wrapping_normalizer.rs` implements the conditional positive-branch normalizer proof, including normal intermediate ranges, rounded length threshold, correlated projection, subtraction/FMA error and exact saturation conditions. It is not yet connected to a source-derived dead interval or final scalar graph binding. The caller must prove those remaining inputs. No public route is enabled.
+
+Next implement the actual coordinate accumulator envelope and carry reconstruction bounds, derive epsilon and the positive dead interval, bind the normalizer's zero-target/identity/axis/distance/mode/strength/clamp premises to the candidate, and establish mask margins. Do not repeat the completed domain/base-composition implementation merely because older plan paragraphs below describe it as future work.
+
 ## Smallest general route
 
 Start with a root-origin, translation-only wrapping scope whose parent has definite bounded dimensions, zero insets/gap, and independent slots with two definite dimensions. Require every slot's native cross size to have a strictly positive source-derived lower bound. Permit variable item count subject to computed bounds and actual graph cost; do not specialize the certificate to the three historical fixture identities. Explicit positional line fractions0,1/2,1 and both wrap directions are possible once each passes the same inequalities. Initially reject intrinsic/stretch/baseline slots, relative insets, slot aspect ratios, native size-modifying constraints, nonzero origins and unknown ancestry.

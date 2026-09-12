@@ -1,0 +1,130 @@
+{
+  "scope": "Private combined automatic-axis min/max ratio bounds; completed direct visual review, no public admission, 10 tail pixel failures retained",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "runtimeOrCompilerModified": false,
+  "browserGeometryConsumed": false,
+  "requests": 24,
+  "frames": 192,
+  "geometryPass": 192,
+  "pixelPass": 182,
+  "presencePass": 192,
+  "pixelFailures": [
+    {
+      "name": "image-combined-constraints-height-percent-min-point-max-row",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-height-percent-min-point-max-row",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-height-conflicting-percent-row",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-height-conflicting-percent-row",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 0,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 1,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 3,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 4,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 5,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-combined-constraints-width-ordered-percent-column",
+      "frame": 7,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    }
+  ],
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/candidate-generator.py",
+      "sha256": "bfc62bbb4a0d1f45f48c8da5f0887998e38cc0a3d3a00f0079993521a7f9cf57"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/all-source-cases.json",
+      "sha256": "2501cd54c910f71b676eeb44a9df5a88605c5ccb01bfaa7140069465d4aa276d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/ordinary-codec.py",
+      "sha256": "70019687001106baca7b0f82c2af76193bcc5c95b210ff4f560a3184b9181a15"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/authoring-bindings.json",
+      "sha256": "80a6016c14e67e909f9701f805c16ac6b44ec3c5ebc5bba82affcd25ceff0872"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/build-receipt.json",
+      "sha256": "a8b33a8119b8dd53c5b988eefe6b55b10faf86824572550c730110e427ff2ce7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/compile-receipt.json",
+      "sha256": "be38f0649fddbd6bd85d39a4bc18750ab8ff4721e1bf3b14d229c4d5b5103bce"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/native-receipt.json",
+      "sha256": "915b407c597229ba7c988a811d8623f939b808ca472e03b09b820ea83ba21003"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/combined-receipt.json",
+      "sha256": "8aa7747c7299762e008a5fc749cad5be0880337fee93badc8a0e51cbc90c4882"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/visual-r1/review-receipt.json",
+      "sha256": "6fbf345470cd510f145db5704760d2903744759ee3c96cceefc2481c2a9abc52"
+    }
+  ],
+  "visualReviewCompleted": true,
+  "visualReview": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-combined-constraints-candidate-r1/visual-r1/review-receipt.json",
+    "sha256": "6fbf345470cd510f145db5704760d2903744759ee3c96cceefc2481c2a9abc52",
+    "inspectedSheets": 24,
+    "representativePairs": 72,
+    "exactVisualTransfers": 120,
+    "frames": 192
+  }
+}

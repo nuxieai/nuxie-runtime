@@ -1,0 +1,119 @@
+{
+  "scope": "Private source-derived ordinary-file preferred image bound follow-ups; no public admission or complete qualification",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "browserGeometryConsumed": false,
+  "runs": [
+    {
+      "root": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1",
+      "frames": 96,
+      "geometryPass": 80,
+      "pixelPass": 64,
+      "presencePass": 80,
+      "artifacts": [
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/candidate-generator.py",
+          "sha256": "1cacacff2c173fd766e4f35d213ed540b53901231ea1dbb725a4b03e38fd70f3"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/cases.json",
+          "sha256": "3efba2f87d0ae3e09dca485d62c33f01ee8c33d001188d26641a90fa92fbec4d"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/authoring-bindings.json",
+          "sha256": "18b40b890cdb79e26072cc4002f33b8e2fc49fbb2f3ef10dafda8dcfe2a778c6"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/build-receipt.json",
+          "sha256": "e43e9f0f5917a5ae7b36892f92809da1e95425555ee11e6f45646e33268dd854"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/compile-receipt.json",
+          "sha256": "bc00439953a8041f101ddd7dd0fb7babab9caecdf6d503da81eeaa0dddc73f66"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/native-receipt.json",
+          "sha256": "ead7abdf24c62203f53ddf5a353234bd32e8d26d25a30dd97ae13ee5356f875f"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/combined-receipt.json",
+          "sha256": "aee4ce4b073ea830f406df8b20f4fa8846dac8c86b4508d15b106bf170e3e2ed"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/visual-r1/coverage.json",
+          "sha256": "5b5ba4631337b0814ce2bf80773c1c1c84f7fa32b56b764fc24bca799617b933"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/visual-r1/review-receipt.json",
+          "sha256": "a60fc9554b8bdc1b979d6525371028eec68b79980fd886849260ab123dd0fe09"
+        }
+      ],
+      "visualReviewCompleted": true,
+      "visualReview": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-followup-r1/visual-r1/review-receipt.json",
+        "sha256": "a60fc9554b8bdc1b979d6525371028eec68b79980fd886849260ab123dd0fe09",
+        "inspectedSheets": 12,
+        "representativePairs": 36,
+        "exactVisualTransfers": 60
+      }
+    },
+    {
+      "root": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1",
+      "frames": 64,
+      "geometryPass": 64,
+      "pixelPass": 60,
+      "presencePass": 64,
+      "artifacts": [
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/candidate-generator.py",
+          "sha256": "f60e25dac52771336712d939fc9597942d3cf86ea1ffc97f93faa9e743b30eda"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/cases.json",
+          "sha256": "55e10ca5145565afe14691bc164c7fc5b70ac49ff064000406bca5fd8ece9a0e"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/authoring-bindings.json",
+          "sha256": "83dac138bc256f556335a7e217c7f801c37090ede2e7def8a9f7b7bfcd6943a4"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/build-receipt.json",
+          "sha256": "053ca2cc2cdda48b4d802cd7aca625aefa5e59511bc22d6adfb87e34618f6e6c"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/compile-receipt.json",
+          "sha256": "c4abb173dedc746536406b7c7bd3d658c0aae59c2abce0597465805e6e095a9f"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/native-receipt.json",
+          "sha256": "7fb325a9d8bd343ac5f7add398471e2d9e5b46bf74067d481a9a19fc72711281"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/combined-receipt.json",
+          "sha256": "839e424ff26511fcac743ba4adf1d75f434a6d72e573ae0b7ab3eba4517009e8"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/visual-r1/coverage.json",
+          "sha256": "b4fdc99e77a7a5751453c2a94bc5d2a1aa725e9ad410936e5e2eb5ea74f9fa15"
+        },
+        {
+          "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/visual-r1/review-receipt.json",
+          "sha256": "f081e66817b9817511b5dcf0dd5844fd8312e5152916136ea38c999ece2a75dd"
+        }
+      ],
+      "visualReviewCompleted": true,
+      "visualReview": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-coefficient-r1/visual-r1/review-receipt.json",
+        "sha256": "f081e66817b9817511b5dcf0dd5844fd8312e5152916136ea38c999ece2a75dd",
+        "inspectedSheets": 8,
+        "representativePairs": 24,
+        "exactVisualTransfers": 40
+      }
+    }
+  ],
+  "limitations": [
+    "Both visual reviews are complete; finite private composition evidence does not establish public API qualification.",
+    "Fractional tail pixel failures are preserved.",
+    "The inner-ratio wrapper still fails when the preferred dimension is the outer parent cross axis.",
+    "Coefficient clamp evidence is preferred-only same-axis percentage bounds; mixed-unit and both-axis bounds remain separate."
+  ]
+}

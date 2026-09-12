@@ -1,0 +1,938 @@
+[
+  {
+    "name": "image-preferred-constraints-width-max-point-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-point-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-point-row-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-width-conflicting-point-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-conflicting-point-row-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-width-max-percent-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:30%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "30%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-percent-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-percent-row-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-width-max-point-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-point-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-point-column-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-width-conflicting-point-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-conflicting-point-column-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:200px;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 120
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-width-max-percent-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;max-width:30%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "30%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-percent-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-width-min-percent-column-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-width:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 0,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-height-max-point-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-point-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-point-row-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-height-conflicting-point-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-conflicting-point-row-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-height-max-percent-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:30%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": "30%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-percent-row-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-percent-row-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-height-max-point-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-point-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-point-column-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-height-conflicting-point-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-conflicting-point-column-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": false
+  },
+  {
+    "name": "image-preferred-constraints-height-max-percent-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;max-height:30%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": "30%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-percent-column-native-transfer",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": true
+  },
+  {
+    "name": "image-preferred-constraints-height-min-percent-column-explicit-zero-control",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-height:75%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "75%"
+    },
+    "guard": {},
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "unsupported-control",
+      "reason": "Preferred-axis ratio transfer hypothesis; no browser dimensions consumed"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "preferredAxis": 1,
+    "omitAutomaticMinimum": false
+  }
+]

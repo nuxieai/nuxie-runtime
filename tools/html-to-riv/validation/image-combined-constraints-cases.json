@@ -1,0 +1,722 @@
+[
+  {
+    "name": "image-combined-constraints-width-ordered-points-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": 180
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-conflicting-points-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-point-min-percent-max-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": "35%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-percent-min-point-max-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:45%;max-height:140px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "45%",
+      "maxHeight": 140
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-ordered-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:25%;max-height:45%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "25%",
+      "maxHeight": "45%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-conflicting-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:60%;max-height:20%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "60%",
+      "maxHeight": "20%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-ordered-points-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:200px;max-width:300px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 300
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-conflicting-points-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:0px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:300px;max-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 300,
+      "maxWidth": 200
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-point-min-percent-max-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:220px;max-width:60%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 220,
+      "maxWidth": "60%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-percent-min-point-max-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:65%;max-width:260px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "65%",
+      "maxWidth": 260
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-ordered-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:40%;max-width:80%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "40%",
+      "maxWidth": "80%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-conflicting-percent-row",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:row;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:80%;max-width:30%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "80%",
+      "maxWidth": "30%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-ordered-points-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:180px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": 180
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-conflicting-points-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:0px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:180px;max-height:100px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 180,
+      "maxHeight": 100
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-point-min-percent-max-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:100px;max-height:35%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 100,
+      "maxHeight": "35%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-percent-min-point-max-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:45%;max-height:140px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "45%",
+      "maxHeight": 140
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-ordered-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:25%;max-height:45%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "25%",
+      "maxHeight": "45%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-width-conflicting-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{width:50%;height:auto;align-self:flex-start;min-height:60%;max-height:20%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": "60%",
+      "maxHeight": "20%"
+    },
+    "guard": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-ordered-points-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:0px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:200px;max-width:300px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 200,
+      "maxWidth": 300
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-conflicting-points-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:0px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:300px;max-width:200px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 300,
+      "maxWidth": 200
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-point-min-percent-max-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:220px;max-width:60%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 220,
+      "maxWidth": "60%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-percent-min-point-max-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:65%;max-width:260px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "65%",
+      "maxWidth": 260
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-ordered-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:40%;max-width:80%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "40%",
+      "maxWidth": "80%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-combined-constraints-height-conflicting-percent-column",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;flex-direction:column;padding:20px;background:#dce6ee}#image{height:50%;width:auto;align-self:flex-start;min-width:80%;max-width:30%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": "80%",
+      "maxWidth": "30%"
+    },
+    "guard": {
+      "maxHeight": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Private combined automatic-axis min/max candidate; original percentage bases preserved on same owner; no public admission"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  }
+]

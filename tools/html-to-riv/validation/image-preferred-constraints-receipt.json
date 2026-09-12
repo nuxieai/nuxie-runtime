@@ -1,0 +1,322 @@
+{
+  "scope": "Private initial preferred-axis direct ratio-transfer and explicit-zero controls; no public admission; all failures retained",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "runtimeOrCompilerModified": false,
+  "browserGeometryConsumed": false,
+  "requests": 32,
+  "frames": 256,
+  "geometryPass": 80,
+  "pixelPass": 76,
+  "presencePass": 84,
+  "maximumFrames": 64,
+  "maximumGeometryPass": 64,
+  "maximumPixelPass": 60,
+  "maximumPresencePass": 64,
+  "minimumAndConflictFrames": 192,
+  "minimumAndConflictGeometryPass": 16,
+  "minimumAndConflictPixelPass": 16,
+  "minimumAndConflictPresencePass": 20,
+  "perCaseCounts": [
+    {
+      "name": "image-preferred-constraints-width-max-point-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-width-min-point-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 2
+    },
+    {
+      "name": "image-preferred-constraints-width-min-point-row-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 2
+    },
+    {
+      "name": "image-preferred-constraints-width-conflicting-point-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-conflicting-point-row-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-max-percent-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-width-min-percent-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-min-percent-row-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-max-point-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-width-min-point-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 4
+    },
+    {
+      "name": "image-preferred-constraints-width-min-point-column-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 4
+    },
+    {
+      "name": "image-preferred-constraints-width-conflicting-point-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-conflicting-point-column-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-max-percent-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 6,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-width-min-percent-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-width-min-percent-column-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-max-point-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-height-min-point-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 2
+    },
+    {
+      "name": "image-preferred-constraints-height-min-point-row-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 2
+    },
+    {
+      "name": "image-preferred-constraints-height-conflicting-point-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-conflicting-point-row-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-max-percent-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-height-min-percent-row-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-min-percent-row-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-max-point-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-height-min-point-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 2
+    },
+    {
+      "name": "image-preferred-constraints-height-min-point-column-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 2,
+      "pixelPass": 2,
+      "presencePass": 2
+    },
+    {
+      "name": "image-preferred-constraints-height-conflicting-point-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-conflicting-point-column-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-max-percent-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 8,
+      "pixelPass": 8,
+      "presencePass": 8
+    },
+    {
+      "name": "image-preferred-constraints-height-min-percent-column-native-transfer",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    },
+    {
+      "name": "image-preferred-constraints-height-min-percent-column-explicit-zero-control",
+      "frames": 8,
+      "geometryPass": 0,
+      "pixelPass": 0,
+      "presencePass": 0
+    }
+  ],
+  "maximumPixelFailures": [
+    {
+      "name": "image-preferred-constraints-width-max-percent-row-native-transfer",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-constraints-width-max-percent-row-native-transfer",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-constraints-width-max-percent-column-native-transfer",
+      "frame": 2,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    },
+    {
+      "name": "image-preferred-constraints-width-max-percent-column-native-transfer",
+      "frame": 6,
+      "failures": [
+        "tail: local RGB error"
+      ]
+    }
+  ],
+  "visualReviewCompleted": true,
+  "visualReview": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/visual-r1/review-receipt.json",
+    "sha256": "a1eb9feb403614656f867cb72ab3a8829cbc58cae6738b1c3b38cf5df34c9c3f",
+    "inspectedSheets": 32,
+    "representativePairs": 96,
+    "exactVisualTransfers": 160,
+    "frames": 256
+  },
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/candidate-generator.py",
+      "sha256": "1121fc6d8ec238b094eafda65a24235f20d9a85ac976f84b85be4cc6e4a9370e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/all-source-cases.json",
+      "sha256": "1a24d9a0fd506966b56e1cdb3ac4f142bb6f6ba2da9df6e9270e7a02f6c9f716"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/ordinary-codec.py",
+      "sha256": "70019687001106baca7b0f82c2af76193bcc5c95b210ff4f560a3184b9181a15"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/authoring-bindings.json",
+      "sha256": "711027d1e32b527fce48929a56751a7d596dfafdab0d7b0065a5166b61301416"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/build-receipt.json",
+      "sha256": "dd5a8fb60e1a959fd8ae453de3aa61d05485144bab187a57e88e3bb7920563f2"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/compile-receipt.json",
+      "sha256": "037aefe0f3d1573fc4e2d9a8267cce3743a02ee93d4bbcad1652fae381edf477"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/native-receipt.json",
+      "sha256": "e4a66a80ad0a39547d0468e6c276a274131a02a5fef873a6ad474bd82519c8cf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/combined-receipt.json",
+      "sha256": "52bfa48792d1d00087cc46f5d92795bd58e437f784ea4b8d7e751a9aec762751"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-preferred-constraints-candidate-r1/visual-r1/review-receipt.json",
+      "sha256": "a1eb9feb403614656f867cb72ab3a8829cbc58cae6738b1c3b38cf5df34c9c3f"
+    }
+  ]
+}

@@ -15,6 +15,8 @@ mod padding;
 #[allow(dead_code)]
 #[path = "flex.rs"]
 mod flex;
+#[path = "flex_descriptor.rs"]
+pub(super) mod flex_descriptor;
 // Staged lowering, exercised against frozen ordinary-file experiments before
 // public wrapping admission and its contextual guards are installed.
 #[allow(dead_code)]
@@ -387,6 +389,13 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
 #[allow(dead_code)]
 pub(super) enum FlexPolicy { Guarded, Candidate, PaddingCandidate }
 pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Result<CompileOutput, Diagnostic> {
+    compile_with_descriptor_capture(input, policy, false).map(|(output, _)| output)
+}
+#[allow(dead_code)]
+pub(super) fn compile_profile_with_descriptors(input: &CompileInput, policy: FlexPolicy) -> Result<(CompileOutput, Vec<flex_descriptor::Group>), Diagnostic> {
+    compile_with_descriptor_capture(input, policy, true)
+}
+fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, capture: bool) -> Result<(CompileOutput, Vec<flex_descriptor::Group>), Diagnostic> {
     if ![input.width, input.height].into_iter().all(|v| v.is_finite() && v > 0. && v <= 16384.) {
         return Err(Diagnostic::new("invalid-viewport", "viewport", "Dimensions must be finite and in (0,16384]"));
     }
@@ -423,7 +432,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     host_paint.set("parentId", Value::Uint(host_fill_id))?;
     host_paint.set("colorValue", Value::Color(0xffffffff))?;
     records.push(host_paint);
-    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate) };
+    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), descriptor_capture: capture, descriptors: Vec::new() };
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
@@ -433,10 +442,12 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     output.map.sort_by_cached_key(|node| node.path.split('/').skip(1)
         .map(|part| part.parse::<usize>().expect("generated numeric DOM path")).collect::<Vec<_>>());
     if output.map.is_empty() { return Err(Diagnostic::new("empty-document", "html", "At least one box element is required")); }
-    Ok(CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map })
+    let constraint_owners = if capture { flex_descriptor::constraint_owners(&output.records) } else { BTreeSet::new() };
+    let descriptors = output.descriptors.into_iter().map(|pending| pending.finish(&output.records, &constraint_owners)).collect();
+    Ok((CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map }, descriptors))
 }
 
-struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool, candidate_padding: bool }
+struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool, candidate_padding: bool, descriptor_capture: bool, descriptors: Vec<flex_descriptor::Pending> }
 impl Emitter {
     fn layout_box(&mut self, name: &str, parent_id: u32, direction: Direction, alignment: u32,
         parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool, auto_margins: [bool; 4]) -> Result<u32, Diagnostic> {
@@ -528,6 +539,8 @@ impl Emitter {
         if padded_group && baseline_group {
             return Err(unsupported(path, "Padding with baseline groups needs padding-aware metric and origin qualification"));
         }
+        let descriptor_start = self.records.len();
+        let mut descriptor_items = Vec::new();
         let count = ordered_elements.len();
         let mut children = Vec::with_capacity(count);
         if count != 0 { spacing::emit(self, parent_id, parent_style, true)?; }
@@ -618,6 +631,10 @@ impl Emitter {
                 let mut paint = Record::new("SolidColor");paint.set("parentId", Value::Uint(fill_id))?;
                 paint.set("colorValue", Value::Color(background))?;self.records.push(paint);
             }
+            if self.descriptor_capture {
+                descriptor_items.push(flex_descriptor::Item::extract(&style, parent_style.direction, &self.records, &id, &path, object_id,
+                    if authored_parent == parent_id { object_id } else { authored_parent }, index, order));
+            }
             self.map.push(SourceNode { id, path: path.clone(), object_id });
             let child_chain = flex::child_chain(definite_chain, &style);
             let descendants = self.children(element, object_id, &style, rules, &path, depth + 1, child_chain, child_bounds)?;
@@ -639,6 +656,9 @@ impl Emitter {
             spacing::emit(self, parent_id, parent_style, children.len() == count)?;
         }
         baseline::emit(self, parent_id, parent_style, &children, path)?;
+        if self.descriptor_capture && count != 0 {
+            self.descriptors.push(flex_descriptor::Pending {parent:flex_descriptor::Parent::extract(parent_style),parent_id,path:path.into(),record_start:descriptor_start,record_end:self.records.len(),items:descriptor_items});
+        }
         Ok(children)
     }
 }

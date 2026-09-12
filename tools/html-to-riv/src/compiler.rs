@@ -317,21 +317,41 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
     computed_order(&value, parent.order, &declaration.source)
 }
 
-fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool, padding_candidate: bool) -> Result<Style, Diagnostic> {
-    let mut declarations = css::cascade(rules, element)?;
+/// A transient declaration pair consumed by typed property computation. The
+/// native declaration retains its source/name/importance and existing normalized
+/// value. Original selected tokens may be unavailable, never inferred from it.
+struct ResolvedDeclaration {
+    native: css::Declaration,
+    #[allow(dead_code)] // consumed by the next typed-provenance integration step
+    original: Option<String>,
+}
+impl std::ops::Deref for ResolvedDeclaration {
+    type Target = css::Declaration;
+    fn deref(&self) -> &Self::Target { &self.native }
+}
+fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style, candidate: bool, padding_candidate: bool)
+    -> Result<(Vec<ResolvedDeclaration>, variables::Variables), Diagnostic> {
     for d in &declarations { validate(d, candidate, padding_candidate, parent.flex, parent.padding)?; }
     let variable_values = variables::compute(&declarations, &parent.variables)?;
     declarations.retain(|d| !d.name.starts_with("--"));
-    for d in &mut declarations {
-        if variables::contains_var(&d.value) {
-            d.value = variables::substitute(&d.value, &variable_values, &d.source)?
+    let mut resolved = Vec::with_capacity(declarations.len());
+    for mut d in declarations {
+        let original = if variables::contains_var(&d.value) {
+            let selected = variables::substitute_with_provenance(&d.value, &variable_values, &d.source)?
                 .ok_or_else(|| unsupported(&d.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
+            d.value = selected.native;
             // Substitution cannot bypass property admission, even for a declaration
             // that loses the cascade. Keep the compiler's strict diagnostics.
-            validate(d, candidate, padding_candidate, parent.flex, parent.padding)?;
-        }
+            validate(&d, candidate, padding_candidate, parent.flex, parent.padding)?;
+            selected.original
+        } else { Some(d.value.clone()) };
         if d.name != "order" { d.value = css::ordinary_value(&d.value)?; }
+        resolved.push(ResolvedDeclaration {native:d, original});
     }
+    Ok((resolved, variable_values))
+}
+fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool, padding_candidate: bool) -> Result<Style, Diagnostic> {
+    let (declarations, variable_values) = resolved_declarations(css::cascade(rules, element)?, parent, candidate, padding_candidate)?;
     let mut style = Style { variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
     // Font-size-relative units use the parent for font-size itself, but the final
     // computed element font size for other lengths, regardless of source order.
@@ -701,5 +721,44 @@ mod padding_pipeline_tests {
     fn ancestor_baseline_cannot_reuse_unpadded_descendant_metrics() {
         let css="#p{flex-direction:row}#a{align-self:baseline}#leaf{padding:2px}";
         assert!(compile_profile(&input(css),FlexPolicy::PaddingCandidate).is_err());
+    }
+}
+
+#[cfg(test)]
+mod declaration_provenance_tests {
+    use super::*;
+    fn declarations(css:&str,parent:&Style)->Result<Vec<ResolvedDeclaration>,Diagnostic> {
+        let document=Html::parse_document("<div id=a></div>");
+        let selector=scraper::Selector::parse("#a").unwrap();
+        let element=document.select(&selector).next().unwrap();
+        let rules=css::stylesheet(css).unwrap();
+        resolved_declarations(css::cascade(&rules,element)?,parent,false,true).map(|(values,_)|values)
+    }
+    #[test]
+    fn winning_variable_tokens_remain_paired_with_actual_native_normalization() {
+        let values=declarations("#a{--v:999.123px;width:10px}#a{--v:100.71428680419922px;width:var(--v)}",&Style::default()).unwrap();
+        let widths:Vec<_>=values.iter().filter(|d|d.name=="width").collect();
+        assert_eq!(widths.len(),2);assert!(widths[0].original.as_ref().unwrap().contains("10px"));
+        assert_eq!(widths[1].native.value.trim(),"100.714px");
+        assert!(widths[1].original.as_ref().unwrap().contains("100.71428680419922px"));
+        assert!(!widths[1].original.as_ref().unwrap().contains("999.123"));
+        let direct=declarations("#a{width:100.71428680419922px}",&Style::default()).unwrap();
+        assert_eq!(direct[0].native.value.trim(),"100.714px");assert!(direct[0].original.as_ref().unwrap().contains("100.71428680419922px"));
+    }
+    #[test]
+    fn frozen_inherited_variables_and_fallbacks_supply_selected_originals() {
+        let mut parent=Style::default();
+        parent.variables=variables::compute(&css::declarations("--x:1.234567890123em;--alias:var(--x)","test").unwrap(),&variables::Variables::default()).unwrap();
+        let values=declarations("#a{--x:9rem;width:var(--alias);height:var(--missing,2.34567890123%)}",&parent).unwrap();
+        assert!(values.iter().find(|d|d.name=="width").unwrap().original.as_ref().unwrap().contains("1.234567890123em"));
+        assert!(values.iter().find(|d|d.name=="height").unwrap().original.as_ref().unwrap().contains("2.34567890123%"));
+        parent.variables.insert("--lost".into(),Some(variables::ResolvedValue {native:"12px".into(),original:None}));
+        assert!(declarations("#a{width:var(--lost,99px)}",&parent).unwrap()[0].original.is_none());
+    }
+    #[test]
+    fn production_computation_keeps_fonts_first_and_strict_loser_validation() {
+        let mut input=CompileInput {html:"<div id=a></div>".into(),css:"#a{--w:2em;width:var(--w);font-size:20px}".into(),width:240.,height:160.};
+        let actual=compile(&input).unwrap();input.css="#a{width:40px;font-size:20px}".into();assert_eq!(actual,compile(&input).unwrap());
+        for css in ["#a{--bad:calc(1px);width:var(--bad);width:1px}","#a{--f:1;flex:var(--f);flex:none}"] {assert!(declarations(css,&Style::default()).is_err());}
     }
 }

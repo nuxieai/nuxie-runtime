@@ -1,0 +1,41 @@
+{
+  "status": "resolved-declaration-provenance-integrated",
+  "scope": "Production declaration pairing before typed computation; no computed scalar bounds or public flex admission yet.",
+  "sourceHashes": {
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "78194f15beafaf30b6e91545769504468074ebe803abf88a16cae72a1c9f69ad",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "compiler.rs": "0a0994fbbcf1bbf6e1b73d951786bd4813a44481936122293cda105acb6229b6",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "74901f508eddfd778f7660b5482ae32764db547a357964a371881b2b201224f6",
+    "flex_descriptor.rs": "9ba775b03f92b25a51edba80201904c15cefae0ba396d02bde6843918e7f5ea3",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "70c12ac308d4b833d20e39f7e8cc68cb8e29931be68caba58f08b8d63774cb06",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f"
+  },
+  "checks": {
+    "rust": 163,
+    "node": 35,
+    "privateFlexFiles": 48,
+    "priorPublicOutputs": 482,
+    "paddingAndProvenanceControls": 79
+  },
+  "artifacts": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/receipt.json": "3d92cb53de508df248340aa2beba378650ab7d08bec480add3f7e30237fb26e0",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/tests.log": "215151d20f58270870fac664fbc8d830188261f0014a96d417c6bec1c562a60d",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/wasm-build.log": "07f6a9e0e87b5e94980614981ddfc443428d1e6a761ba900093bcb6acdd34668",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/transport.log": "28a302097a1a2c99937d72258f11a558ee7b6e508a2df337e8de04fb0bbede84",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/public-controls.json": "a3bd8d113d172f60a52fae9fb91cc3615f2c39ad0d239826b692fc3c98aa9176",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-checkpoint-r1/check-public-controls.py": "5a18ea11766c232e1ec342b6ab4f52212c2527fc84f9efa58a7c5fb80fa2cbda",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/declaration-provenance-public-regression-r1/manifest.json": "be079076327ae8bcefd61fecc2cb6e28c6ea2a7632fa3037d599aa76551aa1d3"
+  }
+}

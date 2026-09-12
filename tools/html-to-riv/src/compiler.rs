@@ -760,6 +760,9 @@ impl Emitter {
         // erase a tiny fixed inner size and miss overflow in its descendants.
         let child_bounds = if let Some(owner) = &content_owner { child_bounds.content_owner(owner, &path)? } else { child_bounds };
         let child_bounds = if let Some(image) = &image { child_bounds.image(image.metadata.width, image.metadata.height, image.aspect_axis, &path)? } else { child_bounds };
+        if image.is_some() && content_owner.is_some() {
+            numeric_bounds.image_outer(child_bounds, sizes, style.padding, native_parent_direction, stretch, &path)?;
+        }
         let outer_direction = content_owner.map_or(style.direction, |owner| owner.packing);
         let outer_alignment = content_owner.map_or_else(|| style.spacing.alignment(style.direction), |owner| owner.packing.alignment());
         let object_id = self.layout_box(&id, authored_parent, outer_direction, outer_alignment,

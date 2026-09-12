@@ -41,6 +41,28 @@ impl Bounds {
         }
         Ok(self)
     }
+    /// After image ratio/fit validation, bound the final automatic outer box.
+    /// `self` is the original containing block: vertical percentage padding
+    /// also uses its width, never the inner image's content width or height.
+    /// The inputs are the actual emission inputs, not authored dimensions that
+    /// an image composition may have replaced. Fixed and cross-axis Fill boxes
+    /// were already checked through their clamp/floor/subtraction path.
+    pub fn image_outer(self, content: Self, sizes: [Size; 2], padding: super::padding::Padding,
+        parent_direction: Direction, stretch: bool, source: &str) -> Result<(), Diagnostic> {
+        let main = usize::from(!parent_direction.is_row());
+        let sides = padding.sides();
+        for axis in 0..2 {
+            if !matches!(sizes[axis], Size::Auto) || (axis != main && stretch) { continue; }
+            let inset = padding_sum(sides[axis], sides[axis + 2], self.upper[0], true);
+            let Some((content, inset)) = content.upper[axis].zip(inset) else {
+                return Err(unsupported(source, "Content-derived image outer sizing requires bounded content and containing-width padding"));
+            };
+            if !round_upper(f64::from(content) + f64::from(inset)).is_finite() {
+                return Err(unsupported(source, "Image content plus padding may exceed finite binary32 outer geometry within the supported viewport domain"));
+            }
+        }
+        Ok(())
+    }
     pub fn gap(self, gap:super::gap::Gap, children:usize, source:&str)->Result<(),Diagnostic> {
         if children<2 {return Ok(());}
         // Physical row gap depends on own content height, column on width.
@@ -257,6 +279,79 @@ mod tests {
         use super::super::padding::Inset;
         assert!(padding_sum(Inset::Percent(100.),Inset::Pixels(0.),Some(2e38),true).unwrap().is_finite());
         assert!(!padding_sum(Inset::Percent(100.),Inset::Percent(100.),Some(2e38),true).unwrap().is_finite());
+    }
+    fn tall_padded_image(final_percent: f32) -> (Bounds, Bounds, super::super::padding::Padding) {
+        let parent_style = Style::default();
+        let mut parent = Bounds::VIEWPORT;
+        for percent in [1000000., 1000000., 1000000., 1000000., 1000000., 1000000., 1000000., final_percent] {
+            parent = parent.child(&Style { width: Size::Percent(percent), height: Size::Pixels(1.),
+                ..Style::default() }, &parent_style, "chain").unwrap();
+        }
+        let mut outer = Style { width: Size::Percent(100.), height: Size::Auto, ..Style::default() };
+        outer.padding.apply("padding", "1000000% 0", super::super::padding::Padding::default(), 16., "image").unwrap();
+        // The current public admission still rejects this percentage-padding
+        // image. Exercise the proposed ordinary owners directly without opening
+        // admission or allocating/rendering these enormous dimensions.
+        let outer_content = parent.child(&outer, &parent_style, "outer").unwrap();
+        let inner = outer_content.content_owner(&super::super::box_sizing::ContentOwner {
+            packing: Direction::Column, sizes: [Size::Percent(100.), Size::Auto],
+            bounds: [Size::Pixels(0.), Size::Pixels(0.), Size::Auto, Size::Auto],
+        }, "inner").unwrap().image(1, 8192, Some(1), "image").unwrap();
+        (parent, inner, outer.padding)
+    }
+    #[test]
+    fn finite_image_and_padding_can_overflow_content_derived_outer() {
+        let (parent, inner, padding) = tall_padded_image(10000.);
+        let sides = padding.sides();
+        let inset = padding_sum(sides[1], sides[3], parent.upper[0], true).unwrap();
+        assert!(inset.is_finite());
+        assert!(inner.upper.into_iter().all(|v| v.unwrap().is_finite()));
+        assert!((inner.upper[1].unwrap() + inset).is_infinite());
+        // Confirm an actual binary32 witness, not only an interval upper
+        // bound: all prior native operations are finite, but the sum is not.
+        let width = parent.witness[0].unwrap();
+        let native_inset = (1000000_f32 / 100.) * width;
+        let native_padding = native_inset + native_inset;
+        let native_content = (100_f32 * width * 0.01) * 8192.;
+        assert!(native_inset.is_finite() && native_padding.is_finite() && native_content.is_finite());
+        assert!((native_content + native_padding).is_infinite());
+        let error = parent.image_outer(inner, [Size::Percent(100.), Size::Auto], padding,
+            Direction::Column, true, "image").unwrap_err();
+        assert!(error.message.contains("content plus padding"));
+    }
+    #[test]
+    fn finite_content_derived_outer_counterpart_remains_admitted() {
+        let (parent, inner, padding) = tall_padded_image(1000.);
+        parent.image_outer(inner, [Size::Percent(100.), Size::Auto], padding,
+            Direction::Column, true, "image").unwrap();
+    }
+    #[test]
+    fn outer_addition_uses_emitted_hug_axes_not_fixed_or_fill_axes() {
+        let parent = Bounds { upper: [Some(1e38), Some(1.)], lower: [Some(0.); 2], witness: [None; 2] };
+        let content = Bounds { upper: [Some(3e38); 2], lower: [Some(0.); 2], witness: [None; 2] };
+        let mut padding = super::super::padding::Padding::default();
+        padding.apply("padding", "50%", padding, 16., "test").unwrap();
+        // Hypothetical content+inset overflows both axes. Fixed dimensions and
+        // genuine cross Fill do not acquire that extra addition.
+        parent.image_outer(content, [Size::Pixels(1.); 2], padding, Direction::Column, false, "fixed").unwrap();
+        parent.image_outer(content, [Size::Auto, Size::Pixels(1.)], padding, Direction::Column, true, "fill width").unwrap();
+        parent.image_outer(content, [Size::Pixels(1.), Size::Auto], padding, Direction::Row, true, "fill height").unwrap();
+        assert!(parent.image_outer(content, [Size::Auto, Size::Pixels(1.)], padding, Direction::Column, false, "hug width").is_err());
+        assert!(parent.image_outer(content, [Size::Pixels(1.), Size::Auto], padding, Direction::Row, false, "hug height").is_err());
+        // Main Auto remains Hug even when cross-axis stretch is enabled.
+        assert!(parent.image_outer(content, [Size::Pixels(1.), Size::Auto], padding, Direction::Column, true, "main height").is_err());
+    }
+    #[test]
+    fn content_derived_outer_requires_original_width_and_content_bounds() {
+        let unknown = Bounds { upper: [None; 2], lower: [None; 2], witness: [None; 2] };
+        let mut padding = super::super::padding::Padding::default();
+        padding.apply("padding", "1% 0", padding, 16., "test").unwrap();
+        let sizes = [Size::Pixels(1.), Size::Auto];
+        assert!(unknown.image_outer(Bounds::VIEWPORT, sizes, padding, Direction::Column, true, "unknown parent width").is_err());
+        assert!(Bounds::VIEWPORT.image_outer(unknown, sizes, padding, Direction::Column, true, "unknown content").is_err());
+        // Point padding has no containing-width dependency.
+        padding.apply("padding", "1px", padding, 16., "test").unwrap();
+        unknown.image_outer(Bounds::VIEWPORT, sizes, padding, Direction::Column, true, "points").unwrap();
     }
     #[test]
     fn intrinsic_and_flexible_used_sizes_are_not_invented() {

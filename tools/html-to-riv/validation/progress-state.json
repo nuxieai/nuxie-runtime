@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-12",
-  "focus": "Primitive variable recovery and Unicode token boundaries qualified",
-  "status": "Runtime immutable; 610 public cases and 35 new native scenes validated",
-  "current": "The compiler now recovers proven invalid nonempty variable values as unset at their original priority and preserves CSS token boundaries. 262 Rust tests, 42 Node tests and strict TypeScript pass. All731 prior files/maps are exact. New35scenes pass280 geometry/pixel comparisons and560 clear controls;37pairs directly reviewed and243 complete-RGBA transfers verified. Unknown grammar and valid unsupported CSS still diagnose.",
-  "next": "Investigate the ordinary content-owner/padding composition for retained large-coordinate content-box failures. Continue independent backlog items while preserving fractional-paint failures; broader function/shorthand recovery remains open. Keep all99items and the immutable target contract.",
+  "focus": "Ordinary content-owner composition repairs retained sizing failure",
+  "status": "Private experiment; runtime and public compiler unchanged",
+  "current": "The revised wrapper passes all 272 geometry comparisons and exactly preserves public pixels, including six fractional-edge failures. Fixed-column packing exposed 16 stretch regressions; parent-axis packing repairs them. A two-owner numeric guard rejects six newly exposed overflow inputs across 20 compile-only controls, while retaining all 34 rendered files/maps. Full visual coverage: 50 inspected triples and 222 complete-RGBA transfers.",
+  "next": "Integrate the ordinary content owner into the public compiler with small explicit sizing views, final-topology numeric bounds and honest descriptor provenance. Validate public transports, depth/resource limits and changed historical outputs. Continue independent backlog items; percentage-plus-point owners and fractional painting remain open.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Content-owner composition checkpoint and remaining integration work",
+      "path": "tools/html-to-riv/validation/content-owner-checkpoint-review.md"
+    },
+    {
+      "label": "Content-owner full visual review",
+      "path": "tools/html-to-riv/validation/content-owner-candidate-visual-review.md"
+    },
+    {
+      "label": "Content-owner Chrome and native gallery",
+      "path": "tools/html-to-riv/output/content-owner-candidate-native-r2/gallery.html"
+    },
     {
       "label": "Primitive recovery implementation and complete checkpoint",
       "path": "tools/html-to-riv/validation/public-value-checkpoint-review.md"
@@ -461,12 +473,12 @@
   ],
   "activeWork": [
     {
-      "name": "Compiler checkpoint complete",
-      "work": "Primitive receiving grammar, token boundaries, public tests, immutable native comparison and prior-output regression are recorded."
+      "name": "Content-owner experiment complete",
+      "work": "Independent Chrome references, frozen public baseline, retained failed candidate, corrected packing, numeric controls and complete visual evidence are recorded."
     },
     {
-      "name": "Next independent work",
-      "work": "Content-owner/padding composition and remaining backlog features; no runtime edits or editor integration."
+      "name": "Next implementation",
+      "work": "Public content-owner lowering and integration checks; all 99 items remain in scope."
     }
   ],
   "publication": {

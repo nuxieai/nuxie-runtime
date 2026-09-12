@@ -1,0 +1,44 @@
+[
+  {
+    "name": "owner-stretch-height-row-normal",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div></div>",
+    "css": "#stage{width:220px;height:120px;flex-direction:row;background:#e2e8f0}#p{box-sizing:content-box;width:100px;height:auto;padding:10px;justify-content:normal;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#b{width:60px;height:20px;background:#3b82f6}",
+    "baselineExpected": "success",
+    "purpose": "Source-audit counterexample: automatic cross-axis owner height must stay stretched for descendant distribution."
+  },
+  {
+    "name": "owner-stretch-height-row-space-evenly",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div></div>",
+    "css": "#stage{width:220px;height:120px;flex-direction:row;background:#e2e8f0}#p{box-sizing:content-box;width:100px;height:auto;padding:10px;justify-content:space-evenly;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#b{width:60px;height:20px;background:#3b82f6}",
+    "baselineExpected": "success",
+    "purpose": "Source-audit counterexample: automatic cross-axis owner height must stay stretched for descendant distribution."
+  },
+  {
+    "name": "owner-stretch-height-row-reverse-normal",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div></div>",
+    "css": "#stage{width:220px;height:120px;flex-direction:row-reverse;background:#e2e8f0}#p{box-sizing:content-box;width:100px;height:auto;padding:10px;justify-content:normal;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#b{width:60px;height:20px;background:#3b82f6}",
+    "baselineExpected": "success",
+    "purpose": "Source-audit counterexample: automatic cross-axis owner height must stay stretched for descendant distribution."
+  },
+  {
+    "name": "owner-stretch-height-row-reverse-space-evenly",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div></div>",
+    "css": "#stage{width:220px;height:120px;flex-direction:row-reverse;background:#e2e8f0}#p{box-sizing:content-box;width:100px;height:auto;padding:10px;justify-content:space-evenly;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#b{width:60px;height:20px;background:#3b82f6}",
+    "baselineExpected": "success",
+    "purpose": "Source-audit counterexample: automatic cross-axis owner height must stay stretched for descendant distribution."
+  },
+  {
+    "name": "owner-stretch-width-column",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div></div>",
+    "css": "#stage{width:220px;height:120px;flex-direction:column;background:#e2e8f0}#p{box-sizing:content-box;width:auto;height:60px;padding:10px;flex-direction:row;justify-content:space-evenly;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#b{width:60px;height:20px;background:#3b82f6}",
+    "baselineExpected": "success",
+    "purpose": "Orthogonal cross-stretch control: the inner automatic width must track its resized outer content."
+  },
+  {
+    "name": "owner-stretch-width-column-reverse",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div></div>",
+    "css": "#stage{width:220px;height:120px;flex-direction:column-reverse;background:#e2e8f0}#p{box-sizing:content-box;width:auto;height:60px;padding:10px;flex-direction:row;justify-content:space-evenly;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#b{width:60px;height:20px;background:#3b82f6}",
+    "baselineExpected": "success",
+    "purpose": "Orthogonal cross-stretch control: the inner automatic width must track its resized outer content."
+  }
+]

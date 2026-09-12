@@ -1,0 +1,343 @@
+[
+  {
+    "name": "content-point-fractional-paint-control",
+    "html": "<div id=\"p\"></div>",
+    "css": "#p{height:15.5px;padding:5px 0;background:#14233f;}#p{box-sizing:content-box;}/* point-fractional-paint-control */",
+    "purpose": "Exact original public source; preserve known numeric/paint limitations without claiming qualification.",
+    "classification": "retained-fractional",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment",
+    "retainedSource": {
+      "file": "public-content-box-cases.json",
+      "name": "content-point-fractional-paint-control"
+    }
+  },
+  {
+    "name": "content-large-add-side-first",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:1000000px;height:20px;padding:0 .03125px 0 .03125px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+    "purpose": "Exact original public source; preserve known numeric/paint limitations without claiming qualification.",
+    "classification": "retained-large",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment",
+    "retainedSource": {
+      "file": "public-content-box-cases.json",
+      "name": "content-large-add-side-first"
+    }
+  },
+  {
+    "name": "content-large-padding-cancellation",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:.03125px;height:20px;padding:0 .03125px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+    "purpose": "Exact original public source; preserve known numeric/paint limitations without claiming qualification.",
+    "classification": "retained-large",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment",
+    "retainedSource": {
+      "file": "public-content-box-cases.json",
+      "name": "content-large-padding-cancellation"
+    }
+  },
+  {
+    "name": "content-large-rounded-outer",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:999999.875px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+    "purpose": "Exact original public source; preserve known numeric/paint limitations without claiming qualification.",
+    "classification": "retained-large",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment",
+    "retainedSource": {
+      "file": "public-content-box-cases.json",
+      "name": "content-large-rounded-outer"
+    }
+  },
+  {
+    "name": "content-large-content-cancellation",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:999999.9375px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+    "purpose": "Exact original public source; preserve known numeric/paint limitations without claiming qualification.",
+    "classification": "retained-large",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment",
+    "retainedSource": {
+      "file": "public-content-box-cases.json",
+      "name": "content-large-content-cancellation"
+    }
+  },
+  {
+    "name": "content-large-full-source-limits",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{width:1000000px;height:20px;padding:0 1000000px 0 1000000px;background:#14233f}#c{width:100%;height:1px;background:#669933}#p{box-sizing:content-box}",
+    "purpose": "Exact original public source; preserve known numeric/paint limitations without claiming qualification.",
+    "classification": "retained-large",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment",
+    "retainedSource": {
+      "file": "public-content-box-cases.json",
+      "name": "content-large-full-source-limits"
+    }
+  },
+  {
+    "name": "owner-direction-row",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"leaf\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:128px;height:70px;padding:7px 13px 11px 5px;flex-direction:row;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#leaf{width:100%;height:10px;background:#fbbf24}#b{width:60px;height:26px;background:#3b82f6}",
+    "purpose": "Original child flow and paint order must survive outer normal-column packing and an unpainted inner owner.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-direction-row-reverse",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"leaf\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:128px;height:70px;padding:7px 13px 11px 5px;flex-direction:row-reverse;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#leaf{width:100%;height:10px;background:#fbbf24}#b{width:60px;height:26px;background:#3b82f6}",
+    "purpose": "Original child flow and paint order must survive outer normal-column packing and an unpainted inner owner.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-direction-column",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"leaf\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:128px;height:70px;padding:7px 13px 11px 5px;flex-direction:column;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#leaf{width:100%;height:10px;background:#fbbf24}#b{width:60px;height:26px;background:#3b82f6}",
+    "purpose": "Original child flow and paint order must survive outer normal-column packing and an unpainted inner owner.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-direction-column-reverse",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"leaf\"></div></div><div id=\"b\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:128px;height:70px;padding:7px 13px 11px 5px;flex-direction:column-reverse;background:#dbeafe}#a{width:40px;height:20px;background:#dc2626}#leaf{width:100%;height:10px;background:#fbbf24}#b{width:60px;height:26px;background:#3b82f6}",
+    "purpose": "Original child flow and paint order must survive outer normal-column packing and an unpainted inner owner.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-small-padding-dominant",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:8px;height:24px;padding:0 2px 0 96px;background:#14233f}#c{width:100%;height:16px;background:#669933}",
+    "purpose": "Visible point-sized analogue: padding dominates the authored content width.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-small-fractional-outer",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:127.875px;height:24px;padding:0 32px;background:#14233f}#c{width:100%;height:16px;background:#669933}",
+    "purpose": "Visible fractional analogue; retain actual paint differences rather than widening gates.",
+    "classification": "retained-fractional",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-zero-content-padding-floor",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:0px;height:0px;padding:8px 12px;background:#14233f}#c{width:100%;height:0px;background:#669933}",
+    "purpose": "A zero content box still has a painted padding floor; an inner owner must not double the inset.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-fixed-max-clamp",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:120px;min-width:20px;max-width:72px;height:50px;max-height:32px;padding:5px 9px;background:#dbeafe}#c{width:100%;height:100%;background:#669933}",
+    "purpose": "Preferred point width/height are clamped by authored content maxima before percentages consume them.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-minimum-wins-maximum",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:10px;min-width:84px;max-width:48px;height:10px;min-height:36px;max-height:20px;padding:5px 9px;background:#dbeafe}#c{width:100%;height:100%;background:#669933}",
+    "purpose": "Both axes retain CSS minimum precedence over conflicting maxima.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-auto-width-point-maximum",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:auto;max-width:140px;height:30px;padding:5px 9px;background:#dbeafe}#c{width:100%;height:100%;background:#669933}",
+    "purpose": "Auto cross-axis width with a point maximum remains a falsifiable candidate; viewport resize must stay live.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-fixed-height-minimum",
+    "html": "<div id=\"p\"><div id=\"c\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:90px;height:8px;min-height:46px;padding:5px 9px;background:#dbeafe}#c{width:100%;height:100%;background:#669933}",
+    "purpose": "A point minimum changes content height without counting padding as part of that authored minimum.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-auto-height-column",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:118px;height:auto;padding:6px 10px;background:#dbeafe}#a{width:100%;height:17px;background:#dc2626}#b{width:100%;height:23px;background:#3b82f6}",
+    "purpose": "Column content height is the intrinsic sum of fixed child heights, with padding added only by the outer owner.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-auto-height-row",
+    "html": "<div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div>",
+    "css": "#p{box-sizing:content-box;width:118px;height:auto;padding:6px 10px;flex-direction:row;background:#dbeafe}#a{width:40px;height:17px;background:#dc2626}#b{width:46px;height:31px;background:#3b82f6}",
+    "purpose": "Row content height is the intrinsic cross-axis child maximum; an inner owner must not acquire definite height accidentally.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-intrinsic-auto-width-in-row",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div><div id=\"b\"></div></div><div id=\"s\"></div></div>",
+    "css": "#stage{width:230px;height:90px;flex-direction:row;background:#e2e8f0}#p{box-sizing:content-box;width:auto;height:48px;padding:6px 10px;flex-direction:row;background:#dbeafe}#a{width:40px;height:17px;background:#dc2626}#b{width:46px;height:31px;background:#3b82f6}#s{width:60px;height:60px;background:#669933}",
+    "purpose": "Intrinsic main-axis width must be measured from authored children, not the outer padding box or viewport.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-nested-percentage-descendants",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{box-sizing:content-box;width:160px;height:80px;padding:8px 10px;background:#dbeafe}#a{width:70%;height:50%;background:#669933}#b{width:50%;height:50%;background:#663399}",
+    "purpose": "Nested percentage children consume the correct content owner at each depth on both axes.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-percentage-border-box-descendant",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{box-sizing:content-box;width:160px;height:80px;padding:7px 11px;background:#dbeafe}#a{width:100%;height:100%;padding:3px;background:#669933}#b{width:100%;height:50%;background:#663399}",
+    "purpose": "The authored percentage border-box child retains its own padding and a separate descendant percentage basis.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-inherited-content-width",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{box-sizing:content-box;width:96px;height:64px;padding:8px;background:#dbeafe}#a{box-sizing:content-box;width:inherit;height:28px;padding:4px;background:#669933}#b{width:inherit;height:8px;background:#663399}",
+    "purpose": "Width inheritance copies authored computed content dimensions, never the emitted outer dimension.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-inherited-box-and-padding",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{box-sizing:content-box;width:112px;height:68px;padding:3px 7px;background:#dbeafe}#a{box-sizing:inherit;padding:inherit;width:44px;height:24px;background:#669933}#b{width:100%;height:50%;background:#663399}",
+    "purpose": "Inherited box sizing and physical padding remain authored style before each owner lowers independently.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-inherited-content-minmax",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{box-sizing:content-box;width:90px;min-width:80px;max-width:120px;height:48px;padding:4px;background:#dbeafe}#a{box-sizing:content-box;width:20px;min-width:inherit;max-width:inherit;height:24px;padding:2px;background:#669933}#b{width:100%;height:10px;background:#663399}",
+    "purpose": "Inherited content bounds stay separate from outer padding-adjusted bounds.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-overflow-across-alpha-sibling",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div></div><div id=\"s\"></div></div>",
+    "css": "#stage{width:100%;height:100px;flex-direction:row;background:#e2e8f0}#p{box-sizing:content-box;width:80px;height:40px;padding:8px 10px;background:rgba(20,80,160,.5)}#a{width:140px;height:24px;background:rgba(240,80,30,.55)}#s{width:80px;height:64px;background:rgba(30,150,90,.6)}",
+    "purpose": "An overflowing child crosses a sibling boundary; helper ownership must retain paint ordering and alpha composition.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-nested-alpha-backgrounds",
+    "html": "<div id=\"p\"><div id=\"a\"><div id=\"b\"></div></div></div>",
+    "css": "#p{box-sizing:content-box;width:100px;height:50px;padding:8px 12px;background:rgba(20,80,160,.5)}#a{width:100%;height:32px;background:rgba(240,80,30,.5)}#b{width:40px;height:40px;background:rgba(30,150,90,.5)}",
+    "purpose": "Outer padding/background paints exactly once; the content owner is unpainted even with overflowing translucent descendants.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "owner-ordered-overflow-siblings",
+    "html": "<div id=\"stage\"><div id=\"p\"><div id=\"a\"></div></div><div id=\"q\"></div></div>",
+    "css": "#stage{width:100%;height:100px;flex-direction:row;background:#e2e8f0}#p{box-sizing:content-box;width:60px;height:40px;padding:6px;order:1;background:#dbeafe}#a{width:120px;height:28px;background:rgba(220,38,38,.7)}#q{width:50px;height:56px;order:2;background:rgba(59,130,246,.7)}",
+    "purpose": "Source IDs, child attachment, order sorting and overflow paint remain observable across an adjacent authored sibling.",
+    "classification": "core",
+    "baselineExpected": "success",
+    "candidateProfile": "point-content-owner-experiment"
+  },
+  {
+    "name": "proposed-mixed-width",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;width:50%;padding:5px}",
+    "purpose": "Exact currently diagnostic source. Percentage owner dimensions/insets require a separate containing-block composition and are outside the initial point-owner experiment.",
+    "classification": "proposed-diagnostic",
+    "baselineExpected": "diagnostic",
+    "candidateProfile": "outside-initial-point-profile",
+    "retainedSource": {
+      "file": "public-content-box-rejections.json",
+      "name": "mixed-width"
+    }
+  },
+  {
+    "name": "proposed-mixed-height",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;height:50%;padding:5px}",
+    "purpose": "Exact currently diagnostic source. Percentage owner dimensions/insets require a separate containing-block composition and are outside the initial point-owner experiment.",
+    "classification": "proposed-diagnostic",
+    "baselineExpected": "diagnostic",
+    "candidateProfile": "outside-initial-point-profile",
+    "retainedSource": {
+      "file": "public-content-box-rejections.json",
+      "name": "mixed-height"
+    }
+  },
+  {
+    "name": "proposed-mixed-minimum",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;min-width:50%;padding:5px}",
+    "purpose": "Exact currently diagnostic source. Percentage owner dimensions/insets require a separate containing-block composition and are outside the initial point-owner experiment.",
+    "classification": "proposed-diagnostic",
+    "baselineExpected": "diagnostic",
+    "candidateProfile": "outside-initial-point-profile",
+    "retainedSource": {
+      "file": "public-content-box-rejections.json",
+      "name": "mixed-minimum"
+    }
+  },
+  {
+    "name": "proposed-mixed-maximum",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;max-height:50%;padding:5px}",
+    "purpose": "Exact currently diagnostic source. Percentage owner dimensions/insets require a separate containing-block composition and are outside the initial point-owner experiment.",
+    "classification": "proposed-diagnostic",
+    "baselineExpected": "diagnostic",
+    "candidateProfile": "outside-initial-point-profile",
+    "retainedSource": {
+      "file": "public-content-box-rejections.json",
+      "name": "mixed-maximum"
+    }
+  },
+  {
+    "name": "proposed-percentage-padding",
+    "html": "<div id=\"p\"><div id=\"a\"></div></div>",
+    "css": "#p{width:160px;height:100px}#a{width:40px;height:20px}#a{box-sizing:content-box;padding:5%}",
+    "purpose": "Exact currently diagnostic source. Percentage owner dimensions/insets require a separate containing-block composition and are outside the initial point-owner experiment.",
+    "classification": "proposed-diagnostic",
+    "baselineExpected": "diagnostic",
+    "candidateProfile": "outside-initial-point-profile",
+    "retainedSource": {
+      "file": "public-content-box-rejections.json",
+      "name": "percentage-padding"
+    }
+  }
+]

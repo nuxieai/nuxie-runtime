@@ -1,0 +1,74 @@
+{
+  "status": "browser characterization and corrected classification; no new public admission",
+  "browser": "153.0.8010.12",
+  "counts": {
+    "cases": 124,
+    "invalid": 112,
+    "empty": 96,
+    "typedInvalid": 16,
+    "invalidWithAdmittedUnset": 102,
+    "validControls": 12
+  },
+  "currentInvalidInputsRejected": 112,
+  "currentValidControlsAdmitted": 3,
+  "currentValidControlsDiagnostic": 9,
+  "compilerSha256": "2e63e64dabb3a18790e8c42812bf4afc2803b238bded24a2475bcba4ad8af2f9",
+  "backgroundCorrection": {
+    "property": "background",
+    "value": "20px",
+    "valid": true,
+    "computedBackgroundPosition": "20px 50%",
+    "compilerStatus": 1,
+    "reason": "valid position component is unadmitted; not a typed-invalid value"
+  },
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/variable-value-grammar-audit.mjs",
+      "sha256": "dee3d968278cfcb1ce58010837348c65e24985bd15b85c9ebc1077d4b7433dca"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/variable-value-grammar-review.md",
+      "sha256": "4066ef50a011d8bdb4c8c82571292f9f3d2cb67e4af90776e809ffb557f3afd8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r3/receipt.json",
+      "sha256": "e05cca3e8cb55558e0569692b2ce70c6540ba5afd94b04a4571ae67fc3bc675b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r3/cases.json",
+      "sha256": "6b2384aa5b30ee3a20778252a470861b7d4b434dd09b4393532069307b3ba958"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r3/driver.mjs",
+      "sha256": "dee3d968278cfcb1ce58010837348c65e24985bd15b85c9ebc1077d4b7433dca"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r3.log",
+      "sha256": "f05763eb902ad2f5aa11cf0beaf3df3409343031ea7046dbf8ce02974f11b96b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r1/driver.mjs",
+      "sha256": "b077ef578fe83c1db131ba19d122dd6430ef54820eebcf6949d0b1fbaafa7538"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r1/cases.json",
+      "sha256": "49f50886235c5acbd23c023097b58ccfd51a6cf476529cf936984280f12c45db"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r1.log",
+      "sha256": "1a3b74cac3eb8b3ab61ec75a64e119f0b418d62795329db673140927d9c42c52"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r2/driver.mjs",
+      "sha256": "f0e2b4534714410a2ad768d5765ab2fef6cbdebdb1b1923bae1d943f935a94ac"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r2/cases.json",
+      "sha256": "60586dc0cf2730ff68eb9a51bdc3e2e4365c80e6e9255c50a161d950a5224f85"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/variable-value-grammar-audit-r2.log",
+      "sha256": "101b11bc3fba26dd8a026659ab72f8db28617d21694b47240f88fda380d82bcd"
+    }
+  ]
+}

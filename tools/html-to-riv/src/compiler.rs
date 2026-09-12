@@ -15,7 +15,7 @@ mod numeric;
 mod scalar_provenance;
 #[allow(dead_code)] // Private analyzer; descriptor premises must be established before admission.
 #[path = "flex_numeric.rs"]
-mod flex_numeric;
+pub(super) mod flex_numeric;
 #[path = "computed_provenance.rs"]
 mod computed_provenance;
 #[path = "gap.rs"]
@@ -25,6 +25,9 @@ mod padding;
 #[allow(dead_code)]
 #[path = "flex.rs"]
 mod flex;
+#[allow(dead_code)] // Conditional parent-size propagation, world proof remains separate.
+#[path = "flex_sizes.rs"]
+pub(super) mod flex_sizes;
 #[path = "flex_structure.rs"]
 mod flex_structure;
 #[path = "flex_descriptor.rs"]

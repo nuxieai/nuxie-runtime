@@ -103,6 +103,7 @@ pub(crate) struct Native {
     pub linked_grow:Option<f32>, pub linked_shrink:Option<f32>,
     pub stored_basis:RecordLength, pub main:RecordLength, pub cross:RecordLength,
     pub minimum:RecordLength,pub maximum:RecordLength,
+    pub cross_minimum:RecordLength,pub cross_maximum:RecordLength,
 }
 #[derive(Debug, Serialize)]
 pub(crate) struct Item {
@@ -125,6 +126,7 @@ pub(crate) struct Group {
     pub native_participant_file_order:Vec<u32>,pub items:Vec<Item>,
     pub helpers:Vec<u32>,pub wrappers:Vec<u32>,
     pub structural_issues:Vec<String>,
+    pub no_local_constraint_or_origin:bool,
     // Null means unresolved, never zero error or an asserted identity ancestor.
     pub parent_main_error:Option<f64>,pub parent_world_error:Option<f64>,
     pub ideal_literal_metadata:Option<String>,
@@ -161,7 +163,8 @@ fn native(records:&[Record],id:u32,direction:Direction)->Native {
         linked_grow:fraction,linked_shrink:fraction,stored_basis:read("flexBasis"),
         main:RecordLength{value:float(record,main),units:style.and_then(|s|uint(s,&format!("{main}UnitsValue")))},
         cross:RecordLength{value:float(record,cross),units:style.and_then(|s|uint(s,&format!("{cross}UnitsValue")))},
-        minimum:read(if direction.is_row(){"minWidth"}else{"minHeight"}),maximum:read(if direction.is_row(){"maxWidth"}else{"maxHeight"})}
+        minimum:read(if direction.is_row(){"minWidth"}else{"minHeight"}),maximum:read(if direction.is_row(){"maxWidth"}else{"maxHeight"}),
+        cross_minimum:read(if direction.is_row(){"minHeight"}else{"minWidth"}),cross_maximum:read(if direction.is_row(){"maxHeight"}else{"maxWidth"})}
 }
 /// Failure to bind a typed value to the actual emitted participant. This is
 /// separate from structural/numerical qualification of the whole group.
@@ -260,7 +263,8 @@ impl Group {
         // Record mutation/constraint machinery must never silently become a rigid
         // transform assertion. Ancestor/world facts remain unresolved regardless.
         let ids:std::collections::BTreeSet<_>=std::iter::once(parent_id).chain(items.iter().flat_map(|i|[i.authored_id,i.native.participant_id])).collect();
-        if ids.iter().any(|id|scene.constraints.contains(id)) {issues.push("participant or parent has a constraint/origin helper".into());}
+        let no_local_constraint_or_origin=!ids.iter().any(|id|scene.constraints.contains(id));
+        if !no_local_constraint_or_origin {issues.push("participant or parent has a constraint/origin helper".into());}
         let main=if direction.is_row(){parent.width}else{parent.height};let cross=if direction.is_row(){parent.height}else{parent.width};
         let metadata_available=size_known(&parent.numeric_width) && size_known(&parent.numeric_height) && items.iter().all(|item|item.computed.numeric.available());
         let mut unresolved_premises=vec!["parent_size_error","ancestor_world_error","native_default_transform_provenance","descendant_target_preservation"];
@@ -268,7 +272,7 @@ impl Group {
         Self{parent_id,parent_path:path.into(),row:direction.is_row(),logical_reverse:!direction.reverses_emission(),native_flow:flow,native_alignment:alignment,
             parent_local_facts,parent_main:main.into(),parent_cross:cross.into(),
             parent_numeric_main:if direction.is_row(){parent.numeric_width.clone()}else{parent.numeric_height.clone()},
-            parent_numeric_cross:if direction.is_row(){parent.numeric_height.clone()}else{parent.numeric_width.clone()},native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,
+            parent_numeric_cross:if direction.is_row(){parent.numeric_height.clone()}else{parent.numeric_width.clone()},native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,no_local_constraint_or_origin,
             parent_main_error:None,parent_world_error:None,ideal_literal_metadata:metadata_available.then(||"computed_scalar_provenance".into()),numerical_admission:false,unresolved_premises}
     }
 }

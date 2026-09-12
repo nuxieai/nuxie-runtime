@@ -1,0 +1,347 @@
+{
+  "status": "experimental-gap-native-candidates-with-four-pixel-failures",
+  "publicAdmission": false,
+  "scope": "Physical ordinary gap fields only; computed em/inherit descriptors fixture-supplied. Overrides raw public driver labels.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/gap-native-r1",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "82b2d04bd46ce4ffca68ddb92e7dfe5f806f28d5471fe910f4c07c5076db1f70",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/gap-native-r1/src/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/gap-native-r1/augment"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345"
+  },
+  "hashes": {
+    "review.md": "2acca6327850b1646517a76fc758c97e338f891ace72d81ec592ae196ec06a0d",
+    "src/main.rs": "9fc5c95b740dc8a94c230c0d951ebd4b9818548c294560050d715d0597b8b1e7",
+    "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "augment": "2d26c0882f45c6c1fe2c705cdd2958261ac6dfb2c6721b234d8d95648e53b528",
+    "adapter.py": "82b2d04bd46ce4ffca68ddb92e7dfe5f806f28d5471fe910f4c07c5076db1f70",
+    "build-command.json": "ccfda1df068b2ab89ccf4b41daefc949a3cc6f013216f7a972bb5dbb1ee8a5e3",
+    "cases.json": "ab495e8b1d9d07b042bac27f5fd09709ee510e3a79c09577eae1894a1ed2771f",
+    "collect.py": "f973c73dbe0586d021557b9500456cbab97f4711cc4f3015a28f739e86d72dba",
+    "matrix.json": "b2c72b74f48fff8718de1302ef4a02e764553a686c8a6245bb2fecea766d02ab",
+    "examples.json": "a7a47dcb5427fac812ce23e161beb968d3cc25622a81f0ea06cab1461357ffaa",
+    "source-audit.json": "15b50957ac1459a01daa80b1b64cac27055ee0814748279d0cabaa6e2a1a4c20",
+    "reproductions.json": "d0ec9dff0849d48572b95f5f3c165f16bcffa21da7e634b019c580a5bb11212d",
+    "visual-direct.json": "540fca62430077a8e23c4122c4e243cc55979819c074903bb0fc381322583613",
+    "visual-transfers.json": "21f6b98db0263a9ad9214269231ad1ac004a978aeabcd3b7e0694a98fabdce55",
+    "render/receipt.json": "15a4eb89cc3b30dff17167c1b2f6b82ca6ff575d3dd0946ca9f9f76e91a5441d",
+    "visual-0.png": "c7b53e7aaff38a1241f887aacb4d2e3a96df8098c8ca96a1b717601b8819f4f9",
+    "visual-4.png": "333ccf5f68366341efd9a0cbd3fdc7249431c79108f616098772b18a6fa37a02",
+    "visual-8.png": "d7bbdba9a5a7763c10161c27ddb5b691b2fbebac97b5c7b1d63c7802664c23ea",
+    "visual-12.png": "97f24d781d447911ed33bffc0511a8e6bfba2446eede63de9896d5604186e5bb",
+    "visual-16.png": "43bfd7333fcf753385cc073fc0d470edc34a4bdd5196185914791803c30f699c",
+    "visual-20.png": "30df2a211435a1d76d94da24bf414fc1599c4323bbced93163a85dde2d86a750",
+    "visual-24.png": "c966e8c84104ce514defffe5accce1cd37860e8a073b64b67006668d4373d1f2",
+    "visual-28.png": "c9914103060fd6d8039c5e7a7bea2310c9e09834c9a55d5ad056a4365b1dc9c4",
+    "visual-32.png": "9ceed50deebdee2d592a97a8031934365942c182052137807129864935995fc2",
+    "visual-36.png": "f9bc0d2a4398e316a8024e363b587c4f1e3cff3bbd35d044d584dcb69ab6d9e8",
+    "visual-40.png": "2ce264c379c22292857995fc06e0d988e64bd5de071f5cfa83f8b9ebd5031aaa",
+    "visual-44.png": "74f7ba5388c16c49c9214a114f8d8fce1aa5e413e68d411cbaa601587ce53d20"
+  },
+  "externalBindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/html-to-riv": "49fc44fb3ab10be9eee214b3fd760092ab14a655a6c36c79d78f10ccae59a58b",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-spacing-checkpoint-r1/manifest.json": "37e4c78de5e36684a2f798b66965002f9ee43863b0e222930eb63d5684df5ce9",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72"
+  },
+  "immutableSourceAudit": [
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/layout/layout_component_style.rs",
+      "sha256": "46b8b93aa0ee7cd97063716a64730e8174410de8d1fb44f1f8ad96310f5f1335",
+      "exactImmutableSource": true
+    },
+    {
+      "path": "crates/nuxie-runtime/src/mechanical_port/source/layout/layout_style_applier.rs",
+      "sha256": "233d9061c9fdeca344f1ab4e35c25c1413a4a2e06fbc2880beaad26aa47cb9f0",
+      "exactImmutableSource": true
+    },
+    {
+      "path": "vendor/taffy-0.12.1-rive-yoga-order/src/compute/flexbox.rs",
+      "sha256": "75f7a79993712f3f115762291819bf3aab530e79002746c63ad9ad500cc728c2",
+      "exactImmutableSource": true
+    }
+  ],
+  "totals": {
+    "scenes": 16,
+    "frames": 128,
+    "geometryPassed": 128,
+    "pixelsPassed": 124,
+    "clearPassed": 256,
+    "exactReproductions": 16
+  },
+  "matrix": [
+    {
+      "name": "gap-row-point-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-em-intrinsic-order",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-percent-intrinsic-control",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-reverse-point-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-reverse-em-intrinsic-order",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-reverse-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-row-reverse-percent-intrinsic-control",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-point-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-em-intrinsic-order",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-percent-intrinsic-control",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "gap-column-reverse-point-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-reverse-em-intrinsic-order",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-reverse-percent-definite",
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "gap-column-reverse-percent-intrinsic-control",
+      "geometryPassed": 8,
+      "pixelsPassed": 6,
+      "failures": [
+        {
+          "frame": 2,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio"
+          ]
+        },
+        {
+          "frame": 6,
+          "geometry": [],
+          "pixels": [
+            "mismatch ratio"
+          ]
+        }
+      ]
+    }
+  ],
+  "reproductions": [
+    {
+      "name": "gap-row-point-definite",
+      "rivSha256": "f74861853ed3322d053748510332d7205544fcddd3ea9d9b217993c8b156ed35",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-em-intrinsic-order",
+      "rivSha256": "7f28d87b8abe65ecfb469d0919e2f124402b4ffdb4fd35d0e772583b364974d8",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-percent-definite",
+      "rivSha256": "f1d5f813092f0b8dfe121ee0b8d97734b3f5bca1e005ac9ebf2b4d0b727413e7",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-percent-intrinsic-control",
+      "rivSha256": "9c16b22fc712efd0dc76e5acc94c80f144daba165df218ae10010d453e659559",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-reverse-point-definite",
+      "rivSha256": "613f599de8e7bab96080cb1ef1fc76b9c040590d6aa3155f295ebb1faa485d3e",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-reverse-em-intrinsic-order",
+      "rivSha256": "05ac84134be73a2d35bb62b7699f713291c447d8e8b68d4db3414d0f82bae623",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-reverse-percent-definite",
+      "rivSha256": "c61e6b6ac3b788ce0d7867aec702808ea68a7365ef41a44830111891c612e906",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-row-reverse-percent-intrinsic-control",
+      "rivSha256": "0a6625031f45e9135c415140ade87380867202261493abfafa1a13d764f4426c",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-point-definite",
+      "rivSha256": "bb7d32f991ca6ac9b9a42f58f34616cbd5fde059bc7b81e274577cdcd665f182",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-em-intrinsic-order",
+      "rivSha256": "e24d926dbee8667f15ac30fb41e440ceb117b7661092723c8955e6dc57e07095",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-percent-definite",
+      "rivSha256": "753bb539ce27f54d3e32699e43abe11a30cbd5fc165bc1c40a65adf9213ba7ec",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-percent-intrinsic-control",
+      "rivSha256": "c01dde3fc4c5383cbb52ff79ea2e590de433cf32caabf64f93aba7c5ba2aab5c",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-reverse-point-definite",
+      "rivSha256": "4545e53c1b57441704b4dffdaf503059c8d599d34a006875b4d568f1257123b2",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-reverse-em-intrinsic-order",
+      "rivSha256": "e8892c16f216147ace4b59a60bf9cc46580d11c70303a0fbdff98d39a353e1d0",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-reverse-percent-definite",
+      "rivSha256": "706c8d2e6a3204cfb796c62fe891d5f3b5e1e1ca863d7481ab330bf41ec0dbfc",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "gap-column-reverse-percent-intrinsic-control",
+      "rivSha256": "aa497996bd6b231e781877f0054a1df159949dccd6f28b0d4dfd6c616e171482",
+      "exactRiv": true,
+      "exactParsedMap": true
+    }
+  ],
+  "visual": {
+    "directPairs": 48,
+    "transferredPairs": 80,
+    "independentImageTransfers": 160,
+    "completePairs": 128,
+    "directSheets": [
+      "visual-0.png",
+      "visual-4.png",
+      "visual-8.png",
+      "visual-12.png",
+      "visual-16.png",
+      "visual-20.png",
+      "visual-24.png",
+      "visual-28.png",
+      "visual-32.png",
+      "visual-36.png",
+      "visual-40.png",
+      "visual-44.png"
+    ],
+    "observations": "Matching geometry; four intrinsic-percentage column/reverse fractional pixel failures preserved. No other visible divergence in passing pairs."
+  },
+  "limitations": [
+    "No helper/gap combination qualification; native extra children receive gaps too.",
+    "No public parser, baseline, numeric, wrapping/grid or general intrinsic certificate.",
+    "Failed percentage controls do not imply immutable composition impossibility."
+  ]
+}

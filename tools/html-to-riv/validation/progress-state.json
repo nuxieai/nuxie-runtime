@@ -1,11 +1,23 @@
 {
   "updated": "2026-09-11",
-  "focus": "Scalar provenance registered; computed-field integration next",
+  "focus": "Computed provenance committed; private flex analyzer registered",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
   "current": "Public padding implemented:152Rust/35Node tests;53 controls pass,482 public and48 private flex outputs remain exact. Native padding and interaction evidence retains ten fractional pixel failures.",
-  "next": "Connect selected original tokens to scalar bounds through computed font, sizes and flex fields, then feed verified descriptors to the arithmetic model.",
+  "next": "Carry flex factor/basis provenance through actual computed styles and descriptors, then establish parent/world domains before public admission.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Registered flex arithmetic analyzer",
+      "path": "tools/html-to-riv/validation/flex-numeric-registration-receipt.json"
+    },
+    {
+      "label": "Computed scalar provenance and shared token storage",
+      "path": "tools/html-to-riv/validation/computed-provenance-receipt.json"
+    },
+    {
+      "label": "Native gap investigation with four retained pixel failures",
+      "path": "tools/html-to-riv/validation/gap-native-receipt.json"
+    },
     {
       "label": "Bounded scalar provenance and independent rational checks",
       "path": "tools/html-to-riv/validation/scalar-provenance-receipt.json"

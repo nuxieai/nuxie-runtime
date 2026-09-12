@@ -13,6 +13,9 @@ mod numeric;
 #[allow(dead_code)] // Numeric proof carrier; typed field integration follows.
 #[path = "scalar_provenance.rs"]
 mod scalar_provenance;
+#[allow(dead_code)] // Private analyzer; descriptor premises must be established before admission.
+#[path = "flex_numeric.rs"]
+mod flex_numeric;
 #[path = "computed_provenance.rs"]
 mod computed_provenance;
 #[path = "padding.rs"]

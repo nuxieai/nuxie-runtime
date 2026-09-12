@@ -1,0 +1,60 @@
+{
+  "status": "registered-private-analyzer-no-public-admission",
+  "rustTests": 185,
+  "nodeTests": 35,
+  "structural": {
+    "cases": 53,
+    "bounded": 27,
+    "unresolved": 26,
+    "checks": 617,
+    "commands": [
+      [
+        "rustc",
+        "--edition=2024",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-numeric-registration-r1/harness.rs",
+        "-o",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-numeric-registration-r1/harness"
+      ],
+      [
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-numeric-registration-r1/harness"
+      ]
+    ]
+  },
+  "arithmetic": {
+    "cases": 3891,
+    "exactChecks": 11673,
+    "seed": 641925,
+    "commands": [
+      [
+        "rustc",
+        "--edition=2024",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-numeric-registration-r1/arithmetic-harness.rs",
+        "-o",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-numeric-registration-r1/arithmetic-harness"
+      ],
+      [
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/flex-numeric-registration-r1/arithmetic-harness"
+      ]
+    ],
+    "sourceTransformation": "crate docs //! to // and super import to crate import for standalone harness; appended main for private arithmetic method access",
+    "comparison": "Every Rust ideal lower <= exact Fraction lower, upper >= exact upper, error >= exact error."
+  },
+  "hashes": {
+    "tools/html-to-riv/output/flex-numeric-registration-r1/arithmetic.py": "5831d5cf8fda70e27b1977161dd3e8c02bc3605e950590365ac91a60ac5524e3",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/check.py": "532bb0f4564379879c857eecebfdc56b907e772919547dd124d78a7d4baf55ed",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/summary.json": "2f71ba9bcdb8a12bd1a90ddc870ff9f2f8ac3c92fc45a1344220970c6d908e6c",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/results.json": "5f536a036b07eef866b767dadee8191b8ae55e42fb0abc70e53095b837a67442",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/arithmetic-summary.json": "4abcde066555efe4e3f90bbfa101dd93f280eb93f3b2b1a281470a3a98ddc708",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/cases.json": "b4e3b4d05212faa1d71ab6fe79d22c0b97d9ec228d7609906b5283c4215f76ba",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/wasm.log": "b8127df5163bd1ba60e77c1b447d14a071c9d9ef084cfdada4362bcd6ca609c6",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/run.log": "3eb3d3ac4ff46b17459e36ee540418bf54ee4df97a94072bb50dfe2a7aed97e9",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/transport.log": "b78937bb89c015a9c059462b356e1926bacc40ab77da82750de2e75493127a65",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/arithmetic.log": "14c43d273af55038b45d11cf5baca91a29058fd74e15c8bac1a8ba63774e9a70",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/tests.log": "73c6d4a534521c85aa0d6114fdf2f4cf5c49836e639ddf2d04d1cdf258740867",
+    "tools/html-to-riv/output/flex-numeric-registration-r1/build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "tools/html-to-riv/src/compiler.rs": "1a75dd1ccfadfa7c349246b2692621c054473957e7a4cc0919b293c56d2e5ffa",
+    "tools/html-to-riv/src/flex_numeric.rs": "42f1969c6b7fbdefa039fa7ea48854d4148f52f8d6fc4febc1f7f8aa8c74412c",
+    "tools/html-to-riv/src/scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  }
+}

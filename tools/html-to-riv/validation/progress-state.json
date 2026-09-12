@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Computed provenance committed; private flex analyzer registered",
+  "focus": "Typed flex provenance and actual descriptor metadata integrated",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
   "current": "Public padding implemented:152Rust/35Node tests;53 controls pass,482 public and48 private flex outputs remain exact. Native padding and interaction evidence retains ten fractional pixel failures.",
-  "next": "Carry flex factor/basis provenance through actual computed styles and descriptors, then establish parent/world domains before public admission.",
+  "next": "Establish structural premises and parent/world error domains from actual emission, then connect the conditional analyzer before public flex admission.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Typed flex provenance and actual emitted descriptor metadata",
+      "path": "tools/html-to-riv/validation/flex-provenance-receipt.json"
+    },
     {
       "label": "Registered flex arithmetic analyzer",
       "path": "tools/html-to-riv/validation/flex-numeric-registration-receipt.json"

@@ -1,0 +1,43 @@
+{
+  "status": "typed-flex-provenance-and-actual-descriptor-capture",
+  "sourceHashes": {
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "d30d1e5ff14e89fce90531365c41ccf66236a90d8a4a11188d9f01beb4d3cd1f",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "computed_provenance.rs": "702754b214b429366273147aa0a56fc36deb9cf57c8ffde5d0c0c3db1d01509a",
+    "compiler.rs": "98580a9392bb0acbbd5df652473e7d10cd1e5f67a0019431f702c754e9b5639f",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "74901f508eddfd778f7660b5482ae32764db547a357964a371881b2b201224f6",
+    "flex_descriptor.rs": "a22c968263c627abbcb08163bc43f03c3f508775a95fed1942fb1b6782eeefc1",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "70c12ac308d4b833d20e39f7e8cc68cb8e29931be68caba58f08b8d63774cb06",
+    "flex_numeric.rs": "42f1969c6b7fbdefa039fa7ea48854d4148f52f8d6fc4febc1f7f8aa8c74412c",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f",
+    "scalar_provenance.rs": "0fee9e4e0d223be37f87f7579a07552ffd05b5e86d159956a97198f1195d2646"
+  },
+  "artifactHashes": {
+    "tools/html-to-riv/output/flex-provenance-checkpoint-r1/receipt.json": "4259447ce722407316e2dc2bcd49588872d4bdd995cc3629d86fbcb898c2a70d",
+    "tools/html-to-riv/output/flex-provenance-checkpoint-r1/public-controls.json": "1d7e77fafd21f1210ff28f58292090a1472ba00ce715b25e2b5e84ab7e88365d",
+    "tools/html-to-riv/output/flex-provenance-checkpoint-r1/public-regression.log": "9fb511aaaab6c15e62f068900cf5faabba4fc438eb9240fae2cd8a3a447fbb50",
+    "tools/html-to-riv/output/flex-provenance-checkpoint-r1/wasm.log": "24dcd1b2bc83ca07697c098a825e1a1e0be30011ab711e64276903213793f2bf",
+    "tools/html-to-riv/output/flex-provenance-checkpoint-r1/transport.log": "e984e9c419d3a5092efdeac1a2d3cea800ad2f5341a60d951aa01a9659b61e1a",
+    "tools/html-to-riv/output/flex-provenance-checkpoint-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/flex-provenance-tests-r4.log": "fda77df2026f6b71910e73138ad8032fce1e0ee3f65e36a82da3306415089e10",
+    "tools/html-to-riv/output/flex-provenance-tests-r3.log": "3200fc27af7f20bfe354f79b71428784b8e655f2e187aacc7be85a1c9e81525c"
+  },
+  "rustTests": 189,
+  "nodeTests": 35,
+  "publicRegression": 482,
+  "positiveControls": 79,
+  "privateFlexScenes": 48,
+  "actualGroupsWithMetadata": 192,
+  "publicAdmissionExpanded": false
+}

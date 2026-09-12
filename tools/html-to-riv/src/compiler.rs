@@ -153,9 +153,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { numeric: computed_provenance::NumericStyle, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { numeric: Box<computed_provenance::NumericStyle>, padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { numeric: computed_provenance::NumericStyle::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { numeric: Box::default(), padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -359,7 +359,7 @@ fn resolved_declarations(mut declarations: Vec<css::Declaration>, parent: &Style
 }
 fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool, padding_candidate: bool) -> Result<Style, Diagnostic> {
     let (declarations, variable_values) = resolved_declarations(css::cascade(rules, element)?, parent, candidate, padding_candidate)?;
-    let mut style = Style { numeric: computed_provenance::NumericStyle {font:parent.numeric.font.clone(),..computed_provenance::NumericStyle::default()}, variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
+    let mut style = Style { numeric: Box::new(computed_provenance::NumericStyle {font:parent.numeric.font.clone(),..computed_provenance::NumericStyle::default()}), variables: variable_values, foreground: parent.foreground, font_size: parent.font_size, ..Style::default() };
     // Font-size-relative units use the parent for font-size itself, but the final
     // computed element font size for other lengths, regardless of source order.
     for d in declarations.iter().filter(|d| d.name == "font-size") {
@@ -384,7 +384,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
             "justify-content" => style.spacing = spacing::computed(&d.value, parent.spacing, &d.source)?,
             "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
-            "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => style.flex.apply(&d.name, &d.value, parent.flex, style.font_size, &d.source)?,
+            "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => { style.flex.apply(&d.name, &d.value, parent.flex, style.font_size, &d.source)?; style.numeric.flex.apply(d,style.flex,&parent.numeric.flex,&style.numeric.font); },
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => { style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?; style.numeric.width = computed_provenance::dimension(d,style.width,&parent.numeric.width,&style.numeric.font); },
             "height" => { style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?; style.numeric.height = computed_provenance::dimension(d,style.height,&parent.numeric.height,&style.numeric.font); },
@@ -462,7 +462,7 @@ fn compile_with_descriptor_capture(input: &CompileInput, policy: FlexPolicy, cap
     records.push(host_paint);
     let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), descriptor_capture: capture, descriptors: Vec::new() };
     // Match the fixed host body in reset.css for inherited computed values.
-    let host_style = Style { numeric: computed_provenance::NumericStyle::host(), width: Size::Percent(100.), height: Size::Percent(100.),
+    let host_style = Style { numeric: Box::new(computed_provenance::NumericStyle::host()), width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
     output.children(body, 0, &host_style, &rules, "", 0, [true; 2], numeric::Bounds::VIEWPORT)?;
     // File object order serves native drawing; public identities stay in DOM

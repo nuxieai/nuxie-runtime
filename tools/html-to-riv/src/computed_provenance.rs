@@ -27,6 +27,7 @@ pub(crate) enum NumericSize {
 }
 #[derive(Clone, Debug)]
 pub(crate) struct NumericStyle {
+    pub flex: NumericFlex,
     pub font: Scalar,
     pub width: NumericSize,
     pub height: NumericSize,
@@ -41,6 +42,7 @@ fn exact(value: f32) -> Scalar {
 impl Default for NumericStyle {
     fn default() -> Self {
         Self {
+            flex: NumericFlex::default(),
             font: exact(ROOT_FONT_SIZE),
             width: NumericSize::Auto,
             height: NumericSize::Auto,
@@ -307,5 +309,304 @@ mod tests {
             NumericSize::Pixels(Err(Unresolved::MissingOriginal))
         ));
         encloses(pixels(&child.numeric.height), 32.);
+    }
+}
+
+/// Authored independent factors; these must not be replaced by native linked
+/// grow/shrink values when a participant is lowered to Fill.
+#[derive(Clone, Debug)]
+pub(crate) struct NumericFlex {
+    pub grow: Scalar,
+    pub shrink: Scalar,
+    pub basis: NumericSize,
+}
+impl Default for NumericFlex {
+    fn default() -> Self {
+        Self {
+            grow: exact(0.),
+            shrink: exact(0.),
+            basis: NumericSize::Auto,
+        }
+    }
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum FlexTokenKind {
+    Number,
+    Dimension,
+    Percent,
+    Ident(String),
+}
+struct FlexToken {
+    text: String,
+    kind: FlexTokenKind,
+}
+fn flex_tokens(text: &str) -> Result<Vec<FlexToken>, Unresolved> {
+    let mut input = ParserInput::new(text);
+    let mut parser = Parser::new(&mut input);
+    let mut out = Vec::new();
+    while !parser.is_exhausted() {
+        parser.skip_whitespace();
+        let start = parser.position();
+        let kind = match parser.next().map_err(|_| Unresolved::OriginalSyntax)? {
+            Token::Number { .. } => FlexTokenKind::Number,
+            Token::Dimension { .. } => FlexTokenKind::Dimension,
+            Token::Percentage { .. } => FlexTokenKind::Percent,
+            Token::Ident(v) => FlexTokenKind::Ident(v.to_ascii_lowercase()),
+            _ => return Err(Unresolved::OriginalSyntax),
+        };
+        out.push(FlexToken {
+            text: parser.slice_from(start).to_owned(),
+            kind,
+        });
+        if out.len() > 3 {
+            return Err(Unresolved::OriginalSyntax);
+        }
+    }
+    Ok(out)
+}
+impl NumericFlex {
+    pub(super) fn apply(
+        &mut self,
+        d: &ResolvedDeclaration,
+        native: super::flex::Flex,
+        parent: &Self,
+        font: &Scalar,
+    ) {
+        // Native admission has already parsed the declaration. A metadata parse
+        // failure only makes the fields touched by this declaration unresolved.
+        let tokens = flex_tokens(&d.value);
+        let originals = d
+            .original
+            .as_ref()
+            .ok_or(Unresolved::MissingOriginal)
+            .and_then(|s| flex_tokens(s));
+        let result = (|| {
+            let tokens = tokens.as_ref().map_err(Clone::clone)?;
+            let keyword = if tokens.len() == 1 {
+                match &tokens[0].kind {
+                    FlexTokenKind::Ident(k) => Some(k.as_str()),
+                    _ => None,
+                }
+            } else {
+                None
+            };
+            if keyword == Some("inherit") {
+                return Ok(parent.clone());
+            }
+            if matches!(keyword, Some("initial" | "unset")) {
+                return Ok(Self {
+                    grow: exact(0.),
+                    shrink: exact(1.),
+                    basis: NumericSize::Auto,
+                });
+            }
+            if keyword == Some("none") {
+                return Ok(Self::default());
+            }
+            if d.name == "flex" && keyword == Some("auto") {
+                return Ok(Self {
+                    grow: exact(1.),
+                    shrink: exact(1.),
+                    basis: NumericSize::Auto,
+                });
+            }
+            let original = |index: usize| -> Result<&str, Unresolved> {
+                let originals = originals.as_ref().map_err(Clone::clone)?;
+                if originals.len() != tokens.len() || originals[index].kind != tokens[index].kind {
+                    return Err(Unresolved::UnitMismatch);
+                }
+                Ok(originals[index].text.as_str())
+            };
+            let factor = |index: usize, value: f32| -> Scalar {
+                let (number, _) = original_number(Some(original(index)?))?;
+                ScalarProvenance::from_decimal(&number, value).map_err(Into::into)
+            };
+            let basis = |index: usize| -> NumericSize {
+                if matches!(native.basis, Size::Auto) {
+                    return NumericSize::Auto;
+                }
+                if tokens[index].kind == FlexTokenKind::Number {
+                    return NumericSize::Pixels(factor(
+                        index,
+                        match native.basis {
+                            Size::Pixels(v) => v,
+                            _ => return NumericSize::Pixels(Err(Unresolved::UnitMismatch)),
+                        },
+                    ));
+                }
+                let mut declaration = d.native.clone();
+                declaration.value = tokens[index].text.clone();
+                let token = ResolvedDeclaration {
+                    native: declaration,
+                    original: original(index)
+                        .ok()
+                        .map(|s| std::sync::Arc::new(s.to_owned())),
+                };
+                dimension(&token, native.basis, &parent.basis, font)
+            };
+            if d.name == "flex-grow" {
+                return Ok(Self {
+                    grow: factor(0, native.grow),
+                    ..self.clone()
+                });
+            }
+            if d.name == "flex-shrink" {
+                return Ok(Self {
+                    shrink: factor(0, native.shrink),
+                    ..self.clone()
+                });
+            }
+            if d.name == "flex-basis" {
+                return Ok(Self {
+                    basis: basis(0),
+                    ..self.clone()
+                });
+            }
+            let number = |i: usize| tokens[i].kind == FlexTokenKind::Number;
+            let (grow, shrink, basis_index) = match tokens.len() {
+                1 if number(0) => (Some(0), None, None),
+                1 => (None, None, Some(0)),
+                2 if number(0) && number(1) => (Some(0), Some(1), None),
+                2 if number(0) => (Some(0), None, Some(1)),
+                2 => (Some(1), None, Some(0)),
+                3 if number(0) && number(1) => (Some(0), Some(1), Some(2)),
+                3 => (Some(1), Some(2), Some(0)),
+                _ => return Err(Unresolved::NativeSyntax),
+            };
+            Ok(Self {
+                grow: grow.map_or_else(|| exact(1.), |i| factor(i, native.grow)),
+                shrink: shrink.map_or_else(|| exact(1.), |i| factor(i, native.shrink)),
+                basis: basis_index.map_or_else(|| NumericSize::Percent(exact(0.)), basis),
+            })
+        })();
+        let resolved = result.unwrap_or_else(|error: Unresolved| Self {
+            grow: Err(error.clone()),
+            shrink: Err(error.clone()),
+            basis: match native.basis {
+                Size::Auto => NumericSize::Auto,
+                Size::Pixels(_) => NumericSize::Pixels(Err(error)),
+                Size::Percent(_) => NumericSize::Percent(Err(error)),
+            },
+        });
+        match d.name.as_str() {
+            "flex-grow" => self.grow = resolved.grow,
+            "flex-shrink" => self.shrink = resolved.shrink,
+            "flex-basis" => self.basis = resolved.basis,
+            _ => *self = resolved,
+        }
+    }
+}
+
+#[cfg(test)]
+mod flex_tests {
+    use super::super::{computed, Style};
+    use super::*;
+    fn style(css: &str, parent: &Style) -> Style {
+        let document = scraper::Html::parse_document("<div id=a></div>");
+        let selector = scraper::Selector::parse("#a").unwrap();
+        computed(
+            document.select(&selector).next().unwrap(),
+            &crate::css::stylesheet(css).unwrap(),
+            parent,
+            true,
+            false,
+        )
+        .unwrap()
+    }
+    fn basis(flex: &NumericFlex) -> &ScalarProvenance {
+        match &flex.basis {
+            NumericSize::Pixels(Ok(v)) | NumericSize::Percent(Ok(v)) => v,
+            _ => panic!("missing basis"),
+        }
+    }
+    fn ideal(value: &ScalarProvenance, want: f64) {
+        assert!(
+            value.ideal_bounds().lower() <= want && value.ideal_bounds().upper() >= want,
+            "{value:?} does not enclose {want}"
+        );
+    }
+    #[test]
+    fn shorthand_slots_variables_and_longhand_overrides_preserve_independent_ideals() {
+        for text in [
+            "1.00000001 1.00000002 2.125em",
+            "2.125em 1.00000001 1.00000002",
+            "1.00000001/**/1.00000002/**/2.125em",
+        ] {
+            let value = style(
+                &format!("#a{{--f:{text};flex:var(--f);font-size:20px}}"),
+                &Style::default(),
+            );
+            let flex = &value.numeric.flex;
+            let g = flex.grow.as_ref().unwrap();
+            let s = flex.shrink.as_ref().unwrap();
+            assert_eq!(g.native().to_bits(), s.native().to_bits());
+            assert!(!g.proves_equal(s));
+            ideal(g, 1.00000001);
+            ideal(s, 1.00000002);
+            ideal(basis(flex), 42.5);
+        }
+        let value = style(
+            "#a{flex:2 .25 3em;flex-grow:.123456789123;flex-basis:2rem;font-size:20px}",
+            &Style::default(),
+        );
+        ideal(value.numeric.flex.grow.as_ref().unwrap(), 0.123456789123);
+        ideal(value.numeric.flex.shrink.as_ref().unwrap(), 0.25);
+        ideal(basis(&value.numeric.flex), 32.);
+    }
+    #[test]
+    fn resets_inheritance_and_omitted_basis_have_distinct_typed_values() {
+        let parent = style("#a{flex:2 .25 3em;font-size:20px}", &Style::default());
+        let child = style("#a{flex:inherit;font-size:80px}", &parent);
+        assert!(basis(&child.numeric.flex).proves_equal(basis(&parent.numeric.flex)));
+        ideal(basis(&child.numeric.flex), 60.);
+        let child = style(
+            "#a{flex:none;flex-grow:inherit;flex-shrink:initial;flex-basis:inherit}",
+            &parent,
+        );
+        ideal(child.numeric.flex.grow.as_ref().unwrap(), 2.);
+        ideal(child.numeric.flex.shrink.as_ref().unwrap(), 1.);
+        ideal(basis(&child.numeric.flex), 60.);
+        for text in ["2", "2 1"] {
+            let v = style(&format!("#a{{flex:{text}}}"), &parent);
+            assert!(matches!(v.numeric.flex.basis, NumericSize::Percent(_)));
+            assert!(basis(&v.numeric.flex).is_exact_zero());
+        }
+        for text in ["none", "initial", "unset", "auto"] {
+            let v = style(&format!("#a{{flex:{text}}}"), &parent);
+            assert!(matches!(v.numeric.flex.basis, NumericSize::Auto));
+            assert_eq!(v.numeric.flex.grow.as_ref().unwrap().native(), v.flex.grow);
+            assert_eq!(
+                v.numeric.flex.shrink.as_ref().unwrap().native(),
+                v.flex.shrink
+            );
+        }
+    }
+    #[test]
+    fn underflowed_authored_basis_is_not_proved_exact_zero_and_missing_metadata_stays_missing() {
+        let value = style("#a{flex:2 7 1e-50}", &Style::default());
+        assert_eq!(basis(&value.numeric.flex).native(), 0.);
+        assert!(!basis(&value.numeric.flex).is_exact_zero());
+        for token in ["-0", "+0", "0e0"] {
+            let v = style(&format!("#a{{flex:2 7 {token}}}"), &Style::default());
+            assert!(basis(&v.numeric.flex).is_exact_zero());
+        }
+        let mut parent = Style::default();
+        parent.variables.insert(
+            "--lost".into(),
+            Some(crate::variables::ResolvedValue {
+                native: "2 .25 12px".into(),
+                original: None,
+            }),
+        );
+        let v = style("#a{flex:var(--lost,1 1 99px)}", &parent);
+        assert_eq!(v.flex.grow, 2.);
+        assert!(matches!(
+            v.numeric.flex.grow,
+            Err(Unresolved::MissingOriginal)
+        ));
+        assert!(matches!(
+            v.numeric.flex.basis,
+            NumericSize::Pixels(Err(Unresolved::MissingOriginal))
+        ));
     }
 }

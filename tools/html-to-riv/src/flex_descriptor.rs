@@ -3,12 +3,13 @@
 //! from already-rounded computed floats.
 use super::{Direction, Style, Size};
 use crate::wire::{Record, Value};
-use serde::Serialize;
+use serde::{Serialize, Serializer};
+use super::computed_provenance::{NumericSize, Scalar};
 
 pub(super) struct Parent {
-    direction:Direction,width:Size,height:Size,padding_zero:bool,distributed:bool,
+    direction:Direction,width:Size,height:Size,numeric_width:NumericSize,numeric_height:NumericSize,padding_zero:bool,distributed:bool,
 }
-impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,padding_zero:style.padding.is_zero(),distributed:style.spacing.distributes()}}}
+impl Parent {pub fn extract(style:&Style)->Self {Self{direction:style.direction,width:style.width,height:style.height,numeric_width:style.numeric.width.clone(),numeric_height:style.numeric.height.clone(),padding_zero:style.padding.is_zero(),distributed:style.spacing.distributes()}}}
 pub(super) struct Pending {
     pub parent:Parent,pub parent_id:u32,pub path:String,pub record_start:usize,pub record_end:usize,pub items:Vec<Item>,
 }
@@ -19,8 +20,64 @@ pub(crate) enum Length { Auto, Pixels(f32), Percent(f32) }
 impl From<Size> for Length {
     fn from(value:Size)->Self {match value {Size::Auto=>Self::Auto,Size::Pixels(v)=>Self::Pixels(v),Size::Percent(v)=>Self::Percent(v)}}
 }
+// Retain the actual carriers (including equality identity) for the analyzer.
+// JSON is diagnostic output only and must never be deserialized as a proof.
+fn scalar_json(value: &Scalar) -> serde_json::Value {
+    match value {
+        Ok(v) => serde_json::json!({"native_bits":v.native().to_bits(),
+            "ideal_lower":v.ideal_bounds().lower(),"ideal_upper":v.ideal_bounds().upper(),
+            "absolute_error_upper":v.absolute_error_upper(),"exact_zero":v.is_exact_zero(),
+            "nonnegative":v.is_nonnegative()}),
+        Err(reason) => serde_json::json!({"unresolved":format!("{reason:?}")}),
+    }
+}
+fn serialize_scalar<S:Serializer>(value:&Scalar,serializer:S)->Result<S::Ok,S::Error> {
+    scalar_json(value).serialize(serializer)
+}
+fn serialize_size<S:Serializer>(value:&NumericSize,serializer:S)->Result<S::Ok,S::Error> {
+    let json=match value {
+        NumericSize::Auto=>serde_json::json!({"kind":"auto"}),
+        NumericSize::Pixels(v)=>serde_json::json!({"kind":"pixels","scalar":scalar_json(v)}),
+        NumericSize::Percent(v)=>serde_json::json!({"kind":"percent_coefficient","scalar":scalar_json(v)}),
+    };
+    json.serialize(serializer)
+}
+#[derive(Debug, Serialize)]
+pub(crate) struct NumericFacts {
+    #[serde(serialize_with="serialize_size")]
+    pub main:NumericSize,
+    #[serde(serialize_with="serialize_size")]
+    pub cross:NumericSize,
+    #[serde(serialize_with="serialize_size")]
+    pub basis:NumericSize,
+    #[serde(serialize_with="serialize_scalar")]
+    pub grow:Scalar,
+    #[serde(serialize_with="serialize_scalar")]
+    pub shrink:Scalar,
+    #[serde(serialize_with="serialize_size")]
+    pub minimum:NumericSize,
+    #[serde(serialize_with="serialize_size")]
+    pub maximum:NumericSize,
+    #[serde(serialize_with="serialize_size")]
+    pub cross_minimum:NumericSize,
+    #[serde(serialize_with="serialize_size")]
+    pub cross_maximum:NumericSize,
+}
+fn size_known(value:&NumericSize)->bool {match value {NumericSize::Auto=>true,NumericSize::Pixels(v)|NumericSize::Percent(v)=>v.is_ok()}}
+impl NumericFacts {
+    fn available(&self)->bool {self.grow.is_ok() && self.shrink.is_ok() && [&self.main,&self.cross,&self.basis,&self.minimum,&self.maximum,&self.cross_minimum,&self.cross_maximum].into_iter().all(size_known)}
+    fn extract(style:&Style,direction:Direction)->Self {
+        let n=&style.numeric;
+        let main=if direction.is_row(){0}else{1};let cross=1-main;
+        let size=[&n.width,&n.height];let min=[&n.min_width,&n.min_height];let max=[&n.max_width,&n.max_height];
+        Self{main:size[main].clone(),cross:size[cross].clone(),basis:n.flex.basis.clone(),
+            grow:n.flex.grow.clone(),shrink:n.flex.shrink.clone(),minimum:min[main].clone(),maximum:max[main].clone(),
+            cross_minimum:min[cross].clone(),cross_maximum:max[cross].clone()}
+    }
+}
 #[derive(Debug, Serialize)]
 pub(crate) struct Computed {
+    pub numeric: NumericFacts,
     pub main: Length, pub cross: Length, pub basis: Length,
     pub grow: f32, pub shrink: f32,
     pub minimum: Length, pub maximum: Length,
@@ -31,7 +88,7 @@ impl Computed {
     fn extract(style:&Style,direction:Direction)->Self {
         let main=if direction.is_row(){0}else{1};let cross=1-main;
         let sizes=[style.width,style.height];let min=[style.min_width,style.min_height];let max=[style.max_width,style.max_height];
-        Self {main:sizes[main].into(),cross:sizes[cross].into(),basis:style.flex.basis.into(),grow:style.flex.grow,shrink:style.flex.shrink,
+        Self {numeric:NumericFacts::extract(style,direction),main:sizes[main].into(),cross:sizes[cross].into(),basis:style.flex.basis.into(),grow:style.flex.grow,shrink:style.flex.shrink,
             minimum:min[main].into(),maximum:max[main].into(),cross_minimum:min[cross].into(),cross_maximum:max[cross].into(),
             padding_zero:style.padding.is_zero(),margins_zero:!style.margins.any(),
             start_aligned_cross:!style.self_alignment.is_baseline() && !style.self_alignment.is_center() && !style.self_alignment.is_end()}
@@ -59,6 +116,10 @@ pub(crate) struct Group {
     pub parent_id:u32,pub parent_path:String,pub row:bool,pub logical_reverse:bool,
     pub native_flow:Option<u32>,pub native_alignment:Option<u32>,
     pub parent_main:Length,pub parent_cross:Length,
+    #[serde(serialize_with="serialize_size")]
+    pub parent_numeric_main:NumericSize,
+    #[serde(serialize_with="serialize_size")]
+    pub parent_numeric_cross:NumericSize,
     pub native_participant_file_order:Vec<u32>,pub items:Vec<Item>,
     pub helpers:Vec<u32>,pub wrappers:Vec<u32>,
     pub structural_issues:Vec<String>,
@@ -130,14 +191,20 @@ impl Group {
         let ids:std::collections::BTreeSet<_>=std::iter::once(parent_id).chain(items.iter().flat_map(|i|[i.authored_id,i.native.participant_id])).collect();
         if ids.iter().any(|id|constraint_owners.contains(id)) {issues.push("participant or parent has a constraint/origin helper".into());}
         let main=if direction.is_row(){parent.width}else{parent.height};let cross=if direction.is_row(){parent.height}else{parent.width};
+        let metadata_available=size_known(&parent.numeric_width) && size_known(&parent.numeric_height) && items.iter().all(|item|item.computed.numeric.available());
+        let mut unresolved_premises=vec!["parent_size_error","ancestor_world_error","native_default_transform_provenance","descendant_target_preservation"];
+        if !metadata_available {unresolved_premises.push("missing_exact_literal_provenance");}
         Self{parent_id,parent_path:path.into(),row:direction.is_row(),logical_reverse:!direction.reverses_emission(),native_flow:flow,native_alignment:alignment,
-            parent_main:main.into(),parent_cross:cross.into(),native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,
-            parent_main_error:None,parent_world_error:None,ideal_literal_metadata:None,numerical_admission:false,unresolved_premises:vec!["missing_exact_literal_provenance","parent_size_error","ancestor_world_error","native_default_transform_provenance","descendant_target_preservation"]}
+            parent_main:main.into(),parent_cross:cross.into(),
+            parent_numeric_main:if direction.is_row(){parent.numeric_width.clone()}else{parent.numeric_height.clone()},
+            parent_numeric_cross:if direction.is_row(){parent.numeric_height.clone()}else{parent.numeric_width.clone()},native_participant_file_order:native_order,items,helpers,wrappers,structural_issues:issues,
+            parent_main_error:None,parent_world_error:None,ideal_literal_metadata:metadata_available.then(||"computed_scalar_provenance".into()),numerical_admission:false,unresolved_premises}
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::NumericSize;
     use super::super::{compile_profile,compile_profile_with_descriptors,FlexPolicy};
     use crate::CompileInput;
     fn request(css:&str)->CompileInput {CompileInput {html:"<div id=p><div id=a></div><div id=b></div><div id=c></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b,#c{{height:20px}}{css}"),width:240.,height:160.}}
@@ -158,9 +225,30 @@ mod tests {
             let logical:Vec<_>=group.items.iter().map(|i|i.native.participant_id).collect();
             assert_eq!(group.native_participant_file_order,if direction.ends_with("reverse"){logical}else{logical.into_iter().rev().collect::<Vec<_>>()});
             assert!(group.structural_issues.is_empty(),"{:?}",group.structural_issues);
-            assert!(!group.numerical_admission);assert!(group.parent_main_error.is_none());assert!(group.parent_world_error.is_none());assert!(group.ideal_literal_metadata.is_none());
+            assert!(!group.numerical_admission);assert!(group.parent_main_error.is_none());assert!(group.parent_world_error.is_none());assert!(group.ideal_literal_metadata.is_some());
             let json=serde_json::to_value(group).unwrap();assert!(json["parent_main_error"].is_null());
         }
+    }
+    #[test]
+    fn descriptors_retain_original_ideals_and_deferred_percentages() {
+        let input=request("#p{width:33.333333333%}#a{--f:.25000000000000001;flex:.25 var(--f) 0px}#b{width:100.71428680419922px}");
+        let (output,groups)=compile_profile_with_descriptors(&input,FlexPolicy::Candidate).unwrap();
+        assert_eq!(output,compile_profile(&input,FlexPolicy::Candidate).unwrap());
+        let group=groups.iter().find(|g|g.items.len()==3).unwrap();
+        let a=&group.items.iter().find(|i|i.source_id=="a").unwrap().computed.numeric;
+        let grow=a.grow.as_ref().unwrap();let shrink=a.shrink.as_ref().unwrap();
+        assert_eq!(grow.native().to_bits(),shrink.native().to_bits());
+        assert!(!grow.proves_equal(shrink));
+        let b=&group.items.iter().find(|i|i.source_id=="b").unwrap().computed.numeric;
+        let NumericSize::Pixels(Ok(width))=&b.main else {panic!("missing width metadata")};
+        assert!(width.absolute_error_upper()>0.0002);
+        let NumericSize::Percent(Ok(percent))=&group.parent_numeric_main else {panic!("parent coefficient was lost")};
+        assert!(percent.ideal_bounds().lower()<=33.333333333 && percent.ideal_bounds().upper()>=33.333333333);
+        let json=serde_json::to_value(group).unwrap();
+        assert_eq!(json["parent_numeric_main"]["kind"],"percent_coefficient");
+        assert!(!group.numerical_admission);
+        assert!(group.unresolved_premises.contains(&"parent_size_error"));
+        assert!(!group.unresolved_premises.contains(&"missing_exact_literal_provenance"));
     }
     #[test]
     fn emitted_wrappers_and_spacing_helpers_remain_explicit() {

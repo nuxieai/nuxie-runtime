@@ -1,0 +1,50 @@
+{
+  "status": "guarded-public-legacy-and-private-flex-candidate-checkpoint",
+  "publicNonlegacyAdmission": false,
+  "rustTests": 126,
+  "nodeTests": 33,
+  "typeScript": "pass",
+  "nativeAndWasmBuilds": "pass",
+  "priorExactOutputs": 482,
+  "candidateExactFiles": 48,
+  "candidateExactParsedMaps": 48,
+  "candidateDeterministicRepeats": 48,
+  "sourceHashes": {
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "90867540d8762cda5b843d176a8d59c8ab8bf0a07dca1b14d5fcdbc5724bff18",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "compiler.rs": "3304fe06fa241cbeb98438fcd4228d66e3a6fb115eb15864a7fdc76cbe88a4d5",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "b9f3f72d87dde162aea502d6f1f4851e88c80a2ae04772e12dc8f5d98200eab2",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f"
+  },
+  "bindings": {
+    "tools/html-to-riv/output/flex-integration-module-r3/receipt.json": "2471295c3c3c15d45319c949ce150dfb2a1a1fa4ce20661b3282e31b3ac42514",
+    "tools/html-to-riv/output/flex-integration-module-r3/build-command.json": "1ae15d72609b553146c5a5f80751f0cbb57282c9aa521896cffb43d11a22dbc9",
+    "tools/html-to-riv/output/flex-integration-module-r3/cargo.log": "0b528662543acc9c7d9c09147af36013ca9268f7cf34cc5ffc3f7ba079fa8211",
+    "tools/html-to-riv/output/flex-integration-module-r3/build.log": "11c03b717b2bd4d7eb65a91ed47c9d304dce28c61d4611b715d8e02eb7f83f78",
+    "tools/html-to-riv/output/flex-integration-module-r3/wasm-build.log": "487185a5964b11fc0321f407a0522dc76d70772849538afe76a21893b44642c4",
+    "tools/html-to-riv/output/flex-integration-module-r3/transport.log": "c27bb397db10fff219293f1780700e0408d281f450fbba00e156d23367d93571",
+    "tools/html-to-riv/output/flex-integration-module-r3/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/flex-integration-strict-r1.log": "a1bbe0828eea87178a717620520b403213d7760d537f62c314a49b3c798512ca",
+    "tools/html-to-riv/output/flex-integration-byte-regression-r2/manifest.json": "a4a349a06a4e7baeb35882f63e086fb7204bb5798302d61fee4aa820c10cc02c",
+    "tools/html-to-riv/validation/flex-factors-native-receipt.json": "b2b458008caf721661bdea3b491cae2da0d481f896e0a37f45808e0a956e13dd",
+    "tools/html-to-riv/validation/flex-factors-expanded-receipt.json": "38eb633f6270515efdcc17e2fb5f076c858cb180648ad153ce674e10471fe7ea",
+    "tools/html-to-riv/tests/flex.rs": "75848fb683437ea2a43cf958ff2a952342482ab6f5f5178e97e68e9d28fd0dd9",
+    "tools/html-to-riv/tests/transport-parity.mjs": "adcd0d612b12de2737eb03d7735e8847da3c20ac5787d62882fe59d5f571a7bc"
+  },
+  "retainedLimitations": [
+    "Aggregate precision/freeze-boundary proof remains incomplete",
+    "Eight thin-alpha pixel failures in the bound native corpus",
+    "Broader independent factors, intrinsic/percentage contexts, helper phases and wrapping remain outstanding"
+  ],
+  "provenance": "Candidate harness snapshots actual source with before/after hashes and copied direct dependency libraries; full command and executable hashes in bound harness receipt. Public regression freezes the executable; this checkpoint does not claim new visual inspection."
+}

@@ -274,3 +274,20 @@ test('automatic-margin intrinsic and composition boundaries have CLI/WASM parity
  assert.equal(fixtures.length,22);
  await assertCorpusParity(fixtures);
 });
+
+test('legacy flex declarations preserve public CLI/WASM output',async()=>{
+ const html='<div id="p"><div id="a"></div></div>';
+ await assertCorpusParity(['div{flex:none}','div{flex:0 0 auto}','div{flex-grow:0;flex-shrink:0;flex-basis:auto}','#p{--f:none}#a{flex:var(--f)}'].map((css,i)=>({name:`legacy-flex-${i}`,html,css:`#p{width:160px;height:120px;flex-direction:row}${css}`})));
+});
+
+test('unqualified flex candidates have identical CLI/WASM diagnostics',async()=>{
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-flex-diagnostics-'));
+ try{
+  for(const [index,css] of [...['1 7 0px','1 1 30px','1 1 auto','initial','1','-1 1 0px'].map(value=>`#a{flex:${value}}`),'#a{flex:1 1 30px;flex:none}','#never{flex:1}','#a{--f:1 1 30px;flex:var(--f);flex:none}'].entries()){
+   const request={html:'<div id="p"><div id="a"></div></div>',css:`#p{width:160px;height:120px;flex-direction:row}${css}`,width:240,height:160};
+   const prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});
+   assert.equal(cli.status,1);assert.equal(result.ok,false);assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

@@ -139,9 +139,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -238,13 +238,13 @@ fn apply_background_shorthand(style: &mut Style, parent: &Style, value: &str, so
     Ok(())
 }
 
-fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
+fn validate(d: &css::Declaration, candidate: bool, inherited_flex: flex::Flex) -> Result<(), Diagnostic> {
     if d.name.starts_with("--") {
         return variables::validate_value(&d.value, &d.source);
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom"].contains(&d.name.as_str()) {
+             "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -276,6 +276,13 @@ fn validate(d: &css::Declaration) -> Result<(), Diagnostic> {
         "margin" | "margin-left" | "margin-top" | "margin-right" | "margin-bottom" => { margins::Margins::default().apply(&d.name, &value, margins::Margins::default(), &d.source)?; }
         "justify-content" => { spacing::computed(&value, spacing::Spacing::Normal, &d.source)?; }
         "align-self" => { computed_alignment(&value, SelfAlignment::AUTO, &d.source)?; }
+        "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => {
+            let mut descriptor = flex::Flex::default();
+            descriptor.apply(&d.name, &value, inherited_flex, 0., &d.source)?;
+            if !candidate && !descriptor.legacy() {
+                return Err(unsupported(&d.source, "Nonlegacy flex declarations await aggregate numeric and visual qualification, including unmatched or overridden declarations"));
+            }
+        }
         "flex-direction" => { computed_direction(&value, Direction::Column, &d.source)?; }
         _ => return Err(unsupported(&d.source, format!("{}: {} has no admitted ordinary-Rive lowering yet", d.name, d.value))),
     }
@@ -297,9 +304,9 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
     computed_order(&value, parent.order, &declaration.source)
 }
 
-fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Result<Style, Diagnostic> {
+fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool) -> Result<Style, Diagnostic> {
     let mut declarations = css::cascade(rules, element)?;
-    for d in &declarations { validate(d)?; }
+    for d in &declarations { validate(d, candidate, parent.flex)?; }
     let variable_values = variables::compute(&declarations, &parent.variables)?;
     declarations.retain(|d| !d.name.starts_with("--"));
     for d in &mut declarations {
@@ -308,7 +315,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
                 .ok_or_else(|| unsupported(&d.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
             // Substitution cannot bypass property admission, even for a declaration
             // that loses the cascade. Keep the compiler's strict diagnostics.
-            validate(d)?;
+            validate(d, candidate, parent.flex)?;
         }
         if d.name != "order" { d.value = css::ordinary_value(&d.value)?; }
     }
@@ -335,6 +342,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
             "justify-content" => style.spacing = spacing::computed(&d.value, parent.spacing, &d.source)?,
             "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
+            "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => style.flex.apply(&d.name, &d.value, parent.flex, style.font_size, &d.source)?,
             "flex-direction" => style.direction = computed_direction(&d.value, parent.direction, &d.source)?,
             "width" => style.width = computed_size(&d.value, parent.width, style.font_size, &d.source)?,
             "height" => style.height = computed_size(&d.value, parent.height, style.font_size, &d.source)?,
@@ -358,6 +366,15 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) -> Res
 }
 
 pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic> {
+    compile_profile(input, FlexPolicy::Guarded)
+}
+
+// Candidate policy is private: an experimental source harness can exercise
+// the complete pipeline, while the exported API always uses Guarded.
+#[derive(Clone, Copy)]
+#[allow(dead_code)]
+pub(super) enum FlexPolicy { Guarded, Candidate }
+pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Result<CompileOutput, Diagnostic> {
     if ![input.width, input.height].into_iter().all(|v| v.is_finite() && v > 0. && v <= 16384.) {
         return Err(Diagnostic::new("invalid-viewport", "viewport", "Dimensions must be finite and in (0,16384]"));
     }
@@ -370,7 +387,7 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
     let body = document.root_element().child_elements().find(|e| e.value().name() == "body")
         .ok_or_else(|| Diagnostic::new("html-syntax", "html", "Missing document body"))?;
     let rules = css::stylesheet(&input.css)?;
-    css::validate_rules(&rules, validate)?;
+    css::validate_rules(&rules, |declaration| validate(declaration, matches!(policy, FlexPolicy::Candidate), flex::Flex::default()))?;
     for host in [document.root_element(), body] {
         if !css::cascade(&rules, host)?.is_empty() {
             return Err(unsupported("document", "Rules matching host html/body are not admitted yet; style authored box elements"));
@@ -394,11 +411,11 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
     host_paint.set("parentId", Value::Uint(host_fill_id))?;
     host_paint.set("colorValue", Value::Color(0xffffffff))?;
     records.push(host_paint);
-    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new() };
+    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate) };
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
-    output.children(body, 0, &host_style, &rules, "", 0)?;
+    output.children(body, 0, &host_style, &rules, "", 0, [true; 2])?;
     // File object order serves native drawing; public identities stay in DOM
     // preorder, with numeric path components (so /2 precedes /10).
     output.map.sort_by_cached_key(|node| node.path.split('/').skip(1)
@@ -407,7 +424,7 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
     Ok(CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map })
 }
 
-struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String> }
+struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool }
 impl Emitter {
     fn layout_box(&mut self, name: &str, parent_id: u32, direction: Direction, alignment: u32,
         parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool, auto_margins: [bool; 4]) -> Result<u32, Diagnostic> {
@@ -453,7 +470,7 @@ impl Emitter {
             self.records.push(layout);self.records.push(layout_style);
         Ok(object_id)
     }
-    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize) -> Result<Vec<baseline::Child>, Diagnostic> {
+    fn children(&mut self, parent: ElementRef<'_>, parent_id: u32, parent_style: &Style, rules: &[css::Rule], path: &str, depth: usize, definite_chain: [bool; 2]) -> Result<Vec<baseline::Child>, Diagnostic> {
         if depth > 128 { return Err(Diagnostic::new("depth-limit", path, "HTML nesting exceeds 128")); }
         let mut elements = Vec::new();
         for node in parent.children() {
@@ -484,14 +501,23 @@ impl Emitter {
         // CSS order modifies layout/paint order, never DOM selector positions.
         ordered_elements.sort_by_key(|(index, _, _, _, order)| (*order, *index));
         if parent_style.direction.reverses_emission() { ordered_elements.reverse(); }
+        // Inspect compact sibling facts before introducing any helper. Keeping
+        // whole Styles here would retain each inherited variable environment.
+        let mut group = flex::Group::default();
+        for (_, element, path, _, _) in &ordered_elements {
+            let style = computed(*element, rules, parent_style, self.candidate_flex)?;
+            group.inspect(&style, parent_style, definite_chain, path)?;
+        }
+        group.validate(parent_style, path, self.candidate_flex)?;
         let count = ordered_elements.len();
         let mut children = Vec::with_capacity(count);
         if count != 0 { spacing::emit(self, parent_id, parent_style, true)?; }
         for (index, element, path, id, order) in ordered_elements {
-            let style = computed(element, rules, parent_style)?;
+            let style = computed(element, rules, parent_style, self.candidate_flex)?;
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
                 return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
             }
+            let flex_plan = flex::lowering(&style, parent_style, definite_chain, &path)?;
             let cross_auto_margin = style.margins.cross(parent_style.direction);
             let effective_alignment = if cross_auto_margin {
                 let cross_start = if parent_style.direction.is_row() { 1 } else { 0 };
@@ -556,6 +582,11 @@ impl Emitter {
             for (margin, synthetic) in authored_margins.iter_mut().zip(alignment_margins) { *margin |= synthetic; }
             let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
                 native_parent_direction, sizes, bounds, stretch, authored_margins)?;
+            if let Some(plan) = flex_plan {
+                // Cross-alignment wrappers are the actual flex participants.
+                // Keep the authored box identity and its inner stretch sizing.
+                plan.emit(&mut self.records, if authored_parent == parent_id { object_id } else { authored_parent }, parent_style.direction)?;
+            }
             let background = style.background.used(style.foreground);
             if background >> 24 != 0 {
                 let fill_id = self.records.len() as u32 - 1;
@@ -564,10 +595,14 @@ impl Emitter {
                 paint.set("colorValue", Value::Color(background))?;self.records.push(paint);
             }
             self.map.push(SourceNode { id, path: path.clone(), object_id });
-            let descendants = self.children(element, object_id, &style, rules, &path, depth + 1)?;
-            let metric = baseline::summarize(&style, &descendants);
-            let used_height = baseline::used_height(&style, &descendants);
-            let last_metric = baseline::summarize_last(&style, &descendants, used_height);
+            let child_chain = flex::child_chain(definite_chain, &style);
+            let descendants = self.children(element, object_id, &style, rules, &path, depth + 1, child_chain)?;
+            // A flexible vertical main size is not the authored intrinsic height.
+            // Unknown scalar summaries prevent unsound ancestor baseline admission.
+            let vertical_flex = flex_plan.is_some() && !parent_style.direction.is_row();
+            let metric = if vertical_flex { None } else { baseline::summarize(&style, &descendants) };
+            let used_height = if vertical_flex { None } else { baseline::used_height(&style, &descendants) };
+            let last_metric = if vertical_flex { None } else { baseline::summarize_last(&style, &descendants, used_height) };
             let last = effective_alignment.is_last_baseline();
             if last && last_metric.is_none() {
                 return Err(unsupported(&path, "Last baseline requires bounded fixed or intrinsic heights and a baseline within the used box; responsive metrics, distributed columns and non-column nested topology require further ordinary-file validation"));

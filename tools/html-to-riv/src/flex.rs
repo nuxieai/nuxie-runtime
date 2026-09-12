@@ -134,3 +134,198 @@ mod tests {
         }
     }
 }
+
+/// Native descriptors remain separate from the authored computed triple.
+#[derive(Clone, Copy)]
+pub(super) struct Lowering { fraction: f32, basis: Size }
+impl Lowering {
+    pub fn emit(self, records: &mut [crate::wire::Record], object: u32, direction: super::Direction) -> Result<(), Diagnostic> {
+        use crate::wire::Value;
+        let row = direction.is_row();
+        records[object as usize + 1].set(if row { "fractionalWidth" } else { "fractionalHeight" }, Value::Float(self.fraction))?;
+        let style = &mut records[object as usize + 2];
+        style.set(if row { "layoutWidthScaleType" } else { "layoutHeightScaleType" }, Value::Uint(1))?;
+        let (basis, units) = match self.basis {
+            Size::Pixels(value) => (value, 1), Size::Auto => (0., 3),
+            Size::Percent(_) => unreachable!("percentage basis is excluded by lowering"),
+        };
+        style.set("flexBasis", Value::Float(basis))?;
+        // LayoutComponent's default basis unit is Auto, not Point.
+        style.set("flexBasisUnitsValue", Value::Uint(units))?;
+        Ok(())
+    }
+}
+impl Flex {
+    pub(super) fn legacy(self) -> bool { self.grow == 0. && self.shrink == 0. && matches!(self.basis, Size::Auto) }
+}
+
+/// Deliberately conservative: a definite descendant does not erase an unknown
+/// intrinsic measurement request higher in this axis's ancestor chain.
+pub(super) fn child_chain(parent: [bool; 2], style: &super::Style) -> [bool; 2] {
+    let sizes = [style.width, style.height];
+    let minimum = [style.min_width, style.min_height];
+    let definite_size = |value| matches!(value, Size::Pixels(_))
+        || matches!(value, Size::Percent(percent) if percent <= 100.);
+    let maximum = [style.max_width, style.max_height];
+    std::array::from_fn(|axis| parent[axis] && definite_size(sizes[axis])
+        && definite_size(minimum[axis])
+        && (matches!(maximum[axis], Size::Auto) || definite_size(maximum[axis])))
+}
+
+pub(super) fn lowering(style: &super::Style, parent: &super::Style, definite: [bool; 2], source: &str) -> Result<Option<Lowering>, Diagnostic> {
+    if style.flex.legacy() { return Ok(None); }
+    let main = if parent.direction.is_row() { 0 } else { 1 };
+    if !definite[main] {
+        return Err(unsupported(source, "Flex factors require an explicit definite main-size chain with percentages at most 100%; intrinsic, amplified or flex-sized ancestors need separate immutable-target qualification"));
+    }
+    let preferred = [style.width, style.height][main];
+    let minimum = [style.min_width, style.min_height][main];
+    let maximum = [style.max_width, style.max_height][main];
+    if !matches!(preferred, Size::Auto) || !matches!(minimum, Size::Pixels(_)) || !matches!(maximum, Size::Auto | Size::Pixels(_)) {
+        return Err(unsupported(source, "Flex factors currently require automatic preferred main size and point min/max bounds"));
+    }
+    let basis = style.flex.basis;
+    if matches!(basis, Size::Percent(_)) {
+        return Err(unsupported(source, "Percentage flex basis needs separate qualification"));
+    }
+    if !matches!(basis, Size::Pixels(0.)) && style.flex.grow != style.flex.shrink {
+        return Err(unsupported(source, "Positive or automatic flex basis requires equal grow and shrink; independent factors need an ordinary-file composition"));
+    }
+    Ok(Some(Lowering { fraction: style.flex.grow, basis }))
+}
+
+#[derive(Default)]
+pub(super) struct Group { active: bool, unequal_zero: bool, shrinking_basis: bool, helper: bool, baseline: bool }
+impl Group {
+    pub fn inspect(&mut self, style: &super::Style, parent: &super::Style, definite: [bool; 2], source: &str) -> Result<(), Diagnostic> {
+        if let Some(plan) = lowering(style, parent, definite, source)? {
+            self.active = true;
+            self.unequal_zero |= matches!(plan.basis, Size::Pixels(0.)) && style.flex.grow != style.flex.shrink;
+            self.shrinking_basis |= !matches!(plan.basis, Size::Pixels(0.)) && style.flex.shrink > 0.;
+        }
+        self.helper |= style.margins.main(parent.direction);
+        self.baseline |= style.self_alignment.is_baseline() && !style.margins.cross(parent.direction);
+        Ok(())
+    }
+    pub fn validate(self, parent: &super::Style, source: &str, candidate: bool) -> Result<(), Diagnostic> {
+        if !self.active { return Ok(()); }
+        if !candidate {
+            return Err(unsupported(source, "Nonlegacy flex values are parsed but public lowering awaits aggregate numeric and visual qualification; only flex:0 0 auto is currently admitted"));
+        }
+        if self.unequal_zero && self.shrinking_basis {
+            return Err(unsupported(source, "Unequal zero-basis factors cannot share a group with positive-basis shrinking items: unscaled shrink sums affect distribution"));
+        }
+        if self.helper || parent.spacing.distributes() {
+            return Err(unsupported(source, "Flex factors cannot share a parent with main automatic margins or space-around/evenly helpers; leftover distribution needs a separate phase"));
+        }
+        if self.baseline {
+            return Err(unsupported(source, "Flex factors combined with baseline groups require separate ordinary-file qualification"));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod candidate_tests {
+// Staged candidate invariants; this does not exercise public admission.
+use crate::{CompileInput, CompileOutput};
+fn compile(input: &CompileInput) -> Result<CompileOutput, Vec<crate::Diagnostic>> {
+    super::super::compile_profile(input, super::super::FlexPolicy::Candidate).map_err(|error| vec![error])
+}
+use nuxie_schema::{definition_by_type_key, FieldKind};
+use serde_json::{Value,json};
+use std::collections::BTreeMap;
+fn input(css: &str)->CompileInput { CompileInput { html:"<div id=p><div id=a><div id=leaf></div></div><div id=b></div></div>".into(),css:format!("#p{{width:160px;height:120px;flex-direction:row}}#a,#b{{height:20px}}#leaf{{width:10px;height:10px}}{css}"),width:240.,height:160. } }
+fn scene(css:&str)->CompileOutput {compile(&input(css)).unwrap()}
+fn uint(bytes:&[u8],i:&mut usize)->u32 {let mut result=0;for shift in (0..35).step_by(7){let b=bytes[*i];*i+=1;result|=((b&127)as u32)<<shift;if b<128{return result}}panic!("bad varuint")}
+fn decoded(output:&CompileOutput)->Vec<(String,BTreeMap<String,Value>)> {
+    let bytes=&output.riv;assert_eq!(&bytes[..7],b"RIVE\x07\x03\x00");let mut i=7;let mut fields=0;
+    while uint(bytes,&mut i)!=0{fields+=1}i+=((fields+3)/4)*4;
+    let mut result=Vec::new();
+    while i<bytes.len(){let definition=definition_by_type_key(uint(bytes,&mut i)as u16).unwrap();let mut values=BTreeMap::new();loop{let key=uint(bytes,&mut i)as u16;if key==0{break}let property=definition.property_by_key_in_hierarchy(key).unwrap();let value=match property.runtime_type{
+        FieldKind::Uint=>json!(uint(bytes,&mut i)),FieldKind::Double=>{let value=f32::from_le_bytes(bytes[i..i+4].try_into().unwrap());i+=4;assert!(value.is_finite());json!(value)},FieldKind::Color=>{let value=u32::from_le_bytes(bytes[i..i+4].try_into().unwrap());i+=4;json!(value)},FieldKind::String|FieldKind::Bytes=>{let len=uint(bytes,&mut i)as usize;let value=&bytes[i..i+len];i+=len;json!(String::from_utf8_lossy(value))},FieldKind::Bool=>{let value=bytes[i]!=0;i+=1;json!(value)},other=>panic!("unexpected {other:?}")};values.insert(property.name.to_owned(),value);}result.push((definition.name.to_owned(),values));}
+    result
+}
+
+#[test]
+fn legacy_explicit_values_leave_bytes_and_maps_unchanged() {
+    for value in ["none","0 0 auto"] {assert_eq!(scene(""),scene(&format!("div{{flex:{value}}}")));}
+    assert_eq!(scene(""),scene("div{flex-grow:0;flex-shrink:0;flex-basis:auto}"));
+    assert_eq!(scene(""),scene("#a{flex:2 7 0px;flex:none}"));
+}
+#[test]
+fn native_point_basis_fraction_and_source_ids_follow_original_axis() {
+    for direction in ["row","row-reverse","column","column-reverse"] {
+        let row=direction.starts_with("row");
+        for align in ["stretch","flex-start","center","safe flex-end"] {
+            let css=format!("#p{{flex-direction:{direction}}}#a{{height:auto;width:auto;flex:2 2 30px;align-self:{align}}}");
+            let output=scene(&css); let r=decoded(&output);
+            let a=output.source_map.iter().find(|n|n.id=="a").unwrap().object_id;
+            let p=output.source_map[0].object_id;
+            let outer=r[a as usize+1].1["parentId"].as_u64().unwrap() as u32;
+            let slot=if outer==p {a}else{outer};
+            assert_eq!(r[slot as usize+1].1[if row {"fractionalWidth"}else{"fractionalHeight"}],json!(2.));
+            assert_eq!(r[slot as usize+2].1["flexBasis"],json!(30.));
+            assert_eq!(r[slot as usize+2].1["flexBasisUnitsValue"],json!(1));
+            assert_eq!(r[slot as usize+2].1[if row {"layoutWidthScaleType"}else{"layoutHeightScaleType"}],json!(1));
+            assert_eq!(output.source_map.iter().map(|n|(n.id.as_str(),n.path.as_str())).collect::<Vec<_>>(),[("p","/0"),("a","/0/0"),("leaf","/0/0/0"),("b","/0/1")]);
+        }
+    }
+}
+#[test]
+fn automatic_equal_basis_stays_distinct_and_requires_group_compatibility() {
+    let output=scene("#a{flex:.25 .25 auto;align-self:center}");
+    let r=decoded(&output);
+    let a=output.source_map.iter().find(|n|n.id=="a").unwrap().object_id;
+    let slot=r[a as usize+1].1["parentId"].as_u64().unwrap() as u32;
+    assert_eq!(r[slot as usize+2].1["flexBasisUnitsValue"],json!(3));
+    assert_eq!(r[slot as usize+1].1["fractionalWidth"],json!(0.25));
+    assert!(compile(&input("#a{flex:1 7 0px}#b{flex:.25 .25 auto}")).is_err());
+    assert!(compile(&input("#a{flex:1 1 0px}#p{width:101%}")).is_err());
+    assert!(compile(&input("#a{flex:1 1 0px}#p{width:50%}")).is_ok());
+}
+
+#[test]
+fn zero_basis_preserves_authored_cascade_without_normalizing_growth() {
+    assert_eq!(scene("#a{flex:.25 7 0px}"),scene("#a{flex-grow:.25;flex-shrink:7;flex-basis:0px}"));
+    assert_eq!(scene("#p{--f:.25 7 0px}#p>div:first-child{flex:var(--f);order:2}"),scene("#a{flex:.25 7 0px;order:2}"));
+    assert_eq!(scene("#a{flex-grow:.25!important;flex:2 7 0px}"),scene("#a{flex:.25 7 0px}"));
+    let r=decoded(&scene("#a{flex:.25 7 0px}"));
+    assert_eq!(r.iter().filter_map(|(_,r)|r.get("fractionalWidth")).collect::<Vec<_>>(),vec![&json!(0.25)]);
+    // Authored shrink still reaches a receiver through inheritance even though
+    // zero-basis native lowering itself stores grow in both native factors.
+    assert!(compile(&input("#a{flex:.25 7 0px}#leaf{width:auto;height:auto;flex-grow:.25;flex-shrink:inherit;flex-basis:30px}")).is_err());
+}
+#[test]
+fn parent_wide_guards_cover_other_siblings_and_intrinsic_ancestors() {
+    for css in [
+        "#a{flex:1 7 0px}#b{width:auto;flex:.1 .1 100px}",
+        "#a{flex:1 1 0px}#b{margin-left:auto}",
+        "#a{flex:1 1 0px}#p{justify-content:space-around}",
+        "#a{flex:1 1 0px}#b{align-self:baseline}",
+        "#a{flex:1 1 0px}#p{width:auto}",
+        "#a{flex:1 1 0px;width:20px}",
+        "#a{flex:1 1 0px;min-width:auto}",
+        "#a{flex:1 1 10%;width:auto}",
+        "#a{flex:1 0 30px}",
+        "#a{flex:initial}",
+    ] {assert_eq!(compile(&input(css)).unwrap_err()[0].code,"unsupported-target-semantics","{css}");}
+    let mut nested=input("#a{flex:1 1 0px}");nested.html=format!("<div id=outer>{}</div>",nested.html);
+    assert!(compile(&nested).is_err()); // inner p fixed width cannot erase outer intrinsic chain
+    nested.css.push_str("#outer{width:220px;height:150px}");assert!(compile(&nested).is_ok());
+    assert!(compile(&input("#a{flex:1 7 0px}#b{width:auto;flex:0 0 30px}")).is_ok());
+}
+#[test]
+fn vertical_flex_does_not_leak_false_ancestor_baseline_metrics() {
+    let mut x=input("#a{width:60px;height:60px;align-self:baseline}#leaf{width:10px;height:auto;flex:1 1 0px}");
+    assert!(compile(&x).is_err());
+    x.css.push_str("#a{align-self:normal}");assert!(compile(&x).is_ok());
+}
+#[test]
+fn invalid_flex_values_stay_strict_in_unmatched_and_overridden_rules() {
+    for value in ["-1 1 0px","1 1 -2px","1 / 2","1 2 3px 4","1000001 1 0px"] {
+        for css in [format!("#never{{flex:{value}}}"),format!("#a{{flex:{value};flex:none}}"),format!("#a{{--f:{value};flex:var(--f)}}")] {assert!(compile(&input(&css)).is_err(),"{css}");}
+    }
+}
+
+}

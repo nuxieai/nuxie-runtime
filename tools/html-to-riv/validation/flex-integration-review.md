@@ -1,0 +1,13 @@
+# Computed flex and candidate compiler integration
+
+The compiler now carries independent computed grow, shrink and basis through cascade and inheritance, checks sibling and ancestor contexts, and emits native flex fields on the actual outer participant when alignment introduces a wrapper. The exported interface uses the Guarded policy. Nonlegacy flex emission remains staged under the private Candidate policy while aggregate numeric qualification is developed. This is not completion of L08/L09 or a reduction of their scope.
+
+Candidate support includes explicit zero-point basis with unequal factors in compatible groups, equal factors with point or auto basis, and zero factors with a positive point basis. Groups reject unequal zero-basis factors mixed with potentially positive-basis shrinking participants, main-auto-margin/distribution helpers and baseline participants. Ancestor main-size chains must remain definite and non-amplifying; vertical flexible height summaries become unknown. These semantic guards do not substitute for the outstanding aggregate numeric proof.
+
+A standalone source-mounted harness exercises the actual compiler pipeline with the private Candidate policy. With the exact retained requests, all48 ordinary files and source maps match the two native experiment corpora exactly and reproduce on repetition. Those corpora jointly have384geometry/376pixel passes and768clear checks, with eight retained thin alpha-paint failures. Each corpus binds72direct visual pairs plus120exact transfers. Exact emitted-file equality connects the integrated candidate to that evidence without claiming new visual inspection or general qualification.
+
+The first harness run used each fixture's first resize dimensions instead of its retained compilation dimensions, so its files differed at the artboard. That run is preserved under `output/flex-integration-module-r1`; corrected comparisons use the exact original request JSON. This was a comparison setup error, not a native rendering failure.
+
+Public admission, transport checks and prior-output regression are recorded separately in the checkpoint receipt. Unsupported nonlegacy declarations must retain strict diagnostics even when unmatched or overridden. The guarded policy is part of compilation, never a runtime-side requirement: every candidate file is an ordinary self-contained scene.
+
+Remaining work: contextual aggregate precision and work bounds; actual public F1/F2 admission and boundary tests; broader independent-factor compositions; percentage/intrinsic contexts; helper-phase integration, baseline metrics and wrapping. Existing nested-percentage overflow and mixed-factor arithmetic counterexamples remain preserved in their dedicated receipts.

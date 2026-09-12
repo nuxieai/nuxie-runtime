@@ -2,6 +2,16 @@
 
 Reviewed on 2026-09-12 against the saved goal, current git state, immutable source guard and latest wrapped-sizing checkpoint. The saved goal remains active and unlimited. Its public-interface restoration instruction is already satisfied; use this brief instead of repeating that step. Work only in `/Users/levi/.codex/worktrees/html-css-immutable`, branch `levi/html-css-immutable-runtime`; the older `7c27` worktree is not the implementation checkout.
 
+## Latest scalar/position advance
+
+Checkpoint evidence is `validation/wrapped-scalar-position-review.md` and its receipt. The frozen R2 build passes396Rust/56Node, native/WASM/TypeScript/source guard;282image+794historical outputs are exact and7,865bindings verify. No new pixel campaign.
+
+The private candidate now binds its complete sizing record segment to a closed scalar instruction grammar, including explicit/default fields, target operands, constraint order and all trace handles. `wrapping_position.rs` propagates error through the final emitted slot-based offset and target. Both results are attached to the same owned `Derived` candidate. See `validation/wrapped-scalar-binding-review.md` and `validation/wrapped-position-bound-review.md`.
+
+**New semantic counterexample:** differing visible/slot cross extents require another `a*(h-v)` term. Current graph gives30 instead of60 for line80/slot50/visible20 with end alignment. This is an executable algebraic counterexample, not a new native capture. Do not narrow the goal to equal extents or hide it in an error tolerance. Next repair the general formula using independent visible-size measurement without a transform feedback cycle, and update the scalar/error certificate accordingly.
+
+**Mask audit changes the next action:** the pinned non-MSAA renderer intersects AABB clips before AA, so current masks can preserve the artboard clip without arbitrary margins. Bind the viewport/domain, paint scalar and rectangle fields, then verify actual paths/matrices and edge pixels. Read `validation/wrapped-mask-coverage-audit.md` and the separate scheduling audit. Public wrapping remains unadmitted; counts remain13/23/4/59. These findings supersede earlier instructions to expand masks or assume sizing semantics are already complete.
+
 ## Current resume point
 
 The preserved snapped wrapped-sizing checkpoint is `5557c8367a`; the machine size/base binding checkpoint is `6eded8aff6`, and the authored-domain/composition/normalizer checkpoint is `0d564aac2f`, and the subsequent coordinate/carry checkpoint is recorded in `validation/wrapped-coordinate-carry-review.md` (confirm current HEAD in git log); the latest public image extension is `f149d5e047` (mixed and both-axis responsive constraints). The worktree was clean at this review and the immutable source guard passed. The saved goal is active with no token budget; this review does not start implementation or change its lifecycle state.

@@ -15,6 +15,8 @@ pub(super) enum Unresolved {
     BaseChanged,
     GeneratedRole { object: u32 },
     Arithmetic(super::wrapping_coordinates::Unresolved),
+    Scalar(super::wrapping_scalar::Unresolved),
+    Position(super::wrapping_position::Unresolved),
     Emission(Diagnostic),
 }
 impl From<Diagnostic> for Unresolved {
@@ -55,15 +57,28 @@ impl Candidate {
 pub(super) struct Derived {
     candidate:Candidate,
     arithmetic:super::wrapping_coordinates::Proof,
+    scalar:super::wrapping_scalar::Binding,
+    position:super::wrapping_position::Proof,
 }
 impl Derived {
     pub(super) fn candidate(&self)->&Candidate {&self.candidate}
     pub(super) fn arithmetic(&self)->&super::wrapping_coordinates::Proof {&self.arithmetic}
+    pub(super) fn scalar(&self)->&super::wrapping_scalar::Binding {&self.scalar}
+    pub(super) fn position(&self)->&super::wrapping_position::Proof {&self.position}
 }
 pub(super) fn compose_with_bounds(domains:Domains<'_>,alignments:&[f32],record_budget:usize)->Result<Derived,Unresolved> {
     let arithmetic=super::wrapping_coordinates::prove(&domains).map_err(Unresolved::Arithmetic)?;
+    let row=domains.base().row;
+    let reverse_cross=domains.base().reverse_cross;
+    let line_fraction=domains.base().line_fraction;
+    let roles=domains.base().slots.iter().map(|s|(s.id,s.visible)).collect::<Vec<_>>();
+    let position=super::wrapping_position::prove(&arithmetic,alignments,row,line_fraction,reverse_cross)
+        .map_err(Unresolved::Position)?;
     let candidate=compose(domains,alignments,arithmetic.epsilon(),record_budget)?;
-    Ok(Derived{candidate,arithmetic})
+    let (start,sizing,_)=candidate.record_costs();
+    let scalar=super::wrapping_scalar::bind(candidate.records(),start,start+sizing,&roles,alignments,
+        row,reverse_cross,line_fraction,arithmetic.epsilon(),candidate.trace()).map_err(Unresolved::Scalar)?;
+    Ok(Derived{candidate,arithmetic,scalar,position})
 }
 fn parent(record: &Record) -> Option<u32> {
     match record.get("parentId") { Some(Value::Uint(id)) => Some(*id), _ => None }
@@ -283,6 +298,46 @@ mod tests {
                 assert!(matches!(result,Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Separation))
                     |Err(Unresolved::Arithmetic(super::super::wrapping_coordinates::Unresolved::Normalizer(_)))));
             }
+        }
+    }
+    #[test]
+    fn sizing_binding_rejects_fields_operands_and_trace_mutations() {
+        use super::super::wrapping_scalar;
+        for row in [false,true] {
+            let (records,roles)=fixture(3,if row {2}else{0},4,1);
+            let candidate=compose(domains(&records,&roles),&[0.,0.5,1.],0.25,1000).unwrap();
+            let (start,size,_)=candidate.record_costs();
+            let bind=|changed:&[Record],trace:&wrapping::Trace| wrapping_scalar::bind(changed,start,start+size,
+                &roles,&[0.,0.5,1.],row,false,0.5,0.25,trace);
+            let binding=bind(candidate.records(),candidate.trace()).unwrap();
+            assert_eq!(binding.nodes+binding.constraints,size);
+            // Each mutation breaks a premise actually used by the scalar
+            // ledger: identity, strength, exact mode, origin or operand.
+            for (kind,key,value) in [
+                ("Node","scaleX",Value::Float(2.)),
+                ("Node",if row {"x"}else{"y"},Value::Float(1.)),
+                ("TranslationConstraint","strength",Value::Float(0.5)),
+                ("TranslationConstraint","sourceSpaceValue",Value::Uint(1)),
+                ("TranslationConstraint","offset",Value::Bool(true)),
+                ("TranslationConstraint","targetId",Value::Uint(candidate.trace().heights[2])),
+                ("TransformConstraint",if row {"originX"}else{"originY"},Value::Float(0.5)),
+                ("DistanceConstraint","modeValue",Value::Uint(0)),
+                ("DistanceConstraint","distance",Value::Float(65535.)),
+                ("DistanceConstraint","targetId",Value::Uint(candidate.trace().tops[0])),
+            ] {
+                let mut changed=candidate.records().to_vec();
+                let r=changed[start..start+size].iter_mut().find(|r|r.kind==kind).unwrap();
+                set(r,key,value);assert!(bind(&changed,candidate.trace()).is_err(),"{kind}.{key}");
+            }
+            let mut reordered=candidate.records().to_vec();
+            let normalized=candidate.trace().boundaries[0].normalized;
+            let constraints=reordered.iter().enumerate().filter(|(_,r)|
+                matches!(r.get("parentId"),Some(Value::Uint(p)) if *p==normalized)).map(|(i,_)|i).collect::<Vec<_>>();
+            assert_eq!(constraints.len(),2);reordered.swap(constraints[0],constraints[1]);
+            assert!(bind(&reordered,candidate.trace()).is_err());
+            let mut changed=compose(domains(&records,&roles),&[0.,0.5,1.],0.25,1000).unwrap();
+            changed.trace.targets.swap(0,1);
+            assert!(bind(candidate.records(),changed.trace()).is_err());
         }
     }
     #[test]

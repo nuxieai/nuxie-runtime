@@ -1,0 +1,11 @@
+# Private sizing scalar and position checkpoint
+
+The owned derived candidate now carries a closed sizing-record grammar binding and conditional final-position bounds. All six new tests pass: five numerical/semantic position tests and one mutation matrix over fields, operands, constraint order and trace handles. Independent source audits cover sizing scheduling and the potential rectangular clip-intersection route. Public wrapping remains unadmitted; no runtime, renderer, schema, shared dependency or root build change was made.
+
+The most consequential finding is a semantic counterexample: differing visible/slot cross extents need an additional a*(h-v) correction. The current graph gives30 where end alignment requires60 for line80/slot50/visible20. This is executable algebraic evidence, not native pixels. Repair the general formula using an independently measurable visible size, then update the graph/error binding; do not silently restrict the objective to equal extents.
+
+Build `output/wrapped-scalar-position-build-r2/frozen` passes396 Rust and56 Node tests, strict TypeScript, native/WASM builds and source guard, with297 frozen source/artifact entries. All282 image outputs and794 historical outputs remain byte/map exact. The evidence verifier checks7,865artifact bindings. Existing pixel failures and earlier captures remain preserved; no new native/Chrome capture or visual inspection is claimed.
+
+The first build attempt put artifacts in repository-root output/ rather than compiler output/. Tests/builds passed but the source-scope guard correctly rejected those nonignored additions. That terminal attempt was moved into `output/wrapped-scalar-position-build-attempt-r1`; its logs preserve the original locations and failed guard and are not successful qualification. The fresh R2 run uses the proper compiler output directory and passes the guard. No exclusion or runtime change was introduced to bypass it.
+
+See the scalar binding, position bound, mask coverage and scalar scheduling audits beside this review for the argument and limits. Next work is visible-size semantic repair, paint-graph/default/domain binding, then same-file original/clone native/Chrome edge and resize validation. Counts remain13 qualified/23 partial/4 investigating/59 pending. The unfinished replacement remains local.

@@ -73,6 +73,12 @@ mod wrapping_carry;
 #[allow(dead_code)] // Conditional source-derived envelope; final scalar/mask checks follow.
 #[path = "wrapping_coordinates.rs"]
 mod wrapping_coordinates;
+#[allow(dead_code)]
+#[path = "wrapping_scalar.rs"]
+mod wrapping_scalar;
+#[allow(dead_code)]
+#[path = "wrapping_position.rs"]
+mod wrapping_position;
 #[path = "images.rs"]
 mod images;
 #[path = "image_constraints.rs"]

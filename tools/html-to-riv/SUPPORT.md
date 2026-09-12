@@ -160,3 +160,7 @@ The public compiler emits ordinary physical gap fields directly from HTML/CSS. T
 ## Private flex analysis checkpoint
 
 Final-scene record types/properties, style and paint ownership, ancestry, intrinsic sizing and interpolation defaults now gate the conditional flex analyzer. Size, world and far-corner bounds are connected to actual emitted descriptors. This does not expand public flex admission: nonlegacy factors/bases and wrapping remain diagnostic. See validation/flex-scene-review.md for the precise restricted model and its regression evidence.
+
+## Private wrapping scalar and position checkpoint
+
+Sizing fields/operands/trace handles are now checked against a closed scalar instruction grammar, and final emitted position error has conditional bounds. Public wrapping remains unadmitted. Differing visible/slot extents expose a missing `a*(h-v)` positioning term (30 versus60 in the executable line80/slot50/visible20 counterexample). Repair requires independent visible-size measurement and renewed graph/arithmetic validation, not a tolerance change or an equal-size scope substitution. The mask audit identifies an intersection-before-AA route in the pinned renderer; actual paint fields, viewport bounds, paths/matrices and native edge pixels remain to be bound. See `validation/wrapped-scalar-binding-review.md`, `validation/wrapped-position-bound-review.md` and `validation/wrapped-mask-coverage-audit.md`. No new pixel qualification or runtime modification is claimed.

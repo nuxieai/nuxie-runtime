@@ -1,0 +1,25 @@
+{
+  "scope": "Private sizing scalar and final emitted-expression bounds; no public wrapping or new pixel qualification",
+  "priorCheckpoint": "45b882e0e5",
+  "build": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-scalar-position-build-r2",
+  "buildSummarySha256": "8e3e0ccb59818c12990ee2fd30c20866469fc08067085b7599e12f55b2b606cf",
+  "rustTests": 396,
+  "nodeTests": 56,
+  "frozenEntries": 297,
+  "compilerSha256": "9769e39d382c1ec2178f1780a68e8a0b7b9342428a8f7ed195acff4d9fdd8359",
+  "wasmSha256": "04c5a6e770ac8f333b8cc4daa7ead7d5a909c3d836351832a642e2331e717e29",
+  "imageOutputs": 282,
+  "historicalOutputs": 794,
+  "verification": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-scalar-position-verification-r1.json",
+  "verificationSha256": "cdf9a432e08f2fd14f473abce64c68602315f7d4b406157bc8562c3d720a5d8b",
+  "artifactBindings": 7865,
+  "publicWrappingAdmitted": false,
+  "visibleSizeSemanticCorrection": "Unresolved; additional a*(h-v) term requires independent visible-size measurement",
+  "reviews": {
+    "wrapped-scalar-position-review.md": "970325794e0492c5d94d3260af9146a22795b452f095cd033bdf92968dfcf85a",
+    "wrapped-scalar-binding-review.md": "26ee276980cf4f43dd06e3ca99e9dff1870e4ad50145c037cc78c3da14470ee1",
+    "wrapped-position-bound-review.md": "72a7e240f7e40d97c76ad5a1be7fbb968649efa09cf3969055be4c873f4ab7bb",
+    "wrapped-mask-coverage-audit.md": "5d57c2356c932d91073fe285964c1879a15f6e087b2e6deef6fd4ce7006fccc6",
+    "wrapped-scalar-scheduling-audit.md": "908be1bf574e788d0bdd203ec6bc03a15fd82ea5f55e90dcc20d7531078e6e1c"
+  }
+}

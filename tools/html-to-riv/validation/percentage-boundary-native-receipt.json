@@ -1,0 +1,16 @@
+{
+  "status": "preserved-immutable-numeric-boundaries",
+  "scope": "Native geometry/recording only; no browser or pixel qualification",
+  "cases": 14,
+  "completeOriginalCloneRuns": 10,
+  "framesInCompleteRuns": 80,
+  "resizeFailures": 4,
+  "bindings": {
+    "tools/html-to-riv/output/percentage-boundary-native-r2/receipt.json": "d3a57541e7dd50288fb95d2b0cca6763131411d7f58cb24f6907307761b0e5df"
+  },
+  "guardsRequired": [
+    "Whole resize-domain sizing rather than only compilation viewport",
+    "Effective min/max clamp order; minimum may override maximum",
+    "Zero parent size and intervening fixed-pixel dimensions reset amplification"
+  ]
+}

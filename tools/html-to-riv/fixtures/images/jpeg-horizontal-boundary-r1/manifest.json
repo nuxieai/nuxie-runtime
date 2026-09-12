@@ -1,0 +1,224 @@
+{
+  "scope": "Horizontal-color and one-row JPEG chroma reconstruction controls",
+  "encoder": {
+    "path": "/opt/homebrew/bin/cjpeg",
+    "sha256": "1313b8394da8708c93fd1bff14d352957cc5e7775b315ef5970953a0004cc760",
+    "version": "libjpeg-turbo version 3.2.0 (build 20260630)"
+  },
+  "generator": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/jpeg-horizontal-boundary-fixtures.py",
+    "sha256": "b81020d2c3668c0999132ce05d9ed3dc6e40689fd6ede287b12311c668ad871e"
+  },
+  "files": [
+    {
+      "name": "2x1-422",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1-422.jpg",
+      "sha256": "5ac14567670a9522c5a4f108d9ea4cbe0085092e0472d09201eb8d7bea93c8b4",
+      "width": 2,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1.ppm",
+      "sourceSha256": "2cb59c9d4fb9cf6c68bc14f0af8701333c966696ea2425c4bc430c1469a2a105",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1-422.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1.ppm"
+      ]
+    },
+    {
+      "name": "2x1-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1-420.jpg",
+      "sha256": "13210c2c439ab43e9260afef02030c2fb26e30209e41bf3d0ca50a25dd7d6caf",
+      "width": 2,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1.ppm",
+      "sourceSha256": "2cb59c9d4fb9cf6c68bc14f0af8701333c966696ea2425c4bc430c1469a2a105",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/2x1.ppm"
+      ]
+    },
+    {
+      "name": "3x1-422",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1-422.jpg",
+      "sha256": "c3455d1671f09ef60d5c49e895299426324da35d9be47c42cb6c08bcb1c8f7c2",
+      "width": 3,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1.ppm",
+      "sourceSha256": "bbada192550907f01b83249da7ddeff939f6bf1ae2941b03cb95c2e55171d09b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1-422.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1.ppm"
+      ]
+    },
+    {
+      "name": "3x1-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1-420.jpg",
+      "sha256": "24ed2c98708e089e52ea2eda05bf94d5f0b8b1637dd67f173499e6faf6cfdd3f",
+      "width": 3,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1.ppm",
+      "sourceSha256": "bbada192550907f01b83249da7ddeff939f6bf1ae2941b03cb95c2e55171d09b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/3x1.ppm"
+      ]
+    },
+    {
+      "name": "4x1-png-control",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1.png",
+      "sha256": "6f6bba9d7a4bc261fdf2e8d2f26358c1d0bd83ec932082758eb0c636d9e89efe",
+      "width": 4,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1.ppm",
+      "sourceSha256": "340f052293779f0b6a4c35c3060e5787ce72baafe587e2345f1466083686f592",
+      "command": null
+    },
+    {
+      "name": "4x1-422",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1-422.jpg",
+      "sha256": "49fe8f22c499c28390d0e6feea5f561bceaf08892cf46c2eb8a6c36beff9289f",
+      "width": 4,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1.ppm",
+      "sourceSha256": "340f052293779f0b6a4c35c3060e5787ce72baafe587e2345f1466083686f592",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1-422.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1.ppm"
+      ]
+    },
+    {
+      "name": "4x1-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1-420.jpg",
+      "sha256": "fda01b4907b15ba4719b15c36efe0ad194f810d051f617f55b1f5f85d173e04e",
+      "width": 4,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1.ppm",
+      "sourceSha256": "340f052293779f0b6a4c35c3060e5787ce72baafe587e2345f1466083686f592",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x1.ppm"
+      ]
+    },
+    {
+      "name": "5x1-422",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1-422.jpg",
+      "sha256": "7cdb912c7ae7d3e51676ca1ee8b0c3a12b9fbfd01b169c43d2cc7e5a26fd64de",
+      "width": 5,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1.ppm",
+      "sourceSha256": "270e3b18011ff09cbdf92f52397069929cec267c8f23406cd47fd66176383e10",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1-422.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1.ppm"
+      ]
+    },
+    {
+      "name": "5x1-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1-420.jpg",
+      "sha256": "d3ca59c99b67cd8fb39ee81fc9afbaf96d423aa9d874c8f5b696707b8d82c600",
+      "width": 5,
+      "height": 1,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1.ppm",
+      "sourceSha256": "270e3b18011ff09cbdf92f52397069929cec267c8f23406cd47fd66176383e10",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/5x1.ppm"
+      ]
+    },
+    {
+      "name": "4x17-422",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17-422.jpg",
+      "sha256": "f8b5cd3bb7d5921d0d3d62c1386ba0fc856e2e63e36a96dd6020718b80be5432",
+      "width": 4,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17.ppm",
+      "sourceSha256": "0fe7b06b8366cab894b9e04835177abb869d2c2bef3ded850aebe1ccfc1855db",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17-422.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17.ppm"
+      ]
+    },
+    {
+      "name": "4x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17-420.jpg",
+      "sha256": "b5366e850228c70f5bbddd21944cfa16750e3f1900d4d8ad2df6f71b29e809f0",
+      "width": 4,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17.ppm",
+      "sourceSha256": "0fe7b06b8366cab894b9e04835177abb869d2c2bef3ded850aebe1ccfc1855db",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-horizontal-boundary-r1/4x17.ppm"
+      ]
+    }
+  ]
+}

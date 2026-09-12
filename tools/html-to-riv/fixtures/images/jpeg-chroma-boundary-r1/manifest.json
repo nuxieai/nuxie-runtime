@@ -1,0 +1,164 @@
+{
+  "scope": "Width-boundary chroma experiment with horizontally uniform authored stripes",
+  "encoder": {
+    "path": "/opt/homebrew/bin/cjpeg",
+    "sha256": "1313b8394da8708c93fd1bff14d352957cc5e7775b315ef5970953a0004cc760",
+    "version": "libjpeg-turbo version 3.2.0 (build 20260630)"
+  },
+  "generator": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/jpeg-chroma-boundary-fixtures.py",
+    "sha256": "3017305b43e4fe36be03de51edbe6b03817c781845f7398581fdf21e13e5f9a5"
+  },
+  "files": [
+    {
+      "name": "1x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/1x17-420.jpg",
+      "sha256": "fdc27a897bda554cec2d179fb1670e971e59df76168a056faead66a9c869f9f4",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/1x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/1x17.ppm"
+      ]
+    },
+    {
+      "name": "2x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/2x17-420.jpg",
+      "sha256": "7f68057eac1944c02da6b5ec0e061699a705f8f3b035fa722e50e51f8829a2d4",
+      "width": 2,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/2x17.ppm",
+      "sourceSha256": "147abf54cb59a6a2356ccf334e3af26ccc6c9a08103077c50215941cfb245317",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/2x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/2x17.ppm"
+      ]
+    },
+    {
+      "name": "3x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/3x17-420.jpg",
+      "sha256": "3956465bc8be0b831a944e56d1a7584f69439cafaf21da84283b7c199d8fc906",
+      "width": 3,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/3x17.ppm",
+      "sourceSha256": "2dd69855ec7c2b0f2836516a2a33cd915f251c2476a34632d023b50e1fa81df5",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/3x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/3x17.ppm"
+      ]
+    },
+    {
+      "name": "4x17-png-control",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17.png",
+      "sha256": "cb7a76407e57155192007e83267858d2ae074c83472f9e6810e197df7a4e0923",
+      "width": 4,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17.ppm",
+      "sourceSha256": "7ae8822eba93e65b061eb9ea49fd7c97378c9361af0edd7a88bbb3d73d1e3ed3",
+      "command": null
+    },
+    {
+      "name": "4x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17-420.jpg",
+      "sha256": "2ff99b45429da14c804b7af120273d4160f748fce7bacc798acc96864b381bb1",
+      "width": 4,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17.ppm",
+      "sourceSha256": "7ae8822eba93e65b061eb9ea49fd7c97378c9361af0edd7a88bbb3d73d1e3ed3",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17.ppm"
+      ]
+    },
+    {
+      "name": "4x17-422",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17-422.jpg",
+      "sha256": "7cabbe16641b2bb5e658d70244c8a1303f49c31eb493e7d71c9279a65e50a508",
+      "width": 4,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17.ppm",
+      "sourceSha256": "7ae8822eba93e65b061eb9ea49fd7c97378c9361af0edd7a88bbb3d73d1e3ed3",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17-422.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/4x17.ppm"
+      ]
+    },
+    {
+      "name": "5x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/5x17-420.jpg",
+      "sha256": "3cb2d8f7e61a7e840c0160f05d28feb7161e64acb1305ed78963efcc03cda357",
+      "width": 5,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/5x17.ppm",
+      "sourceSha256": "72e31ae088bf925d4090a841d661ef38cbdaebcb4b53a31e3237299992c1b02a",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/5x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/5x17.ppm"
+      ]
+    },
+    {
+      "name": "6x17-420",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/6x17-420.jpg",
+      "sha256": "e6ec4b8d72e3097fe212896e44c03c2b12f888da77c054da5b95751f56fc99e3",
+      "width": 6,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/6x17.ppm",
+      "sourceSha256": "e8ec8ec1701c63344a156800dac91501baf3541debf9b1213e93503e3081f696",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/6x17-420.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-chroma-boundary-r1/6x17.ppm"
+      ]
+    }
+  ]
+}

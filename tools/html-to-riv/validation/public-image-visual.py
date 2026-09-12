@@ -60,8 +60,9 @@ def sheets(rows,out,prefix,columns=('chrome','native')):
     groups=collections.defaultdict(list)
     for row in rows:groups[(row['width'],row['height'])].append(row)
     for (w,h),group in groups.items():
-        for start in range(0,len(group),4):
-            selected=group[start:start+4];canvas=Image.new('RGBA',(len(columns)*(w+8)+8,len(selected)*(h+45)+28),'#ddd');draw=ImageDraw.Draw(canvas)
+        rows_per_sheet=max(1,min(4,(1500-28)//(h+45)))
+        for start in range(0,len(group),rows_per_sheet):
+            selected=group[start:start+rows_per_sheet];canvas=Image.new('RGBA',(len(columns)*(w+8)+8,len(selected)*(h+45)+28),'#ddd');draw=ImageDraw.Draw(canvas)
             draw.text((8,6),' / '.join(columns)+' — complete source PNG pixels, no scaling',fill='black');members=[]
             for i,row in enumerate(selected):
                 y=28+i*(h+45)
@@ -77,7 +78,7 @@ def sheets(rows,out,prefix,columns=('chrome','native')):
             result.append({**bind(file),'members':members})
     return result
 
-def gallery(coverage,out,reviewed=False):
+def gallery(coverage,out,reviewed=False,supplementary=()):
     def rel(p):return html.escape(os.path.relpath(p,out),quote=True)
     cards=[]
     for sheet in coverage['sheets']:
@@ -86,31 +87,47 @@ def gallery(coverage,out,reviewed=False):
             failure=bool(row['pixelFailures']);images=''.join(f'<figure><figcaption>{label}</figcaption><a href="{rel(p["path"])}"><img loading="lazy" src="{rel(p["path"])}"></a></figure>' for label,p in m['images'].items())
             targets=[t for t in coverage['transfers'] if t['case']==row['name'] and t['sourceFrame']==row['frame']]
             detail={'measured':row,'visualTransfers':targets}
-            cards.append(f'<article data-name="{row["name"]}" data-fail="{str(failure).lower()}"><h2>{row["name"]} · frame {row["frame"]} · {row["width"]}×{row["height"]}</h2><p class="{"fail" if failure else "pass"}">Geometry: {"FAIL" if row["metricFailures"] else "PASS"} · Pixels: {"FAIL" if failure else "PASS"} · Presence: {"PASS" if all(v["passed"] for v in row["imagePresence"].values()) else "FAIL"}</p><p><a href="{rel(row["prefix"]+".diff.png")}">Diff</a> · <a href="{rel(sheet["path"])}">Unscaled sheet</a> · {len(targets)} exact visual transfers</p><div class="pair">{images}</div><details><summary>Measurements, failures, exact transfer proofs</summary><pre>{html.escape(json.dumps(detail,indent=2))}</pre></details></article>')
+            cards.append(f'<article data-name="{row["name"]}" data-fail="{str(failure).lower()}" data-geometry="{str(bool(row['metricFailures'])).lower()}" data-presence="{str(not all(v['passed'] for v in row['imagePresence'].values())).lower()}"><h2>{row["name"]} · frame {row["frame"]} · {row["width"]}×{row["height"]}</h2><p class="{"fail" if failure else "pass"}">Geometry: {"FAIL" if row["metricFailures"] else "PASS"} · Pixels: {"FAIL" if failure else "PASS"} · Presence: {"PASS" if all(v["passed"] for v in row["imagePresence"].values()) else "FAIL"}</p><p><a href="{rel(row["prefix"]+".diff.png")}">Diff</a> · <a href="{rel(sheet["path"])}">Unscaled sheet</a> · {len(targets)} exact visual transfers</p><div class="pair">{images}</div><details><summary>Measurements, failures, exact transfer proofs</summary><pre>{html.escape(json.dumps(detail,indent=2))}</pre></details></article>')
     failures=''.join(f'<tr><td>{r["name"]}</td><td>{r["frame"]}</td><td>{html.escape(", ".join(r["pixelFailures"]))}</td><td><a href="{rel(r["prefix"]+".chrome.png")}">Chrome</a> / <a href="{rel(r["prefix"]+".native.png")}">native</a> / <a href="{rel(r["prefix"]+".diff.png")}">diff</a></td></tr>' for r in coverage['pixelFailureRows'])
-    comparisons=''.join(f'<p><a href="{rel(sheet["path"])}">Chrome / previous native / repaired native</a></p>' for sheet in coverage['beforeAfterSheets'])
+    comparisons=''.join(f'<p><a href="{rel(sheet["path"])}">Chrome / previous native / current native</a></p>' for sheet in coverage['beforeAfterSheets'])
+    supplementary_links=''.join(f'<p><a href="{rel(b["path"])}">{html.escape(Path(b["path"]).name)}</a>: {html.escape(b["observation"])}</p>' for b in supplementary)
     counts=coverage['counts'];text=f"{counts['sourceCases']} cases; {counts['frames']} frames; {counts['representatives']} directly reviewed pairs; {counts['visualTransfers']} exact visual transfers. Geometry {counts['geometryPass']}/{counts['frames']}, pixels {counts['pixelPass']}/{counts['frames']}, presence {counts['presencePass']}/{counts['frames']}." if reviewed else f"Prepared coverage: {counts}. Direct inspection pending."
-    page='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public image candidate · visual review</title><style>body{font:15px system-ui;margin:0;background:#f3f4f5;color:#17212b}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:28px}h2{font-size:17px}a{color:#125bc7}p{line-height:1.55}article{background:white;border:1px solid #ccd1d6;border-radius:8px;margin:20px 0;padding:16px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0;overflow:auto}figcaption{margin-bottom:6px}img{display:block;max-width:100%;height:auto}pre{overflow:auto;font-size:12px;max-height:600px;background:#f6f7f8;padding:12px}.fail{color:#a02020}.pass{color:#165930}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}.controls{position:sticky;top:0;background:#f3f4f5;padding:12px 0}input,select{font:inherit;padding:6px}.hidden{display:none}</style><main><h1>Public image compiler candidate</h1><p>'''+html.escape(text)+'''</p><p>This is visual evidence for frozen emitted scenes, not a claim of complete public API qualification. Fractional failures are retained. Exact white-canvas extensions transfer complete visible RGBA evidence only; each frame retains its own numeric gates and viewport. Gallery previews fit the panel; linked PNGs and sheets are unscaled.</p><p><a href="coverage.json">Coverage</a> · <a href="review-receipt.json">Review receipt</a> · <a href="../combined-receipt.json">Combined native receipt</a></p><details><summary>All retained pixel failures</summary><table><tr><th>Case</th><th>Frame</th><th>Failure</th><th>Evidence</th></tr>'''+failures+'''</table></details><details><summary>Four stretch cases before and after</summary>'''+comparisons+'''</details><div class="controls"><input id="search" placeholder="Filter case"><select id="result"><option value="all">All representatives</option><option value="failed">Pixel failures</option></select><span id="count"></span></div>'''+''.join(cards)+'''</main><script>const cards=[...document.querySelectorAll('article')],search=document.querySelector('#search'),result=document.querySelector('#result');function filter(){let n=0;for(const c of cards){const show=c.dataset.name.includes(search.value.toLowerCase())&&(result.value==='all'||c.dataset.fail==='true');c.classList.toggle('hidden',!show);n+=show}document.querySelector('#count').textContent=` ${n}/${cards.length} representatives`}search.oninput=result.onchange=filter;filter();</script></html>'''
+    page='''<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Public image corpus · visual review</title><style>body{font:15px system-ui;margin:0;background:#f3f4f5;color:#17212b}main{max-width:1600px;margin:auto;padding:24px}h1{font-size:28px}h2{font-size:17px}a{color:#125bc7}p{line-height:1.55}article{background:white;border:1px solid #ccd1d6;border-radius:8px;margin:20px 0;padding:16px}.pair{display:grid;grid-template-columns:1fr 1fr;gap:12px}figure{margin:0;overflow:auto}figcaption{margin-bottom:6px}img{display:block;max-width:100%;height:auto}pre{overflow:auto;font-size:12px;max-height:600px;background:#f6f7f8;padding:12px}.fail{color:#a02020}.pass{color:#165930}td,th{padding:6px;border-bottom:1px solid #ddd;text-align:left}.controls{position:sticky;top:0;background:#f3f4f5;padding:12px 0}input,select{font:inherit;padding:6px}.hidden{display:none}</style><main><h1>Public image compiler corpus</h1><p>'''+html.escape(text)+'''</p><p>This is visual evidence for frozen emitted scenes, not a claim of complete public API qualification. Fractional failures are retained. Exact white-canvas extensions transfer complete visible RGBA evidence only; each frame retains its own numeric gates and viewport. Gallery previews fit the panel; linked PNGs and sheets are unscaled.</p><p><a href="coverage.json">Coverage</a> · <a href="review-receipt.json">Review receipt</a> · <a href="../combined-receipt.json">Combined native receipt</a></p><details><summary>All retained pixel failures</summary><table><tr><th>Case</th><th>Frame</th><th>Failure</th><th>Evidence</th></tr>'''+failures+'''</table></details><details><summary>Optional exact-source before and after</summary>'''+comparisons+'''</details><details><summary>Supplementary inspected evidence</summary>'''+supplementary_links+'''</details><div class="controls"><input id="search" placeholder="Filter case"><select id="result"><option value="all">All representatives</option><option value="failed">Pixel failures</option><option value="geometry">Geometry failures</option><option value="presence">Presence failures</option></select><span id="count"></span></div>'''+''.join(cards)+'''</main><script>const cards=[...document.querySelectorAll('article')],search=document.querySelector('#search'),result=document.querySelector('#result');function filter(){let n=0;for(const c of cards){const show=c.dataset.name.includes(search.value.toLowerCase())&&(result.value==='all'||(result.value==='failed'?c.dataset.fail:c.dataset[result.value])==='true');c.classList.toggle('hidden',!show);n+=show}document.querySelector('#count').textContent=` ${n}/${cards.length} representatives`}search.oninput=result.onchange=filter;filter();</script></html>'''
     (out/'gallery.html').write_text(page)
 
-parser=argparse.ArgumentParser();parser.add_argument('--root',type=Path,default=BASE/'output/public-image-layout-r2');parser.add_argument('--complete',type=Path);args=parser.parse_args();root=args.root.resolve();out=root/'visual'
+parser=argparse.ArgumentParser();parser.add_argument('--root',type=Path,default=BASE/'output/public-image-layout-r2');parser.add_argument('--complete',type=Path);parser.add_argument('--before-native',type=Path,help='Optional prior native receipt for exact-source before/after comparisons');args=parser.parse_args();root=args.root.resolve();out=root/'visual'
 if args.complete:
     coverage=read(out/'coverage.json');notes=read(args.complete)
+    completion_helper=out/'completion-helper.py';assert not completion_helper.exists();completion_helper.write_bytes(Path(__file__).read_bytes())
     for b in coverage['bindings']+coverage['artifacts']:checked(b)
     expected=coverage['sheets']+coverage['beforeAfterSheets'];assert len(notes['inspectedSheets'])==len(expected)
     assert {x['path'] for x in notes['inspectedSheets']}=={x['path'] for x in expected}
     for b in notes['inspectedSheets']:checked(b);assert b['observation'].strip()
     for b in expected:checked(b)
+    for b in notes.get('supplementaryInspection',[]):checked(b);assert b['observation'].strip()
     assert notes['reviewCompleted'] is True
-    receipt={'scope':coverage['scope'],'visualReviewCompleted':True,'counts':coverage['counts'],'bindings':[bind(out/'coverage.json'),bind(args.complete),bind(Path(__file__))],'inspectedSheets':notes['inspectedSheets'],'observations':notes['observations'],'limitations':notes['limitations']}
-    save(out/'review-receipt.json',receipt);gallery(coverage,out,True);print(json.dumps(receipt['counts'],indent=2));raise SystemExit
+    receipt={'scope':coverage['scope'],'visualReviewCompleted':True,'counts':coverage['counts'],'bindings':[bind(out/'coverage.json'),bind(args.complete),bind(completion_helper)],'inspectedSheets':notes['inspectedSheets'],'observations':notes['observations'],'limitations':notes['limitations'],'supplementaryInspection':notes.get('supplementaryInspection',[])}
+    save(out/'review-receipt.json',receipt);gallery(coverage,out,True,notes.get('supplementaryInspection',[]));print(json.dumps(receipt['counts'],indent=2));raise SystemExit
 
-native=read(root/'combined-receipt.json');finite(native);assert not native['errors'] and len(native['rows'])==216
+native=read(root/'combined-receipt.json');finite(native);assert not native['errors'] and native['rows']
 build=read(root/'build-receipt.json');compiled={r['name']:r for r in read(root/'compile-receipt.json')};cases={c['name']:c for c in read(root/'cases.json')}
-for b in native['bindings']+build['bindings']:checked(b)
+source_bindings_path=root/'frozen/source-bindings.json'
+source_bindings=read(source_bindings_path)['files']
+authoring_path=root/'authoring-bindings.json'
+authoring_bindings=read(authoring_path) if authoring_path.exists() else []
+for b in native['bindings']+build.get('bindings',source_bindings)+authoring_bindings:checked(b)
+extra_bindings=[bind(source_bindings_path)]
+if authoring_bindings:extra_bindings.append(bind(authoring_path))
+if 'bindingsSha256' in build:assert sha(source_bindings_path)==build['bindingsSha256']
+if 'summarySha256' in build:
+    summary=Path(build['build'])/'summary.json';assert sha(summary)==build['summarySha256'];extra_bindings.append(bind(summary))
 assert sha(root/'frozen/html-to-riv')==build['compilerSha256']
+assert all(r['matchesExpectation'] for r in compiled.values())
+assert len(native['rows'])==8*sum(r['compiled'] for r in compiled.values())
+asset_sources={Path(b['path']).resolve():Path(b.get('snapshot',b['path'])) for b in source_bindings+authoring_bindings}
 assert {r['name'] for r in native['rows']}=={name for name,c in compiled.items() if c['compiled']}
 assert not out.exists(),'Preserve existing output; choose a new output root for a new review';out.mkdir()
+helper_snapshot=out/'preparation-helper.py';helper_snapshot.write_bytes(Path(__file__).read_bytes())
 rows=native['rows'];sources=[];file_bindings={};representatives=[];transfers=[]
 def record_file(p):
     p=Path(p);file_bindings[str(p)]=bind(p);return file_bindings[str(p)]
@@ -118,9 +135,16 @@ for name in dict.fromkeys(r['name'] for r in rows):
     case=cases[name];current=root/name;req=read(current/'request.json');scene=(current/'scene.riv').read_bytes();mapping=read(current/'scene.map.json');group=[r for r in rows if r['name']==name]
     assert [r['frame'] for r in group]==list(range(8));assert all(req[k]==case['input'][k] for k in case['input'])
     expected_assets={key:bytes(req['assets'][key]['bytes']) for key in sorted(req['assets'])};unique=list(dict.fromkeys(expected_assets.values()))
-    for key,relpath in case['assetFiles'].items():assert expected_assets[key]==(root/'frozen/inputs'/relpath).read_bytes()
+    asset_bindings={}
+    for key,relpath in case['assetFiles'].items():
+        asset_source=asset_sources[(BASE/relpath).resolve()]
+        assert expected_assets[key]==asset_source.read_bytes()
+        asset_bindings[key]=record_file(asset_source)
+    assert sha(current/'request.json')==compiled[name]['requestSha256']
+    assert sha(current/'scene.riv')==compiled[name]['rivSha256']
+    assert sha(current/'scene.map.json')==compiled[name]['mapSha256']
     wire=records(scene);assert [v[212] for kind,v in wire if kind==106]==unique
-    source={'case':name,'request':record_file(current/'request.json'),'scene':record_file(current/'scene.riv'),'map':record_file(current/'scene.map.json'),'assetSha256':{key:hashlib.sha256(value).hexdigest() for key,value in expected_assets.items()},'uniqueEmbeddedAssets':len(unique),'exactEmbeddedBytes':True,'rows':[]}
+    source={'case':name,'request':record_file(current/'request.json'),'scene':record_file(current/'scene.riv'),'map':record_file(current/'scene.map.json'),'assetSha256':{key:hashlib.sha256(value).hexdigest() for key,value in expected_assets.items()},'assetSources':asset_bindings,'uniqueEmbeddedAssets':len(unique),'exactEmbeddedBytes':True,'rows':[]}
     own=[]
     for row in group:
         prefix=Path(row['prefix']);render=prefix.parent;original=render.parent;probe=Path(row['probeDirectory']);e=row['evidence'];checked({'path':e['receipt'],'sha256':e['receiptSha256']});checked({'path':e['result'],'sha256':e['resultSha256']})
@@ -155,20 +179,24 @@ for name in dict.fromkeys(r['name'] for r in rows):
             origin,proof=matched;transfers.append({'case':name,'frame':row['frame'],'instance':row['instance'],'sourceFrame':origin['frame'],'sourceInstance':origin['instance'],'sameRequestSceneMapReferenceAndMeasurements':True,'pixelFailures':row['pixelFailures'],'pixelMetrics':row['pixelMetrics'],'images':proof})
         else:own.append(row);representatives.append(row)
     sources.append(source)
-old=read(BASE/'output/public-image-layout-r1/render-reference-r2-receipt.json');before_after=[];before_rows=[]
-# Evidence-kind spelling remains receipt-owned; identify changed scenes by exact bytes.
-changed={name for name in compiled if compiled[name]['compiled'] and not compiled[name]['previous']['sameRiv']}
-assert len(changed)==4
-for name in sorted(changed):
-    previous=[r for r in old['rows'] if r['name']==name];current=[r for r in rows if r['name']==name]
-    assert len(previous)==len(current)==8
-    for a,b in zip(previous,current):
-        assert a['browserMetrics']==b['browserMetrics'] and a['metricFailures'] and not b['metricFailures']
-        before_after.append({'case':name,'frame':b['frame'],'previous':a,'current':b,'geometryRepaired':True})
-    a,b=previous[0],current[0];witness=dict(b);witness['oldNativePath']=a['prefix']+'.native.png';witness['newNativePath']=b['prefix']+'.native.png'
-    for p in [a['prefix']+'.chrome.png',a['prefix']+'.native.png']:record_file(p)
-    assert rgba_equal_on_white(a['prefix']+'.chrome.png',b['prefix']+'.chrome.png')[0]
-    before_rows.append(witness)
-counts={'sourceCases':len(sources),'frames':len(rows),'representatives':len(representatives),'visualTransfers':len(transfers),'geometryPass':sum(not r['metricFailures'] for r in rows),'pixelPass':sum(not r['pixelFailures'] for r in rows),'presencePass':sum(all(v['passed'] for v in r['imagePresence'].values()) for r in rows),'freshFrames':native['summary']['freshFrames'],'unchangedSceneTransfers':native['summary']['transferredFrames'],'repairedStretchFrames':len(before_after)}
-coverage={'scope':'Visual evidence for frozen public-image candidate scenes; full API qualification is separate. Complete opaque-white RGBA extension proves only visible pixel transfer, not offscreen content or shared numeric gates.','counts':counts,'bindings':[bind(p) for p in [root/'combined-receipt.json',root/'build-receipt.json',root/'compile-receipt.json',root/'cases.json',Path(__file__)]],'sources':sources,'artifacts':list(file_bindings.values()),'representatives':representatives,'transfers':transfers,'sheets':sheets(representatives,out,'review-sheet'),'beforeAfterSheets':sheets(before_rows,out,'stretch-before-after',('chrome','oldNative','newNative')),'beforeAfter':before_after,'pixelFailureRows':[r for r in rows if r['pixelFailures']],'reviewCompleted':False}
+before_after=[];before_rows=[]
+if args.before_native:
+    old=read(args.before_native);finite(old);extra_bindings.append(bind(args.before_native))
+    for b in old.get('bindings',[]):checked(b)
+    old_rows={(r['name'],r['frame']):r for r in old['rows']}
+    for name in dict.fromkeys(r['name'] for r in rows):
+        current=[r for r in rows if r['name']==name]
+        previous=[old_rows.get((name,r['frame'])) for r in current]
+        if any(r is None for r in previous):continue
+        if all(a['rivSha256']==b['rivSha256'] for a,b in zip(previous,current)):continue
+        for a,b in zip(previous,current):
+            assert all(a[k]==b[k] for k in ['requestSha256','browserMetrics','width','height','instance','step'])
+            for side in ['chrome','native']:
+                path=a['prefix']+'.'+side+'.png';assert sha(path)==a[side+'Sha256'];record_file(path)
+            assert rgba_equal_on_white(a['prefix']+'.chrome.png',b['prefix']+'.chrome.png')[0]
+            before_after.append({'case':name,'frame':b['frame'],'previous':a,'current':b,'previousGeometryPass':not a['metricFailures'],'currentGeometryPass':not b['metricFailures']})
+        a,b=previous[0],current[0];witness=dict(b);witness['oldNativePath']=a['prefix']+'.native.png';witness['newNativePath']=b['prefix']+'.native.png'
+        before_rows.append(witness)
+counts={'sourceCases':len(sources),'frames':len(rows),'representatives':len(representatives),'visualTransfers':len(transfers),'geometryPass':sum(not r['metricFailures'] for r in rows),'pixelPass':sum(not r['pixelFailures'] for r in rows),'presencePass':sum(all(v['passed'] for v in r['imagePresence'].values()) for r in rows),'freshFrames':native['summary']['freshFrames'],'unchangedSceneTransfers':native['summary']['transferredFrames'],'beforeAfterFrames':len(before_after)}
+coverage={'scope':'Visual evidence for frozen public-image candidate scenes; full API qualification is separate. Complete opaque-white RGBA extension proves only visible pixel transfer, not offscreen content or shared numeric gates.','counts':counts,'bindings':[bind(p) for p in [root/'combined-receipt.json',root/'build-receipt.json',root/'compile-receipt.json',root/'cases.json',helper_snapshot]]+extra_bindings,'sources':sources,'artifacts':list(file_bindings.values()),'representatives':representatives,'transfers':transfers,'sheets':sheets(representatives,out,'review-sheet'),'beforeAfterSheets':sheets(before_rows,out,'before-after',('chrome','oldNative','newNative')),'beforeAfter':before_after,'pixelFailureRows':[r for r in rows if r['pixelFailures']],'reviewCompleted':False}
 save(out/'coverage.json',coverage);gallery(coverage,out);print(json.dumps(counts,indent=2));print('sheets',len(coverage['sheets']),'before/after sheets',len(coverage['beforeAfterSheets']))

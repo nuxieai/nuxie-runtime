@@ -1,0 +1,462 @@
+{
+  "scope": "Authored codec-pixel controls: PNG and JPEG4:4:4 controls plus4:2:2/4:2:0 baseline/progressive, even/odd/portrait/skinny sizes",
+  "encoder": {
+    "path": "/opt/homebrew/bin/cjpeg",
+    "sha256": "1313b8394da8708c93fd1bff14d352957cc5e7775b315ef5970953a0004cc760",
+    "version": "libjpeg-turbo version 3.2.0 (build 20260630)"
+  },
+  "generator": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/jpeg-subsampling-fixtures.py",
+    "sha256": "edd7afce6bbe2a788d533855a18dda309a90d0d424b6d7c34fea86eb9789185f"
+  },
+  "files": [
+    {
+      "name": "96x64-png-control",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.png",
+      "sha256": "f5dfa330e4076514399670a3a472bbbe51069c7b13378013f95a3838493b153f",
+      "width": 96,
+      "height": 64,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm",
+      "sourceSha256": "2c8f98a50d2b9d25efe071690581a5ac4661da9074fe1a8d06842c80cac1cadf",
+      "command": null
+    },
+    {
+      "name": "96x64-444-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-444-baseline.jpg",
+      "sha256": "1925b251ff23fe5cbeab4b5c50db14c3025420758e670b6254edbace72ca15fc",
+      "width": 96,
+      "height": 64,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm",
+      "sourceSha256": "2c8f98a50d2b9d25efe071690581a5ac4661da9074fe1a8d06842c80cac1cadf",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "1x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-444-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm"
+      ]
+    },
+    {
+      "name": "96x64-422-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-422-baseline.jpg",
+      "sha256": "4124f3ad19032aa38ca61c4e301fcc4190ae5b5e1d06cf739e0a90ce021046a1",
+      "width": 96,
+      "height": 64,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm",
+      "sourceSha256": "2c8f98a50d2b9d25efe071690581a5ac4661da9074fe1a8d06842c80cac1cadf",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-422-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm"
+      ]
+    },
+    {
+      "name": "96x64-422-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-422-progressive.jpg",
+      "sha256": "916927a29a79f023e56798c4613a81ba794f0bc610b018687866fe09ac6269c9",
+      "width": 96,
+      "height": 64,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm",
+      "sourceSha256": "2c8f98a50d2b9d25efe071690581a5ac4661da9074fe1a8d06842c80cac1cadf",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-422-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm"
+      ]
+    },
+    {
+      "name": "96x64-420-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-420-baseline.jpg",
+      "sha256": "e6b8524c67b58546c7085d655acc8328451671ccc41308e57f62ab4c4d693c49",
+      "width": 96,
+      "height": 64,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm",
+      "sourceSha256": "2c8f98a50d2b9d25efe071690581a5ac4661da9074fe1a8d06842c80cac1cadf",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-420-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm"
+      ]
+    },
+    {
+      "name": "96x64-420-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-420-progressive.jpg",
+      "sha256": "6b9ede115dffa98572945c1dd07533e66b7d7b0014564851f13b75c6ce7f4cd8",
+      "width": 96,
+      "height": 64,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm",
+      "sourceSha256": "2c8f98a50d2b9d25efe071690581a5ac4661da9074fe1a8d06842c80cac1cadf",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64-420-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/96x64.ppm"
+      ]
+    },
+    {
+      "name": "97x65-png-control",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.png",
+      "sha256": "4240f638ae0ddf8cd9221b51239de488d6f3bfaf2475a05bce82c77a41df252b",
+      "width": 97,
+      "height": 65,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm",
+      "sourceSha256": "c641ac7183a45dd9c58f43e1df1eab9c6ef640922b7facceefdca20468f84b28",
+      "command": null
+    },
+    {
+      "name": "97x65-444-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-444-baseline.jpg",
+      "sha256": "5fb50bbacfb8fb2b0f59e28069c97104eb0d36f0197190b2d8b6b5dcc80511bc",
+      "width": 97,
+      "height": 65,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm",
+      "sourceSha256": "c641ac7183a45dd9c58f43e1df1eab9c6ef640922b7facceefdca20468f84b28",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "1x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-444-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm"
+      ]
+    },
+    {
+      "name": "97x65-422-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-422-baseline.jpg",
+      "sha256": "ed2fea10e73cc7b8c560df8eb9dba3c7ae2255e2e06d291cc1fb7f782efc82ca",
+      "width": 97,
+      "height": 65,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm",
+      "sourceSha256": "c641ac7183a45dd9c58f43e1df1eab9c6ef640922b7facceefdca20468f84b28",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-422-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm"
+      ]
+    },
+    {
+      "name": "97x65-422-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-422-progressive.jpg",
+      "sha256": "97a02c7979f8f7cf47088c0feb8ea1d488b236c337d88298c8de2e760935deab",
+      "width": 97,
+      "height": 65,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm",
+      "sourceSha256": "c641ac7183a45dd9c58f43e1df1eab9c6ef640922b7facceefdca20468f84b28",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-422-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm"
+      ]
+    },
+    {
+      "name": "97x65-420-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-420-baseline.jpg",
+      "sha256": "6f4668ecdccc45c4438a3fa47e5f65fdcd9675fecf29d2087b962ff6f484fc89",
+      "width": 97,
+      "height": 65,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm",
+      "sourceSha256": "c641ac7183a45dd9c58f43e1df1eab9c6ef640922b7facceefdca20468f84b28",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-420-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm"
+      ]
+    },
+    {
+      "name": "97x65-420-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-420-progressive.jpg",
+      "sha256": "1cfcc9ba3edede8a4af36c35ecb9dc40def5e707119d5417c7a90c9da2761ae3",
+      "width": 97,
+      "height": 65,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm",
+      "sourceSha256": "c641ac7183a45dd9c58f43e1df1eab9c6ef640922b7facceefdca20468f84b28",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65-420-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/97x65.ppm"
+      ]
+    },
+    {
+      "name": "31x47-png-control",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.png",
+      "sha256": "952b6e9c551d5512f343aadb6144733d521e28cd21d98cdc92cd3163574362bd",
+      "width": 31,
+      "height": 47,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm",
+      "sourceSha256": "afd93704648ba4140284da0368e0489a50cdd7ffd82fce7664b5303ee647e69d",
+      "command": null
+    },
+    {
+      "name": "31x47-444-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-444-baseline.jpg",
+      "sha256": "07fa45349eb991decbfe66be30757e0d2c24b297d6dd54e9cb85221faf5f6626",
+      "width": 31,
+      "height": 47,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm",
+      "sourceSha256": "afd93704648ba4140284da0368e0489a50cdd7ffd82fce7664b5303ee647e69d",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "1x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-444-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm"
+      ]
+    },
+    {
+      "name": "31x47-422-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-422-baseline.jpg",
+      "sha256": "12d66384d98656cf43d6ca5ae55fbecd01bc52f63adb4b290bf65c12555ca315",
+      "width": 31,
+      "height": 47,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm",
+      "sourceSha256": "afd93704648ba4140284da0368e0489a50cdd7ffd82fce7664b5303ee647e69d",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-422-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm"
+      ]
+    },
+    {
+      "name": "31x47-422-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-422-progressive.jpg",
+      "sha256": "d07a5c198a0dabdd218fe557c72596e0cace11154a6a806621289f4dd2bb8f49",
+      "width": 31,
+      "height": 47,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm",
+      "sourceSha256": "afd93704648ba4140284da0368e0489a50cdd7ffd82fce7664b5303ee647e69d",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-422-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm"
+      ]
+    },
+    {
+      "name": "31x47-420-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-420-baseline.jpg",
+      "sha256": "aea801374fdc9f617396965c07d15542272bf527714ec8e96c7a25832d8091ff",
+      "width": 31,
+      "height": 47,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm",
+      "sourceSha256": "afd93704648ba4140284da0368e0489a50cdd7ffd82fce7664b5303ee647e69d",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-420-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm"
+      ]
+    },
+    {
+      "name": "31x47-420-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-420-progressive.jpg",
+      "sha256": "d7e7b1cc90ec9939c6f0eddfc03ed3079323f02cdcce6af0c24248d3c012c908",
+      "width": 31,
+      "height": 47,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm",
+      "sourceSha256": "afd93704648ba4140284da0368e0489a50cdd7ffd82fce7664b5303ee647e69d",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47-420-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/31x47.ppm"
+      ]
+    },
+    {
+      "name": "1x17-png-control",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.png",
+      "sha256": "c2e28fa754bfbc953f32f1d4cb9ecb70c9d707009be64ce3fcf1c14fb6a5458b",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": null
+    },
+    {
+      "name": "1x17-444-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-444-baseline.jpg",
+      "sha256": "1afa3d1ee99346962d350f32a291359360464804a5a99f3d315db0c36d495b62",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "1x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-444-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm"
+      ]
+    },
+    {
+      "name": "1x17-422-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-422-baseline.jpg",
+      "sha256": "a3eb86f14594053df794b5fc5a869d23cac614b95897d554f420b427fdb9a06e",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-422-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm"
+      ]
+    },
+    {
+      "name": "1x17-422-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-422-progressive.jpg",
+      "sha256": "8300703ca6eaad60e7cb505d1d59ac437eeb0b0a1e93e6df74bf4e3c9581b4b4",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x1,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-422-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm"
+      ]
+    },
+    {
+      "name": "1x17-420-baseline",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-420-baseline.jpg",
+      "sha256": "fdc27a897bda554cec2d179fb1670e971e59df76168a056faead66a9c869f9f4",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-420-baseline.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm"
+      ]
+    },
+    {
+      "name": "1x17-420-progressive",
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-420-progressive.jpg",
+      "sha256": "1feee965460423784129d436475075e4ceb500420195e858e8bda7ecbcb0d934",
+      "width": 1,
+      "height": 17,
+      "source": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm",
+      "sourceSha256": "dc55c83aaf677f5fc5176d67c805d7cd3f44c44147198dc7a3be056d5447db7b",
+      "command": [
+        "/opt/homebrew/bin/cjpeg",
+        "-quality",
+        "90",
+        "-sample",
+        "2x2,1x1,1x1",
+        "-baseline",
+        "-progressive",
+        "-outfile",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17-420-progressive.jpg",
+        "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/fixtures/images/jpeg-pixels-r1/1x17.ppm"
+      ]
+    }
+  ]
+}

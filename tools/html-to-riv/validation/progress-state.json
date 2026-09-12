@@ -1,11 +1,27 @@
 {
   "updated": "2026-09-12",
-  "focus": "Public authored images on the unchanged runtime",
-  "status": "Image support implemented with partial visual qualification; all 99 backlog items remain in scope",
-  "current": "Public static PNG/JPEG/WebP assets, intrinsic/stretch owners, fit/position, sampling, variable recovery and exact-byte deduplication are implemented. 301 Rust/56 Node tests and TypeScript/native/WASM builds pass; all 794 prior outputs stay exact. The public image corpus passes 216 geometry, 198 pixel and 216 presence frames, with all 18 fractional paint failures reviewed and retained. Asset limits/malformed data pass 86 cases and 252 CLI/ABI/JS observations.",
-  "next": "Continue image/layout work with a concrete next matrix: common JPEG subsampling and additional intrinsic asset ratios, then unsupported constraint/alignment/painting contexts. Keep fractional paint limitations explicit. Public text/font provision and glyph paint remain open; do not repeat completed line-height geometry or unchanged resource campaigns.",
+  "focus": "Public JPEG subsampling and additional image ratios",
+  "status": "Bounded JPEG checkpoint complete; narrow decoder contexts diagnose; all 99 backlog items remain in scope",
+  "current": "Public 4:2:2/4:2:0 JPEG at widths >=5 embeds original bytes. 309 Rust/56 Node tests, TypeScript/native/WASM builds, 56 public cases and 272 native geometry/pixel/presence frames pass. Narrow subsampled assets diagnose after retained color failures invalidated a tiny-image exception. All794 prior outputs and39 earlier image/ratio scenes remain exact; new ratios retain16 local pixel failures alongside the earlier18.",
+  "next": "Advance another public compiler context with a finite acceptance matrix, starting with plausible ordinary image-padding/constraint compositions. Preserve known fractional paint failures. Revisit narrow JPEG exceptions or text paint only with a concrete new hypothesis; continue independent backlog work without repeating completed campaigns.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public JPEG checkpoint: unchanged runtime, APIs and decoder boundary",
+      "path": "tools/html-to-riv/validation/public-jpeg-checkpoint-review.md"
+    },
+    {
+      "label": "Public JPEG native/Chrome gallery",
+      "path": "tools/html-to-riv/output/public-jpeg-layout-r2/visual/gallery.html"
+    },
+    {
+      "label": "Additional intrinsic image ratios and retained tail-edge failures",
+      "path": "tools/html-to-riv/validation/public-image-aspect-review.md"
+    },
+    {
+      "label": "Narrow JPEG decoder limitation and rejected tiny exception",
+      "path": "tools/html-to-riv/validation/jpeg-decoder-boundary-review.md"
+    },
     {
       "label": "Public authored images: APIs, unchanged runtime and retained pixel failures",
       "path": "tools/html-to-riv/validation/public-image-checkpoint-review.md"
@@ -537,16 +553,16 @@
   ],
   "activeWork": [
     {
-      "name": "Public image checkpoint",
-      "work": "27 rendered scenes/13 diagnostics, all public interfaces, 794 exact regressions and complete visual review. 18 fractional pixel failures remain; broader ratios/layout/codec representations stay open."
+      "name": "Public JPEG checkpoint",
+      "work": "34 ordinary scenes and 22 diagnostics; 272 native frames pass. Narrow chroma failures remain preserved. Final visual and source evidence is bound separately from earlier image-layout limitations."
     },
     {
-      "name": "Asset admission and resources",
-      "work": "86 cases/252 interface observations pass; immutable baseline decoders and ordinary embedded bytes. Pre-serialization process memory, worst-case CPU and broader asset types remain unqualified."
+      "name": "Image padding and constraints",
+      "work": "Next bounded compiler work: test ordinary content/ratio-owner compositions before widening public admission."
     },
     {
       "name": "Typography prerequisites",
-      "work": "Source-derived line-height geometry complete; public fonts/text and glyph paint remain unresolved. Advance only with a new discriminating hypothesis."
+      "work": "Source-derived line-height geometry is preserved; public fonts/text and glyph paint remain unresolved. Revisit with a new discriminating hypothesis."
     }
   ],
   "publication": {

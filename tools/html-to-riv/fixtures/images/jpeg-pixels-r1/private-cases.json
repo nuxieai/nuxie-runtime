@@ -1,0 +1,506 @@
+[
+  {
+    "name": "96x64-png-control",
+    "asset": "96x64.png",
+    "request": {
+      "assetWidth": 96,
+      "assetHeight": 64,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "96x64-444-baseline",
+    "asset": "96x64-444-baseline.jpg",
+    "request": {
+      "assetWidth": 96,
+      "assetHeight": 64,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "96x64-422-baseline",
+    "asset": "96x64-422-baseline.jpg",
+    "request": {
+      "assetWidth": 96,
+      "assetHeight": 64,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "96x64-422-progressive",
+    "asset": "96x64-422-progressive.jpg",
+    "request": {
+      "assetWidth": 96,
+      "assetHeight": 64,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "96x64-420-baseline",
+    "asset": "96x64-420-baseline.jpg",
+    "request": {
+      "assetWidth": 96,
+      "assetHeight": 64,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "96x64-420-progressive",
+    "asset": "96x64-420-progressive.jpg",
+    "request": {
+      "assetWidth": 96,
+      "assetHeight": 64,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "97x65-png-control",
+    "asset": "97x65.png",
+    "request": {
+      "assetWidth": 97,
+      "assetHeight": 65,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "97x65-444-baseline",
+    "asset": "97x65-444-baseline.jpg",
+    "request": {
+      "assetWidth": 97,
+      "assetHeight": 65,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "97x65-422-baseline",
+    "asset": "97x65-422-baseline.jpg",
+    "request": {
+      "assetWidth": 97,
+      "assetHeight": 65,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "97x65-422-progressive",
+    "asset": "97x65-422-progressive.jpg",
+    "request": {
+      "assetWidth": 97,
+      "assetHeight": 65,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "97x65-420-baseline",
+    "asset": "97x65-420-baseline.jpg",
+    "request": {
+      "assetWidth": 97,
+      "assetHeight": 65,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "97x65-420-progressive",
+    "asset": "97x65-420-progressive.jpg",
+    "request": {
+      "assetWidth": 97,
+      "assetHeight": 65,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "31x47-png-control",
+    "asset": "31x47.png",
+    "request": {
+      "assetWidth": 31,
+      "assetHeight": 47,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "31x47-444-baseline",
+    "asset": "31x47-444-baseline.jpg",
+    "request": {
+      "assetWidth": 31,
+      "assetHeight": 47,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "31x47-422-baseline",
+    "asset": "31x47-422-baseline.jpg",
+    "request": {
+      "assetWidth": 31,
+      "assetHeight": 47,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "31x47-422-progressive",
+    "asset": "31x47-422-progressive.jpg",
+    "request": {
+      "assetWidth": 31,
+      "assetHeight": 47,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "31x47-420-baseline",
+    "asset": "31x47-420-baseline.jpg",
+    "request": {
+      "assetWidth": 31,
+      "assetHeight": 47,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "31x47-420-progressive",
+    "asset": "31x47-420-progressive.jpg",
+    "request": {
+      "assetWidth": 31,
+      "assetHeight": 47,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "1x17-png-control",
+    "asset": "1x17.png",
+    "request": {
+      "assetWidth": 1,
+      "assetHeight": 17,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "1x17-444-baseline",
+    "asset": "1x17-444-baseline.jpg",
+    "request": {
+      "assetWidth": 1,
+      "assetHeight": 17,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "1x17-422-baseline",
+    "asset": "1x17-422-baseline.jpg",
+    "request": {
+      "assetWidth": 1,
+      "assetHeight": 17,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "1x17-422-progressive",
+    "asset": "1x17-422-progressive.jpg",
+    "request": {
+      "assetWidth": 1,
+      "assetHeight": 17,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "1x17-420-baseline",
+    "asset": "1x17-420-baseline.jpg",
+    "request": {
+      "assetWidth": 1,
+      "assetHeight": 17,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  },
+  {
+    "name": "1x17-420-progressive",
+    "asset": "1x17-420-progressive.jpg",
+    "request": {
+      "assetWidth": 1,
+      "assetHeight": 17,
+      "width": {
+        "unit": "auto"
+      },
+      "height": {
+        "unit": "auto"
+      },
+      "aspectRatio": false,
+      "fit": 7,
+      "alignmentX": 0.0,
+      "alignmentY": 0.0,
+      "clip": true,
+      "nearest": false
+    },
+    "css": "#image{display:block;width:auto;height:auto;object-fit:fill;object-position:50% 50%;image-rendering:auto;background:#e9f0f6}"
+  }
+]

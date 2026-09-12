@@ -1,0 +1,47 @@
+{
+  "scope": "Programmatic authored RGB image fixtures; no browser screenshot or target-driven pixel adjustment.",
+  "pillow": "12.2.0",
+  "generatorSha256": "55a1a474dbeafd36e259b3aa8c023f4eed0fed5f27106cb3d10be53a81b0d6cf",
+  "files": [
+    {
+      "name": "portrait.png",
+      "width": 48,
+      "height": 96,
+      "mode": "RGB",
+      "bytes": 255,
+      "sha256": "e0896ca552cbee54afc48127dfab894018658f1f08400367865e3c16109360d4"
+    },
+    {
+      "name": "wide.png",
+      "width": 160,
+      "height": 40,
+      "mode": "RGB",
+      "bytes": 260,
+      "sha256": "6ed78ceb72fa40bd0317b36a65a0190450ea13bf28448ebc3a3d6af6a9b96bd8"
+    },
+    {
+      "name": "square.png",
+      "width": 41,
+      "height": 41,
+      "mode": "RGB",
+      "bytes": 203,
+      "sha256": "084f9952837502b7dac965213c9be5275ccc3aeaf311e3c1666fec7180c2a7e2"
+    },
+    {
+      "name": "odd.png",
+      "width": 37,
+      "height": 23,
+      "mode": "RGB",
+      "bytes": 182,
+      "sha256": "911086d7393ff11d99b3841ec547c4d8bb251892f48d7ebb1f4ccee5cbc8876c"
+    },
+    {
+      "name": "small.png",
+      "width": 3,
+      "height": 5,
+      "mode": "RGB",
+      "bytes": 112,
+      "sha256": "ec8bb07422bbb6ad0f7fc3878371b271df20db2819eb7c709dd38b4ab45358e3"
+    }
+  ]
+}

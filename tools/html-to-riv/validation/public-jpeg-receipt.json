@@ -1,0 +1,739 @@
+{
+  "status": "verified-bounded-public-jpeg-checkpoint",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "scope": "Standalone compiler; original encoded assets; ordinary Rive files and immutable Mac native consumer; no new renders or compiles in this verifier.",
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-build-r2/frozen/html-to-riv",
+    "sha256": "db691584e4447506d7b91faa69eaef8844afd782ef723534452c78f81a6acb33"
+  },
+  "wasm": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-build-r2/frozen/compiler.wasm",
+    "sha256": "97b47cbb424dc21c9b4dbf5cb92f3097ab361ce88b03c630d3b7eb2e61b0b1aa"
+  },
+  "sourceBindingsVerified": 249,
+  "rustTests": 309,
+  "nodeTests": 56,
+  "publicJpegCases": {
+    "total": 56,
+    "admitted": 34,
+    "diagnosed": 22,
+    "parityObservations": 112
+  },
+  "native": {
+    "frames": 272,
+    "geometryPass": 272,
+    "pixelPass": 272,
+    "presencePass": 272,
+    "scenes": 34,
+    "failures": [],
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-layout-r2/combined-receipt.json",
+      "sha256": "a56f0cfb683dd2f6291403634eaddec4e9dd8298e258748ad76cd1f5cf284353"
+    }
+  },
+  "visual": {
+    "representatives": 34,
+    "transferredFrames": 238,
+    "sheets": 9,
+    "visualReviewCompleted": true,
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-layout-r2/visual/review-receipt.json",
+      "sha256": "0cf793696ab77ea2c1b93538ee720851395632ef933f47f8498d719cdfff6a63"
+    }
+  },
+  "visualReviewCompleted": true,
+  "priorPublicImage": {
+    "cases": 40,
+    "admitted": 27,
+    "parityObservations": 80,
+    "native": {
+      "frames": 216,
+      "geometryPass": 216,
+      "pixelPass": 198,
+      "presencePass": 216,
+      "scenes": 27,
+      "failures": [
+        {
+          "name": "column-auto-stretch",
+          "frame": 0,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-0"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 1,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-1"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 2,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-2"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 3,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-3"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 4,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-4"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 5,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-5"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 6,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-6"
+        },
+        {
+          "name": "column-auto-stretch",
+          "frame": 7,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/column-auto-stretch/render/frame-7"
+        },
+        {
+          "name": "fractional-linear",
+          "frame": 0,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-linear/render-reference-r2/frame-0"
+        },
+        {
+          "name": "fractional-linear",
+          "frame": 3,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-linear/render-reference-r2/frame-3"
+        },
+        {
+          "name": "fractional-linear",
+          "frame": 4,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-linear/render-reference-r2/frame-4"
+        },
+        {
+          "name": "fractional-linear",
+          "frame": 7,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-linear/render-reference-r2/frame-7"
+        },
+        {
+          "name": "fractional-nearest",
+          "frame": 0,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-nearest/render-reference-r2/frame-0"
+        },
+        {
+          "name": "fractional-nearest",
+          "frame": 3,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-nearest/render-reference-r2/frame-3"
+        },
+        {
+          "name": "fractional-nearest",
+          "frame": 4,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-nearest/render-reference-r2/frame-4"
+        },
+        {
+          "name": "fractional-nearest",
+          "frame": 7,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-nearest/render-reference-r2/frame-7"
+        },
+        {
+          "name": "contain-quarter-fractional-alignment",
+          "frame": 1,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/contain-quarter-fractional-alignment/render-reference-r2/frame-1"
+        },
+        {
+          "name": "contain-quarter-fractional-alignment",
+          "frame": 5,
+          "pixelFailures": [
+            "mismatch ratio"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/contain-quarter-fractional-alignment/render-reference-r2/frame-5"
+        }
+      ],
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/combined-receipt.json",
+        "sha256": "fd60701251976027b112416983aa5148733267194ec5741fd402d5ba24dcebfb"
+      }
+    },
+    "visual": {
+      "representatives": 45,
+      "transferredFrames": 171,
+      "sheets": 12,
+      "visualReviewCompleted": true,
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/visual/review-receipt.json",
+        "sha256": "8ffc18a27ca92d18f3591beb3ca41f826f7b1ef0ea3e3414b4f914b7c9c73212"
+      }
+    }
+  },
+  "additionalAspect": {
+    "cases": 12,
+    "admitted": 12,
+    "parityObservations": 24,
+    "native": {
+      "frames": 96,
+      "geometryPass": 96,
+      "pixelPass": 80,
+      "presencePass": 96,
+      "scenes": 12,
+      "failures": [
+        {
+          "name": "odd-column-stretch",
+          "frame": 0,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-0"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 1,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-1"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 2,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-2"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 3,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-3"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 4,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-4"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 5,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-5"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 6,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-6"
+        },
+        {
+          "name": "odd-column-stretch",
+          "frame": 7,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-column-stretch/render/frame-7"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 0,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-0"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 1,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-1"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 2,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-2"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 3,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-3"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 4,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-4"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 5,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-5"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 6,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-6"
+        },
+        {
+          "name": "odd-row-fixed-cross-height",
+          "frame": 7,
+          "pixelFailures": [
+            "tail: local RGB error"
+          ],
+          "prefix": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/odd-row-fixed-cross-height/render/frame-7"
+        }
+      ],
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/native-receipt.json",
+        "sha256": "7b7d7f2cd51801a11fb86c0c0396d72045cfcd7d08f8746f001017cd8a238c28"
+      }
+    },
+    "visual": {
+      "representatives": 36,
+      "transferredFrames": 60,
+      "sheets": 9,
+      "visualReviewCompleted": true,
+      "receipt": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/visual/review-receipt.json",
+        "sha256": "924631cab7b796c6399aaf0525cdd15c9ff500de8a25c14ffb24184ec20b973d"
+      }
+    }
+  },
+  "assets": {
+    "cases": 86,
+    "interfaceObservations": 252,
+    "artifactsVerified": 2373,
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-assets-jpeg-r2/receipt.json",
+      "sha256": "215ac3874084205e13f07a3767dbe7d686a5f1172a64488375454a1a55e87b0e"
+    }
+  },
+  "priorExactOutputs": 794,
+  "regression": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-jpeg-regression-r2/receipt.json",
+    "sha256": "d36c2fcce9c37687ea1bc4af8c46103ecb06cab4ba0d0f504ff5777e8bcf38b9"
+  },
+  "parities": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-parity-r2/receipt.json",
+      "sha256": "c4d5d203955cb1821e1a42a0eb4e431a59120959a93ee1976eb53d72a1de86d9"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-parity-r2/receipt.json",
+      "sha256": "deb7eca6ea62080227853d0786a7c67479c0edce775c34797a659712e44c4dc1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-jpeg-parity-r2/receipt.json",
+      "sha256": "c820534844495e291e2e6d9cdf0480046cccf2c723addbdac14015b7ae90bf54"
+    }
+  ],
+  "gate": "All 4:2:2 and 4:2:0 widths <=4 diagnosed unsupported-image; 4:4:4 unchanged; no tiny/content-specific exceptions qualified.",
+  "invalidatedTinyException": {
+    "failedFrames": 8,
+    "meanImageRgbError": 7.5,
+    "receipt": {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/jpeg-decoder-boundary-r1/revised-gate-review.json",
+      "sha256": "7085323445e6e7d4fe79bac92e09b377f814d454e5224de4c3e2d52002d51f08"
+    }
+  },
+  "immutableTools": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json",
+    "sha256": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72"
+  },
+  "runtimeGuard": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-checkpoint-r1/runtime-guard.json",
+    "sha256": "d4a44cc495d169fc09b3304b70094c2181571a0a7cfd06ee8d4e5fd750af6bba"
+  },
+  "historicalSourceSnapshots": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-native.mjs",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/recovered-reference-driver/public-image-native.mjs",
+      "sha256": "1b980bc6b4d9142c56ef9fea299bb84f0ba44217b994a6193e3390f8ceccd13c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-visual.py",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-layout-r2/visual/preparation-helper.py",
+      "sha256": "ce59b9999d538d699f6879b1b6c8b62391a58bc9525d4fa4200ca823eb593bf6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-visual.py",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/visual/public-image-visual.py",
+      "sha256": "f5567c190aa4c4b63fbdcd258b9c7fc3dc15f43d5980b987c745db61ac7608b1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-visual.py",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/visual/public-image-visual-pre-seal.py",
+      "sha256": "50826c5d74e3d156404eb69a90ec799d58e3f2a7eddd615dbe65ec2d6bbcedd6"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-visual.py",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r2/visual/public-image-visual.py",
+      "sha256": "f5567c190aa4c4b63fbdcd258b9c7fc3dc15f43d5980b987c745db61ac7608b1"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-image-visual.py",
+      "snapshot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-aspect-r1/source-snapshots/validation/public-image-visual.py",
+      "sha256": "f5567c190aa4c4b63fbdcd258b9c7fc3dc15f43d5980b987c745db61ac7608b1"
+    }
+  ],
+  "requestSerializationDifferences": [
+    {
+      "case": "root-intrinsic-opaque-png",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-opaque-png/request.json",
+        "sha256": "196952be56e01802afb329fb1c024905113ba24de86e3a11e142b2b0a482b2e9"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-opaque-png/request.json",
+        "sha256": "d217ae1803acc8a0b3a31a862da155ace39db5627edd11c922de6005cdb7ba72"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-intrinsic-alpha-png",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-alpha-png/request.json",
+        "sha256": "895e86b3f94de560c361411b50a47fcd1f7a52f095461094a22e29874d0ba447"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-alpha-png/request.json",
+        "sha256": "17a20169076e5bb3504e3645eb5c3137baf1082be3c67c9c8bb788ad9de9cb69"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-intrinsic-baseline-jpg",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-baseline-jpg/request.json",
+        "sha256": "cb5336b36f7324a045fd7dbd6bf248ae38895884335e70b1bec21eae1c1455bb"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-baseline-jpg/request.json",
+        "sha256": "72cb79b40526eeaea47e7b828dca6a8c5f645e1c408ab8ce0b30f157cda2a516"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-intrinsic-progressive-jpg",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-progressive-jpg/request.json",
+        "sha256": "363c07b84185107db7a056fc33c36479193050e2046170255640d410b3207615"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-progressive-jpg/request.json",
+        "sha256": "42166f76979b98e70333374850fa53c7fa965a8217e37845ff7cde20946740f0"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-intrinsic-lossless-webp",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-lossless-webp/request.json",
+        "sha256": "c188d8931d0251d2a5045205ad57efc60918e5be4e06aa83e563ebaf0cc3f860"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-lossless-webp/request.json",
+        "sha256": "2f903df7451d758dd68af5be8062133343d605f3ae50d771755604e419e992ab"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-intrinsic-lossy-webp",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-lossy-webp/request.json",
+        "sha256": "a89001787fab6ae95cfcb349dca8dff669135a281b7e6665224b610a6f2ac430"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-lossy-webp/request.json",
+        "sha256": "06fc90854de6ea5777c01a3245ab19479644209a99cf3f747687b33d52d74f40"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-intrinsic-alpha-webp",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-intrinsic-alpha-webp/request.json",
+        "sha256": "e34a64b992d00069d60e1df721e90a561bb53f6dc05b227c8feef3af3160508c"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-intrinsic-alpha-webp/request.json",
+        "sha256": "28969c918efb84497528ece421e6aed3a8c4facaf49dcb1e4e86866db88e3112"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "root-percent-width",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/root-percent-width/request.json",
+        "sha256": "d5ec52c7ba1e1b2b0181d21eaabb25e15e0235630894b7469d5df09e8618036b"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/root-percent-width/request.json",
+        "sha256": "d1697b2916720ac5d2ef513baecf2de48fb2654cd37db2ded5289315e5ce6ae6"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "column-fixed-main-cross-stretch",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/column-fixed-main-cross-stretch/request.json",
+        "sha256": "7975082217f53d05914e8c933d9959caaa18326e02838e9135ee6f27f9e72c2d"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/column-fixed-main-cross-stretch/request.json",
+        "sha256": "37723f8dde9db32feb6fee57edb3ce8fcbaeb83c529a4527f4dd04d8397cd1b6"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "column-fixed-main-cross-start",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/column-fixed-main-cross-start/request.json",
+        "sha256": "bda8096683e9f56a6ce65e7e6242afd5ea5409afde5755e7f8fd4b3f10f88321"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/column-fixed-main-cross-start/request.json",
+        "sha256": "aa262fbb2dca5d0be5b7429933c24631f36aa8b87a3fdc9e4b138c5ea77b9a7b"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "row-auto-start",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/row-auto-start/request.json",
+        "sha256": "a4076d0a051d4be7e71ab9a3ecd3dbcfd9fb1856d53559400049483caff1cf0c"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/row-auto-start/request.json",
+        "sha256": "fa5ab330a40d112fc06391f99ead28ec1e90e72cd56d68a9d380a5423a414127"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "row-fixed-main-cross-stretch",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/row-fixed-main-cross-stretch/request.json",
+        "sha256": "0fb21a0aeaf2be514f7b75f4cc8edd198439e0243ec6f8d74fa030e93b2b4130"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/row-fixed-main-cross-stretch/request.json",
+        "sha256": "9c44a63458da6886c23dd74b9ac8d452fc46a67a3a7ab999faa61a8aad960f77"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "row-fixed-main-cross-start",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/row-fixed-main-cross-start/request.json",
+        "sha256": "b1fd86da0bbec76846db998e438fcea7291517f97b9b6f46e7b1c9936806c1bb"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/row-fixed-main-cross-start/request.json",
+        "sha256": "34090e3677bc1d8793094233072774edf93586ae39d1fb2a98c85b23565d885f"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "fractional-linear",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-linear/request.json",
+        "sha256": "06a92367fdefa1a619586d0df94a62795c19b986fc58cb3ae56823c46d523601"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/fractional-linear/request.json",
+        "sha256": "9f83d30fe4e97a79ff45aacc5750a2b62034730ebe6d0de52e3ac5a2918902c6"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "fractional-nearest",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/fractional-nearest/request.json",
+        "sha256": "fb7e1be9240a30322e7a3d0bf1765ea5ad459887486e88b7d12d7c1dcc990722"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/fractional-nearest/request.json",
+        "sha256": "05e6a30798314cb3e14ce76e8648214d5cccb09d9d52055adb8c9782185de38a"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "contain-centered",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/contain-centered/request.json",
+        "sha256": "8b97cf8b59bd276ba95bd7fa02b281000f8ca92ed06e01b2606b9ef8abd1bb2d"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/contain-centered/request.json",
+        "sha256": "6f21e94db007f80afeb24a59761ed9dfe3e527edf44df854b19a2da5ead6ad7e"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "cover-quarter",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/cover-quarter/request.json",
+        "sha256": "8481d0a84517a2ae74b688e67e1e4651afdf4a1c901ae807e9d75ce40e00f9ed"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/cover-quarter/request.json",
+        "sha256": "436c77e1d5d331c51092471b48c069752cf03e60ad23efa9317e6f85e63c8296"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "none-left-bottom",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/none-left-bottom/request.json",
+        "sha256": "8bb4a9479c3ce75db54e7ee785274d6fe56be9730ec9d139f39720251a8b33da"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/none-left-bottom/request.json",
+        "sha256": "93acb65df14d4b63464f0a32b9bbdf638ffde442931959f976d4ec72f1419f18"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "contain-quarter-fractional-alignment",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/contain-quarter-fractional-alignment/request.json",
+        "sha256": "53209a8bef56488058b90bf57e238b97ff674255f5a6cb2e09b6ecbe7bb838cb"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/contain-quarter-fractional-alignment/request.json",
+        "sha256": "189ecd0d0c30bc281fd0c121ffff206a7fe08ad23f6816a6a6834cfc860058d3"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "scale-down-pair",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/scale-down-pair/request.json",
+        "sha256": "1edc82ce56c8abc4bc79b6ecfd001beee8d55ffd96cc39fdba41bf2e8ddc56be"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/scale-down-pair/request.json",
+        "sha256": "b0a47d6014be117460813f490f299d3c36e722e98dbedef18592c222ae892a74"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "paint-inheritance",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/paint-inheritance/request.json",
+        "sha256": "1e3ba7a9b0bf23d5666b646534fb8a3ace9ccc7472bc1538a3617a8ea6b01465"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/paint-inheritance/request.json",
+        "sha256": "92a1d59de39417381707d75da38e3c4dbe840b3464fe77cd929f79bc1b47a69c"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "images-box-siblings-overlap-order",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/images-box-siblings-overlap-order/request.json",
+        "sha256": "66710962408a0a09ee67b10969214422a215c9eb8dea9bcb15ed5520ec9d64b7"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/images-box-siblings-overlap-order/request.json",
+        "sha256": "47bd3942f3e3a0a33f8a6b7ea19b7c96ca2b7c6bbb00802ac6118d603d5a0d39"
+      },
+      "parsedRequestExactlyEqual": true
+    },
+    {
+      "case": "exact-key-aliases-unused",
+      "prior": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-layout-r1/exact-key-aliases-unused/request.json",
+        "sha256": "65fcba33af782766dc27c72c64f5283e45731e3a15839c3aa9f29defb7680039"
+      },
+      "current": {
+        "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-image-jpeg-regression-r2/exact-key-aliases-unused/request.json",
+        "sha256": "517cf1f95ceb6d9ebfe5b9cffa5c54aa34dbebdbaf260bc54b2f9ff0ac4839d0"
+      },
+      "parsedRequestExactlyEqual": true
+    }
+  ],
+  "limitations": [
+    "Finite 34-scene JPEG qualification, not all sizes/colors/layouts/platforms or universal decoder equality.",
+    "New JPEG evidence transfers all272 frames only after exact original request/RIV/map/reset/tool identity.",
+    "Older image and aspect suites retain18 and16 pixel failures respectively; geometry and presence pass.",
+    "Opaque-white RGBA review transfers certify captured pixels only; offscreen content is not inferred.",
+    "Asset limits do not establish whole-process memory or CPU bounds; no runtime/dependency mutations."
+  ],
+  "evidenceBindings": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-jpeg-checkpoint-r1/artifact-bindings.json",
+    "sha256": "22efbb02bb982d667ac9c68e87fb0b6893fae458929a4e26d6b4c60cde701022"
+  }
+}

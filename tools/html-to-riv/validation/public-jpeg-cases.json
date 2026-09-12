@@ -1,0 +1,1334 @@
+[
+  {
+    "name": "codec-96x64-png-control",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/96x64.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-96x64-444-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/96x64-444-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-96x64-422-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/96x64-422-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-96x64-422-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/96x64-422-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-96x64-420-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/96x64-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-96x64-420-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/96x64-420-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-97x65-png-control",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/97x65.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-97x65-444-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/97x65-444-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-97x65-422-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/97x65-422-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-97x65-422-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/97x65-422-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-97x65-420-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/97x65-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-97x65-420-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/97x65-420-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-31x47-png-control",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/31x47.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-31x47-444-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/31x47-444-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-31x47-422-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/31x47-422-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-31x47-422-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/31x47-422-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-31x47-420-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/31x47-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-31x47-420-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/31x47-420-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-1x17-png-control",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/1x17.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-1x17-444-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/1x17-444-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-1x17-422-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/1x17-422-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-1x17-422-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/1x17-422-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-1x17-420-baseline",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/1x17-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "codec-1x17-420-progressive",
+    "group": "jpeg-codec",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-pixels-r1/1x17-420-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-422-17x23-baseline",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/422-17x23-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-422-17x23-progressive",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/422-17x23-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-420-17x23-baseline",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/420-17x23-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-420-17x23-progressive",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/420-17x23-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-422-33x9-baseline",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/422-33x9-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-422-33x9-progressive",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/422-33x9-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-420-33x9-baseline",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/420-33x9-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "scans-420-33x9-progressive",
+    "group": "jpeg-scans",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-sampling-r1/420-33x9-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-1x17-420",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/1x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-2x17-420",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/2x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-3x17-420",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/3x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-4x17-png-control",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/4x17.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-4x17-420",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/4x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-4x17-422",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/4x17-422.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-5x17-420",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/5x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "vertical-6x17-420",
+    "group": "jpeg-vertical",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-chroma-boundary-r1/6x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-2x1-422",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/2x1-422.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-2x1-420",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/2x1-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-3x1-422",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/3x1-422.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-3x1-420",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/3x1-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-4x1-png-control",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/4x1.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-4x1-422",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/4x1-422.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-4x1-420",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/4x1-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-5x1-422",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/5x1-422.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-5x1-420",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/5x1-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-4x17-422",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/4x17-422.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "horizontal-4x17-420",
+    "group": "jpeg-horizontal",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-horizontal-boundary-r1/4x17-420.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "single-chroma-1x1-420-baseline",
+    "group": "jpeg-single-chroma",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-single-chroma-r1/1x1-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "single-chroma-1x2-420-baseline",
+    "group": "jpeg-single-chroma",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-single-chroma-r1/1x2-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "single-chroma-2x1-420-baseline",
+    "group": "jpeg-single-chroma",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-single-chroma-r1/2x1-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "single-chroma-2x2-420-baseline",
+    "group": "jpeg-single-chroma",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-single-chroma-r1/2x2-420-baseline.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  },
+  {
+    "name": "single-chroma-2x2-420-progressive",
+    "group": "jpeg-single-chroma",
+    "assetFiles": {
+      "picture": "fixtures/images/jpeg-single-chroma-r1/2x2-420-progressive.jpg"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\"><div id=\"tail\"></div>",
+      "css": "#image{align-self:flex-start;background:#e9f0f6}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "diagnostic",
+      "code": "unsupported-image",
+      "messageIncludes": "narrow subsampled JPEG"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Independent source assets; intrinsic image dimensions and following sibling; original/clone resize without recompilation."
+    ]
+  }
+]

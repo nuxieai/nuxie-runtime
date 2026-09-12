@@ -137,10 +137,45 @@ struct Scan {
     high: u8,
     low: u8,
 }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ComponentGrid {
+    horizontal: usize,
+    vertical: usize,
+    // A single-component scan visits only blocks containing real samples.
+    columns: usize,
+    rows: usize,
+    // Interleaved MCUs include edge padding. Use the same padded row stride for
+    // coefficient presence in every scan, including noninterleaved AC scans.
+    stride: usize,
+    padded_rows: usize,
+}
+impl ComponentGrid {
+    fn index(
+        &self,
+        mcu: usize,
+        interleaved: bool,
+        mcu_columns: usize,
+        h: usize,
+        v: usize,
+    ) -> usize {
+        let (x, y) = if interleaved {
+            (
+                (mcu % mcu_columns) * self.horizontal + h,
+                (mcu / mcu_columns) * self.vertical + v,
+            )
+        } else {
+            (mcu % self.columns, mcu / self.columns)
+        };
+        y * self.stride + x
+    }
+}
 struct Frame {
     progressive: bool,
     ids: [u8; 3],
-    blocks: usize,
+    mcu_columns: usize,
+    mcu_rows: usize,
+    grids: [ComponentGrid; 3],
     // Only zero/nonzero affects future AC-refinement bit consumption. Retain
     // one bit per coefficient per block instead of another decoded image.
     nonzero: [Vec<u64>; 3],
@@ -164,18 +199,42 @@ impl Frame {
                 "JPEG frame component identifiers must be unique",
             ));
         }
-        if [data[7], data[10], data[13]] != [0x11; 3] {
+        let sampling = [data[7], data[10], data[13]];
+        if !matches!(
+            sampling,
+            [0x11, 0x11, 0x11] | [0x21, 0x11, 0x11] | [0x22, 0x11, 0x11]
+        ) {
             return Err(unsupported(
                 source,
-                "JPEG entropy validation currently supports 4:4:4 sampling; subsampled images remain unqualified",
+                "JPEG entropy validation supports 4:4:4, 4:2:2, and 4:2:0 with sampling 1x1/1x1/1x1, 2x1/1x1/1x1, or 2x2/1x1/1x1",
             ));
         }
-        let blocks = width.div_ceil(8) * height.div_ceil(8);
+        // The first component carries the maximum factors in this profile.
+        // Dimensions have already passed the shared per-image resource guard;
+        // factors are at most two, so these products cannot overflow usize.
+        let max_h = usize::from(sampling[0] >> 4);
+        let max_v = usize::from(sampling[0] & 15);
+        let mcu_columns = width.div_ceil(8 * max_h);
+        let mcu_rows = height.div_ceil(8 * max_v);
+        let grids = sampling.map(|factor| {
+            let horizontal = usize::from(factor >> 4);
+            let vertical = usize::from(factor & 15);
+            ComponentGrid {
+                horizontal,
+                vertical,
+                columns: (width * horizontal).div_ceil(8 * max_h),
+                rows: (height * vertical).div_ceil(8 * max_v),
+                stride: mcu_columns * horizontal,
+                padded_rows: mcu_rows * vertical,
+            }
+        });
         Ok(Self {
             progressive,
             ids,
-            blocks,
-            nonzero: std::array::from_fn(|_| vec![0; blocks]),
+            mcu_columns,
+            mcu_rows,
+            grids,
+            nonzero: grids.map(|grid| vec![0; grid.stride * grid.padded_rows]),
             levels: [[None; 64]; 3],
         })
     }
@@ -522,8 +581,17 @@ pub(super) fn validate(bytes: &[u8], source: &str) -> Result<(), Diagnostic> {
                 let mut eob = 0u32;
                 let mut restart = 0u8;
                 let mut predictors = [0i32; 3];
-                for block in 0..frame.blocks {
-                    if block > 0 && restart_interval != 0 && block % restart_interval == 0 {
+                let interleaved = scan.components.len() > 1;
+                let mcu_count = if interleaved {
+                    frame.mcu_columns * frame.mcu_rows
+                } else {
+                    let grid = frame.grids[scan.components[0].component];
+                    grid.columns * grid.rows
+                };
+                for mcu in 0..mcu_count {
+                    // Restart intervals count frame MCUs when interleaved, or
+                    // individual real component blocks in a single-component scan.
+                    if mcu > 0 && restart_interval != 0 && mcu % restart_interval == 0 {
                         if eob != 0 {
                             return Err(invalid(source, "JPEG EOB run crosses a restart boundary"));
                         }
@@ -532,38 +600,52 @@ pub(super) fn validate(bytes: &[u8], source: &str) -> Result<(), Diagnostic> {
                         predictors = [0; 3];
                     }
                     for component in &scan.components {
-                        let mask = &mut frame.nonzero[component.component][block];
-                        if scan.start == 0 {
-                            if scan.high == 0 {
-                                dc(
-                                    &mut bits,
-                                    tables[0][component.dc].as_ref().ok_or_else(|| {
-                                        invalid(source, "Missing JPEG DC Huffman table")
-                                    })?,
-                                    &mut predictors[component.component],
-                                    scan.low,
-                                )?;
-                            } else {
-                                bits.read(1)?;
-                            }
-                        }
-                        if scan.end != 0 {
-                            let table = tables[1][component.ac]
-                                .as_ref()
-                                .ok_or_else(|| invalid(source, "Missing JPEG AC Huffman table"))?;
-                            if scan.high == 0 {
-                                initial_ac(
-                                    &mut bits,
-                                    table,
-                                    mask,
-                                    scan.start.max(1),
-                                    scan.end,
-                                    &mut eob,
-                                    frame.progressive,
-                                    scan.low,
-                                )?;
-                            } else {
-                                refine_ac(&mut bits, table, mask, scan.start, scan.end, &mut eob)?;
+                        let grid = frame.grids[component.component];
+                        let (horizontal, vertical) = if interleaved {
+                            (grid.horizontal, grid.vertical)
+                        } else {
+                            (1, 1)
+                        };
+                        for v in 0..vertical {
+                            for h in 0..horizontal {
+                                let block = grid.index(mcu, interleaved, frame.mcu_columns, h, v);
+                                let mask = &mut frame.nonzero[component.component][block];
+                                if scan.start == 0 {
+                                    if scan.high == 0 {
+                                        dc(
+                                            &mut bits,
+                                            tables[0][component.dc].as_ref().ok_or_else(|| {
+                                                invalid(source, "Missing JPEG DC Huffman table")
+                                            })?,
+                                            &mut predictors[component.component],
+                                            scan.low,
+                                        )?;
+                                    } else {
+                                        bits.read(1)?;
+                                    }
+                                }
+                                if scan.end != 0 {
+                                    let table =
+                                        tables[1][component.ac].as_ref().ok_or_else(|| {
+                                            invalid(source, "Missing JPEG AC Huffman table")
+                                        })?;
+                                    if scan.high == 0 {
+                                        initial_ac(
+                                            &mut bits,
+                                            table,
+                                            mask,
+                                            scan.start.max(1),
+                                            scan.end,
+                                            &mut eob,
+                                            frame.progressive,
+                                            scan.low,
+                                        )?;
+                                    } else {
+                                        refine_ac(
+                                            &mut bits, table, mask, scan.start, scan.end, &mut eob,
+                                        )?;
+                                    }
+                                }
                             }
                         }
                     }
@@ -592,11 +674,135 @@ mod tests {
     use super::*;
     const BASELINE: &[u8] = include_bytes!("../fixtures/images/ordinary-r1/baseline.jpg");
     const PROGRESSIVE: &[u8] = include_bytes!("../fixtures/images/ordinary-r1/progressive.jpg");
+    const SUBSAMPLED: [&[u8]; 8] = [
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/422-17x23-baseline.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/422-17x23-progressive.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/420-17x23-baseline.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/420-17x23-progressive.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/422-33x9-baseline.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/422-33x9-progressive.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/420-33x9-baseline.jpg"),
+        include_bytes!("../fixtures/images/jpeg-sampling-r1/420-33x9-progressive.jpg"),
+    ];
 
     #[test]
     fn supplied_baseline_and_progressive_scans_finish_without_synthetic_bits() {
         for bytes in [BASELINE, PROGRESSIVE] {
             validate(bytes, "src").unwrap();
+        }
+    }
+
+    #[test]
+    fn subsampled_odd_sized_fixtures_pass_entropy_and_unchanged_full_decoder() {
+        for (index, bytes) in SUBSAMPLED.iter().enumerate() {
+            validate(bytes, "src").unwrap();
+            let assets = [(
+                "image".to_owned(),
+                crate::assets::Asset::Image {
+                    bytes: bytes.to_vec(),
+                },
+            )]
+            .into();
+            let metadata = crate::assets::AssetTable::validate(&assets)
+                .unwrap()
+                .get("image")
+                .unwrap();
+            assert_eq!(
+                (metadata.width, metadata.height),
+                if index < 4 { (17, 23) } else { (33, 9) }
+            );
+        }
+    }
+
+    #[test]
+    fn odd_component_blocks_keep_real_extents_and_interleaved_padding_distinct() {
+        let make = |sampling| {
+            Frame::new(
+                &[8, 0, 23, 0, 17, 3, 1, sampling, 0, 2, 0x11, 0, 3, 0x11, 0],
+                true,
+                "src",
+            )
+            .unwrap()
+        };
+        let frame = make(0x22);
+        assert_eq!((frame.mcu_columns, frame.mcu_rows), (2, 2));
+        assert_eq!(
+            frame.grids[0],
+            ComponentGrid {
+                horizontal: 2,
+                vertical: 2,
+                columns: 3,
+                rows: 3,
+                stride: 4,
+                padded_rows: 4
+            }
+        );
+        for grid in &frame.grids[1..] {
+            assert_eq!(
+                *grid,
+                ComponentGrid {
+                    horizontal: 1,
+                    vertical: 1,
+                    columns: 2,
+                    rows: 2,
+                    stride: 2,
+                    padded_rows: 2
+                }
+            );
+        }
+        let y = frame.grids[0];
+        let interleaved: Vec<_> = (0..4)
+            .flat_map(|mcu| {
+                (0..2).flat_map(move |v| (0..2).map(move |h| y.index(mcu, true, 2, h, v)))
+            })
+            .collect();
+        assert_eq!(
+            interleaved,
+            [0, 1, 4, 5, 2, 3, 6, 7, 8, 9, 12, 13, 10, 11, 14, 15]
+        );
+        let single: Vec<_> = (0..9).map(|block| y.index(block, false, 2, 0, 0)).collect();
+        assert_eq!(single, [0, 1, 2, 4, 5, 6, 8, 9, 10]);
+        let frame = make(0x21);
+        assert_eq!((frame.mcu_columns, frame.mcu_rows), (2, 3));
+        assert_eq!(
+            frame.grids[0],
+            ComponentGrid {
+                horizontal: 2,
+                vertical: 1,
+                columns: 3,
+                rows: 3,
+                stride: 4,
+                padded_rows: 3
+            }
+        );
+        assert_eq!((frame.grids[1].columns, frame.grids[1].rows), (2, 3));
+    }
+
+    #[test]
+    fn same_padded_mcu_grid_does_not_hide_missing_real_progressive_blocks() {
+        for (index, bytes) in SUBSAMPLED[..4].iter().enumerate() {
+            let progressive = index % 2 == 1;
+            let mut changed = bytes.to_vec();
+            let sof = changed
+                .windows(2)
+                .position(|b| b == [0xff, if progressive { 0xc2 } else { 0xc0 }])
+                .unwrap();
+            // 17->25 keeps two 16-pixel MCU columns and four padded Y block
+            // columns, but changes real Y columns from three to four. Sequential
+            // interleaved entropy already includes those blocks and stays valid;
+            // progressive noninterleaved Y AC scans are now missing real blocks.
+            changed[sof + 7..sof + 9].copy_from_slice(&25u16.to_be_bytes());
+            if progressive {
+                assert_eq!(validate(&changed, "src").unwrap_err().code, "invalid-image");
+            } else {
+                validate(&changed, "src").unwrap();
+            }
+            let sos = bytes.windows(2).position(|b| b == [0xff, 0xda]).unwrap();
+            let entropy =
+                sos + 2 + usize::from(u16::from_be_bytes([bytes[sos + 2], bytes[sos + 3]]));
+            let mut missing = bytes[..entropy].to_vec();
+            missing.extend_from_slice(&[0xff, 0xd9]);
+            assert_eq!(validate(&missing, "src").unwrap_err().code, "invalid-image");
         }
     }
 
@@ -696,6 +902,100 @@ mod tests {
         bytes
     }
 
+    fn subsampled_header(progressive: bool, sampling: u8) -> Vec<u8> {
+        let mut bytes = header(progressive, 17);
+        // The helper puts SOF immediately after SOI; choose a 17x17 frame.
+        bytes[7] = 0;
+        bytes[8] = 17;
+        bytes[13] = sampling;
+        bytes.extend(segment(0xdd, &[0, 1]));
+        bytes
+    }
+    fn restarted_zeros(mcus: usize, bits_per_mcu: usize) -> Vec<u8> {
+        let mut out = Vec::new();
+        for mcu in 0..mcus {
+            if mcu != 0 {
+                out.extend_from_slice(&[0xff, 0xd0 + ((mcu - 1) & 7) as u8]);
+            }
+            out.extend(std::iter::repeat_n(0, bits_per_mcu / 8));
+            if bits_per_mcu % 8 != 0 {
+                out.push((1 << (8 - bits_per_mcu % 8)) - 1);
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn subsampled_restart_units_follow_each_scan_including_component_subsets() {
+        for (sampling, frame_mcus, y_blocks_per_mcu, chroma_blocks) in
+            [(0x21, 6, 2, 6), (0x22, 4, 4, 4)]
+        {
+            // Interleaved baseline consumes edge padding and counts one restart
+            // unit per frame MCU, not per component block.
+            let mut interleaved = subsampled_header(false, sampling);
+            scan(
+                &mut interleaved,
+                &[1, 2, 3],
+                0,
+                63,
+                0,
+                &restarted_zeros(frame_mcus, (y_blocks_per_mcu + 2) * 2),
+            );
+            validate(&finish(interleaved.clone()), "src").unwrap();
+            // Moving a restart to the position after one block must fail.
+            let sos = interleaved
+                .windows(2)
+                .position(|b| b == [0xff, 0xda])
+                .unwrap();
+            let begin = sos
+                + 2
+                + usize::from(u16::from_be_bytes([
+                    interleaved[sos + 2],
+                    interleaved[sos + 3],
+                ]));
+            interleaved.splice(begin..begin, [0x3f, 0xff, 0xd0]);
+            assert!(validate(&finish(interleaved), "src").is_err());
+
+            // A single Y scan has exactly nine real blocks. A Cb+Cr pair is
+            // still interleaved on the frame MCU grid despite neither component
+            // carrying the frame's maximum horizontal/vertical factors.
+            let mut paired = subsampled_header(false, sampling);
+            scan(&mut paired, &[1], 0, 63, 0, &restarted_zeros(9, 2));
+            scan(
+                &mut paired,
+                &[2, 3],
+                0,
+                63,
+                0,
+                &restarted_zeros(frame_mcus, 4),
+            );
+            validate(&finish(paired), "src").unwrap();
+
+            let mut progressive = subsampled_header(true, sampling);
+            scan(&mut progressive, &[1], 0, 0, 0, &restarted_zeros(9, 1));
+            scan(
+                &mut progressive,
+                &[2, 3],
+                0,
+                0,
+                0,
+                &restarted_zeros(frame_mcus, 2),
+            );
+            scan(&mut progressive, &[1], 1, 63, 0, &restarted_zeros(9, 1));
+            for id in [2, 3] {
+                scan(
+                    &mut progressive,
+                    &[id],
+                    1,
+                    63,
+                    0,
+                    &restarted_zeros(chroma_blocks, 1),
+                );
+            }
+            validate(&finish(progressive), "src").unwrap();
+        }
+    }
+
     #[test]
     fn synthetic_sequential_mcus_require_exact_entropy_and_restarts() {
         // Three DC0+EOB pairs per MCU => six zero bits, then two one padding bits.
@@ -780,7 +1080,15 @@ mod tests {
         assert!(Huffman::new([0; 16], vec![], "src").is_err());
         let mut bytes = BASELINE.to_vec();
         let sof = bytes.windows(2).position(|b| b == [0xff, 0xc0]).unwrap();
-        bytes[sof + 4 + 7] = 0x22;
+        for sampling in [0, 0x12, 0x31, 0x41, 0x23] {
+            bytes[sof + 4 + 7] = sampling;
+            assert_eq!(
+                validate(&bytes, "src").unwrap_err().code,
+                "unsupported-image"
+            );
+        }
+        bytes[sof + 4 + 7] = 0x11;
+        bytes[sof + 4 + 10] = 0x21;
         assert_eq!(
             validate(&bytes, "src").unwrap_err().code,
             "unsupported-image"

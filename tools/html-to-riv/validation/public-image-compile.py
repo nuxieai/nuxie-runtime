@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 
@@ -14,6 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('root', type=Path)
 parser.add_argument('--build', type=Path)
 parser.add_argument('--previous', type=Path)
+parser.add_argument('--cases', type=Path, help='Additional authored corpus; freeze its exact case and asset inputs separately')
 args = parser.parse_args()
 module = Path(__file__).resolve().parents[1]
 root = args.root.resolve()
@@ -60,15 +62,36 @@ else:
     write(root / 'build-receipt.json', dict(scope='Public native image candidate only; full module/WASM validation separate',
           command=command, bindings=bindings, compilerSha256=sha(frozen / 'html-to-riv'), logSha256=sha(root / 'build.log')))
 
-cases_source = frozen / 'inputs/validation/public-image-cases.json'
+cases_source = args.cases.resolve() if args.cases else frozen / 'inputs/validation/public-image-cases.json'
 shutil.copy2(cases_source, root / 'cases.json')
 cases = json.loads(cases_source.read_text())
+names = [case['name'] for case in cases]
+assert len(names) == len(set(names)), 'Duplicate case names'
+assert all(re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', name) for name in names), 'Case names must be single directory names'
+for case in cases:
+    for file in case['assetFiles'].values():
+        relative = Path(file)
+        assert not relative.is_absolute() and '..' not in relative.parts, 'Assets must use module-relative paths without parent traversal'
+asset_root = frozen / 'inputs'
+authoring_bindings = [dict(path=str(cases_source), snapshot=str(root / 'cases.json'), sha256=sha(cases_source))]
+if args.cases:
+    # A new corpus can exercise an existing frozen compiler. Freeze authored
+    # assets alongside requests without adding files to that old build snapshot.
+    asset_root = root / 'authoring-inputs'
+    for file in sorted({file for case in cases for file in case['assetFiles'].values()}):
+        source = (module / file).resolve()
+        source.relative_to(module)
+        snapshot = asset_root / source.relative_to(module)
+        snapshot.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, snapshot)
+        authoring_bindings.append(dict(path=str(source), snapshot=str(snapshot), sha256=sha(source)))
+write(root / 'authoring-bindings.json', authoring_bindings)
 results = []
 for case in cases:
     directory = root / case['name']
     directory.mkdir()
     request = dict(case['input'])
-    request['assets'] = {key: dict(kind='image', bytes=list((frozen / 'inputs' / file).read_bytes()))
+    request['assets'] = {key: dict(kind='image', bytes=list((asset_root / file).read_bytes()))
                          for key, file in case['assetFiles'].items()}
     write(directory / 'request.json', request)
     command = [str(frozen / 'html-to-riv'), str(directory / 'request.json'), str(directory / 'scene.riv')]
@@ -98,3 +121,4 @@ print(json.dumps(dict(cases=len(results), compiled=sum(r['compiled'] for r in re
                      matches=sum(r['matchesExpectation'] for r in results),
                      changed=[r['name'] for r in results if r.get('previous', {}).get('sameRiv') is False])))
 assert all(r['matchesExpectation'] for r in results)
+assert all(sha(Path(b['path'])) == sha(Path(b['snapshot'])) == b['sha256'] for b in authoring_bindings)

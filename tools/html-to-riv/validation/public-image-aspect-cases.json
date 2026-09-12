@@ -1,0 +1,299 @@
+[
+  {
+    "name": "portrait-root-start",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/portrait.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div>",
+      "css": "#image{background:#e9f0f6;align-self:flex-start}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Two automatic nonstretch axes retain encoded 48 by 96.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "portrait-column-stretch",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/portrait.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:120px;height:160px;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Column cross stretch supplies width120; automatic main height240 overflows the parent before the tail.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "portrait-row-stretch",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/portrait.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Row cross stretch supplies height120; automatic main width60 follows ratio1:2.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "wide-column-fixed-height-start",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/wide.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:160px;background:#dce6ee}#image{background:#e9f0f6;height:80px;align-self:flex-start}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "One fixed height80 with nonstretch auto width yields320 by80; image may overflow narrow viewport.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "wide-row-fixed-main-stretch",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/wide.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;width:100px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed main width100 plus stretched automatic cross height120 deliberately does not retain ratio4:1.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "square-root-responsive-width",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/square.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div>",
+      "css": "#image{background:#e9f0f6;width:50%}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Odd encoded square41 by41 has viewport-responsive 50% width and ratio-derived height; this is not intrinsic pixel substitution.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "square-row-start",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/square.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;align-self:flex-start}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Two automatic nonstretch axes retain encoded41 by41 under a row parent.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "odd-column-stretch",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/odd.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:160px;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "37:23 source produces fractional auto height at width200; retain geometry/pixel residuals separately.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "odd-row-fixed-cross-height",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/odd.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;height:60px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed cross height60 supplies fractional ratio-derived main width; tail x must follow.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "odd-column-fixed-cross-width",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/odd.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:160px;background:#dce6ee}#image{background:#e9f0f6;width:93px}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Fixed cross width93 supplies fractional ratio-derived main height; tail y must follow.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "small-row-stretch",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/small.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:200px;height:120px;flex-direction:row;background:#dce6ee}#image{background:#e9f0f6;}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Small encoded3 by5 source magnifies to72 by120 via row stretch; linear interpolation remains visible.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  },
+  {
+    "name": "small-root-start",
+    "group": "intrinsic-aspect-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/aspect-r1/small.png"
+    },
+    "input": {
+      "html": "<img id=\"image\" src=\"picture\" alt=\"Authored aspect ratio control\"><div id=\"tail\"></div>",
+      "css": "#image{background:#e9f0f6;align-self:flex-start}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "expected": {
+      "outcome": "compile"
+    },
+    "observeIds": [
+      "image",
+      "tail"
+    ],
+    "notes": [
+      "Very small intrinsic3 by5 source stays at its natural size with following tail y5.",
+      "Observe the following tail; do not infer used image size only from painted content. Preserve original/clone resize and fractional pixel failures."
+    ]
+  }
+]

@@ -328,7 +328,7 @@ fn decode_png(bytes: &[u8], source: &str) -> Result<(u32, u32), Diagnostic> {
 
 /// Inspect every marker, including metadata between progressive scans. Decoder
 /// metadata accessors alone can hide broken ICC sequences or late EXIF records.
-fn jpeg_container(bytes: &[u8], source: &str) -> Result<(u32, u32), Diagnostic> {
+fn jpeg_container(bytes: &[u8], source: &str) -> Result<(u32, u32, [u8; 3]), Diagnostic> {
     let mut pos = 2usize;
     let mut frame = None;
     let mut scans = 0usize;
@@ -396,7 +396,7 @@ fn jpeg_container(bytes: &[u8], source: &str) -> Result<(u32, u32), Diagnostic> 
                     u16::from_be_bytes([data[1], data[2]]) as u32,
                 );
                 dimensions(width, height, source)?;
-                frame = Some((width, height));
+                frame = Some((width, height, [data[7], data[10], data[13]]));
             }
             0xc4 | 0xdb | 0xdd => {} // Huffman/quantization/restart tables: full decoder validates payloads.
             0xda if frame.is_some() => scans += 1,
@@ -440,8 +440,26 @@ fn jpeg_container(bytes: &[u8], source: &str) -> Result<(u32, u32), Diagnostic> 
 }
 
 fn decode_jpeg(bytes: &[u8], source: &str) -> Result<(u32, u32), Diagnostic> {
-    let expected = jpeg_container(bytes, source)?;
+    let (width, height, sampling) = jpeg_container(bytes, source)?;
+    let expected = (width, height);
     jpeg_validation::validate(bytes, source)?;
+    // The baseline Mac decoder and pinned Chrome reconstruct narrow chroma
+    // planes differently. File samplers operate after decode and cannot select
+    // a JPEG upsampler. Preserve the encoded bytes and diagnose these contexts.
+    // Even a single logical chroma sample can disagree: the native decoder's
+    // reconstruction can involve encoded padding. Tiny exceptions remain
+    // unqualified; this is not a claim that every narrow image differs.
+    // Evidence: validation/jpeg-decoder-boundary-review.md.
+    let narrow_chroma = match sampling {
+        [0x21 | 0x22, 0x11, 0x11] => width <= 4,
+        _ => false,
+    };
+    if narrow_chroma {
+        return Err(unsupported(
+            source,
+            "This narrow subsampled JPEG has unqualified chroma reconstruction between Chrome and the immutable runtime; supply PNG or 4:4:4 JPEG, or use subsampled JPEG at least 5 pixels wide",
+        ));
+    }
     let mut decoder = jpeg_decoder::Decoder::new(Cursor::new(bytes));
     decoder.set_max_decoding_buffer_size(MAX_RGBA_BYTES);
     decoder
@@ -623,6 +641,38 @@ mod tests {
             assert_eq!(records[1].kind, "FileAssetContents");
             assert!(matches!(records[0].get("width"), Some(Value::Float(96.))));
             assert!(matches!(records[0].get("height"), Some(Value::Float(64.))));
+            assert!(
+                matches!(records[1].get("bytes"), Some(Value::Bytes(actual)) if actual == bytes)
+            );
+        }
+    }
+
+    #[test]
+    fn narrow_jpeg_chroma_diagnoses_measured_decoder_disagreements() {
+        for bytes in [
+            &include_bytes!("../fixtures/images/jpeg-pixels-r1/1x17-420-baseline.jpg")[..],
+            include_bytes!("../fixtures/images/jpeg-pixels-r1/1x17-420-progressive.jpg"),
+            include_bytes!("../fixtures/images/jpeg-chroma-boundary-r1/4x17-420.jpg"),
+            include_bytes!("../fixtures/images/jpeg-horizontal-boundary-r1/3x1-422.jpg"),
+            include_bytes!("../fixtures/images/jpeg-horizontal-boundary-r1/4x17-422.jpg"),
+            include_bytes!("../fixtures/images/jpeg-single-chroma-r1/2x1-420-baseline.jpg"),
+        ] {
+            let error = error(bytes);
+            assert_eq!(error.code, "unsupported-image");
+            assert!(error.message.contains("chroma reconstruction"));
+            assert!(error.message.contains("PNG or 4:4:4 JPEG"));
+        }
+    }
+
+    #[test]
+    fn jpeg_chroma_boundary_keeps_wider_files_exact() {
+        for bytes in [
+            &include_bytes!("../fixtures/images/jpeg-chroma-boundary-r1/5x17-420.jpg")[..],
+            include_bytes!("../fixtures/images/jpeg-chroma-boundary-r1/6x17-420.jpg"),
+            include_bytes!("../fixtures/images/jpeg-horizontal-boundary-r1/5x1-422.jpg"),
+        ] {
+            let table = AssetTable::validate(&map(bytes)).unwrap();
+            let records = table.global_records().unwrap();
             assert!(
                 matches!(records[1].get("bytes"), Some(Value::Bytes(actual)) if actual == bytes)
             );

@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Conditional parent-first rigid size domains implemented",
+  "focus": "Rigid world and far-edge domains pass native boundary controls",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
   "current": "Public gaps:201Rust/36Node tests;128/128fresh geometry/pixel comparisons and256clear checks, complete visual coverage.12prior native gaps exact;4intrinsic-percentage controls reject with historical failures retained.",
-  "next": "Connect actual world-position additions and flexible child results to parent-first domains, then validate numerical admission end to end.",
+  "next": "Connect flexible target analysis to propagated size/world domains and verify remaining scene premises before public admission.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "World and corner error domains with96native frames",
+      "path": "tools/html-to-riv/validation/flex-world-domains-receipt.json"
+    },
     {
       "label": "Parent-first rigid size domains and world arithmetic audit",
       "path": "tools/html-to-riv/validation/flex-size-domains-receipt.json"

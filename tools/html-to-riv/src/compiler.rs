@@ -28,6 +28,9 @@ mod flex;
 #[allow(dead_code)] // Conditional parent-size propagation, world proof remains separate.
 #[path = "flex_sizes.rs"]
 pub(super) mod flex_sizes;
+#[allow(dead_code)] // Conditional world propagation; native admission validation follows.
+#[path = "flex_world.rs"]
+pub(super) mod flex_world;
 #[path = "flex_structure.rs"]
 mod flex_structure;
 #[path = "flex_descriptor.rs"]

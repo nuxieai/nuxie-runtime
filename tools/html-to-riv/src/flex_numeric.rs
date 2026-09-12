@@ -121,7 +121,7 @@ impl ErrorEnvelope {
         let rounding = add_up(mul_up(U, add_up(magnitude, propagated)), TINY);
         Self::new(lo, hi, add_up(propagated, rounding))
     }
-    fn add(self, rhs: Self) -> Proof<Self> {
+    pub(crate) fn add(self, rhs: Self) -> Proof<Self> {
         // Native finite addition to exact zero does not round.
         if self.is_zero() { return Ok(rhs); }
         if rhs.is_zero() { return Ok(self); }
@@ -129,7 +129,7 @@ impl ErrorEnvelope {
             add_up(self.error, rhs.error))
     }
     fn neg(self) -> Self { Self { lo: -self.hi, hi: -self.lo, error: self.error } }
-    fn sub(self, rhs: Self) -> Proof<Self> { self.add(rhs.neg()) }
+    pub(crate) fn sub(self, rhs: Self) -> Proof<Self> { self.add(rhs.neg()) }
     fn mul(self, rhs: Self) -> Proof<Self> {
         if self.is_zero() || rhs.is_zero() { return Ok(Self::zero()); }
         let mut lo = f64::INFINITY;

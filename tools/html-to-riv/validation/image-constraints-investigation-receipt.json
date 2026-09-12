@@ -1,0 +1,51 @@
+{
+  "scope": "Private constraint compositions; public min/max admission unchanged",
+  "direct": {
+    "frames": 104,
+    "geometryPass": 64,
+    "pixelPass": 64,
+    "presencePass": 88,
+    "visualReviewCompleted": true
+  },
+  "ratioAndInner": {
+    "frames": 40,
+    "geometryPass": 16,
+    "pixelPass": 16,
+    "presencePass": 32,
+    "visualReviewCompleted": true
+  },
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-constraints-candidate.py",
+      "sha256": "97795a3c82280b59ae2e0139dbf22b49737d79e2882ee992bb6831ac1b660adc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-constraints-cases.json",
+      "sha256": "824ff3b250c9ada92a5d7c933b67617d4788e0192adcea21e73ebea2e14c4209"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-constraints-plan.md",
+      "sha256": "c7fa40ecec37cbdbccabc925fe29a4900304add28b013d291a9c9f2f42066762"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/image-constraints-investigation.md",
+      "sha256": "f0c24ca31c47ec81f9a1181b1523c2ff3099f4639489fd96b9d6082f7c064a21"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-constraints-candidate-r1/combined-receipt.json",
+      "sha256": "bb19e073fc75e59267d2c8056afa32f2a40ad91d82deae96acfbb8327faa9d7f"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-constraints-candidate-r1/visual-r1/review-receipt.json",
+      "sha256": "026d36b4d5a0c90d4fe2853ce1442318854666263c002517f6a44f8078bef93a"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-constraints-composition-r1/combined-receipt.json",
+      "sha256": "e437d355c2557c60263db18608df8e3de58ce69a02f8bb729b2e528c8cc1bddf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/image-constraints-composition-r1/visual-r1/review-receipt.json",
+      "sha256": "c90fe073cf8c76a9752183dfc033b0a5d7190ec06cbb102af05213ded8002703"
+    }
+  ]
+}

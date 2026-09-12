@@ -1,0 +1,341 @@
+[
+  {
+    "name": "image-constraints-intrinsic-min-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:auto;height:auto;align-self:flex-start;min-width:144px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 144
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-intrinsic-max-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:auto;height:auto;align-self:flex-start;max-width:48px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 48
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-width-max-width-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:auto;align-self:flex-start;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-height-max-height-ratio",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:auto;height:80px;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-both-fixed-max-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:80px;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-both-fixed-min-height",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:80px;min-height:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 120
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-inconsistent-width-bounds",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:80px;min-width:140px;max-width:60px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minWidth": 140,
+      "maxWidth": 60
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-stretch-max-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:auto;height:auto;max-width:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 120
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-padded-border-max-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:auto;align-self:flex-start;padding:8px;max-width:80px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80
+    },
+    "contentBox": false,
+    "pointInsets": 16,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-padded-content-max-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{box-sizing:content-box;width:120px;height:auto;align-self:flex-start;padding:8px;max-width:80px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": 80
+    },
+    "contentBox": true,
+    "pointInsets": 16,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-both-fixed-percent-max-width",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:200px;height:80px;max-width:50%;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxWidth": "50%"
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-fixed-width-auto-height-max-height",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:auto;align-self:flex-start;max-height:40px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "maxHeight": 40
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  },
+  {
+    "name": "image-constraints-fixed-width-auto-height-min-height",
+    "assetFiles": {
+      "picture": "fixtures/images/ordinary-r1/opaque.png"
+    },
+    "input": {
+      "html": "<div id=\"parent\"><img id=\"image\" src=\"picture\"><div id=\"tail\"></div></div>",
+      "css": "#parent{width:100%;height:100%;background:#dce6ee}#image{width:120px;height:auto;align-self:flex-start;min-height:120px;background:#ffedc2}#tail{width:8px;height:8px;background:#17212b}",
+      "width": 390,
+      "height": 320
+    },
+    "bounds": {
+      "minHeight": 120
+    },
+    "contentBox": false,
+    "pointInsets": 0,
+    "candidateExpectation": {
+      "status": "intended-support",
+      "reason": "Direct ordinary outer min/max property hypothesis; not public admission."
+    },
+    "observeIds": [
+      "parent",
+      "image",
+      "tail"
+    ]
+  }
+]

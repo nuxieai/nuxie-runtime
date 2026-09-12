@@ -7,6 +7,10 @@
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
     {
+      "label": "Public native normalization and inherited font-chain controls",
+      "path": "tools/html-to-riv/validation/provenance-native-controls-receipt.json"
+    },
+    {
       "label": "Corrected literal and percentage arithmetic prerequisite",
       "path": "tools/html-to-riv/validation/flex-literal-descriptor-receipt.json"
     },

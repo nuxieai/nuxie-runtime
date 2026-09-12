@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Private compiler descriptors implemented; literal provenance integration next",
+  "focus": "Integrating numeric token provenance and computed scalar bounds",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
   "current": "Public padding implemented:152Rust/35Node tests;53 controls pass,482 public and48 private flex outputs remain exact. Native padding and interaction evidence retains ten fractional pixel failures.",
-  "next": "Carry exact CSS numerical provenance through computed values, connect descriptor facts to corrected arithmetic model, and extend clamp/freeze bounds. Continue wrapping and remaining backlog.",
+  "next": "Preserve original numeric token provenance through Variables; implement bounded scalar carrier; connect real compiler descriptors to arithmetic proof before public flex admission.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Corrected literal and percentage arithmetic prerequisite",
+      "path": "tools/html-to-riv/validation/flex-literal-descriptor-receipt.json"
+    },
     {
       "label": "Actual compiler descriptor capture with output regression",
       "path": "tools/html-to-riv/validation/flex-descriptor-extraction-receipt.json"

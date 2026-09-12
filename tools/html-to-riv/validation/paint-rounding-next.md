@@ -1,6 +1,8 @@
-# Next executable experiment: live paint-only edge rounding
+# Completed experiment: live paint-only edge rounding
 
-The positive predicate has concrete native evidence in positive-clamp-review.md. The standalone paint isolation and Chrome snapping source audit are complete. Implement and test the next ordinary-file composition; do not spend another turn restating these findings.
+The scalar and standalone paint experiments described below are now implemented. See rounding-scalar-review.md and rounding-paint-review.md: 1696 scalar frames and 224 paint frames pass. The sections below preserve the original design proposal, not current implementation instructions. The implemented negative search uses the separate negative-source pass described in the scalar review.
+
+Next integrate the file composition through compiler-owned construction, checked coordinate domains, independent emitted-field validation and aggregate resource bounds, then test it on the actual wrapped Derived candidate. Preserve its 48 prior pixel failures until a fresh campaign establishes the new result. GOAL-RESTART.md is the authoritative restart order.
 
 ## First build a scalar rounding graph
 

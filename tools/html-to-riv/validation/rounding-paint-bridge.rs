@@ -1,0 +1,33 @@
+// Frozen validation-only live edge paint composition. No browser-derived values.
+pub(crate) fn validation_rounding_paint_recipe(input:&str,out:&std::path::Path)->Result<(),String>{
+ use serde::Deserialize;use serde_json::json;use crate::wire::{Record,Value};
+ #[derive(Deserialize)]#[serde(rename_all="camelCase",deny_unknown_fields)]struct Recipe{axis:String,initial_viewport:[f32;2],offset:f32,percent:bool,extent:f32,extent_percent:bool,margin:f32,inset:f32}
+ fn set(r:&mut Record,k:&str,v:Value)->Result<(),String>{r.set(k,v).map_err(|e|format!("{e:?}"))}
+ fn add(r:&mut Vec<Record>,kind:&'static str,parent:u32)->Result<u32,String>{let id=r.len()as u32-1;let mut n=Record::new(kind);set(&mut n,"parentId",Value::Uint(parent))?;r.push(n);Ok(id)}
+ fn put(r:&mut[Record],id:u32,k:&str,v:Value)->Result<(),String>{set(&mut r[id as usize+1],k,v)}
+ fn paint(r:&mut Vec<Record>,owner:u32)->Result<(),String>{let f=add(r,"Fill",owner)?;let c=add(r,"SolidColor",f)?;put(r,c,"colorValue",Value::Color(if owner==0{0xffffffff}else{0x80ff6030}))}
+ fn node(r:&mut Vec<Record>,parent:u32,dims:[f32;2],units:[u32;2],direction:u32)->Result<u32,String>{let n=add(r,"LayoutComponent",parent)?;let s=add(r,"LayoutComponentStyle",0)?;put(r,n,"styleId",Value::Uint(s))?;put(r,s,"flexDirectionValue",Value::Uint(direction))?;for(i,k)in["width","height"].into_iter().enumerate(){put(r,n,k,Value::Float(dims[i]))?;put(r,s,&format!("{k}UnitsValue"),Value::Uint(units[i]))?;}for k in["minWidthUnitsValue","minHeightUnitsValue"]{put(r,s,k,Value::Uint(1))?;}Ok(n)}
+ fn copy(r:&mut Vec<Record>,owner:u32,target:u32,y:bool,factor:f32,local:bool)->Result<u32,String>{let c=add(r,"TranslationConstraint",owner)?;put(r,c,"targetId",Value::Uint(target))?;put(r,c,"doesCopy",Value::Bool(!y))?;put(r,c,"doesCopyY",Value::Bool(y))?;put(r,c,if y{"copyFactorY"}else{"copyFactor"},Value::Float(factor))?;if local{put(r,c,"destSpaceValue",Value::Uint(1))?;}Ok(c)}
+ fn scalar(r:&mut Vec<Record>,parent:u32,y:bool,value:f32)->Result<u32,String>{let n=add(r,"Node",parent)?;put(r,n,if y{"y"}else{"x"},Value::Float(value))?;Ok(n)}
+ fn positive(r:&mut Vec<Record>,source:u32,y:bool)->Result<u32,String>{let mut p=source;for i in 0..4{let n=add(r,"Node",0)?;let c=copy(r,n,p,y,if i==0{1.}else{2f32.powi(64)},false)?;for(k,v)in[(if y{"minY"}else{"min"},Value::Bool(true)),(if y{"minValueY"}else{"minValue"},Value::Float(0.)),(if y{"maxY"}else{"max"},Value::Bool(true)),(if y{"maxValueY"}else{"maxValue"},Value::Float(1.))]{put(r,c,k,v)?;}p=n;}Ok(p)}
+ fn landmark(r:&mut Vec<Record>,owner:u32,x:f32,y:f32)->Result<u32,String>{let n=add(r,"Node",0)?;let c=add(r,"TransformConstraint",n)?;put(r,c,"targetId",Value::Uint(owner))?;put(r,c,"originX",Value::Float(x))?;put(r,c,"originY",Value::Float(y))?;Ok(n)}
+ // A local difference is retained before copying onto a zero-orthogonal root.
+ fn difference(r:&mut Vec<Record>,a:u32,b:u32,y:bool)->Result<u32,String>{let local=add(r,"Node",b)?;copy(r,local,a,y,1.,false)?;let n=add(r,"Node",0)?;let c=copy(r,n,local,y,1.,false)?;put(r,c,"sourceSpaceValue",Value::Uint(1))?;Ok(n)}
+ let q:Recipe=serde_json::from_str(input).map_err(|e|e.to_string())?;let horizontal=match q.axis.as_str(){"x"=>true,"y"=>false,_=>return Err("axis".into())};
+ let mut r=vec![Record::new("Backboard"),Record::new("Artboard"),Record::new("LayoutComponentStyle")];set(&mut r[1],"styleId",Value::Uint(1))?;for(i,k)in["width","height"].into_iter().enumerate(){set(&mut r[1],k,Value::Float(q.initial_viewport[i]))?;}paint(&mut r,0)?;
+ let p=node(&mut r,0,[100.,100.],[2,2],if horizontal{2}else{0})?;let ps=p+1;let side=if horizontal{"Left"}else{"Top"};put(&mut r,ps,&format!("padding{side}"),Value::Float(q.inset))?;put(&mut r,ps,&format!("padding{side}UnitsValue"),Value::Uint(1))?;
+ let mut dims=[80.,q.offset];let mut units=[1,if q.percent{2}else{1}];if horizontal{dims.reverse();units.reverse();}let spacer=node(&mut r,p,dims,units,0)?;
+ let mut dims=[80.,q.extent];let mut units=[1,if q.extent_percent{2}else{1}];if horizontal{dims.reverse();units.reverse();}let v=node(&mut r,p,dims,units,0)?;put(&mut r,v+1,&format!("margin{side}"),Value::Float(q.margin))?;put(&mut r,v+1,&format!("margin{side}UnitsValue"),Value::Uint(1))?;
+ let start=landmark(&mut r,v,0.,0.)?;let end=landmark(&mut r,v,1.,1.)?;let mut edges=Vec::new();let mut traces=Vec::new();let mut size_flags=Vec::new();
+ for y in [false,true]{
+  let a=paint_rounding::round(&mut r,start,y).map_err(|e|format!("{e:?}"))?;let b=paint_rounding::round(&mut r,end,y).map_err(|e|format!("{e:?}"))?;
+  let size=difference(&mut r,end,start,y)?;let threshold=scalar(&mut r,size,y,-1./16.)?;let flag=positive(&mut r,threshold,y)?;
+  let minimum=add(&mut r,"Node",a.rounded)?;copy(&mut r,minimum,flag,y,1.,true)?;
+  let final_end=add(&mut r,"Node",minimum)?;let c=copy(&mut r,final_end,b.rounded,y,1.,false)?;put(&mut r,c,"minMaxSpaceValue",Value::Uint(1))?;put(&mut r,c,if y{"minY"}else{"min"},Value::Bool(true))?;put(&mut r,c,if y{"minValueY"}else{"minValue"},Value::Float(0.))?;
+  edges.push((a.rounded,final_end));size_flags.push(json!({"size":size,"flag":flag,"roundedEnd":b.rounded,"finalEnd":final_end}));traces.push(format!("{a:?}"));traces.push(format!("{b:?}"));
+ }
+ let drawable=add(&mut r,"Shape",0)?;let rect=add(&mut r,"Rectangle",drawable)?;for(k,x)in[("width",32768.),("height",32768.),("x",16384.),("y",16384.)]{put(&mut r,rect,k,Value::Float(x))?;}paint(&mut r,drawable)?;
+ let mut masks=Vec::new();for(y,(lo,hi))in[false,true].into_iter().zip(&edges){for(trailing,target)in[(false,*lo),(true,*hi)]{let mask=add(&mut r,"Shape",target)?;let rect=add(&mut r,"Rectangle",mask)?;for(k,x)in[("width",32768.),("height",32768.),("x",if !y&&trailing{-16384.}else{16384.}),("y",if y&&trailing{-16384.}else{16384.})]{put(&mut r,rect,k,Value::Float(x))?;}let clip=add(&mut r,"ClippingShape",drawable)?;put(&mut r,clip,"sourceId",Value::Uint(mask))?;masks.push(mask);}}
+ std::fs::create_dir_all(out).map_err(|e|e.to_string())?;std::fs::write(out.join("scene.riv"),crate::wire::encode(&r).map_err(|e|format!("{e:?}"))?).map_err(|e|e.to_string())?;
+ for(name,value)in[("scene.map.json",json!([{"id":"p","object_id":p},{"id":"spacer","object_id":spacer},{"id":"v","object_id":v}])),("construction.json",json!({"start":start,"end":end,"edges":edges,"sizeFlags":size_flags,"masks":masks,"drawable":drawable,"records":r.len(),"roundingTraces":traces,"scope":"Private live vector clip paint from ordinary layout anchors; declared scalar domain and mask coverage require qualification"}))]{std::fs::write(out.join(name),serde_json::to_vec_pretty(&value).unwrap()).map_err(|e|e.to_string())?;}Ok(())
+}

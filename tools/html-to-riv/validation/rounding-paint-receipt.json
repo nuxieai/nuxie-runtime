@@ -1,0 +1,46 @@
+{
+  "status": "verified-private-signed-rounding-and-paint",
+  "publicAdmission": false,
+  "counts": {
+    "frames": 224,
+    "representatives": 84,
+    "transfers": 140,
+    "sheets": 24,
+    "geometryPass": 224,
+    "pixelPass": 224
+  },
+  "scalarFrames": 1696,
+  "scalarNumericalChecks": 410432,
+  "scalarZeroSignDifferences": 32,
+  "reproductionArtifacts": 3922,
+  "clips": 1120,
+  "clearChecks": 448,
+  "preservedPriorPixelFailures": 24,
+  "rustTests": 406,
+  "nodeTests": 56,
+  "artifactBindings": 17092,
+  "scope": "Private scalar module and closed one-owner live paint recipes only; no public admission or wrapped Derived qualification.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "evidence": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/rounding-paint-verification-r1.json",
+      "sha256": "507c2febf6bb20f099bec980f81e0f0524b8d6480e2465d74d27f868beb5e30e"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/rounding-paint-r1/visual/review-receipt.json",
+      "sha256": "f82fa1f7ceb712bb72868ea4b659344b60e53e2fc0184f35bb16c9db4aedb378"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/playwright/rounding-paint-r1/visual/before-after-inspection.json",
+      "sha256": "95be3562ef6c66a6b7ffbae5081c2299b54a7d1a05a6caadd65e95eee4badfb0"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/rounding-paint-review.md",
+      "sha256": "d4943a16cab6ddfd369a45784e9c9a10faefe7f4e6535f8728db06d2bb9409bf"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/rounding-paint-evidence.py",
+      "sha256": "88cb076ad410b936f2e3ff503a250bfa1c2d150502a9ce19a14bbd81be0ed645"
+    }
+  ]
+}

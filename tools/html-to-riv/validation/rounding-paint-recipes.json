@@ -1,0 +1,366 @@
+{
+  "rounded-paint-x-quarter": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-half": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64.5,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-three-quarter": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64.75,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-integer": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 65,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-responsive-offset": {
+    "axis": "x",
+    "initialViewport": [
+      241,
+      96
+    ],
+    "offset": 32.5,
+    "percent": true,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-responsive-extent": {
+    "axis": "x",
+    "initialViewport": [
+      241,
+      96
+    ],
+    "offset": 64.5,
+    "percent": false,
+    "extent": 25,
+    "extentPercent": true,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-thin-limit": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64,
+    "percent": false,
+    "extent": 0.0625,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-thin-above": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64,
+    "percent": false,
+    "extent": 0.078125,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-thin-phase": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 0.078125,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-half-extent": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 0.5,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-fractional-extent": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 45.5,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-x-negative-half": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 0,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": -0.5,
+    "inset": 0
+  },
+  "rounded-paint-x-negative-three-quarter": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 0,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": -0.75,
+    "inset": 0
+  },
+  "rounded-paint-x-cumulative-half": {
+    "axis": "x",
+    "initialViewport": [
+      240,
+      96
+    ],
+    "offset": 0.25,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0.25
+  },
+  "rounded-paint-y-quarter": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-half": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64.5,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-three-quarter": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64.75,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-integer": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 65,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-responsive-offset": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      241
+    ],
+    "offset": 32.5,
+    "percent": true,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-responsive-extent": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      241
+    ],
+    "offset": 64.5,
+    "percent": false,
+    "extent": 25,
+    "extentPercent": true,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-thin-limit": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64,
+    "percent": false,
+    "extent": 0.0625,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-thin-above": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64,
+    "percent": false,
+    "extent": 0.078125,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-thin-phase": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 0.078125,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-half-extent": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 0.5,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-fractional-extent": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 64.25,
+    "percent": false,
+    "extent": 45.5,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0
+  },
+  "rounded-paint-y-negative-half": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 0,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": -0.5,
+    "inset": 0
+  },
+  "rounded-paint-y-negative-three-quarter": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 0,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": -0.75,
+    "inset": 0
+  },
+  "rounded-paint-y-cumulative-half": {
+    "axis": "y",
+    "initialViewport": [
+      96,
+      240
+    ],
+    "offset": 0.25,
+    "percent": false,
+    "extent": 45,
+    "extentPercent": false,
+    "margin": 0,
+    "inset": 0.25
+  }
+}

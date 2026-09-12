@@ -999,3 +999,7 @@ mod gap_pipeline_tests {
         assert!(!parent.numerical_admission);
     }
 }
+
+#[allow(dead_code)]
+#[path = "paint_rounding.rs"]
+mod paint_rounding;

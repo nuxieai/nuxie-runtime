@@ -1,0 +1,21 @@
+# Private signed scalar rounding candidate
+
+`src/paint_rounding.rs` emits 564 ordinary Node/TranslationConstraint records per coordinate. It remains private and unadmitted. The source must be an ordinary Node in identity artboard space, with no dependency on generated objects; the caller must prove its selected finite world coordinate remains in [-16384,16384]. The function checks the source handle, Backboard/Artboard prefix and u32 object capacity before mutation. Unexpected schema errors roll back appended records. The domain and dependency obligations are explicit caller preconditions, not inferred from a single initial value.
+
+Two independent binary searches examine powers 16384 through 1. Positive search accepts `x >= n - 0.5`; negative search accepts `-x > n - 0.5`. Their integer difference implements half ties toward positive infinity. Thresholds are exact half-integers; a large shift of the source never occurs. Each comparison uses the previously investigated four-stage nonpositive/positive predicate: first clamp to [0,1], then three gains of 2^64, each clamped to [0,1]. There is no DistanceConstraint. The output is a root Node so callers do not inherit the intermediate accumulator parent chain.
+
+Every Step exposes the threshold, signed difference, four predicate stages, decision bit and new accumulator. The trace is read-only observation metadata; the emitted file requires none of it on import or resize. Positive and negative searches both run without host branch selection.
+
+The validation-only bridge freezes the compiler source and appends an explicit private export only to the copied crate. It constructs static IEEE-bit sources and a dynamic ordinary layout-derived source `viewport / 2 - 50`, invokes the actual module and encodes its records directly. The baseline node probe observes original and cloned imports with eight resize steps. The runner compares all intermediates to exact rational source values and integer half-threshold decisions; floating intermediate subtraction and predicate-stage results are checked separately. Signed zero is compared numerically, since native world transformations may canonicalize its sign.
+
+Static controls include both signs of adjacent f32 values around 0.25, 0.5, 0.75, 1.5, 2.5, 8191.5 and 16383.5, legal endpoints at 16384, normal/subnormal minima and signed zero. The dynamic sequence crosses negative/positive half ties and zero, then repeats. Both axes are exercised. This is native scalar evidence, not Chrome visual or paint qualification. Chrome LayoutUnit quantization, four-edge mask construction, thin-box semantics, cumulative origins, practical composed object budgets and public admission remain separate obligations.
+
+Focused tests cover transactional invalid handle rejection and exact record cost/schema emission for both axes. Initial test compilation failure from using unavailable Record/Value equality traits is preserved in rounding-scalar-tests-r1.log; r2 uses encoded-byte equality and pattern matching. Runtime and renderer sources are unchanged.
+
+## Native result
+
+The r1 campaign produced 106 cases and 1696 original/clone frames with 410432 scalar checks. Every reconstructed f32 value matches, including all predicate stages, bits, accumulators and final rounding. Original/clone sequences and repeated viewports match exactly. Each file adds exactly 564 ordinary records.
+
+The initial observer compared native shortest-roundtrip JSON decimals as f64, producing 1088 false failed frames (for example JSON `1e-45` denotes f32 minimum subnormal). `output/rounding-scalar-r1/initial-json-decimal-observer/` preserves that runner, receipt and observations. Reconstructing native f32 values before exact comparison yields zero failures without changing files, captures or tolerance. The corrected runner is subsequently rerun independently under `output/rounding-scalar-r2`; its result and a separate deterministic artifact comparison are recorded below. The correction is limited to observation representation and is explicitly bound in the r1 receipt.
+
+The independent corrected r2 rerun passes all 1696 frames. All 3922 scene, recipe, trace, frame-index, geometry and renderer-stream artifacts reproduce byte exactly; see r1/reproduction.json. No visual claim is made by scalar probes.

@@ -353,3 +353,5 @@ The source-derived wrapping candidate now checks exact paint records and mask vi
 ## Public fixed wrapping integration
 
 See [public wrapping review](validation/public-wrapping-review.md) and [bound campaign receipt](validation/public-wrapping-receipt.json):463 Rust/57 Node,128 public CLI native/Chrome geometry+pixel frames,256 clear controls,48 direct visual pairs and80 exact repeat transfers;1,076 previous scenes remain exact on new CLI/raw WASM. Resource/lifecycle and broader wrapping qualification remain open. Historical alpha expectation and clip-observer setup failures are preserved.
+
+Public resource follow-up: [12 CLI/WASM outcomes and seven release lifecycle scenes](validation/public-wrapping-resource-review.md), with [effective target audit](validation/public-wrapping-target-review.md). Integer84 owners succeeds; tested1562/1563 reject a separation proof. Fractional34 succeeds with high measured cost,35 rejects the compiler record budget. No new resource-scene browser pixels or maximum integer capacity claim. L04/L06 are partial.

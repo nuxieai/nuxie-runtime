@@ -1,0 +1,30 @@
+{
+  "status": "public-resource-observations-complete",
+  "scope": "12 deterministic CLI/WASM construction outcomes and seven CPU lifecycle measurements; not new browser pixel qualification or exhaustive capacity.",
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-resources-r1/receipt.json",
+      "sha256": "abc04b5c4235a23ddf1cce025715074c0aaedee32cae1d29ee8c57f83b923cc8"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-resources-r1/wasm-parity.json",
+      "sha256": "6a541ffb5d1129236e46090576cad533087a65fdc1a30b1ca424c91ae6a8ac41"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-lifecycle-r1/receipt.json",
+      "sha256": "ca619293e03a3d70a8198bdac9487d7b54c418c407e571abd0904f0d9cac1136"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-wrapping-lifecycle-r1/hardware.json",
+      "sha256": "5f51bfd780598dea040cd54bdd8bbb70ba39f7d2f2aab005270549aa695928b7"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-resource-review.md",
+      "sha256": "0ecb75a6a85476eba640a1dbc220617f6ad80e57593874f412178a3bd6abe556"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/public-wrapping-target-review.md",
+      "sha256": "f5150660cd215c5c25d02e0d99a529d13273c1a782c3ec84d1f0f0bd455e1955"
+    }
+  ]
+}

@@ -14,7 +14,7 @@ Distinguish native support, proposed compositions, qualified implementations, ev
 
 ## Overall state
 
-13 qualified / 23 partial / 4 investigating / 59 pending = 99. These are evidence states, not a percentage of implementation effort. Public Rust/CLI/WASM/JavaScript restoration is complete. Public wrapping and text/font rendering remain unadmitted. Do not transfer qualifications from the reverted modified-runtime implementation.
+13 qualified / 25 partial / 4 investigating / 57 pending = 99. These are evidence states, not a percentage of implementation effort. Public Rust/CLI/WASM/JavaScript restoration is complete. Public wrapping and text/font rendering remain unadmitted. Do not transfer qualifications from the reverted modified-runtime implementation.
 
 ## Current completed implementation: owned rounded wrapping paint
 
@@ -75,7 +75,7 @@ The frozen public-wrapping-product-build-r1 passes 463 Rust /57 Node tests, nati
 
 The first public profile requires a single transparent fixed-size wrapping root with direct empty fixed-size boxes and explicit positional line alignment. It preserves authored numeric provenance and diagnoses percentages/auto dimensions, normal/stretch lines, nested content/assets and unproved contexts. Fixed-root resize tests establish clipping and persistence, not responsive reflow. No general wrapping qualification or backlog status upgrade yet.
 
-Next finish effective build/evidence audit and public lifecycle/resource/admission-boundary coverage, then broaden unresolved wrapping semantics and continue the whole99-item backlog. Do not redo the completed unchanged build, captures or regression replay. All processes from this campaign have completed.
+Effective target audit and first public lifecycle/resource campaign are now recorded in public-wrapping-target-review.md and public-wrapping-resource-review.md. L04/L06 are partial. Next implement the source-bound normal/stretch plan in public-wrapping-stretch-plan.md; wrapping_stretch.rs may be an unregistered agent draft, so inspect status before duplicating work. Continue broader admission and all99items. Do not redo the completed unchanged build, captures or regression replay. All processes from this campaign have completed.
 
 ## Immediate next work
 

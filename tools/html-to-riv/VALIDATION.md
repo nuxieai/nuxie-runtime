@@ -185,3 +185,5 @@ The private paint lowering now reproduces48combined optimized files exactly, wit
 Automatic margin implementation:86scenes/688geometry passes/680pixel passes/1376clear checks, all86exact CLI reproductions and complete visual coverage. The initial native-margin and static-alignment failures remain preserved.111Rust/31Node tests pass;482prior outputs are unchanged. The eight final failures concern local descendant pixels at fractional positions, so L07 remains partial. See `validation/auto-margins-implementation-review.md` and `validation/public-auto-margins-final-receipt.json`.
 
 Snapped private paint checkpoint:48exact experimental file matches and48deterministic repeats;112Rust tests pass. The implementation inherits only the bound dynamic corpus evidence, not general wrapping qualification. See `validation/wrapping-paint-snapped-module-review.md` and its receipt.
+
+Private flex computed-value staging adds four tests;116Rust tests pass. Pinned Chrome shorthand checks are bound by `validation/flex-computed-values-receipt.json`. Public flex-factor declarations remain unadmitted pending native and contextual proof.

@@ -8,6 +8,9 @@ mod baseline;
 mod spacing;
 #[path = "margins.rs"]
 mod margins;
+#[allow(dead_code)]
+#[path = "flex.rs"]
+mod flex;
 // Staged lowering, exercised against frozen ordinary-file experiments before
 // public wrapping admission and its contextual guards are installed.
 #[allow(dead_code)]

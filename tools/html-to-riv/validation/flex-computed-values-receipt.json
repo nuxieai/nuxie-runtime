@@ -1,0 +1,12 @@
+{
+  "status": "private-computed-value-parser",
+  "publicAdmission": false,
+  "rustTestsPassed": 116,
+  "bindings": {
+    "tools/html-to-riv/output/flex-computed-values-r1/tests.log": "52642ec8a552a71a95c291640697d7e27edd802c3d2dabc7ebe3ea5eec7ff841",
+    "tools/html-to-riv/src/flex.rs": "f78e15cf0baec3196097640153d36fa6e9445b698c86bd4f93f205cc088959b0",
+    "tools/html-to-riv/src/compiler.rs": "2f750f2a8f5243bd1a5068854f81ac4825379c1cb53784eddf7dec304c277c40",
+    "tools/html-to-riv/output/flex-factors-native-r1/shorthand-chrome.json": "21a19784430cba80cd374e08a03c9ee75400180aee100546ac47696b6a56fde3"
+  },
+  "nativeQualification": false
+}

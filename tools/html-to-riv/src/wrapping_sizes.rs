@@ -140,6 +140,49 @@ pub(super) fn used_size(
     )
 }
 
+// This path retains the authored scalar and validates the explicit fixed-layout
+// conversion. It deliberately does not weaken the legacy raw-source binding.
+fn resolve_layout(source:&super::fixed_layout::LayoutLength,raw:&RecordLength,
+    parent:MachineInterval)->Result<MachineInterval,Unresolved>{
+    use super::fixed_layout::LayoutLength;
+    let (authored,native,units)=match source{
+        LayoutLength::Auto=>return Err(Unresolved::AutomaticSize),
+        LayoutLength::Fixed(value)=>{
+            value.validate().map_err(|_|Unresolved::Metadata)?;
+            (value.authored(),value.emitted(),1)
+        },
+        LayoutLength::Percent(value)=>(value,value.native(),2),
+    };
+    if !authored.is_nonnegative() || !native.is_finite() || native<0. {
+        return Err(Unresolved::Metadata);
+    }
+    if raw.units!=Some(units) || !raw.value.is_some_and(|v|v.to_bits()==native.to_bits()){
+        return Err(Unresolved::NativeBinding);
+    }
+    if units==1{MachineInterval::new(native,native)}else{parent.percentage(native)}
+}
+
+/// Bind normalized fixed layout fields to their retained authored provenance.
+/// Percentages keep native coefficient/parent multiplication order unchanged.
+/// Min/max resolve against the original parent interval; conflicting minima win.
+pub(super) fn used_layout_size(
+    preferred:(&super::fixed_layout::LayoutLength,&RecordLength),
+    minimum:(&super::fixed_layout::LayoutLength,&RecordLength),
+    maximum:(&super::fixed_layout::LayoutLength,&RecordLength),
+    parent:MachineInterval,
+)->Result<MachineInterval,Unresolved>{
+    use super::fixed_layout::LayoutLength;
+    let preferred=resolve_layout(preferred.0,preferred.1,parent)?;
+    if matches!(minimum.0,LayoutLength::Auto){return Err(Unresolved::AutomaticMinimum);}
+    let minimum=resolve_layout(minimum.0,minimum.1,parent)?;
+    let maximum=if matches!(maximum.0,LayoutLength::Auto){
+        if !absent(maximum.1){return Err(Unresolved::NativeBinding);}None
+    }else{Some(resolve_layout(maximum.0,maximum.1,parent)?)};
+    MachineInterval::new(
+        maximum.map_or(preferred.lower,|m|preferred.lower.min(m.lower)).max(minimum.lower),
+        maximum.map_or(preferred.upper,|m|preferred.upper.min(m.upper)).max(minimum.upper))
+}
+
 /// Sufficient per-slot envelope for arbitrary nonempty line partitions. This is
 /// not a gate certificate: separation, carry errors and masks remain unproved.
 pub(super) fn cross_extents(slots: &[MachineInterval]) -> Result<MachineInterval, Unresolved> {
@@ -269,4 +312,40 @@ mod tests {
             assert_eq!(MachineInterval::new(lo, hi), Err(Unresolved::Domain));
         }
     }
+    #[test]
+    fn normalized_fixed_dimensions_bind_conversion_zero_and_min_wins(){
+        use super::super::fixed_layout::LayoutLength;
+        let convert=|v:f32|LayoutLength::from_numeric(&value(v,false).0).unwrap();
+        let raw=|v:f32|RecordLength{units:Some(1),value:Some(v)};
+        let parent=MachineInterval::new(0.,16384.).unwrap();let zero=convert(0.);let z=raw(0.);let auto=LayoutLength::Auto;let absent=no_max().1;
+        let tiny=convert(1./128.);let q=used_layout_size((&tiny,&z),(&zero,&z),(&auto,&absent),parent).unwrap();assert_eq!(q,MachineInterval::new(0.,0.).unwrap());
+        let tiny_source=value(1./128.,false).0;
+        assert_eq!(used_size((&tiny_source,&z),(&value(0.,false).0,&z),(&NumericSize::Auto,&absent),parent),Err(Unresolved::NativeBinding));
+        let preferred=convert(3.249);let minimum=convert(5.251);let maximum=convert(2.251);
+        let q=used_layout_size((&preferred,&raw(3.234375)),(&minimum,&raw(5.25)),(&maximum,&raw(2.25)),parent).unwrap();assert_eq!(q,MachineInterval::new(5.25,5.25).unwrap());
+        assert_eq!(used_layout_size((&preferred,&raw(3.249)),(&zero,&z),(&auto,&absent),parent),Err(Unresolved::NativeBinding));
+        assert_eq!(used_layout_size((&preferred,&raw(3.234375)),(&zero,&z),(&auto,&z),parent),Err(Unresolved::NativeBinding));
+    }
+    #[test]
+    fn normalized_percentages_keep_old_native_order_and_overflow_rejection(){
+        use super::super::fixed_layout::LayoutLength;
+        let preferred=value(37.125,true);let minimum=value(5.,true);let maximum=value(90.,true);
+        let p=LayoutLength::from_numeric(&preferred.0).unwrap();let lo=LayoutLength::from_numeric(&minimum.0).unwrap();let hi=LayoutLength::from_numeric(&maximum.0).unwrap();
+        for parent in [MachineInterval::new(0.,16384.).unwrap(),MachineInterval::new(19.375,703.125).unwrap(),MachineInterval::new(f32::MAX,f32::MAX).unwrap()]{
+            assert_eq!(used_layout_size((&p,&preferred.1),(&lo,&minimum.1),(&hi,&maximum.1),parent),used_size((&preferred.0,&preferred.1),(&minimum.0,&minimum.1),(&maximum.0,&maximum.1),parent));
+        }
+    }
+
+    #[test]
+    fn normalized_saturation_cannot_bypass_nonnegative_or_exact_encoding(){
+        use super::super::fixed_layout::LayoutLength;
+        // Positive LayoutUnit saturation is not exactly representable as an
+        // ordinary f32 layout field. The conversion must reject, not round it.
+        assert!(LayoutLength::from_numeric(&value(f32::MAX,false).0).is_err());
+        let negative=LayoutLength::from_numeric(&value(-f32::MAX,false).0).unwrap();
+        let raw=RecordLength{units:Some(1),value:negative.value()};
+        let zero=LayoutLength::from_numeric(&value(0.,false).0).unwrap();let z=value(0.,false).1;
+        assert_eq!(used_layout_size((&negative,&raw),(&zero,&z),(&LayoutLength::Auto,&no_max().1),MachineInterval::new(0.,16384.).unwrap()),Err(Unresolved::Metadata));
+    }
+
 }

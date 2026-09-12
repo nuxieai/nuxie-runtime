@@ -20,6 +20,9 @@ mod scalar_provenance;
 pub(super) mod flex_numeric;
 #[path = "computed_provenance.rs"]
 mod computed_provenance;
+#[allow(dead_code)] // Private normalized layout path; public admission requires native qualification.
+#[path = "fixed_layout.rs"]
+mod fixed_layout;
 #[path = "gap.rs"]
 mod gap;
 #[path = "padding.rs"]

@@ -1,0 +1,7 @@
+{
+  "input": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-derived-recipes.json",
+  "inputSha256": "85fb1bad4690c0b0a5dcb6bd2c94e78e7a10c1e67791930687466427b811a2e3",
+  "outputSha256": "31806b6945befbe0869c2353817c417e0046d6ee2584b46d1dfefdff0f166209",
+  "generatorSha256": "fe0bfb83b3b6692ba3f82572a0311fb847894b6e6c4d0a6d06487ae67467b1a5",
+  "scope": "Original numeric values with retained decimal token metadata; no browser measurements"
+}

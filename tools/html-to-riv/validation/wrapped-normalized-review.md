@@ -1,0 +1,15 @@
+# Private fixed layout normalization checkpoint
+
+The compiler now lowers fixed layout lengths to the pinned Chrome1/64 unit before layout combination. Authored provenance remains separate from the derived emitted value. This repairs all28known boundary pixel failures without runtime changes or altered tolerances.
+
+`fixed_layout.rs` checks finite computed floats, actualf32 scaling, truncation towardzero, saturation and exact output representability. `wrapping_sizes` and `wrapping_domains` bind normalized values to actual records for all six dimensions of every parent, slot and visible owner; Candidate retains source metadata. The old resolution path and public compiler admission remain separate.
+
+Validation covers431Rust and56Node tests plus native/WASM builds, TypeScript and immutable-source guard. The actual private constructor accepts all80recipes twice. Independent proof checking covers2880dimensions and320negative controls. The validation bridge retains original decimal tokens and checks double-to-float resolution; source review exposed an adversarial direct-f32 parsing discrepancy, corrected in r2 with acceptance/rejection controls. All400r2artifacts exactly match r1capture inputs. Historical r1source failures remain preserved.
+
+Fresh pinned Chrome153.0.8010.12 / immutable Rust Metal RasterOrdering capture passes256boundary geometry/pixel frames and512clear controls. All28prior pixel failures are repaired. Actual scalar/stream observation passes20608checks and256streams;64raw differences represent off-artboard saturation only, with zero clipped-edge differences. Root inspected sheets00–12 and agent13–25:96representative pairs,160exact repeat transfers. Thin extra lines and accumulated-decimal edge displacement are absent. Faint color residuals remain; passing tolerances is not RGBA identity.
+
+The original48-case regression passes384geometry/pixel frames and768clear controls. All384Chrome/native PNGs, scene bytes and geometry exactly match the previously reviewed rounded campaign, allowing direct-review transfer. Its fresh observer passes52992scalar checks,384streams and2304Chrome edge comparisons.
+
+See `wrapped-normalized-evidence.py`/receipt, `wrapped-normalized-proof-check.py`, `wrapped-normalized-source-review.md`, and the two boundary visual reviews. Public executable hashes changed, so all1076prior accepted requests (282image+794transport) were executed again on both newCLI and rawWASM. Allscene bytes match; CLI maps match bytewise and WASM maps structurally. See wrapped-normalized-public-regression-review.md. Malformed-request corpora and the JS wrapper were not separately rerun by this replay; the build includes56Node tests.
+
+This is private constructor support. Public wrapping, responsive percentage-result quantization, later flex arithmetic, typography and all other pending backlog items remain open. The graph still has the previously measured substantial costs. Next implement source-proven integer-edge optimization and measure its effect with the existing release harness. No runtime, renderer, schema, dependency or root build changes; nothing pushed.

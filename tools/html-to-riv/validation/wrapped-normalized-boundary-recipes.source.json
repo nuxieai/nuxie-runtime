@@ -1,0 +1,7 @@
+{
+  "input": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-boundary-recipes.json",
+  "inputSha256": "ffe87a8e41d1fa1e632619aeaaa50d56ac3118e8cc345832508ab840e074eb0e",
+  "outputSha256": "e71ac7c27082208bc2773d7951b9b118c03fa7abaf6acf386c5dbf84d9a39e50",
+  "generatorSha256": "fe0bfb83b3b6692ba3f82572a0311fb847894b6e6c4d0a6d06487ae67467b1a5",
+  "scope": "Original numeric values with retained decimal token metadata; no browser measurements"
+}

@@ -23,6 +23,14 @@ pub(super) struct Slot {
     pub visible_fraction: [f32; 2],
 }
 
+/// Owned source snapshots for the normalized path. These retain both authored
+/// scalar provenance and fixed-layout conversion; no raw scalar is replaced.
+#[derive(Clone,Debug)]
+pub(super) struct LayoutAuthored {
+    pub parent:(u32,super::fixed_layout::LayoutStyle),
+    pub roles:BTreeMap<u32,super::fixed_layout::LayoutStyle>,
+}
+
 pub(super) struct Domains<'a> {
     // The borrow prevents mutating the base while treating these dimensions as
     // bound to it. Augmentation needs its own preservation check and token.
@@ -31,8 +39,10 @@ pub(super) struct Domains<'a> {
     parent_axes: [MachineInterval; 2],
     slots: Vec<Slot>,
     cross_extents: MachineInterval,
+    layout_authored:Option<LayoutAuthored>,
 }
 impl<'a> Domains<'a> {
+    pub(super) fn layout_authored(&self)->Option<&LayoutAuthored>{self.layout_authored.as_ref()}
     pub(super) fn base(&self) -> &Binding<'a> { &self.base }
     pub(super) fn viewport(&self) -> [MachineInterval; 2] { self.viewport }
     pub(super) fn parent_axes(&self) -> [MachineInterval; 2] { self.parent_axes }
@@ -92,7 +102,48 @@ pub(super) fn resolve<'a>(
     let cross_extents = wrapping_sizes::cross_extents(
         &slots.iter().map(|slot| slot.axes[cross]).collect::<Vec<_>>())
         .map_err(Unresolved::CrossExtents)?;
-    Ok(Domains { base, viewport, parent_axes, slots, cross_extents })
+    Ok(Domains { base, viewport, parent_axes, slots, cross_extents, layout_authored:None })
+}
+
+fn layout_dimensions(object:u32,authored:&super::fixed_layout::LayoutStyle,
+    native:&Sizes,parent:[MachineInterval;2])->Result<[MachineInterval;2],Unresolved>{
+    let preferred=[&authored.width,&authored.height];
+    let minimum=[&authored.min_width,&authored.min_height];
+    let maximum=[&authored.max_width,&authored.max_height];
+    let resolve=|axis:usize|wrapping_sizes::used_layout_size(
+        (preferred[axis],&native.preferred[axis]),(minimum[axis],&native.minimum[axis]),
+        (maximum[axis],&native.maximum[axis]),parent[axis])
+        .map_err(|reason|Unresolved::Dimension{object,axis,reason});
+    Ok([resolve(0)?,resolve(1)?])
+}
+
+/// Normalized dimensions require authored metadata for EVERY slot and visible
+/// owner exactly once. Parent metadata is supplied separately. All six fields
+/// bind to emitted records, including visible preferred/minimum/maximum values.
+/// The returned token owns source snapshots and borrows the checked records.
+pub(super) fn resolve_layout<'a>(records:&'a[Record],parent:u32,roles:&[(u32,u32)],
+    authored_parent:&super::fixed_layout::LayoutStyle,
+    authored_roles:&[(u32,&super::fixed_layout::LayoutStyle)],
+    viewport:[MachineInterval;2])->Result<Domains<'a>,Unresolved>{
+    let base=wrapping_slots::inspect(records,parent,roles).map_err(Unresolved::Structure)?;
+    let mut authored=BTreeMap::new();
+    for &(object,values) in authored_roles{
+        if !base.slots.iter().any(|s|s.id==object||s.visible==object)
+            || authored.insert(object,values.clone()).is_some(){
+            return Err(Unresolved::AuthoredRole{object});
+        }
+    }
+    let parent_axes=layout_dimensions(parent,authored_parent,&base.parent_sizes,viewport)?;
+    let slots=base.slots.iter().map(|slot|{
+        let numeric=authored.get(&slot.id).ok_or(Unresolved::AuthoredRole{object:slot.id})?;
+        let axes=layout_dimensions(slot.id,numeric,&slot.sizes,parent_axes)?;
+        let visible=authored.get(&slot.visible).ok_or(Unresolved::AuthoredRole{object:slot.visible})?;
+        let visible_axes=layout_dimensions(slot.visible,visible,&slot.visible_sizes,axes)?;
+        Ok(Slot{object:slot.id,axes,visible:slot.visible,visible_axes,visible_fraction:slot.visible_fraction})
+    }).collect::<Result<Vec<_>,Unresolved>>()?;
+    let cross_extents=wrapping_sizes::cross_extents(&slots.iter().map(|s|s.axes[usize::from(base.row)]).collect::<Vec<_>>()).map_err(Unresolved::CrossExtents)?;
+    Ok(Domains{base,viewport,parent_axes,slots,cross_extents,
+        layout_authored:Some(LayoutAuthored{parent:(parent,authored_parent.clone()),roles:authored})})
 }
 
 #[cfg(test)]
@@ -209,4 +260,42 @@ mod tests {
         assert_eq!(d.slots[0].axes[1].lower(),0.);
         assert_eq!(d.slots[0].axes[1].upper(),1024.);
     }
+    #[test]
+    fn normalized_metadata_covers_every_owner_and_is_retained(){
+        use super::super::fixed_layout::{LayoutLength,LayoutStyle};
+        let mut records=scene();let parent=LayoutStyle::from_numeric(&authored(50.,25.,true)).unwrap();
+        let mut slot=LayoutStyle::from_numeric(&authored(60.249,30.251,false)).unwrap();
+        let visible=LayoutStyle::from_numeric(&authored(100.,100.,true)).unwrap();
+        set(&mut records[5],"width",Value::Float(60.234375));set(&mut records[5],"height",Value::Float(30.25));
+        let d=resolve_layout(&records,2,&[(4,6)],&parent,&[(4,&slot),(6,&visible)],viewport()).unwrap();
+        assert_eq!(d.slots()[0].axes,[MachineInterval::new(60.234375,60.234375).unwrap(),MachineInterval::new(30.25,30.25).unwrap()]);
+        assert_eq!(d.slots()[0].visible_axes,d.slots()[0].axes);
+        let snapshot=d.layout_authored().unwrap();assert_eq!(snapshot.parent.0,2);assert_eq!(snapshot.roles.len(),2);
+        slot.width=LayoutLength::Auto;
+        assert!(matches!(snapshot.roles[&4].width,LayoutLength::Fixed(_)));
+        assert!(resolve(&scene(),2,&[(4,6)],&authored(50.,25.,true),&[(4,&authored(60.,30.,false))],viewport()).unwrap().layout_authored().is_none());
+    }
+    #[test]
+    fn normalized_roles_and_all_visible_fields_fail_closed(){
+        use super::super::fixed_layout::LayoutStyle;
+        let records=scene();let parent=LayoutStyle::from_numeric(&authored(50.,25.,true)).unwrap();let slot=LayoutStyle::from_numeric(&authored(60.,30.,false)).unwrap();let visible=LayoutStyle::from_numeric(&authored(100.,100.,true)).unwrap();
+        for roles in [vec![(4,&slot)],vec![(6,&visible)],vec![(4,&slot),(6,&visible),(6,&visible)],vec![(4,&slot),(6,&visible),(2,&parent)],vec![(4,&slot),(99,&visible)]]{
+            assert!(matches!(resolve_layout(&records,2,&[(4,6)],&parent,&roles,viewport()),Err(Unresolved::AuthoredRole{..})));
+        }
+        for (record,key,value)in [(7,"width",Value::Float(99.)),(7,"height",Value::Float(99.)),(8,"minWidth",Value::Float(1.)),(8,"minHeight",Value::Float(1.)),(8,"maxWidth",Value::Float(1.)),(8,"maxHeight",Value::Float(1.))]{
+            let mut changed=records.clone();set(&mut changed[record],key,value);
+            assert!(matches!(resolve_layout(&changed,2,&[(4,6)],&parent,&[(4,&slot),(6,&visible)],viewport()),Err(Unresolved::Dimension{object:6,..})|Err(Unresolved::Structure(_))),"{key}");
+        }
+    }
+
+    #[test]
+    fn normalized_positive_visible_lengths_can_legitimately_become_zero(){
+        use super::super::fixed_layout::LayoutStyle;
+        let mut records=scene();let parent=LayoutStyle::from_numeric(&authored(50.,25.,true)).unwrap();let slot=LayoutStyle::from_numeric(&authored(60.,30.,false)).unwrap();let visible=LayoutStyle::from_numeric(&authored(1./128.,1./128.,false)).unwrap();
+        for key in ["width","height"]{set(&mut records[7],key,Value::Float(0.));set(&mut records[8],&format!("{key}UnitsValue"),Value::Uint(1));}
+        let d=resolve_layout(&records,2,&[(4,6)],&parent,&[(4,&slot),(6,&visible)],viewport()).unwrap();
+        assert_eq!(d.slots()[0].visible_axes,[MachineInterval::new(0.,0.).unwrap();2]);
+        assert_eq!(d.slots()[0].axes,[MachineInterval::new(60.,60.).unwrap(),MachineInterval::new(30.,30.).unwrap()]);
+    }
+
 }

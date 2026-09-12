@@ -1,0 +1,68 @@
+{
+  "scope": "1076 accepted public corpus entries (282 image +794 transport). Newly executed frozen CLI and raw WASM ABI. Exact scene bytes, CLI map bytes and WASM map structures. No new rendering, malformed-input corpus rerun or JS-wrapper regression claim.",
+  "sources": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-product-build-r1/summary.json",
+      "sha256": "74cd15865c995a2b30b87942e16eb715bfc2cbccde63fa136f9f69582f5cb362"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-product-build-r1/frozen/source-bindings.json",
+      "sha256": "b1c0e0c0b15a9e71a6352d3ce18db3290306d0c64051ead5f977a8ac5ababc24"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-normalized-public-regression.py",
+      "sha256": "e590d92ef67f9eebd752274f5ab512fceb09e2c8b1d9449c94a8e2759a78b106"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-paint-mask-existing-r1/manifest.json",
+      "sha256": "9573509bf29ee6fe69ea18122cc74021db6d9cafbe8b38d05e35ed200573600d"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-wrapped-paint-mask-regression-r1/receipt.json",
+      "sha256": "b9318fa523636117405fe65902bf2ca895581ac35158e3530b5e73193bd7e72d"
+    }
+  ],
+  "sourceBindingsVerified": 308,
+  "compiler": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/html-to-riv",
+    "sha256": "0ba75e2469f8611d36f0ce6963f3da22786c088c0e9858d9cef49da86265c073"
+  },
+  "wasm": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/compiler.wasm",
+    "sha256": "956638b04931ad485c719e9ee21d0d864dc9e1329e5783bfbc5787f3a20818c8"
+  },
+  "references": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/references.json",
+    "sha256": "df93eab019c40294dd6e3d5beca8068e33cc39cad7f28ddd27e292f38e4883b1"
+  },
+  "cliResults": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/cli-results.json",
+    "sha256": "be100ee39de313a99f8ca2bbcdb95c19334eab44c9ab0ee648db88b12ccbaaa6"
+  },
+  "wasmResults": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/wasm-results.json",
+    "sha256": "7e13e9f34e14a74ad1597fb62f4c42666ff428ce7b011c7c24b74236f2d01d6f"
+  },
+  "wasmWorker": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/wasm.mjs",
+    "sha256": "70f5729483fe76bd25fbaad3243eb92f11fd2cdff9760b0ed778dfb767fd80b2"
+  },
+  "wasmLog": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/wasm.log",
+    "sha256": "670890308ea6bd1ea0e631acaf60b000ff9e836a0f8d85316552b719ead274e9"
+  },
+  "wasmExitCode": 0,
+  "total": 1076,
+  "cliPassed": 1076,
+  "wasmPassed": 1076,
+  "groups": {
+    "images": 282,
+    "accepted-transport": 794
+  },
+  "status": "verified-public-output-regression",
+  "evidence": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-normalized-public-regression-r1/receipt.json",
+    "sha256": "99f317bfe5e1eb819eae9c853b891353dee371d7ecb975f2b47bd88590308905"
+  },
+  "artifactVerification": "All1076actual CLI/WASM scene bytes and maps independently rechecked after execution; exact CLI bytes and semantic WASM map equality."
+}

@@ -32,6 +32,7 @@ impl From<Diagnostic> for Unresolved {
 /// must consume this candidate before it can become admitted output.
 pub(super) struct Candidate {
     records: Vec<Record>,
+    layout_authored: Option<super::wrapping_domains::LayoutAuthored>,
     trace: wrapping::Trace,
     paint_trace: wrapping_paint::Trace,
     viewport: [MachineInterval; 2],
@@ -45,6 +46,7 @@ pub(super) struct Candidate {
     paint_records: usize,
 }
 impl Candidate {
+    pub(super) fn layout_authored(&self) -> Option<&super::wrapping_domains::LayoutAuthored> { self.layout_authored.as_ref() }
     pub(super) fn records(&self) -> &[Record] { &self.records }
     pub(super) fn trace(&self) -> &wrapping::Trace { &self.trace }
     pub(super) fn paint_trace(&self) -> &wrapping_paint::Trace { &self.paint_trace }
@@ -224,7 +226,7 @@ pub(super) fn compose(
     if records.len() != end { return Err(Unresolved::ResourceBudget); }
     preserved(base, &records, &paints.iter().map(|p|p.paints[0].color).collect::<Vec<_>>(),
         &items.iter().map(|i|i.visible).collect(),base.len()+sizing_records)?;
-    Ok(Candidate { records, trace, paint_trace, viewport:domains.viewport(), parent_axes:domains.parent_axes(),
+    Ok(Candidate { records, layout_authored: domains.layout_authored().cloned(), trace, paint_trace, viewport:domains.viewport(), parent_axes:domains.parent_axes(),
         slots:domains.slots().to_vec(), cross_extents:domains.cross_extents(), epsilon, alignments:alignments.to_vec(),
         base_records:base.len(), sizing_records, paint_records })
 }
@@ -268,6 +270,27 @@ mod tests {
     fn domains<'a>(records:&'a[Record],roles:&[(u32,u32)])->Domains<'a> {
         let n=numeric();let values=roles.iter().map(|&(id,_)|(id,&n)).collect::<Vec<_>>();
         wrapping_domains::resolve(records,2,roles,&n,&values,[MachineInterval::new(0.,16384.).unwrap();2]).unwrap()
+    }
+    #[test]
+    fn normalized_candidate_retains_authored_sources_after_domain_consumption() {
+        let (records, roles) = fixture(2, 2, 0, 1);
+        let mut source = numeric();
+        source.width = NumericSize::Pixels(Ok(ScalarProvenance::from_decimal("60.001", 60.001).unwrap()));
+        let layout = super::super::fixed_layout::LayoutStyle::from_numeric(&source).unwrap();
+        let authored = roles.iter().flat_map(|&(slot, visible)| [(slot, &layout), (visible, &layout)]).collect::<Vec<_>>();
+        let domains = wrapping_domains::resolve_layout(&records, 2, &roles, &layout, &authored,
+            [MachineInterval::new(0., 16384.).unwrap(); 2]).unwrap();
+        let candidate = compose(domains, &[0., 0.], 0.25, 100_000).unwrap();
+        let retained = candidate.layout_authored().unwrap();
+        assert_eq!(retained.parent.0, 2);
+        assert_eq!(retained.roles.len(), 4);
+        for style in std::iter::once(&retained.parent.1).chain(retained.roles.values()) {
+            let super::super::fixed_layout::LayoutLength::Fixed(width) = &style.width else { panic!("missing normalized width") };
+            assert_eq!(width.emitted(), 60.);
+            assert_eq!(width.authored().native(), 60.001);
+            assert!(width.authored().ideal_bounds().lower() > 60.);
+        }
+        assert!(compose(self::domains(&records, &roles), &[0., 0.], 0.25, 100_000).unwrap().layout_authored().is_none());
     }
     #[test]
     fn variable_count_composition_keeps_bound_inputs_and_reproduces_ordinary_bytes() {

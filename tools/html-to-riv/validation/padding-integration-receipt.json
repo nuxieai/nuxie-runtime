@@ -1,0 +1,53 @@
+{
+  "status": "private-padding-pipeline-and-public-zero-admission",
+  "publicNonzeroPadding": false,
+  "rustTests": 147,
+  "nodeTests": 35,
+  "buildsAndTypeScript": "pass",
+  "exactCandidateFilesAndParsedMaps": 20,
+  "exactRepeats": 20,
+  "exactPrimitiveFilesIncludingNegativeControls": 24,
+  "priorPublicOutputsUnchanged": 482,
+  "priorFlexCandidateOutputsUnchanged": 48,
+  "sourceHashes": {
+    "wrapping_paint.rs": "8c28ce23bdf732b34612e120e88f891e5a0df78e99ba312c3c4c0e0fe319bca2",
+    "variables.rs": "90867540d8762cda5b843d176a8d59c8ab8bf0a07dca1b14d5fcdbc5724bff18",
+    "reset.css": "a61eb8e0d9c0cfa6e544fdd6d1a931e92a0dca18c6ca02806b1aae2dc7f03c5a",
+    "compiler.rs": "b67cf68e85fb95524cd418dcff876fe1454e10a13d11e159ddcf556e23df8f0d",
+    "color.rs": "00e6aebac859a8d9415ceb58a96708ef2859d47979b30b41d74c6760536481e0",
+    "lib.rs": "f220598cfbba22ee292ed92e74e84d649b4a406fcf741debebb11ee18d71e69e",
+    "baseline.rs": "74901f508eddfd778f7660b5482ae32764db547a357964a371881b2b201224f6",
+    "spacing.rs": "36252438e62d5c0fc3b2bab272aa85b9a6fe5b6bc60eb740c670525530ea6562",
+    "padding.rs": "4429150da94bfdd59c412f2a983f47ace556a5434e57b00860cf6174db2c30ec",
+    "flex.rs": "8ce7f1543afb42606423cd16203248229bd35e85bdeb9ed870fa3ae1b4961002",
+    "wrapping.rs": "c17146749694a85dee52a059e77988bd691826d8d5d0e6948b024ad78de975b0",
+    "main.rs": "26d822b5e9ce87025bdaca21ffeee128727695fa5f8ee518716e23e3d6e07d4c",
+    "numeric.rs": "53d1e6d631323c7ae5f2159614bf215c7e09c33ea46c57209026223fe84ddf14",
+    "css.rs": "cd86eb0421af06c870c610df6488d4f9931995e1d78440b8196e4194f5fbaadf",
+    "wire.rs": "cfe21ece0322ce62794e51d4e4b3a01ab96cae09af86b9f94fd99cdac7b82297",
+    "wasm.rs": "0aadc40f4772e510142e3f13496ecc6c6df0505fe056e57ab06a4446e657e57f",
+    "margins.rs": "efdfc3adc089297f38a469931e0a7e6e5df3dce1351088025ec6b5df44590a3f"
+  },
+  "bindings": {
+    "tools/html-to-riv/output/padding-integration-module-r1/receipt.json": "84b8b466ede3e156f0984740c2bd2a007a54e294ca685dcb07fe9db8b2f0fe2f",
+    "tools/html-to-riv/output/padding-integration-module-r1/build-command.json": "8cc57c045944af3b31092a888d0811fed234a74728a96f12b6eee1d8dc173692",
+    "tools/html-to-riv/output/padding-integration-module-r1/cargo.log": "9c724fec7c5ae3ccb69d3f78e77ed2858fd7a356f5c28dece7090e1d7cc98cb0",
+    "tools/html-to-riv/output/padding-integration-module-r1/build.log": "c56557e38a30e221588a3f47358245be6fb3095367e58301b0e118a6c49a7594",
+    "tools/html-to-riv/output/padding-integration-module-r1/wasm-build.log": "a01895b387ac8505b16b084c546f443f1f958596a302dc33cbdd7f6a37d3c3a5",
+    "tools/html-to-riv/output/padding-integration-module-r1/transport.log": "2418834d7df1a7a9a2dbfd7014a8b2790aa60349244a72f167b4e5016dab76bb",
+    "tools/html-to-riv/output/padding-integration-module-r1/runtime-guard.json": "516deee91beb6117c5f2734245e5ea452cbfb5aa9a3e5949820464023d31786a",
+    "tools/html-to-riv/output/padding-integration-tests-r2.log": "52e80ea75a565de803b00b70f9e99c8a9c8ab6b58cbb1de35e83830e41b16553",
+    "tools/html-to-riv/output/padding-module-native-r1/receipt.json": "f6e4b46036a2542845d4d71f2792f0e5007b7251172dd2f99116c9b492e335d3",
+    "tools/html-to-riv/output/padding-integration-byte-regression-r1/manifest.json": "5497ba2bedfff80bfb0b0269916c222453c3a5f01ae127bbfcf6c2459590be98",
+    "tools/html-to-riv/output/flex-integration-module-r5/receipt.json": "8453c93d7ac1c5cc7bec2a614e9ad48782dc2fa89c2504607f443d342058d040",
+    "tools/html-to-riv/validation/padding-native-receipt.json": "4b5f86aee55ef04e8ccfbd75573c6555c76932aaa02eab0c116b5b29f22bbd9a",
+    "tools/html-to-riv/tests/padding.rs": "65c48d8149a481a7b8b1ec1008a25c16573f21f4f2ef9a959432f8bf865e067f",
+    "tools/html-to-riv/tests/transport-parity.mjs": "2d5612cacdfbea356f086478f58b923dda15d86976636f3b9ccf2ee368ca4d23"
+  },
+  "limits": [
+    "Content-box not admitted",
+    "Padded content bounds deliberately unknown pending correct numeric model",
+    "Padded baselines, alignment wrappers and nonlegacy flex combinations diagnose",
+    "Two native fractional leaf pixel failures retained"
+  ]
+}

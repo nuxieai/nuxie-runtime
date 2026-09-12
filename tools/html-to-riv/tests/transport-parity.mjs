@@ -307,3 +307,15 @@ test('percentage overflow diagnostics and finite clamps agree across CLI/WASM',a
   }
  }finally{fs.rmSync(dir,{recursive:true,force:true});}
 });
+
+test('padding zero admission and strict rejection match CLI/WASM',async()=>{
+ const compiler=await createCompiler(wasm),dir=fs.mkdtempSync(path.join(os.tmpdir(),'immutable-padding-parity-'));
+ try{
+  for(const [index,[css,accepted]] of [['#a{padding:0}',true],['#a{padding:0px 0% 0em 0rem}',true],['#a{--p:0;padding:var(--p)}',true],['#a{padding:initial}',true],['#a{padding:2px}',false],['#never{padding:2px}',false],['#a{padding:2px;padding:0}',false],['#a{--p:2px;padding:var(--p);padding:0}',false],['#a{padding:-1px}',false]].entries()){
+   const request={html:'<div id="a"></div>',css,width:240,height:160},prefix=path.join(dir,String(index));fs.writeFileSync(prefix+'.json',JSON.stringify(request));
+   const cli=spawnSync(binary,[prefix+'.json',prefix+'.riv'],{encoding:'utf8'}),result=compiler.compile({languageVersion:LANGUAGE_VERSION,...request});assert.equal(result.ok,accepted);assert.equal(cli.status,accepted?0:1);
+   if(accepted){assert.deepEqual(Buffer.from(result.riv),fs.readFileSync(prefix+'.riv'));assert.deepEqual(result.sourceMap,JSON.parse(fs.readFileSync(prefix+'.map.json','utf8')));}
+   else{assert.deepEqual(result.diagnostics,JSON.parse(cli.stderr));assert(!fs.existsSync(prefix+'.riv'));assert(!fs.existsSync(prefix+'.map.json'));}
+  }
+ }finally{fs.rmSync(dir,{recursive:true,force:true});}
+});

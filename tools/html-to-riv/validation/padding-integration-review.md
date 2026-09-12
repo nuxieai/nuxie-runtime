@@ -1,0 +1,11 @@
+# Integrated private padding compiler path
+
+The compiler now carries computed physical padding through shorthand/longhand cascade, variables, font-relative resolution and inheritance, and emits native padding fields on the authored box. The exported Guarded path admits only zero padding and retains strict diagnostics for nonzero unmatched, overridden and resolved-variable declarations. A separate private PaddingCandidate profile exercises nonzero padding; FlexCandidate remains independent. This is not public padding qualification or completion of L15.
+
+A source-mounted harness of the actual compiler pipeline reproduces all20border-box native experiment files and parsed source maps exactly, twice. A separate primitive harness reproduces all24experimental files, including the four deliberately incorrect content-box controls. Those controls remain failures, not supported content-box encodings. The positive native corpus retains160geometry/158pixel passes with two fractional leaf failures and complete visual coverage. These are exact-file evidence links, not new visual inspection claims.
+
+Padding is stored on authored LayoutComponentStyle records; synthetic wrappers receive none. Candidate padded alignment wrappers, padded baseline-sharing dependencies and padding/nonlegacy-flex combinations diagnose. Padded baseline/height summaries become unknown so unpadded ancestors cannot reuse false offsets. Numeric traversal explicitly stops treating padded border-box extents as descendant content extents; padded content bounds remain unknown until the correct floor/inset model is integrated. Public nonzero admission must wait for that work.
+
+147Rust tests and35Node tests pass, along with native/WASM builds, strict TypeScript checks and the immutable source guard. All482prior public outputs and48staged flex files/maps remain exact. The source snapshots used by the20-case harness match the current sources. Build/test/reproduction hashes are bound by `padding-integration-receipt.json`.
+
+The initial isolated module test evidence directory collided with a separate primitive harness. The current primitive proof was rerun in the fresh `output/padding-module-native-r1` directory; actual crate tests and pipeline evidence above are independently bound. Any refreshed isolated-test receipt is supplemental, not the basis for this checkpoint.

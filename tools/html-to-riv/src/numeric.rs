@@ -14,6 +14,14 @@ impl Bounds {
     // This is the documented complete viewport domain, not the input viewport.
     pub const VIEWPORT: Self = Self { upper: [Some(16384.); 2], witness: [Some(16384.); 2] };
     pub fn child(self, style: &Style, parent: &Style, source: &str) -> Result<Self, Diagnostic> {
+        if !style.padding.is_zero() {
+            // This private candidate has native padding floors and subtracts
+            // padding from containing content dimensions. The unpadded border-
+            // box bound is not a bound for that content box or its witness.
+            // Keep both explicitly unknown until interval inset arithmetic is
+            // qualified; do not bake resolved browser geometry into the file.
+            return Ok(Self { upper: [None; 2], witness: [None; 2] });
+        }
         let sizes = [style.width, style.height];
         let minima = [style.min_width, style.min_height];
         let maxima = [style.max_width, style.max_height];
@@ -103,6 +111,13 @@ mod tests {
             let upper=resolve(Size::Percent(percent),Some(parent)).unwrap();
             assert!(f64::from(upper)>=f64::from(percent * parent * 0.01));
         }
+    }
+    #[test]
+    fn padding_does_not_pass_border_box_bounds_as_content_box_bounds() {
+        let mut child=Style {width:Size::Pixels(100.),height:Size::Pixels(100.),..Style::default()};
+        child.padding.apply("padding","10px",super::super::padding::Padding::default(),16.,"test").unwrap();
+        let bounds=Bounds::VIEWPORT.child(&child,&Style::default(),"test").unwrap();
+        assert_eq!(bounds.upper,[None;2]);assert_eq!(bounds.witness,[None;2]);
     }
     #[test]
     fn intrinsic_and_flexible_used_sizes_are_not_invented() {

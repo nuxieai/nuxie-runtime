@@ -197,3 +197,5 @@ Guarded flex integration checkpoint:126Rust/33Node tests, native/WASM builds and
 Percentage overflow guard:18native boundary decisions match retained evidence, with6nonfinite cases diagnosed and12finite controls byte/map unchanged.133Rust/34Node tests, builds/TypeScript/source guard pass;482public outputs and48candidate flex outputs remain exact. See `validation/numeric-guard-review.md` and receipt.
 
 Padding investigation:20border-box candidates pass160geometry/158pixels;2fractional leaf failures remain. Fourcontent-box controls intentionally fail32geometry/pixel frames; all384clear checks pass. All24files/maps reproduce with complete visual coverage. See `validation/padding-native-review.md`; this does not enable public padding.
+
+Private padding integration:20candidate files/parsed maps and24primitive files reproduce exactly.147Rust/35Node tests, builds, TypeScript and source guard pass;482public outputs and48private flex outputs remain unchanged. Public nonzero padding remains diagnostic. See `validation/padding-integration-review.md`.

@@ -10,6 +10,8 @@ mod spacing;
 mod margins;
 #[path = "numeric.rs"]
 mod numeric;
+#[path = "padding.rs"]
+mod padding;
 #[allow(dead_code)]
 #[path = "flex.rs"]
 mod flex;
@@ -141,9 +143,9 @@ impl BackgroundColor {
     }
 }
 #[derive(Clone)]
-struct Style { flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
+struct Style { padding: padding::Padding, flex: flex::Flex, margins: margins::Margins, spacing: spacing::Spacing, self_alignment: SelfAlignment, order: i32, direction: Direction, variables: variables::Variables, width: Size, height: Size, min_width: Size, min_height: Size, max_width: Size, max_height: Size, font_size: f32, foreground: u32, background: BackgroundColor }
 impl Default for Style {
-    fn default() -> Self { Self { flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
+    fn default() -> Self { Self { padding: padding::Padding::default(), flex: flex::Flex::default(), margins: margins::Margins::default(), spacing: spacing::Spacing::Normal, self_alignment: SelfAlignment::AUTO, order: 0, direction: Direction::Column, variables: variables::Variables::default(), width: Size::Auto, height: Size::Auto, min_width: Size::Pixels(0.), min_height: Size::Pixels(0.), max_width: Size::Auto, max_height: Size::Auto, font_size: ROOT_FONT_SIZE, foreground: 0xff000000, background: BackgroundColor::Rgba(0) } }
 }
 
 fn unsupported(source: &str, message: impl Into<String>) -> Diagnostic {
@@ -240,13 +242,13 @@ fn apply_background_shorthand(style: &mut Style, parent: &Style, value: &str, so
     Ok(())
 }
 
-fn validate(d: &css::Declaration, candidate: bool, inherited_flex: flex::Flex) -> Result<(), Diagnostic> {
+fn validate(d: &css::Declaration, candidate: bool, padding_candidate: bool, inherited_flex: flex::Flex, inherited_padding: padding::Padding) -> Result<(), Diagnostic> {
     if d.name.starts_with("--") {
         return variables::validate_value(&d.value, &d.source);
     }
     if variables::contains_var(&d.value) {
         if !["width", "height", "min-width", "min-height", "max-width", "max-height",
-             "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom"].contains(&d.name.as_str()) {
+             "font-size", "background", "background-color", "color", "display", "flex-direction", "flex", "flex-grow", "flex-shrink", "flex-basis", "order", "align-self", "justify-content", "margin", "margin-left", "margin-top", "margin-right", "margin-bottom", "padding", "padding-left", "padding-top", "padding-right", "padding-bottom"].contains(&d.name.as_str()) {
             return Err(unsupported(&d.source, format!("{} has no admitted ordinary-Rive lowering yet", d.name)));
         }
         return variables::validate_value(&d.value, &d.source);
@@ -276,6 +278,13 @@ fn validate(d: &css::Declaration, candidate: bool, inherited_flex: flex::Flex) -
         // Display remains flex; direction is independent of the column authoring reset.
         "display" if matches!(value.as_str(), "flex" | "inherit") => {}
         "margin" | "margin-left" | "margin-top" | "margin-right" | "margin-bottom" => { margins::Margins::default().apply(&d.name, &value, margins::Margins::default(), &d.source)?; }
+        "padding" | "padding-left" | "padding-top" | "padding-right" | "padding-bottom" => {
+            let mut descriptor = padding::Padding::default();
+            descriptor.apply(&d.name, &value, inherited_padding, if padding_candidate { 0. } else { ROOT_FONT_SIZE }, &d.source)?;
+            if !padding_candidate && !descriptor.is_zero() {
+                return Err(unsupported(&d.source, "Nonzero padding requires private candidate qualification, including unmatched or overridden declarations"));
+            }
+        }
         "justify-content" => { spacing::computed(&value, spacing::Spacing::Normal, &d.source)?; }
         "align-self" => { computed_alignment(&value, SelfAlignment::AUTO, &d.source)?; }
         "flex" | "flex-grow" | "flex-shrink" | "flex-basis" => {
@@ -306,9 +315,9 @@ fn ordering_key(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style) ->
     computed_order(&value, parent.order, &declaration.source)
 }
 
-fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool) -> Result<Style, Diagnostic> {
+fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candidate: bool, padding_candidate: bool) -> Result<Style, Diagnostic> {
     let mut declarations = css::cascade(rules, element)?;
-    for d in &declarations { validate(d, candidate, parent.flex)?; }
+    for d in &declarations { validate(d, candidate, padding_candidate, parent.flex, parent.padding)?; }
     let variable_values = variables::compute(&declarations, &parent.variables)?;
     declarations.retain(|d| !d.name.starts_with("--"));
     for d in &mut declarations {
@@ -317,7 +326,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
                 .ok_or_else(|| unsupported(&d.source, "Missing or cyclic custom property without a usable fallback; computed-value invalidation is not admitted"))?;
             // Substitution cannot bypass property admission, even for a declaration
             // that loses the cascade. Keep the compiler's strict diagnostics.
-            validate(d, candidate, parent.flex)?;
+            validate(d, candidate, padding_candidate, parent.flex, parent.padding)?;
         }
         if d.name != "order" { d.value = css::ordinary_value(&d.value)?; }
     }
@@ -341,6 +350,7 @@ fn computed(element: ElementRef<'_>, rules: &[css::Rule], parent: &Style, candid
     for d in &declarations {
         match d.name.as_str() {
             "margin" | "margin-left" | "margin-top" | "margin-right" | "margin-bottom" => style.margins.apply(&d.name, &d.value, parent.margins, &d.source)?,
+            "padding" | "padding-left" | "padding-top" | "padding-right" | "padding-bottom" => style.padding.apply(&d.name, &d.value, parent.padding, style.font_size, &d.source)?,
             "justify-content" => style.spacing = spacing::computed(&d.value, parent.spacing, &d.source)?,
             "align-self" => style.self_alignment = computed_alignment(&d.value, parent.self_alignment, &d.source)?,
             "order" => style.order = computed_order(&d.value, parent.order, &d.source)?,
@@ -375,7 +385,7 @@ pub(super) fn compile(input: &CompileInput) -> Result<CompileOutput, Diagnostic>
 // the complete pipeline, while the exported API always uses Guarded.
 #[derive(Clone, Copy)]
 #[allow(dead_code)]
-pub(super) enum FlexPolicy { Guarded, Candidate }
+pub(super) enum FlexPolicy { Guarded, Candidate, PaddingCandidate }
 pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Result<CompileOutput, Diagnostic> {
     if ![input.width, input.height].into_iter().all(|v| v.is_finite() && v > 0. && v <= 16384.) {
         return Err(Diagnostic::new("invalid-viewport", "viewport", "Dimensions must be finite and in (0,16384]"));
@@ -389,7 +399,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     let body = document.root_element().child_elements().find(|e| e.value().name() == "body")
         .ok_or_else(|| Diagnostic::new("html-syntax", "html", "Missing document body"))?;
     let rules = css::stylesheet(&input.css)?;
-    css::validate_rules(&rules, |declaration| validate(declaration, matches!(policy, FlexPolicy::Candidate), flex::Flex::default()))?;
+    css::validate_rules(&rules, |declaration| validate(declaration, matches!(policy, FlexPolicy::Candidate), matches!(policy, FlexPolicy::PaddingCandidate), flex::Flex::default(), padding::Padding::default()))?;
     for host in [document.root_element(), body] {
         if !css::cascade(&rules, host)?.is_empty() {
             return Err(unsupported("document", "Rules matching host html/body are not admitted yet; style authored box elements"));
@@ -413,7 +423,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     host_paint.set("parentId", Value::Uint(host_fill_id))?;
     host_paint.set("colorValue", Value::Color(0xffffffff))?;
     records.push(host_paint);
-    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate) };
+    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::PaddingCandidate) };
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };
@@ -426,7 +436,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     Ok(CompileOutput { riv: wire::encode(&output.records)?, source_map: output.map })
 }
 
-struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool }
+struct Emitter { records: Vec<Record>, map: Vec<SourceNode>, ids: BTreeSet<String>, candidate_flex: bool, candidate_padding: bool }
 impl Emitter {
     fn layout_box(&mut self, name: &str, parent_id: u32, direction: Direction, alignment: u32,
         parent_direction: Direction, sizes: [Size; 2], bounds: [Size; 4], stretch: bool, auto_margins: [bool; 4]) -> Result<u32, Diagnostic> {
@@ -506,16 +516,23 @@ impl Emitter {
         // Inspect compact sibling facts before introducing any helper. Keeping
         // whole Styles here would retain each inherited variable environment.
         let mut group = flex::Group::default();
+        let mut padded_group = !parent_style.padding.is_zero();
+        let mut baseline_group = false;
         for (_, element, path, _, _) in &ordered_elements {
-            let style = computed(*element, rules, parent_style, self.candidate_flex)?;
+            let style = computed(*element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
             group.inspect(&style, parent_style, definite_chain, path)?;
+            padded_group |= !style.padding.is_zero();
+            baseline_group |= style.self_alignment.is_baseline() && !style.margins.cross(parent_style.direction);
         }
         group.validate(parent_style, path, self.candidate_flex)?;
+        if padded_group && baseline_group {
+            return Err(unsupported(path, "Padding with baseline groups needs padding-aware metric and origin qualification"));
+        }
         let count = ordered_elements.len();
         let mut children = Vec::with_capacity(count);
         if count != 0 { spacing::emit(self, parent_id, parent_style, true)?; }
         for (index, element, path, id, order) in ordered_elements {
-            let style = computed(element, rules, parent_style, self.candidate_flex)?;
+            let style = computed(element, rules, parent_style, self.candidate_flex, self.candidate_padding)?;
             if [style.height, style.min_height, style.max_height].iter().any(|size| matches!(size, Size::Percent(_))) && matches!(parent_style.height, Size::Auto) && parent_id != 0 {
                 return Err(unsupported(&path, "Percentage height or height bound inside an auto-height parent needs an immutable-target encoding proof"));
             }
@@ -533,6 +550,9 @@ impl Emitter {
                     else if start { AlignmentPosition::FlexEnd } else { AlignmentPosition::FlexStart },
                     overflow: OverflowAlignment::Safe }
             } else { style.self_alignment };
+            if !style.padding.is_zero() && effective_alignment.wrapper_alignment(parent_style.direction).is_some() {
+                return Err(unsupported(&path, "Padding on an alignment wrapper participant needs a separate padding-floor and percentage-containing-block proof"));
+            }
             if style.margins.main(parent_style.direction) && parent_style.spacing.distributes() {
                 return Err(unsupported(&path, "Main-axis automatic margins with space-around/evenly require line-aware distribution; flexible spacer helpers would consume margin free space"));
             }
@@ -585,6 +605,7 @@ impl Emitter {
             for (margin, synthetic) in authored_margins.iter_mut().zip(alignment_margins) { *margin |= synthetic; }
             let object_id = self.layout_box(&id, authored_parent, style.direction, style.spacing.alignment(style.direction),
                 native_parent_direction, sizes, bounds, stretch, authored_margins)?;
+            style.padding.emit(&mut self.records[object_id as usize + 2])?;
             if let Some(plan) = flex_plan {
                 // Cross-alignment wrappers are the actual flex participants.
                 // Keep the authored box identity and its inner stretch sizing.
@@ -619,5 +640,46 @@ impl Emitter {
         }
         baseline::emit(self, parent_id, parent_style, &children, path)?;
         Ok(children)
+    }
+}
+
+#[cfg(test)]
+mod padding_pipeline_tests {
+    use super::*;
+    fn input(css: &str) -> CompileInput {
+        CompileInput {html:"<div id=p><div id=a><div id=leaf></div></div></div>".into(),css:format!("#p{{width:160px;height:120px}}#a{{width:40px;height:30px}}#leaf{{width:10px;height:10px}}{css}"),width:240.,height:160.}
+    }
+    fn candidate(css:&str)->CompileOutput {compile_profile(&input(css),FlexPolicy::PaddingCandidate).unwrap()}
+    #[test]
+    fn padding_cascade_variables_font_resolution_and_inheritance_remain_computed() {
+        assert_eq!(candidate("#p{--pad:1em 2em;font-size:10px;padding:var(--pad)}"),candidate("#p{font-size:10px;padding:10px 20px}"));
+        assert_eq!(candidate("#p{font-size:10px;padding:2em}#a{font-size:30px;padding:inherit}"),candidate("#p{font-size:10px;padding:20px}#a{font-size:30px;padding:20px}"));
+        assert_eq!(candidate("#a{padding-left:4px!important;padding:2px}"),candidate("#a{padding:2px 2px 2px 4px}"));
+        assert_eq!(candidate("#a{padding:10px;padding:unset}"),candidate(""));
+    }
+    #[test]
+    fn candidate_padding_keeps_authored_identity_and_element_count() {
+        let plain=candidate("");let padded=candidate("#p{padding:2% 3% 4% 5%}#a{padding:1px 2px 3px 4px}");
+        assert_eq!(plain.source_map,padded.source_map);
+        assert_ne!(plain.riv,padded.riv);
+        // A padding floor larger than the authored box is native behavior;
+        // neither dimensions nor helpers are substituted at compile time.
+        assert!(compile_profile(&input("#a{width:1px;height:1px;padding:30px}"),FlexPolicy::PaddingCandidate).is_ok());
+    }
+    #[test]
+    fn unresolved_padding_wrapper_baseline_and_flex_contexts_diagnose() {
+        for direction in ["row","row-reverse","column","column-reverse"] {
+            let css=format!("#p{{flex-direction:{direction}}}#a{{padding:2px;align-self:center}}");
+            assert!(compile_profile(&input(&css),FlexPolicy::PaddingCandidate).is_err());
+        }
+        for css in ["#p{flex-direction:row;padding:2px}#a{align-self:baseline}","#p{flex-direction:row}#a{padding:2px;align-self:baseline}","#a{height:auto;flex:1 1 0px;padding:2px}","#a{box-sizing:content-box;padding:2px}"] {
+            assert!(compile_profile(&input(css),FlexPolicy::PaddingCandidate).is_err(),"{css}");
+        }
+        assert!(compile_profile(&input("#a{padding:2px}"),FlexPolicy::Candidate).is_err());
+    }
+    #[test]
+    fn ancestor_baseline_cannot_reuse_unpadded_descendant_metrics() {
+        let css="#p{flex-direction:row}#a{align-self:baseline}#leaf{padding:2px}";
+        assert!(compile_profile(&input(css),FlexPolicy::PaddingCandidate).is_err());
     }
 }

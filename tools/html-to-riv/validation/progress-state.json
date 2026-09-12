@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Flex factors and guarded wrapping integration",
+  "focus": "Padding numeric integration and flex numeric admission",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
-  "current": "Compiler percentage-overflow guard now rejects6known nonfinite cases and preserves12finite controls;133Rust/34Node tests pass.482public outputs and48private flex files remain exact. Nonlegacy flex numeric qualification and padding integration remain active work.",
-  "next": "Qualify flex factor/basis native profiles and retain pixel failures; integrate computed values with parent/intrinsic guards. Continue wrapping coordinate and sizing proofs.",
+  "current": "Private padding pipeline reproduces20border-box files;147Rust/35Node tests pass.482public outputs and48flex candidates remain exact. Public nonzero padding and nonlegacy flex still await their numeric/context qualification.",
+  "next": "Implement padded content-size bounds and qualify public padding contexts. Derive production flex numeric descriptors and literal conversion bounds; continue full backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Integrated private padding checkpoint",
+      "path": "tools/html-to-riv/validation/padding-integration-receipt.json"
+    },
     {
       "label": "Implemented percentage overflow guard",
       "path": "tools/html-to-riv/validation/numeric-guard-receipt.json"

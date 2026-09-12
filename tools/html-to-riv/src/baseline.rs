@@ -27,6 +27,7 @@ fn bounded_height(style: &Style, intrinsic: Option<f32>) -> Option<f32> {
 }
 
 pub(super) fn summarize(style: &Style, children: &[Child]) -> Option<Metric> {
+    if !style.padding.is_zero() { return None; }
     if children.is_empty() {
         if let Some(height) = bounded_height(style, Some(0.)) {
             return Some(Metric { ascent: Ascent::Fixed(height), descent: 0., origin: if height == 0. { 0. } else { 1. } });
@@ -74,6 +75,7 @@ fn ordered(children: &[Child]) -> Vec<&Child> {
 // fixed preceding sibling can contribute its height even when its own
 // baseline topology remains unresolved.
 pub(super) fn used_height(style: &Style, children: &[Child]) -> Option<f32> {
+    if !style.padding.is_zero() { return None; }
     let intrinsic = if children.is_empty() { Some(0.) }
     else if matches!(style.direction, Direction::Column) {
         ordered(children).into_iter().try_fold(0.0_f32, |sum, child| {
@@ -85,6 +87,7 @@ pub(super) fn used_height(style: &Style, children: &[Child]) -> Option<f32> {
 }
 
 pub(super) fn summarize_last(style: &Style, children: &[Child], height: Option<f32>) -> Option<Metric> {
+    if !style.padding.is_zero() { return None; }
     let height = height?;
     let ascent = if children.is_empty() { height } else {
         if !matches!(style.direction, Direction::Column) || style.spacing.distributes()

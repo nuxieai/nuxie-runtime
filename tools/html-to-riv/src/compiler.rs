@@ -52,6 +52,12 @@ mod wrapping;
 #[allow(dead_code)]
 #[path = "wrapping_paint.rs"]
 mod wrapping_paint;
+#[allow(dead_code)] // Machine size bounds; full wrapping admission remains separate.
+#[path = "wrapping_sizes.rs"]
+mod wrapping_sizes;
+#[allow(dead_code)] // Base scene binding; augmented wrapping graph proof follows.
+#[path = "wrapping_slots.rs"]
+mod wrapping_slots;
 #[path = "images.rs"]
 mod images;
 #[path = "image_constraints.rs"]

@@ -1,0 +1,19 @@
+{
+  "scope": "Private machine-size and base-scene binding; no public wrapping or new pixel qualification",
+  "rustTests": 370,
+  "nodeTests": 56,
+  "imageOutputs": 282,
+  "historicalOutputs": 794,
+  "compilerSha256": "fe27c13223299189e7c92edea2d5d9cb1c45e2a892913411b6c4aaf5cdc055b9",
+  "wasmSha256": "3f8bb54d61de9875941b5e631a721e776750e34d82ea2ac534fc2b4e1a2f6031",
+  "publicWrappingAdmitted": false,
+  "artifactBindings": 7846,
+  "verification": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-size-binding-verification-r1.json",
+    "sha256": "b7f3cf424ff0f5635f33d7a378be407f52d8ae01f080053257e48aeb55c9493e"
+  },
+  "review": {
+    "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-size-binding-review.md",
+    "sha256": "88ef7fe680874e4957a3b6eda56f6146ec0291d8e6e0e40b95a2bdeadd966a27"
+  }
+}

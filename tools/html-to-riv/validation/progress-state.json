@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
   "focus": "Wrapped sizing and admission proof",
-  "status": "Private snapped sizing checkpoint verified; source certificate next",
-  "current": "48private scenes pass384nativegeometry/pixels and768clears.768line gates and1152eachcarry/max/offset checks pass independent Chrome packing. All768PNGfiles match prior reviewed pixels.361Rust/56Node;282priorimages+794historical exact.",
-  "next": "Implement the source-derived wrapping admission certificate in validation/wrapped-sizing-certificate-next.md: positive slot bounds, anchor error, separation, normalizer cancellation, carry and mask bounds. Do not promote experimental1/64 to a public policy.",
+  "status": "Private machine size bounds and base slot binding implemented; full wrapping certificate remains open",
+  "current": "Machine size intervals and a closed base-scene slot binder are implemented with9new tests.370Rust/56Node, TypeScript, native/WASM and source guard pass;282priorimage+794historical outputs are exact.7,846artifact bindings verified. Public wrapping remains unadmitted; no new pixel campaign.",
+  "next": "Connect authored parent domains and prove final helper-graph preservation. Implement validated coordinate accumulation, line separation, rounded normalization, carry reconstruction error and mask bounds using wrapped-gap-normalizer-audit.md.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Machine size and base slot binding checkpoint",
+      "path": "tools/html-to-riv/validation/wrapped-size-binding-review.md"
+    },
+    {
+      "label": "Different-line, normalizer and carry arithmetic audit",
+      "path": "tools/html-to-riv/validation/wrapped-gap-normalizer-audit.md"
+    },
     {
       "label": "Private snapped sizing and independently checked signals",
       "path": "tools/html-to-riv/validation/wrapped-sizing-snapped-review.md"

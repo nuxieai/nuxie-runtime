@@ -2,6 +2,14 @@
 
 This is a read-only implementation plan, not a completed proof or public admission. It builds on `wrapped-anchor-error-audit.md`, `wrapped-slot-size-invariant.md` and `wrapped-coordinate-admission.md`. No runtime changes or new native campaign are proposed here.
 
+## Implemented prerequisites and audit corrections
+
+`src/wrapping_sizes.rs` now resolves closed machine size intervals from authored numeric metadata and bit-matching ordinary fields. It follows native binary32 percentage multiplication order, checks intermediate overflow before clamps, retains original parent bases and implements minimum-wins endpoint clamping. These are machine enclosures, not ideal CSS error envelopes. Explicit minima are required; automatic minima remain unresolved.
+
+`src/wrapping_slots.rs` binds a closed, completed base scene before augmentation: one root-origin parent, independent definite slots, one painted visible child per slot, unique styles and no unrecognized records or native overrides. The token borrows the inspected records. This is **not yet a binding of the final helper graph**; generated landmarks/constraints/masks and preservation of the base scene still need inspection after composition.
+
+The newer `wrapped-gap-normalizer-audit.md` refines the proposed equations below. Exclude line stretch as well as item stretch; validate actual accumulator magnitude intervals before choosing R; check the rounded normalizer length; and propagate reconstruction error through carry maxima. In particular a local-space max constraint can exceed its selected operand by one ulp, so the old measured-extent bound alone does not establish reset safety. The conditional different-line operation count31+4N is sufficient only with the shared-machine-offset and validated-envelope premises in that audit. None of these prerequisites admits public wrapping yet.
+
 ## Smallest general route
 
 Start with a root-origin, translation-only wrapping scope whose parent has definite bounded dimensions, zero insets/gap, and independent slots with two definite dimensions. Require every slot's native cross size to have a strictly positive source-derived lower bound. Permit variable item count subject to computed bounds and actual graph cost; do not specialize the certificate to the three historical fixture identities. Explicit positional line fractions0,1/2,1 and both wrap directions are possible once each passes the same inequalities. Initially reject intrinsic/stretch/baseline slots, relative insets, slot aspect ratios, native size-modifying constraints, nonzero origins and unknown ancestry.

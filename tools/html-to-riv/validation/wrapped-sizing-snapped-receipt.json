@@ -1,0 +1,365 @@
+{
+  "scope": "Private snapped sizing checkpoint only. No public CSS admission or runtime modification.",
+  "epsilon": 0.015625,
+  "epsilonIsAdmissionCertificate": false,
+  "counts": {
+    "cases": 48,
+    "frames": 384,
+    "sizingGates": 768,
+    "forwardValues": 1152,
+    "backwardValues": 1152,
+    "lineMaximumValues": 1152,
+    "offsetValues": 1152,
+    "sizingPass": 384,
+    "geometryPass": 384,
+    "pixelPass": 384,
+    "clearPass": 768,
+    "changedPairs": 0,
+    "failureRows": 0
+  },
+  "recordCosts": [
+    {
+      "case": "combined-slot-row-wrap-flex-start-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-start-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-start-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-start-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-center-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-center-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-center-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-center-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-flex-end-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-start-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-center-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-row-wrap-reverse-flex-end-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-start-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-center-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-center-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-center-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-center-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-flex-end-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-start-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-center-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-percentage-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-percentage-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-bounds-normal-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    },
+    {
+      "case": "combined-slot-column-wrap-reverse-flex-end-bounds-reverse-main",
+      "raw": 43,
+      "sized": 193,
+      "final": 342
+    }
+  ],
+  "publicBuild": {
+    "rustTests": 361,
+    "nodeTests": 56,
+    "sourceBindings": 288,
+    "immutableRuntimeGuard": "pass",
+    "compilerSha256": "88e199170c3559b966dc9cf79b53471dc2889190d30afd71be08c3fcbcb6227f",
+    "wasmSha256": "acd9142d0bf8166dc5e97f2a6ab1d4d0414e62dc0ed6418dd6809082e12455e6",
+    "unchangedFromMixedCheckpoint": true
+  },
+  "unchangedPublicImageFilesAndMaps": 282,
+  "unchangedHistoricalOutputs": 794,
+  "visualTransfer": {
+    "pairs": 384,
+    "identicalCompletePngFiles": 768,
+    "priorDirectPairs": 96,
+    "priorExactTransfers": 288,
+    "freshDirectInspections": 0
+  },
+  "preservedThresholdTransitionFailures": 8,
+  "next": "validation/wrapped-sizing-certificate-next.md",
+  "verificationArtifactBindings": 11337,
+  "bindings": [
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-sizing-snapped-checkpoint-r1/verification.json",
+      "sha256": "6d0e82d25b2e3f3b83922671f24df7390c06a9384612d904fdb993c6008fd36c"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-sizing-snapped-checkpoint.py",
+      "sha256": "5b385b7302dc9e0a52fac7bd5e596bf9a21537eff23d4ba18b97c454539c74cc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-sizing-snapped-review.md",
+      "sha256": "345725c86b5ae5c2cf9451486e9ef4c5889d2f4a594777c69e53d94a5460dda5"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/validation/wrapped-sizing-snapped-evidence.py",
+      "sha256": "4d45e094112169f750381c37f1cb8535a2ebeb7d6778747aa4f3f290faccd62b"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-sizing-snapped-r1/sizing-evidence.json",
+      "sha256": "a0bbcd9aa38f2955c7d9daa3e1ad56bd27780cccec6289d11e3afae829c8fe69"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-sizing-snapped-build-r1/summary.json",
+      "sha256": "c220208bce59833b67b22fe4e9f0e3195d87fb54c2d7373da27c45c08215dadc"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/wrapped-sizing-snapped-existing-r1/results/manifest.json",
+      "sha256": "f5f2d4b5a4ffa2132fd4829524f98a131fe88893673bb928ed5136fff2122012"
+    },
+    {
+      "path": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-transport-malformed-wrapped-sizing-regression-r1/receipt.json",
+      "sha256": "d15e93735e603f1dcf5792a55a6c88fcc00b2a5493d2551c510c97b34bb3b4ad"
+    }
+  ]
+}

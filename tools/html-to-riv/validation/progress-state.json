@@ -1,11 +1,19 @@
 {
   "updated": "2026-09-12",
-  "focus": "Mixed image bounds; returning to wrapped layout",
-  "status": "Mixed public checkpoint verified; next is wrapped sizing",
-  "current": "50requests/26files/100interface comparisons.208geometry/presence and190pixel passes.18failedframes include four image-paint mismatch cases.256priorimage files/maps and794historical outputs exact.",
-  "next": "Finish mixed public evidence checkpoint, then return to L04/L06 snapped sizing discriminator using validation/next-independent-checkpoint.md. Keep unresolved image combinations documented.",
+  "focus": "Wrapped sizing and admission proof",
+  "status": "Private snapped sizing checkpoint verified; source certificate next",
+  "current": "48private scenes pass384nativegeometry/pixels and768clears.768line gates and1152eachcarry/max/offset checks pass independent Chrome packing. All768PNGfiles match prior reviewed pixels.361Rust/56Node;282priorimages+794historical exact.",
+  "next": "Implement the source-derived wrapping admission certificate in validation/wrapped-sizing-certificate-next.md: positive slot bounds, anchor error, separation, normalizer cancellation, carry and mask bounds. Do not promote experimental1/64 to a public policy.",
   "baseline": "Immutable source target: 6c7ac16617835b5f581784ff08a9e779bb52faf3; source guard passes with current work. Recorded main restoration: 9738049372ffd45639de39c2217c1f548963340a. Live remote head was not queried during this review; replacement remains local.",
   "evidence": [
+    {
+      "label": "Private snapped sizing and independently checked signals",
+      "path": "tools/html-to-riv/validation/wrapped-sizing-snapped-review.md"
+    },
+    {
+      "label": "Next source-derived wrapping certificate obligations",
+      "path": "tools/html-to-riv/validation/wrapped-sizing-certificate-next.md"
+    },
     {
       "label": "Mixed public constraints and image/tail pixel failures",
       "path": "tools/html-to-riv/validation/public-image-mixed-review.md"

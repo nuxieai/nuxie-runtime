@@ -1,0 +1,69 @@
+# Source-derived certificate for wrapped sizing and paint gates
+
+This is a read-only implementation plan, not a completed proof or public admission. It builds on `wrapped-anchor-error-audit.md`, `wrapped-slot-size-invariant.md` and `wrapped-coordinate-admission.md`. No runtime changes or new native campaign are proposed here.
+
+## Smallest general route
+
+Start with a root-origin, translation-only wrapping scope whose parent has definite bounded dimensions, zero insets/gap, and independent slots with two definite dimensions. Require every slot's native cross size to have a strictly positive source-derived lower bound. Permit variable item count subject to computed bounds and actual graph cost; do not specialize the certificate to the three historical fixture identities. Explicit positional line fractions0,1/2,1 and both wrap directions are possible once each passes the same inequalities. Initially reject intrinsic/stretch/baseline slots, relative insets, slot aspect ratios, native size-modifying constraints, nonzero origins and unknown ancestry.
+
+The easiest first implementation admits authored finite point cross sizes and homogeneous point min/max, together with responsive main dimensions. Cross percentages can follow using the same interval interface when their minima establish a positive machine lower bound. Existing percentage-only historical fixtures cannot all enter this route: their cross-size lower bound is zero over the full open viewport domain. Preserve that limitation rather than increasing the minimum viewport implicitly.
+
+The slot-size invariant establishes that the published final size equals the target size used in cross alignment for this zero-inset definite-slot shape. Without that fact, an anchor reconstructed from final size need not identify the same line anchor. Bind it to final ordinary records and their native size/units, not only computed Style.
+
+## Available implementation pieces and their actual limits
+
+- `ScalarProvenance` retains authored ideal intervals, native binary32 value and error, including source coefficient selection. Its nonnegative add/multiply/min/max operations suit source size arithmetic; they do not prove runtime anchor equality.
+- `flex_numeric::ErrorEnvelope` exposes ideal lower/upper and error, checked add/subtract and `preferred_percent`. The percentage helper correctly models `fl(fl(coefficient * owner) * 0.01f32)` and rejects intermediate overflow. Enclose native values with outward-rounded `[lower-error, upper+error]`. `mul`, `div` and clamp remain private implementation helpers; there is no public sqrt/normalizer correlation proof.
+- `numeric::Bounds` tracks finite upper/lower/witness dimensions but not origin arithmetic errors or record identities. Its exponent checks alone cannot certify gates.
+- `flex_sizes::propagate` currently rejects nonzero min/max, flexible targets, unknown parents, helpers/wrappers and content owners. It is not already a wrapped-slot bound pass. `flex_world::propagate` proves direct single-line start-aligned groups, not wrapping line offsets. `flex_proof` is explicitly a direct-leaf conditional analyzer.
+- `flex_scene` and descriptors provide a useful final-record/ancestry binding pattern. A wrapping certificate needs explicit roles for independent slots, visible moved owners, generated landmarks and masks; accepting arbitrary user constraints into the existing direct-box certificate would be unsound.
+
+Add small internal helpers for native size-interval resolution and bound clamping, finalized slot-shape binding, wrapping local-coordinate bounds, and gate/mask inequalities. Reuse arithmetic primitives rather than treating the current direct-leaf certificate as a wrapping proof.
+
+## Concrete quantities and inequalities
+
+For each slot resolve the preferred dimension and min/max against the original fixed parent content basis. With nonnegative intervals, native used size is monotone:
+
+`h = max(minimum, min(preferred, maximum))`, with absent maximum unbounded.
+
+Clamp lower endpoints together and upper endpoints together, with native-operation outward rounding. Let `l_i` and `h_i` bound that machine size; `L = min(l_i)` and `H = max(h_i)`. Reject unknown, nonfinite or nonpositive L for this first route. A maximum smaller than a positive minimum does not erase the lower bound because minimum wins.
+
+Any nonempty contiguous line has extent at least L and at most H. For adjacent visual lines with common fraction f, the ideal anchor gap is `(1-f)*linePrevious + f*lineNext`, so at least L. Nonadjacent paint-anchor pairs cannot have a smaller ideal gap. No enumeration of browser line partitions is needed for this sufficient route. A later partition-aware lower bound could admit center alignment when not every item has positive l_i; it is a separate optimization.
+
+Let N be slot count, C the parent cross upper bound, and P bound its absolute machine world translation. A deliberately loose candidate envelope is:
+
+`B = P + 2*C + (2*N + 4)*H + 1`
+
+`R = 4*(B + H + 1)`.
+
+Evaluate every sum/product outward. The local envelope must be justified against the chosen native direction/positional-alignment path: at most N line extents, first-line positional offset bounded by max(C,NH), local item offsets bounded by H, and reconstructed anchors bounded by another H. For initial root-origin scopes P=0. Do not substitute a lexical depth limit for P. If allowing ancestors later, derive each actual world interval independently.
+
+The existing same-line operation audit supplies `E_same = upward_f32(31*(2^-24*R + 2^-149))`, conditional on its exact landmark/subtraction graph and final-size invariant. Use this as emitted epsilon after validating the graph's operations still match the audit. Shared parent/line values cancel symbolically; independently interval-subtracting two full world ranges loses that relation and cannot prove a small same-line difference.
+
+For **different-line** separation, account for line-offset accumulation separately. `flexbox.rs:2059,2097` updates the cross accumulator using a sum and add/subtract; it is not safe to assume every earlier common-line cancellation applies unchanged. A conservative candidate budget is `E_gap = upward((31 + 4*N + 8)*eta(R))`, where `eta(R)=2^-24*R+2^-149`: two scalar operations per line, two endpoint accumulation budgets, and slack for first-line placement. The helper must audit and record that path-specific operation count; this formula is a proposed sufficient overcount, not an implemented theorem.
+
+With epsilon>=E_same, same-line subtraction is nonpositive before the zero floor and therefore produces exact zero. For separated lines require the downward-rounded bound
+
+`deadLower = down(L - E_gap - epsilon - E_subtract) > 0.001f32`.
+
+Here E_subtract bounds the actual abs-minus-epsilon operation; use its checked interval, not a guessed tolerance. Also bound `deadUpper`, its square and sqrt inputs as finite. The square must not overflow merely because deadUpper is finite.
+
+As a concrete **candidate certificate input**, N=3, parent cross upper8192, slot cross sizes1px,30px,50px and P=0 give L=1,H=50,B=16885,R=67744. Before outward endpoint refinements, E_same is0.1251735687 and the proposed E_gap is0.2059307098; L minus both leaves about0.6688957214, far above0.001. This shows a source-derived epsilon can differ substantially from historical experimental1/64. It does not impose a1px minimum on arbitrary designs: the actual inequalities determine admission. Historical percentage-only start/end cases still fail the positive-gap premise.
+
+## Normalizer, carry and masks need their own checks
+
+Once dead is positive normal-range and above the early return, the projected vector has exactly one nonzero component. The actual immutable operation is `dead * (D / sqrt(fl(dead*dead)))`, followed by target addition and **Vec2D::lerp at strength1** (`distance_constraint.rs:75–77`, `vec2d.rs:41–42`). Retain correlation between dead and its length. Before interpolation, a conservative lower factor `(1-u)^2/(1+u)^2` relative to D is comfortably above1/2 when the square/sqrt/divide/multiply remain finite and normal.
+
+Do not stop that proof before interpolation. Native lerp computes `(b-a).mul_add(1,a)` after a rounded subtraction; strength1 does not make it an exact copy. With a very large dead value, cancellation can destroy b even if normalization itself was finite. Bound subtraction error by the actual `|b-a|` interval, then the fused add result; require the resulting normalized lower bound, after interpolation and zero-anchor subtraction, to remain strictly above D/2. With the concrete moderate-coordinate R above the bound has ample margin, but mere finiteness is insufficient. Doubling and clamping then gives exact65536; zero returns early and stays zero. The corresponding upper bound must keep doubling finite. This missing interpolation obligation is directly visible in current immutable source, not a new native failure capture.
+
+A generic independent interval calculation of `dead * (D/length)` loses correlation and may be too weak. A dedicated scalar-normalizer lemma plus the actual lerp error bound is the smaller helper than broadly exposing unchecked arithmetic or assuming DistanceConstraint is an exact sentinel primitive.
+
+Carry reset additionally requires every measured line/slot extent upper, including landmark-difference error, to be at most65536. Exact unsigned sentinel subtraction followed by max(0,...) then clears the previous-line carry. Do not use only CSS h_i if the measured bottom-minus-top path has error. Same-line carried maxima must retain their own size/alignment error envelope; correct binary membership alone does not prove final geometry.
+
+Current paint masks are centered at16384 with size32768, giving bounds[0,32768]. Their zero active edge has no positive margin around the observed viewport[0,16384]. A concrete ordinary-file candidate expands them to[-m,32768+m] by retaining center16384 and using size32768+2m, where representable m is derived from active-mask transform/raster uncertainty. Require `m >= E_active + rasterMargin` and `65536-m-E_inactive > 16384+rasterMargin`; audit the orthogonal axis too. Do not declare m=1 universally sufficient without deriving those errors. Exact0/65536 signals remove their normalization residual but not every mask transform or coverage obligation. Runtime viewing outside the declared artboard-local viewport or with arbitrary transformations requires a different observation certificate.
+
+## Certificate output and next implementation seam
+
+Return an internal `WrappingCertificate` containing finalized role/record bindings, domain, native per-slot intervals, L/H/N/P/B/R, counted operation graph, epsilon, positive dead interval, normalizer proof premises, measured carry bounds, mask coverage inequalities and exact charged record cost. Return contextual unresolved reasons for any missing premise. This certificate is compiler-only data, never a runtime-policy sidecar.
+
+Implement the first machine-interval resolver and slot-shape binder before public routing; then derive the equations above from real source inputs and emitted records. Connect the private snapped sizing experiment to that certificate only after the different-line operation count and mask expansion have evidence. No current scalar or flex helper proves those missing steps automatically.

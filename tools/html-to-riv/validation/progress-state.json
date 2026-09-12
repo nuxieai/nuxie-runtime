@@ -1,11 +1,15 @@
 {
   "updated": "2026-09-11",
-  "focus": "Padding numeric integration and flex numeric admission",
+  "focus": "Public padding checkpoint; flex numeric admission next",
   "status": "Automatic margins implemented with retained pixel limits; wrapping primitives staged",
-  "current": "Private padding pipeline reproduces20border-box files;147Rust/35Node tests pass.482public outputs and48flex candidates remain exact. Public nonzero padding and nonlegacy flex still await their numeric/context qualification.",
-  "next": "Implement padded content-size bounds and qualify public padding contexts. Derive production flex numeric descriptors and literal conversion bounds; continue full backlog.",
+  "current": "Public padding implemented:152Rust/35Node tests;53 controls pass,482 public and48 private flex outputs remain exact. Native padding and interaction evidence retains ten fractional pixel failures.",
+  "next": "Continue flex numeric admission and wrapping; broaden padding contexts from evidence and work through the remaining backlog.",
   "baseline": "Target tree: 6c7ac16617835b5f581784ff08a9e779bb52faf3. Remote main after revert: 9738049372ffd45639de39c2217c1f548963340a. Full tracked-tree equality verified.",
   "evidence": [
+    {
+      "label": "Public padding checkpoint and retained limitations",
+      "path": "tools/html-to-riv/validation/public-padding-receipt.json"
+    },
     {
       "label": "Integrated private padding checkpoint",
       "path": "tools/html-to-riv/validation/padding-integration-receipt.json"

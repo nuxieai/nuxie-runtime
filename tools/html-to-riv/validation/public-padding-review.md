@@ -1,0 +1,13 @@
+# Public padding checkpoint
+
+Physical padding and its shorthand now accept nonnegative px/em/rem/percent lengths, zero, variables and CSS-wide inheritance/reset in the ordinary border-box profile. All percentage sides use containing content width. No runtime/renderer changes or extra padding objects are required.
+
+The public compiler reproduces all20 positive padding native files/maps exactly. It also reproduces32/36 interaction files/maps exactly, covering automatic-margin/around/evenly helpers, order and padded descendants under unpadded alignment wrappers. Four inherited mixed-unit files differ because the experimental adapter explicitly writes zero bottom-padding fields and the compiler omits zero fields. They were therefore rerendered independently:32 geometry and32 pixel frames pass with64 clear checks. All64 complete Chrome/native RGBA images equal the previously reviewed interaction images independently; visual review transfers through that identity, not through an assumption about omitted defaults.
+
+The earlier160/158 padding geometry/pixel result and288/280 interaction result retain their ten failed pixel frames. Exact output reproduction does not erase these failures or qualify arbitrary combinations. No tolerances changed. L15 remains partial; percentage margins remain unadmitted.
+
+The numeric guard propagates content-size intervals through padded boxes, including padding floors after maximum clamping. It bounds native divide-then-multiply percentage padding independently from tagged percentage dimension arithmetic. Side sums are checked before subtraction, including vertical sides resolved against width. Seven finite padded controls reproduce exactly; four known nonfinite controls diagnose without output. Existing18 unpadded controls retain12 exact finite outputs and six rejections. Four content-box negative controls diagnose. Thus53 controls pass in total. These huge-size probes establish exponent/rejection behavior, not Chrome pixel fidelity or aggregate coordinate precision.
+
+152 Rust tests and35 Node tests pass; native/WASM builds, TypeScript checks and immutable-source guard pass. All482 prior public outputs and48 private flex candidate outputs/maps remain exact. Source hashes remain unchanged through validation. The frozen compiler, source snapshot, requests, logs, native receipt and independently hashed image transfers are bound in public-padding-receipt.json.
+
+Directly padded alignment wrappers, padded baseline groups, unknown intrinsic percentage-padding bases, content-box sizing and nonlegacy flex remain diagnostic. Further context qualification should replace restrictions only with evidence. Flex numerical admission and wrapping remain separate unfinished work.

@@ -31,7 +31,7 @@ fn unsupported_computed_contexts_do_not_publish() {
     for (html,css) in [
         ("<div id='box'></div>","#box{display:grid}"),
         ("<div id='box'></div>","#box{background-image:linear-gradient(red,blue)}"),
-        ("<div id='box'></div>",".unmatched{padding:10px}"),
+        ("<div id='box'></div>",".unmatched{padding:auto}"),
         ("<div style='width:calc(100% - 1px)'></div>",""),
         ("<div><div style='height:50%'></div></div>",""),
         ("<div>Text</div>",""),

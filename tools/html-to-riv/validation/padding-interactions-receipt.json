@@ -1,0 +1,664 @@
+{
+  "status": "experimental-padding-interactions-with-eight-preserved-pixel-failures",
+  "publicAdmission": false,
+  "scope": "Frozen helper/compiler files plus ordinary padding-only adapter; CSS cascade descriptors manually supplied, not new public pipeline qualification.",
+  "baseline": "6c7ac16617835b5f581784ff08a9e779bb52faf3",
+  "outputRoot": "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-interactions-r1",
+  "browser": "153.0.8010.12",
+  "backend": "rust-metal",
+  "effectiveMode": "RasterOrdering",
+  "toolHashes": {
+    "compiler": "5ee56a86ee142f6b31f86746e7feb5962cd3f30db5b9731b8e539d9e94f4caab",
+    "probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "renderer": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f"
+  },
+  "buildCommand": [
+    "rustc",
+    "--edition=2024",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-interactions-r1/src/main.rs",
+    "--extern",
+    "nuxie_schema=tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib",
+    "--extern",
+    "nuxie_html_to_riv=tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib",
+    "-L",
+    "dependency=tools/html-to-riv/target/debug/deps",
+    "-C",
+    "debuginfo=0",
+    "-o",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/padding-interactions-r1/augment"
+  ],
+  "dependencies": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_schema-d38a609bcd1a8756.rlib": "b62a79ec4509c83741fdd1885a4dd5ca1b7372d0de5d60be26b3624981569a6e",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/target/debug/deps/libnuxie_html_to_riv-2a3ea2ff3e99ad16.rlib": "11d4f8b9ee87bff52a56e21ec203c7dc82564e8e4bf74c4222eb7eb03f1a8345"
+  },
+  "hashes": {
+    "review.md": "b26d716e3cbc57e8339e4128b8e3a2d4b3aa9fb3ca95555f893a93c3d14f69d0",
+    "src/main.rs": "51efd7465bdf3994527a67820eec8f24592460886934c1e29af81088d57957ce",
+    "src/wire.rs": "165693e9692f888daab0ce181b0583e7e32179bfa5c71b745b6edba7dc276308",
+    "augment": "4f335532574cd79829cb0a1c01d5c51aa895a6c47aaf18d39f1cd5f35e29df97",
+    "build-command.json": "1ce3157d7d011507b10b33b082623b7da453cbf62a6c4c75e70ff09521a66c9e",
+    "cases.json": "f24a778826de6f16a77186369569f0edea8d066518abe7151ec999129465c941",
+    "extra-cases.json": "c8ef9be5fd6f6bccfaad1b7485846a623961445d882eba317fb0367226f79b7a",
+    "grandchild-cases.json": "2b0d2dd12461763004767d8d354d64d0c62b37e82bebc168da8c6eca4aaab01e",
+    "adapter.py": "5ee56a86ee142f6b31f86746e7feb5962cd3f30db5b9731b8e539d9e94f4caab",
+    "adapter-extra.py": "2a7b51ac2670c7749694578215f080af3f34e9c361f861170ac680ee25f25965",
+    "adapter-grandchild.py": "b540a69265a06d0898a97cf77591c442d7cc4960537798a10e0e96be5948bbd1",
+    "collect.py": "37dc9a469bba90a21f2fca4600658477fb030f421feee0ba6214e939106635f1",
+    "counts.json": "eed457e52c5c6ba157a84a61b0e3a4f4628e6b870a67ea44eaab1bc9874e360a",
+    "matrix.json": "c85ce228d095871e1f5ea34f3973ca9b6479a2e07bda60e8f3b549f0428e6cda",
+    "visual-direct.json": "cb698e151ba09b0fc6378ed9f1d07224acaf4f1ac17a38dcef9ebf02a204910d",
+    "visual-transfers.json": "4a05bde85e3eeb798f68601076ded2bb58b08faedaf1bf1d57455324c12d52ba",
+    "reproductions.json": "cdf2f79e22ad59f7baa73e80fd92eeba7042a3f12aba2368e79f5708d5d63321",
+    "render/receipt.json": "cb7d4a24bb10565a2d64b8724b983f2a3ce468a296cb1ddc00cfa52790e53719",
+    "render-extra/receipt.json": "88196b9f9070f4ab5366e6e7a74a6e570d5dc0b1621f215f133c3898fddc7654",
+    "render-grandchild/receipt.json": "f153db9a8c52eb4929a351d1961b982ee4a4dc8527dd3cbfbeac1730caee1586",
+    "visual-0.png": "a2df0dc1138c6ee41a8ed5a310a4f1c1d80d0a1f2696a152d3caf6c40b6180c9",
+    "visual-4.png": "b1a29a307c142be7a1158cec4b0ccaac12979d9795be190bbcae3747edf3e1b9",
+    "visual-8.png": "18786e0713d644c29fb0e89d21da39fb5ac9ff6dd5d16a50b268e931bd0f1da5",
+    "visual-12.png": "1690778fd4d95fca682601f5f5114f2008c0b5e5b5795ed458af5dd437016660",
+    "visual-16.png": "2a21faf244f1b4c3bfdfaab19e2ff7222c88b031523c526e6c94c310fbcfa600",
+    "visual-20.png": "a5eaa5fe7b4c87c54fa1ff1e1a82d76dadda20908eb80d37d419b6b39df39467",
+    "visual-24.png": "add2271d637acfb1e2d65abfde4ebd66a7612893af83a717a77077368ec4cf2e",
+    "visual-28.png": "0ec32fcd8ab8a654b585ed1008d4e9d906fb1f7c2d6a2f3d708964afb45cb8ee",
+    "visual-32.png": "035178953b673fcbde33f5cc952b11eb076daddb78ca4b14ce2216ea9e1be128",
+    "visual-36.png": "3e24314670f65e319e4997c78af9b1c4548be91d5e28b0a54d992414004f6f27",
+    "visual-40.png": "b9f235100bb547ba78d601a91362e8a59556cfffab35dbf0567f0b63b7175f87",
+    "visual-44.png": "f4547cbd1cf4666e3309e6a27476aac1501bc236f7162ee9d556b956598befbf",
+    "visual-48.png": "19907a0c0e09954ddf76dc290230a708fde63a382992c08dbba12a30e2744040",
+    "visual-52.png": "1b3fedc985a503b001ece840ef458c70ec1bb3322bf07218a3e89924ea9bf21a",
+    "visual-56.png": "64636e05f22ac4436cf33dd724c1649e436be97623b33e73fc470bcd8dc4f6e3",
+    "visual-60.png": "093316188fad55a5fab1de2c7ed730daed8f27902b1749eb84e9c891faf129b9",
+    "visual-64.png": "e372797aafdaa99602ff3daf4c87babe3e10700e3a146a2985adca7adc63d676",
+    "visual-68.png": "74e374b93ff4084a697f1db7b510d944d39ee12b1d2aff72003038e778b88eb8",
+    "visual-72.png": "0c98d55ca226cc016e775091583a992d4e2ea63c1ca319b782c47b5ab3352998",
+    "visual-76.png": "2801c09f37e5479129affbcdabbaeaef68cd101598ab336c990cf55f7d1b7079",
+    "visual-80.png": "436d6fa325c6129580003b2d4b89758c9bf8774f3d05ab79633b0bfbdf78b84f",
+    "visual-84.png": "4d2ac3b62fe1ac2e7615e5109d1ce50077f6072c80661852a7b91931754c3f3a",
+    "visual-88.png": "eebdddec033f845ba638149a41ac63e9adb4fbffc15024b52145732cb37f656f"
+  },
+  "externalBindings": {
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-auto-margins-r3/html-to-riv": "a61975ce0aef5f153b9db3300c5b3b13707cac113bff3f0a4b4bf450c8d2ce1d",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/public-auto-margins-r3/render/receipt.json": "7972a4e1dc5e3080adb051c06834e4083a49f8839b8752c942634c65f8fcd1b9",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/baseline-probe": "7b17829dfdea44709faaff688ad146e659862d66bf284dd9aa4b17696839fe6a",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/renderer-replay": "276a49d810c05de7cfb0f0a4109853d12216da64e5d9d8e131f7400357f8e51f",
+    "/Users/levi/.codex/worktrees/html-css-immutable/tools/html-to-riv/output/immutable-baseline-toolchain-r2/manifest.json": "84ca614216439463361dd188b4af1b424fbdad99f30c5f05a4267b0ca25b3d72"
+  },
+  "counts": {
+    "scenes": 36,
+    "frames": 288,
+    "geometryPassed": 288,
+    "pixelsPassed": 280,
+    "clearPassed": 576,
+    "directPairsPrepared": 91,
+    "exactTransferPairs": 197,
+    "exactReproductions": 36
+  },
+  "matrix": [
+    {
+      "name": "padding-interaction-row-parent-px-main-auto",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-parent-percent-around",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-parent-px-evenly",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 4,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "padding-interaction-row-wrapper-padded-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-parent-px-order",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-cascade-inherited-mixed",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-px-main-auto",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-percent-around",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-px-evenly",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 4,
+      "failures": [
+        {
+          "frame": 0,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        },
+        {
+          "frame": 3,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        },
+        {
+          "frame": 4,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        },
+        {
+          "frame": 7,
+          "geometry": [],
+          "pixels": [
+            "d: local RGB error"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-padded-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-px-order",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-cascade-inherited-mixed",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-parent-px-main-auto",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-parent-percent-around",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-parent-px-evenly",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-wrapper-padded-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-parent-px-order",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-cascade-inherited-mixed",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-px-main-auto",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-percent-around",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-px-evenly",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-padded-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-px-order",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-cascade-inherited-mixed",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-wrapper-percent-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-percent-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-wrapper-percent-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-percent-descendant",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-wrapper-padded-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-padded-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-wrapper-padded-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-padded-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-wrapper-percent-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-percent-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-wrapper-percent-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-percent-descendant-grandchild",
+      "frames": 8,
+      "geometryPassed": 8,
+      "pixelsPassed": 8,
+      "failures": []
+    }
+  ],
+  "reproductions": [
+    {
+      "name": "padding-interaction-row-parent-px-main-auto",
+      "rivSha256": "3ddcd1e1d907fd88d8ff50f2c588fc4d98d1db4bf7291d9df1bd750bad3d8532",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-parent-percent-around",
+      "rivSha256": "0ca00e57b82a2611ab441256ef5492abc14a39141ad74f6041a267d2d25b9c31",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-parent-px-evenly",
+      "rivSha256": "51bbc0de10ccd5b5d5fd2e2e1635ad16f122846c39eba0446aecf903ce37e290",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-wrapper-padded-descendant",
+      "rivSha256": "6f227ec8b83a400f4540a160dda51d79b6651b963e66caf15199dcc7ce3bcd51",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-parent-px-order",
+      "rivSha256": "cfd3e3c1038a5821326dd0435883d5714f17695997407926aa969d87ee22b1db",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-cascade-inherited-mixed",
+      "rivSha256": "76fa849e8467a2a70120f924726691e8148722d9c535c8797bd149f9ee3710fd",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-px-main-auto",
+      "rivSha256": "e5c06d5b2edaaf2d726838754100c188d2c568d9bde21704ca9a1c293e267c7b",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-percent-around",
+      "rivSha256": "137c4d534876ab3fc469549d0b93c8b09585ec2d1228b7563859c6465606de1e",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-px-evenly",
+      "rivSha256": "a310cfb494b83744a3156201b8e4e85873076b6d311ddeffcd546b4eed4c3a38",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-padded-descendant",
+      "rivSha256": "32e424950c54bd26978ed19ff8155a516f380b93eca27e32572d29f890177bae",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-parent-px-order",
+      "rivSha256": "8ff60a52578112a3ef0c008cdd94fd1cff727640f6822761cee60af2eae3b326",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-cascade-inherited-mixed",
+      "rivSha256": "ace5cc5a13fd64accd12e1aaa121e6fe470617d1d936cff5bd49e82b01e77adc",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-parent-px-main-auto",
+      "rivSha256": "9c12c5535d513b7edc60e743b93ab3e8f4d5d90c54a374b42b171279c7f5ebcb",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-parent-percent-around",
+      "rivSha256": "27be5e55a97b127a39988395f49b9617e5172eadbed391a5e0952f5012f93525",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-parent-px-evenly",
+      "rivSha256": "70f345e84a385712f4af1ac01875a210e56eb2bf3ee68ffd6b76c33a163d5a04",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-wrapper-padded-descendant",
+      "rivSha256": "1a97e2ba9e0c8547304df6ccb9b25c2beb60e8034fee64ec197a730b594230c4",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-parent-px-order",
+      "rivSha256": "2cd2b5dac5023eb5a9dbebd42cebcb757e39ee6731bc7384d783b6093229c0c7",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-cascade-inherited-mixed",
+      "rivSha256": "e2bc4b241a778ab6ece010bbde314266858bb8cc6df8d2ab5ead8c11e2e66ee5",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-px-main-auto",
+      "rivSha256": "db2a58624e54dee4512e90c9a6a35ad2729052100299820e06bcb9b7517f3683",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-percent-around",
+      "rivSha256": "577f8debd8304b83ef66a53e46431aef3cd8fa01a300c204a7bc3b889d18f093",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-px-evenly",
+      "rivSha256": "1ad6b32b822e21d7bd896c1630d0b9136e12ef70cb8c0784f432deb0eec4a73d",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-padded-descendant",
+      "rivSha256": "182356545f8f10a1b3baa7b0021a702c1088264b570ef140cfde98fc89ae6a9e",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-parent-px-order",
+      "rivSha256": "1785587dea4969d4b3b2ccde12c2e6382ede38ff9c668e32b29b3cbeb7281488",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-cascade-inherited-mixed",
+      "rivSha256": "fd5107890ce1d912ac7d3259394564d960c1bd310f2959b1ef40c93c4b5646f0",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-wrapper-percent-descendant",
+      "rivSha256": "38dc66d7f68063dc9babdd6ada5e537f108fdde5247f9b60168a9bc1faff1ddb",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-percent-descendant",
+      "rivSha256": "f2c6b692aceca51dc205226d61624a604f7157ca3cc4576457337de4ba3c9153",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-wrapper-percent-descendant",
+      "rivSha256": "c81c8fddc9be19b2fcca7770554c106847c0ff033d468809438661536810afa2",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-percent-descendant",
+      "rivSha256": "38684e4573dc256980b0624040d65ae4d5a8b68b8b26d649d66da25b10707f59",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-wrapper-padded-descendant-grandchild",
+      "rivSha256": "7bd3dcec88a735f06ae06e565f8295d78fb08093544c14c69cc6d80541ebbda4",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-padded-descendant-grandchild",
+      "rivSha256": "174673ac03fde87da9329e947c2ed6af7bbfb5763a5c47909e28946dd964ef44",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-wrapper-padded-descendant-grandchild",
+      "rivSha256": "38026596898783b5108dffec605e14f187e651b2b1c5a4319c0555f96a1df0c3",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-padded-descendant-grandchild",
+      "rivSha256": "fdb7ac2a572d8c79f950dc69881e0d6778519048adf6580815612f2ae5e0591f",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-wrapper-percent-descendant-grandchild",
+      "rivSha256": "4592287ba8592a49e9a66314e2a09c45f46bf5edea67a228e3fa74cce6e1cb25",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-row-reverse-wrapper-percent-descendant-grandchild",
+      "rivSha256": "f43a89ac428cb67705a4790f55017e433bb45f3185b217673d4ae5081fe9b297",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-wrapper-percent-descendant-grandchild",
+      "rivSha256": "e89798cdd468179e42255f38037ef33c25d47ac275ade48557efdaf5ab59e320",
+      "exactRiv": true,
+      "exactParsedMap": true
+    },
+    {
+      "name": "padding-interaction-column-reverse-wrapper-percent-descendant-grandchild",
+      "rivSha256": "7e3ffb28342b5aecbd016c6f12e7747dfe05bc121e1334304bb027a40a75f428",
+      "exactRiv": true,
+      "exactParsedMap": true
+    }
+  ],
+  "visual": {
+    "directPairs": 91,
+    "transferredPairs": 197,
+    "independentImageTransfers": 394,
+    "completePairs": 288,
+    "directSheets": [
+      "visual-0.png",
+      "visual-4.png",
+      "visual-8.png",
+      "visual-12.png",
+      "visual-16.png",
+      "visual-20.png",
+      "visual-24.png",
+      "visual-28.png",
+      "visual-32.png",
+      "visual-36.png",
+      "visual-40.png",
+      "visual-44.png",
+      "visual-48.png",
+      "visual-52.png",
+      "visual-56.png",
+      "visual-60.png",
+      "visual-64.png",
+      "visual-68.png",
+      "visual-72.png",
+      "visual-76.png",
+      "visual-80.png",
+      "visual-84.png",
+      "visual-88.png"
+    ],
+    "rule": "Both decoded fullRGBA images with dimensions equal the directly reviewed reference; dedup includes across fixtures.",
+    "observations": "No visible layout divergence. Eight fractional descendant local RGB failures retained."
+  },
+  "limitations": [
+    "No arbitrary growing siblings/helper interactions or padded-wrapper admission.",
+    "Wrapper percentage padding applies to descendant D whose authored definite containing A is preserved.",
+    "Manual computed descriptors validate native semantics, not parser/cascade integration."
+  ]
+}

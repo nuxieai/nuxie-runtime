@@ -399,7 +399,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     let body = document.root_element().child_elements().find(|e| e.value().name() == "body")
         .ok_or_else(|| Diagnostic::new("html-syntax", "html", "Missing document body"))?;
     let rules = css::stylesheet(&input.css)?;
-    css::validate_rules(&rules, |declaration| validate(declaration, matches!(policy, FlexPolicy::Candidate), matches!(policy, FlexPolicy::PaddingCandidate), flex::Flex::default(), padding::Padding::default()))?;
+    css::validate_rules(&rules, |declaration| validate(declaration, matches!(policy, FlexPolicy::Candidate), matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate), flex::Flex::default(), padding::Padding::default()))?;
     for host in [document.root_element(), body] {
         if !css::cascade(&rules, host)?.is_empty() {
             return Err(unsupported("document", "Rules matching host html/body are not admitted yet; style authored box elements"));
@@ -423,7 +423,7 @@ pub(super) fn compile_profile(input: &CompileInput, policy: FlexPolicy) -> Resul
     host_paint.set("parentId", Value::Uint(host_fill_id))?;
     host_paint.set("colorValue", Value::Color(0xffffffff))?;
     records.push(host_paint);
-    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::PaddingCandidate) };
+    let mut output = Emitter { records, map: Vec::new(), ids: BTreeSet::new(), candidate_flex: matches!(policy, FlexPolicy::Candidate), candidate_padding: matches!(policy, FlexPolicy::Guarded | FlexPolicy::PaddingCandidate) };
     // Match the fixed host body in reset.css for inherited computed values.
     let host_style = Style { width: Size::Percent(100.), height: Size::Percent(100.),
         background: BackgroundColor::Rgba(0xffffffff), ..Style::default() };

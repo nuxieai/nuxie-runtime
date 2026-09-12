@@ -2,6 +2,8 @@
 
 The runtime identity is pinned in [TARGET.md](TARGET.md). Native evidence from the reverted implementation is invalid for this target. Current public admission is documented separately in [SUPPORT.md](SUPPORT.md); parser/API success is not visual qualification.
 
+Current padding checkpoint: [public-padding-review.md](validation/public-padding-review.md) binds public native reproduction, independently rerendered inheritance cases, numeric controls and regression evidence. Known pixel failures remain preserved.
+
 ## Reproducible checks
 
 Run from repository root unless stated otherwise. Authoring dependencies are resolved only by this module's standalone Cargo.lock/package-lock.json.

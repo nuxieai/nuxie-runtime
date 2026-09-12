@@ -58,7 +58,7 @@ Excluded: CSS Grid, editor integration, scripts, interactions, bindings and anim
 | L13 | Aspect ratio | pending | Immutable-target audit and revalidation required; historical status: investigating. |
 | L13a | Numeric math in aspect ratios | pending | Immutable-target audit and revalidation required; historical status: active. |
 | L14 | Intrinsic image sizing | pending | Immutable-target audit and revalidation required; historical status: active. |
-| L15 | Percentage padding/margins | pending | Ordinary border-box padding candidate passes160geometry/158pixels, with2fractional leaf failures preserved. Content-box direct-mapping controls fail32frames. Native percent padding resolves every side against containing-block width. Computed padding/module integration remains staged; percentage margins remain unadmitted. See validation/padding-native-review.md. |
+| L15 | Percentage padding/margins | partial | Public physical padding and computed cascade implemented with content-size exponent guards.20 positive native files and32 interaction files reproduce exactly;4 mixed-inheritance files rerender32/32 geometry/pixels. Two original and eight interaction fractional pixel failures remain. Percentage margins remain unadmitted. See validation/public-padding-review.md. |
 | L16 | Negative margins | pending | Immutable-target audit and revalidation required; historical status: native-qualified. |
 | L17 | Relative positioning | pending | Immutable-target audit and revalidation required; historical status: partial. |
 | L18 | Absolute positioning and insets | pending | Immutable-target audit and revalidation required; historical status: active. |

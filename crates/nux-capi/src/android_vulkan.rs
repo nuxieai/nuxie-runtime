@@ -38,7 +38,11 @@ struct PendingPresentation {
     revision: u64,
 }
 
-enum RenderDelivery { Undelivered, Completed, Submitted }
+enum RenderDelivery {
+    Undelivered,
+    Completed,
+    Submitted,
+}
 
 struct AndroidVulkanRendererState {
     pending: RefCell<Option<PendingPresentation>>,
@@ -51,8 +55,10 @@ impl AndroidVulkanRendererState {
     fn validate_pending(&self, player: &NuxPlayer) -> Result<(), ApiFailure> {
         if let Some(pending) = self.pending.borrow().as_ref() {
             if !Rc::ptr_eq(&pending.occurrence, &player.artboard) {
-                return Err(ApiFailure::new(NuxStatus::HandleMismatch,
-                    "pending surface frame belongs to another occurrence"));
+                return Err(ApiFailure::new(
+                    NuxStatus::HandleMismatch,
+                    "pending surface frame belongs to another occurrence",
+                ));
             }
         }
         Ok(())
@@ -60,22 +66,36 @@ impl AndroidVulkanRendererState {
 
     fn complete_pending(&self, player: &NuxPlayer) -> Result<(), ApiFailure> {
         self.validate_pending(player)?;
-        let pending = self.pending.borrow_mut().take().ok_or_else(||
-            ApiFailure::new(NuxStatus::RuntimeError, "surface completion has no submitted occurrence"))?;
-        pending.occurrence.refresh_bound_view_model_invalidation()
+        let pending = self.pending.borrow_mut().take().ok_or_else(|| {
+            ApiFailure::new(
+                NuxStatus::RuntimeError,
+                "surface completion has no submitted occurrence",
+            )
+        })?;
+        pending
+            .occurrence
+            .refresh_bound_view_model_invalidation()
             .map_err(|status| ApiFailure::new(status, "pending occurrence revision overflowed"))?;
         // Completion names the submitted revision, never a later phase/input
         // write. Leave a newer revision dirty so it receives its own frame.
         if pending.occurrence.render_revision.get() == pending.revision {
-            pending.occurrence.acknowledge_presented(pending.revision)
-                .map_err(|status| ApiFailure::new(status, "pending occurrence acknowledgement failed"))?;
+            pending
+                .occurrence
+                .acknowledge_presented(pending.revision)
+                .map_err(|status| {
+                    ApiFailure::new(status, "pending occurrence acknowledgement failed")
+                })?;
         }
         Ok(())
     }
 
     fn discard_pending(&self) -> Result<(), ApiFailure> {
         #[cfg(target_os = "android")]
-        self.factory.borrow().native.borrow_mut().drain_surface_frame()
+        self.factory
+            .borrow()
+            .native
+            .borrow_mut()
+            .drain_surface_frame()
             .map_err(renderer_failure)?;
         self.pending.borrow_mut().take();
         Ok(())
@@ -88,7 +108,12 @@ impl Drop for AndroidVulkanRendererState {
         // Imported players may retain the factory after this renderer is freed.
         #[cfg(target_os = "android")]
         {
-            let _ = self.factory.borrow().native.borrow_mut().detach_android_surface();
+            let _ = self
+                .factory
+                .borrow()
+                .native
+                .borrow_mut()
+                .detach_android_surface();
         }
         self.pending.get_mut().take();
     }
@@ -467,7 +492,10 @@ fn with_rendered_player<T>(
     }
 
     if state.pending.borrow().is_some() {
-        return Err(ApiFailure::new(NuxStatus::ReentrantCall, "surface frame is still pending"));
+        return Err(ApiFailure::new(
+            NuxStatus::ReentrantCall,
+            "surface frame is still pending",
+        ));
     }
     player
         .artboard
@@ -507,7 +535,8 @@ fn with_rendered_player<T>(
     let (output, delivered) = complete(sink, &state)?;
     if matches!(delivered, RenderDelivery::Submitted) {
         *state.pending.borrow_mut() = Some(PendingPresentation {
-            occurrence: Rc::clone(&player.artboard), revision: rendered_revision,
+            occurrence: Rc::clone(&player.artboard),
+            revision: rendered_revision,
         });
     }
     if matches!(delivered, RenderDelivery::Completed) {
@@ -635,16 +664,24 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
                 ));
             }
             unsafe { *out_presentation = NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE };
-            let outcome =
-                with_rendered_player(renderer, player, clear_color, fit, |state, player| {
+            let outcome = with_rendered_player(
+                renderer,
+                player,
+                clear_color,
+                fit,
+                |state, player| {
                     state.validate_pending(player)?;
                     let factory = state.factory.borrow();
-                    let admission = factory.native.borrow_mut().prepare_surface_frame()
+                    let admission = factory
+                        .native
+                        .borrow_mut()
+                        .prepare_surface_frame()
                         .map_err(renderer_failure)?;
                     Ok(match admission {
                         nuxie_renderer::NativeVulkanSurfaceAdmission::Ready => None,
-                        nuxie_renderer::NativeVulkanSurfaceAdmission::Submitted =>
-                            Some(NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED),
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Submitted => {
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED)
+                        }
                         nuxie_renderer::NativeVulkanSurfaceAdmission::Presented => {
                             state.complete_pending(player)?;
                             Some(NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED)
@@ -653,33 +690,41 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
                             state.complete_pending(player)?;
                             Some(NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL)
                         }
-                        nuxie_renderer::NativeVulkanSurfaceAdmission::Unavailable =>
-                            Some(NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE),
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Unavailable => {
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE)
+                        }
                         nuxie_renderer::NativeVulkanSurfaceAdmission::Reattach => {
                             state.pending.borrow_mut().take();
                             Some(NUX_ANDROID_VULKAN_PRESENTATION_REATTACH)
                         }
                     })
-                }, |sink, _state| {
+                },
+                |sink, _state| {
                     let (outcome, delivered) = match sink.finish_and_present()? {
-                        nuxie_renderer::NativeVulkanPresentation::Submitted => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED, RenderDelivery::Submitted)
-                        }
-                        nuxie_renderer::NativeVulkanPresentation::Presented => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED, RenderDelivery::Completed)
-                        }
-                        nuxie_renderer::NativeVulkanPresentation::Suboptimal => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL, RenderDelivery::Completed)
-                        }
-                        nuxie_renderer::NativeVulkanPresentation::Reattach => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_REATTACH, RenderDelivery::Undelivered)
-                        }
-                        nuxie_renderer::NativeVulkanPresentation::Unavailable => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE, RenderDelivery::Undelivered)
-                        }
+                        nuxie_renderer::NativeVulkanPresentation::Submitted => (
+                            NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED,
+                            RenderDelivery::Submitted,
+                        ),
+                        nuxie_renderer::NativeVulkanPresentation::Presented => (
+                            NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED,
+                            RenderDelivery::Completed,
+                        ),
+                        nuxie_renderer::NativeVulkanPresentation::Suboptimal => (
+                            NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL,
+                            RenderDelivery::Completed,
+                        ),
+                        nuxie_renderer::NativeVulkanPresentation::Reattach => (
+                            NUX_ANDROID_VULKAN_PRESENTATION_REATTACH,
+                            RenderDelivery::Undelivered,
+                        ),
+                        nuxie_renderer::NativeVulkanPresentation::Unavailable => (
+                            NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE,
+                            RenderDelivery::Undelivered,
+                        ),
                     };
                     Ok((outcome, delivered))
-                })?;
+                },
+            )?;
             unsafe { *out_presentation = outcome };
             Ok(())
         })();
@@ -714,43 +759,57 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         "out_frame is null",
                     ));
                 }
-                with_rendered_player(renderer, player, clear_color, fit, |state, _| { state.discard_pending()?; Ok(None) }, |sink, state| {
-                    let pixels = sink.finish()?;
-                    let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {
-                        ApiFailure::new(NuxStatus::RuntimeError, "frame row stride overflowed")
-                    })?;
-                    let expected_len = usize::try_from(
-                        u64::from(row_stride_bytes) * u64::from(state.pixel_height),
-                    )
-                    .map_err(|_| {
-                        ApiFailure::new(NuxStatus::RuntimeError, "frame byte length overflowed")
-                    })?;
-                    if pixels.len() != expected_len {
-                        return Err(ApiFailure::new(
-                            NuxStatus::RuntimeError,
-                            format!(
-                                "Vulkan readback returned {} bytes, expected {expected_len}",
-                                pixels.len()
-                            ),
-                        ));
-                    }
-                    let pending = PendingHandlePublication::new(
-                        NuxAndroidVulkanFrame {
-                            pixels: pixels.into_boxed_slice(),
-                            width: state.pixel_width,
-                            height: state.pixel_height,
-                            row_stride_bytes,
-                        },
-                        HandleKind::AndroidVulkanFrame,
-                    );
-                    register_handle(
-                        pending.handle,
-                        HandleKind::AndroidVulkanFrame,
-                        thread::current().id(),
-                    );
-                    unsafe { *out_frame = pending.finish() };
-                    Ok(((), RenderDelivery::Completed))
-                })
+                with_rendered_player(
+                    renderer,
+                    player,
+                    clear_color,
+                    fit,
+                    |state, _| {
+                        state.discard_pending()?;
+                        Ok(None)
+                    },
+                    |sink, state| {
+                        let pixels = sink.finish()?;
+                        let row_stride_bytes =
+                            state.pixel_width.checked_mul(4).ok_or_else(|| {
+                                ApiFailure::new(
+                                    NuxStatus::RuntimeError,
+                                    "frame row stride overflowed",
+                                )
+                            })?;
+                        let expected_len = usize::try_from(
+                            u64::from(row_stride_bytes) * u64::from(state.pixel_height),
+                        )
+                        .map_err(|_| {
+                            ApiFailure::new(NuxStatus::RuntimeError, "frame byte length overflowed")
+                        })?;
+                        if pixels.len() != expected_len {
+                            return Err(ApiFailure::new(
+                                NuxStatus::RuntimeError,
+                                format!(
+                                    "Vulkan readback returned {} bytes, expected {expected_len}",
+                                    pixels.len()
+                                ),
+                            ));
+                        }
+                        let pending = PendingHandlePublication::new(
+                            NuxAndroidVulkanFrame {
+                                pixels: pixels.into_boxed_slice(),
+                                width: state.pixel_width,
+                                height: state.pixel_height,
+                                row_stride_bytes,
+                            },
+                            HandleKind::AndroidVulkanFrame,
+                        );
+                        register_handle(
+                            pending.handle,
+                            HandleKind::AndroidVulkanFrame,
+                            thread::current().id(),
+                        );
+                        unsafe { *out_frame = pending.finish() };
+                        Ok(((), RenderDelivery::Completed))
+                    },
+                )
             })();
             match result {
                 Ok(()) => NuxStatus::Ok,
@@ -883,9 +942,18 @@ mod tests {
             bytes.push(value as u8);
         }
         let mut bytes = b"RIVE".to_vec();
-        for value in [7, 2, 0, 0] { varint(&mut bytes, value); }
+        for value in [7, 2, 0, 0] {
+            varint(&mut bytes, value);
+        }
         for name in ["Backboard", "Artboard"] {
-            varint(&mut bytes, nuxie_schema::definition_by_name(name).unwrap().type_key.int.into());
+            varint(
+                &mut bytes,
+                nuxie_schema::definition_by_name(name)
+                    .unwrap()
+                    .type_key
+                    .int
+                    .into(),
+            );
             bytes.push(0);
         }
         unsafe {
@@ -895,95 +963,211 @@ mod tests {
             if status != NuxStatus::Ok {
                 let mut diagnostic: NuxCapiDiagnosticView = std::mem::zeroed();
                 diagnostic.struct_size = std::mem::size_of::<NuxCapiDiagnosticView>() as u32;
-                let message = if !result.is_null() &&
-                    nux_capi_result_diagnostic(result, &mut diagnostic) == NuxStatus::Ok {
+                let message = if !result.is_null()
+                    && nux_capi_result_diagnostic(result, &mut diagnostic) == NuxStatus::Ok
+                {
                     String::from_utf8_lossy(std::slice::from_raw_parts(
-                        diagnostic.message.data.cast::<u8>(), diagnostic.message.len)).into_owned()
-                } else { format!("{status:?}") };
+                        diagnostic.message.data.cast::<u8>(),
+                        diagnostic.message.len,
+                    ))
+                    .into_owned()
+                } else {
+                    format!("{status:?}")
+                };
                 nux_capi_result_free(result);
-                assert_ne!(std::env::var("NUXIE_REQUIRE_LIVE_VULKAN_TESTS").as_deref(), Ok("1"),
-                    "Vulkan unavailable: {message}");
+                assert_ne!(
+                    std::env::var("NUXIE_REQUIRE_LIVE_VULKAN_TESTS").as_deref(),
+                    Ok("1"),
+                    "Vulkan unavailable: {message}"
+                );
                 return;
             }
             nux_capi_result_free(result);
             let mut file = ptr::null_mut();
             result = ptr::null_mut();
-            assert_eq!(nux_file_import_android_vulkan(renderer, bytes.as_ptr(), bytes.len(),
-                &NuxFileImportConfig::default(), &mut file, &mut result), NuxStatus::Ok);
+            assert_eq!(
+                nux_file_import_android_vulkan(
+                    renderer,
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxFileImportConfig::default(),
+                    &mut file,
+                    &mut result
+                ),
+                NuxStatus::Ok
+            );
             nux_capi_result_free(result);
             let mut artboard = ptr::null_mut();
-            assert_eq!(nux_artboard_instance_new(file, 0, &mut artboard), NuxStatus::Ok);
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut artboard),
+                NuxStatus::Ok
+            );
             let mut player = ptr::null_mut();
             assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
             let revision = (&*player).artboard.render_revision.get();
             assert_eq!((&*player).artboard.presented_render_revision.get(), 0);
-            let skipped = with_rendered_player(renderer, player, 0xff112233,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(Some(42)),
-                |_, _| panic!("unavailable admission must not render")).unwrap();
+            let skipped = with_rendered_player(
+                renderer,
+                player,
+                0xff112233,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                |_, _| Ok(Some(42)),
+                |_, _| panic!("unavailable admission must not render"),
+            )
+            .unwrap();
             assert_eq!(skipped, 42);
             assert_eq!((&*player).artboard.presented_render_revision.get(), 0);
-            let invalid = with_rendered_player::<u32>(renderer, player, 0, 999,
+            let invalid = with_rendered_player::<u32>(
+                renderer,
+                player,
+                0,
+                999,
                 |_, _| panic!("fit validation must precede admission"),
-                |_, _| unreachable!());
+                |_, _| unreachable!(),
+            );
             assert!(invalid.is_err());
-            let pixels = with_rendered_player(renderer, player, 0xff112233,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(None),
-                |sink, _| Ok((sink.finish()?, RenderDelivery::Completed))).unwrap();
+            let pixels = with_rendered_player(
+                renderer,
+                player,
+                0xff112233,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                |_, _| Ok(None),
+                |sink, _| Ok((sink.finish()?, RenderDelivery::Completed)),
+            )
+            .unwrap();
             assert_eq!(pixels, [0x11, 0x22, 0x33, 0xff].repeat(4));
-            assert_eq!((&*player).artboard.presented_render_revision.get(), revision);
+            assert_eq!(
+                (&*player).artboard.presented_render_revision.get(),
+                revision
+            );
             let mut other_artboard = ptr::null_mut();
             let mut other_player = ptr::null_mut();
-            assert_eq!(nux_artboard_instance_new(file, 0, &mut other_artboard), NuxStatus::Ok);
-            assert_eq!(nux_player_new_default(other_artboard, &mut other_player), NuxStatus::Ok);
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut other_artboard),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_new_default(other_artboard, &mut other_player),
+                NuxStatus::Ok
+            );
             for mutate_while_pending in [false, true] {
                 let occurrence = &(&*player).artboard;
                 occurrence.invalidate_render().unwrap();
                 let submitted_revision = occurrence.render_revision.get();
                 let old_presented = occurrence.presented_render_revision.get();
-                let submitted = with_rendered_player(renderer, player, 0xff112233,
-                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(None),
-                    |sink, _| { sink.finish()?; Ok((4, RenderDelivery::Submitted)) }).unwrap();
+                let submitted = with_rendered_player(
+                    renderer,
+                    player,
+                    0xff112233,
+                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    |_, _| Ok(None),
+                    |sink, _| {
+                        sink.finish()?;
+                        Ok((4, RenderDelivery::Submitted))
+                    },
+                )
+                .unwrap();
                 assert_eq!(submitted, 4);
                 assert_eq!(occurrence.presented_render_revision.get(), old_presented);
                 for _ in 0..3 {
-                    let polled = with_rendered_player(renderer, player, 0,
+                    let polled = with_rendered_player(
+                        renderer,
+                        player,
+                        0,
                         NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
-                        |state, player| { state.validate_pending(player)?; Ok(Some(4)) },
-                        |_, _| panic!("pending polls must not record another frame")).unwrap();
+                        |state, player| {
+                            state.validate_pending(player)?;
+                            Ok(Some(4))
+                        },
+                        |_, _| panic!("pending polls must not record another frame"),
+                    )
+                    .unwrap();
                     assert_eq!(polled, 4);
                 }
-                let wrong = with_rendered_player::<u32>(renderer, other_player, 0,
+                let wrong = with_rendered_player::<u32>(
+                    renderer,
+                    other_player,
+                    0,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
-                    |state, player| { state.complete_pending(player)?; Ok(Some(1)) },
-                    |_, _| unreachable!()).unwrap_err();
+                    |state, player| {
+                        state.complete_pending(player)?;
+                        Ok(Some(1))
+                    },
+                    |_, _| unreachable!(),
+                )
+                .unwrap_err();
                 assert_eq!(wrong.status, NuxStatus::HandleMismatch);
-                if mutate_while_pending { occurrence.invalidate_render().unwrap(); }
-                let completed = with_rendered_player(renderer, player, 0,
+                if mutate_while_pending {
+                    occurrence.invalidate_render().unwrap();
+                }
+                let completed = with_rendered_player(
+                    renderer,
+                    player,
+                    0,
                     NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
-                    |state, player| { state.complete_pending(player)?; Ok(Some(1)) },
-                    |_, _| panic!("completing a poll must not record another frame")).unwrap();
+                    |state, player| {
+                        state.complete_pending(player)?;
+                        Ok(Some(1))
+                    },
+                    |_, _| panic!("completing a poll must not record another frame"),
+                )
+                .unwrap();
                 assert_eq!(completed, 1);
-                assert_eq!(occurrence.presented_render_revision.get(),
-                    if mutate_while_pending { old_presented } else { submitted_revision });
-                let duplicate = (&*renderer).state.borrow().complete_pending(&*player).unwrap_err();
+                assert_eq!(
+                    occurrence.presented_render_revision.get(),
+                    if mutate_while_pending {
+                        old_presented
+                    } else {
+                        submitted_revision
+                    }
+                );
+                let duplicate = (&*renderer)
+                    .state
+                    .borrow()
+                    .complete_pending(&*player)
+                    .unwrap_err();
                 assert_eq!(duplicate.status, NuxStatus::RuntimeError);
             }
             let occurrence = &(&*player).artboard;
             occurrence.invalidate_render().unwrap();
-            with_rendered_player(renderer, player, 0,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(None),
-                |sink, _| { sink.finish()?; Ok(((), RenderDelivery::Submitted)) }).unwrap();
+            with_rendered_player(
+                renderer,
+                player,
+                0,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                |_, _| Ok(None),
+                |sink, _| {
+                    sink.finish()?;
+                    Ok(((), RenderDelivery::Submitted))
+                },
+            )
+            .unwrap();
             let old_presented = occurrence.presented_render_revision.get();
             assert!((&*renderer).state.borrow().pending.borrow().is_some());
             result = ptr::null_mut();
-            assert_eq!(nux_renderer_android_vulkan_resize(renderer, 2, 2, &mut result), NuxStatus::Ok);
+            assert_eq!(
+                nux_renderer_android_vulkan_resize(renderer, 2, 2, &mut result),
+                NuxStatus::Ok
+            );
             nux_capi_result_free(result);
             assert!((&*renderer).state.borrow().pending.borrow().is_none());
             assert_eq!(occurrence.presented_render_revision.get(), old_presented);
             let mut cpu_frame = ptr::null_mut();
-            assert_eq!(nux_renderer_android_vulkan_render_player(renderer, player, 0,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, &mut cpu_frame, ptr::null_mut()), NuxStatus::Ok);
-            assert_eq!(occurrence.presented_render_revision.get(), occurrence.render_revision.get());
+            assert_eq!(
+                nux_renderer_android_vulkan_render_player(
+                    renderer,
+                    player,
+                    0,
+                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    &mut cpu_frame,
+                    ptr::null_mut()
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                occurrence.presented_render_revision.get(),
+                occurrence.render_revision.get()
+            );
             nux_android_vulkan_frame_free(cpu_frame);
             nux_player_free(other_player);
             nux_artboard_instance_free(other_artboard);

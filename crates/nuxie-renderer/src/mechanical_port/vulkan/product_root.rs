@@ -1535,6 +1535,26 @@ mod gpu_canvas_frame_number_tests {
 
     #[test]
     #[ignore = "requires a configured Vulkan test host"]
+    fn surface_fence_poll_preserves_pending_ownership_until_gpu_completion() {
+        use super::super::surface_swapchain::wait_pending_fence;
+        let backend = VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
+        let fence = backend.resources.fence;
+        unsafe { backend.device.reset_fences(&[fence]).expect("reset test fence") };
+        let mut pending = true;
+        for _ in 0..3 {
+            assert!(!wait_pending_fence(&backend.device, fence, &mut pending, 0).unwrap());
+            assert!(pending, "timeout must retain pending ownership");
+        }
+        unsafe { backend.device.queue_submit(backend.queue, &[], fence).expect("signal test fence") };
+        assert!(wait_pending_fence(&backend.device, fence, &mut pending, u64::MAX).unwrap());
+        assert!(!pending);
+        // An already-retired fence is not polled or reset again.
+        unsafe { backend.device.reset_fences(&[fence]).expect("reset completed fence") };
+        assert!(wait_pending_fence(&backend.device, fence, &mut pending, 0).unwrap());
+    }
+
+    #[test]
+    #[ignore = "requires a configured Vulkan test host"]
     fn gpu_only_finish_submits_without_readback_and_preserves_next_frame() {
         let mut backend = VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
         let frame = backend

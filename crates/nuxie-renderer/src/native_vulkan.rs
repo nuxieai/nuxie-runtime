@@ -22,6 +22,8 @@ pub enum NativeVulkanPresentation {
     Suboptimal,
     /// No swapchain image was available; this frame completed offscreen.
     Unavailable,
+    /// No frame was delivered; the surface was retired and must be reattached.
+    Reattach,
 }
 
 /// An exact-source Vulkan renderer factory with CPU export and Android surfaces.

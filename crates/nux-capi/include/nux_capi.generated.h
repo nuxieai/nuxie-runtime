@@ -1231,6 +1231,10 @@ typedef struct NuxViewModelSnapshotValueView {
 #endif
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
+#define NUX_ANDROID_VULKAN_PRESENTATION_REATTACH 3
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
 #define NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL 2
 #endif
 
@@ -1777,8 +1781,9 @@ NuxStatus nux_renderer_android_vulkan_free(struct NuxAndroidVulkanRenderer *rend
 #if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
 /**
  * Renders into the attached surface without CPU pixel readback. A successful
- * call writes PRESENTED, UNAVAILABLE or SUBOPTIMAL; only a delivered frame
- * acknowledges the player's rendered revision. SUBOPTIMAL requires reattachment.
+ * call writes PRESENTED, UNAVAILABLE, SUBOPTIMAL or REATTACH; only a delivered frame
+ * acknowledges the player's rendered revision. SUBOPTIMAL and REATTACH require
+ * reattachment; REATTACH did not deliver this frame and preserves the player.
  * Errors require caller recovery. out_result is optional and failure-only;
  * out_presentation is required and reset on entry.
  */

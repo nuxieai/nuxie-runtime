@@ -4,6 +4,7 @@ import pathlib
 import stat
 import struct
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -532,7 +533,7 @@ class PipelineContractTests(unittest.TestCase):
         budget = validate_budget(
             json.loads((REPO_ROOT / "tools/android-runtime-size-budget-v4.json").read_text())
         )
-        self.assertEqual(budget["releaseTag"], "android-runtime-v0.3.9")
+        self.assertEqual(budget["releaseTag"], RELEASE_TAG)
         self.assertEqual(list(budget["maximums"]["fileBytes"]), list(EXPECTED_FILES))
 
     def test_builder_plan_exposes_every_pinned_dimension(self) -> None:
@@ -545,7 +546,7 @@ class PipelineContractTests(unittest.TestCase):
         ).stdout
         for expected in (
             "NuxieRuntimeAndroid.zip",
-            "android-runtime-v0.3.9",
+            RELEASE_TAG,
             "Rust".lower(),
             "1.94.1",
             "4.1.2",
@@ -564,9 +565,29 @@ class PipelineContractTests(unittest.TestCase):
         self.assertIn('"${rust_cargo}" ndk \\', builder)
         self.assertNotIn('"${cargo_ndk}" --version', builder)
 
+    def test_release_tag_cli_and_publisher_reject_an_old_cut(self) -> None:
+        tag = subprocess.run(
+            [sys.executable, str(REPO_ROOT / "tools/android_runtime_contract.py"), "release-tag"],
+            check=True, capture_output=True, text=True,
+        ).stdout.strip()
+        self.assertEqual(tag, "android-runtime-v0.3.10")
+        with tempfile.TemporaryDirectory() as directory:
+            rejected = subprocess.run(
+                [str(REPO_ROOT / "tools/publish-nux-capi-android-release.sh"),
+                 "android-runtime-v0.3.9", directory],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(rejected.returncode, 3)
+            self.assertIn("does not match immutable " + tag, rejected.stderr)
+            candidate = subprocess.run(
+                [str(REPO_ROOT / "tools/publish-nux-capi-android-release.sh"), tag, directory],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(candidate.returncode, 3)
+            self.assertIn("required Android release asset is missing", candidate.stderr)
+
     def test_publisher_orders_draft_download_verify_before_publish(self) -> None:
         publisher = (REPO_ROOT / "tools/publish-nux-capi-android-release.sh").read_text()
-        self.assertIn('expected_tag="android-runtime-v0.3.9"', publisher)
         self.assertIn("rev-parse refs/remotes/origin/main", publisher)
         self.assertIn("ls-remote --exit-code origin", publisher)
         self.assertIn("gh release create", publisher)

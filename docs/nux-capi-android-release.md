@@ -63,15 +63,18 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.3.9 release
+## Immutable v0.3.10 release candidate
+
+The artifact version in `tools/android_runtime_contract.py` is authoritative for
+the builder and publisher. This candidate is not published by building it.
 
 After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.3.9 <full-source-sha>
-git push origin android-runtime-v0.3.9
-tools/publish-nux-capi-android-release.sh android-runtime-v0.3.9
+git tag android-runtime-v0.3.10 <full-source-sha>
+git push origin android-runtime-v0.3.10
+tools/publish-nux-capi-android-release.sh android-runtime-v0.3.10
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

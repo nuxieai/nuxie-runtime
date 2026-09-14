@@ -330,6 +330,8 @@ pub(crate) mod vulkan {
 
     #[path = "surface_config.rs"]
     mod surface_config;
+    #[path = "surface_swapchain.rs"]
+    mod surface_swapchain;
 
     pub(crate) use ore_context_vulkan_decl::ContextVulkan;
     pub(crate) use product_root::VulkanProductBackend;

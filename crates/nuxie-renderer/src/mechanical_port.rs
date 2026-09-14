@@ -328,6 +328,9 @@ pub(crate) mod vulkan {
     #[path = "product_root.rs"]
     mod product_root;
 
+    #[path = "surface_config.rs"]
+    mod surface_config;
+
     pub(crate) use ore_context_vulkan_decl::ContextVulkan;
     pub(crate) use product_root::VulkanProductBackend;
 }

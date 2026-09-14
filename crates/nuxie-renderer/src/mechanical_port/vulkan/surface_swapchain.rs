@@ -204,6 +204,13 @@ impl SurfaceSwapchain {
     }
 }
 
+pub(super) fn surface_requires_reattachment(error: vk::Result) -> bool {
+    matches!(
+        error,
+        vk::Result::ERROR_OUT_OF_DATE_KHR | vk::Result::ERROR_SURFACE_LOST_KHR
+    )
+}
+
 fn presentation_was_enqueued(result: &Result<bool, vk::Result>) -> bool {
     matches!(
         result,
@@ -251,6 +258,23 @@ impl Drop for SurfaceSwapchain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_surface_changes_request_reattachment() {
+        for error in [vk::Result::ERROR_OUT_OF_DATE_KHR, vk::Result::ERROR_SURFACE_LOST_KHR] {
+            assert!(surface_requires_reattachment(error));
+        }
+        for error in [
+            vk::Result::ERROR_DEVICE_LOST,
+            vk::Result::ERROR_OUT_OF_HOST_MEMORY,
+            vk::Result::ERROR_OUT_OF_DEVICE_MEMORY,
+            vk::Result::ERROR_INITIALIZATION_FAILED,
+            vk::Result::TIMEOUT,
+            vk::Result::NOT_READY,
+        ] {
+            assert!(!surface_requires_reattachment(error));
+        }
+    }
+
     #[test]
     fn surface_rejection_still_enqueues_present_waits() {
         for result in [

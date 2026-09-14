@@ -457,6 +457,7 @@ pub type NuxAndroidVulkanPresentation = u32;
 pub const NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE: NuxAndroidVulkanPresentation = 0;
 pub const NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED: NuxAndroidVulkanPresentation = 1;
 pub const NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL: NuxAndroidVulkanPresentation = 2;
+pub const NUX_ANDROID_VULKAN_PRESENTATION_REATTACH: NuxAndroidVulkanPresentation = 3;
 
 /// Attaches a live ANativeWindow on the renderer's owning thread. The caller must
 /// exclude other graphics producers for this window. Vulkan retains a window
@@ -532,8 +533,9 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_detach_surface(
 }
 
 /// Renders into the attached surface without CPU pixel readback. A successful
-/// call writes PRESENTED, UNAVAILABLE or SUBOPTIMAL; only a delivered frame
-/// acknowledges the player's rendered revision. SUBOPTIMAL requires reattachment.
+/// call writes PRESENTED, UNAVAILABLE, SUBOPTIMAL or REATTACH; only a delivered frame
+/// acknowledges the player's rendered revision. SUBOPTIMAL and REATTACH require
+/// reattachment; REATTACH did not deliver this frame and preserves the player.
 /// Errors require caller recovery. out_result is optional and failure-only;
 /// out_presentation is required and reset on entry.
 #[cfg(target_os = "android")]
@@ -563,6 +565,9 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
                         }
                         nuxie_renderer::NativeVulkanPresentation::Suboptimal => {
                             (NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL, true)
+                        }
+                        nuxie_renderer::NativeVulkanPresentation::Reattach => {
+                            (NUX_ANDROID_VULKAN_PRESENTATION_REATTACH, false)
                         }
                         nuxie_renderer::NativeVulkanPresentation::Unavailable => {
                             (NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE, false)

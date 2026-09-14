@@ -473,6 +473,7 @@ impl VulkanProductBackend {
         &mut self,
         frame_number: u64,
     ) -> Result<crate::native_vulkan::NativeVulkanPresentation, RendererError> {
+        use super::surface_swapchain::surface_requires_reattachment;
         use super::surface_transfer::SurfaceTransfer;
         use crate::native_vulkan::NativeVulkanPresentation;
         let config = self
@@ -524,6 +525,10 @@ impl VulkanProductBackend {
             }
             Err(error) => {
                 self.surface.take();
+                if surface_requires_reattachment(error) {
+                    self.finish_target(frame_number, false)?;
+                    return Ok(NativeVulkanPresentation::Reattach);
+                }
                 return Err(RendererError::Device(format!(
                     "acquire Android Vulkan surface: {error:?}"
                 )));
@@ -532,6 +537,7 @@ impl VulkanProductBackend {
         // After acquisition every failure retires its semaphore owner. The
         // owner's Drop waits pending native work before the command pool can be
         // reused or destroyed, including failed submission/presentation.
+        let mut surface_changed = false;
         let result = (|| {
             let command = self.flush_target(frame_number)?;
             let source = self.target_mut().accessTargetImage(
@@ -557,6 +563,7 @@ impl VulkanProductBackend {
                 .expect("acquired surface is retained");
             let suboptimal =
                 unsafe { swapchain.submit_and_present(self.queue, command) }.map_err(|error| {
+                    surface_changed = surface_requires_reattachment(error);
                     RendererError::Device(format!("present Android Vulkan surface: {error:?}"))
                 })?;
             swapchain.wait_submission().map_err(|error| {
@@ -582,6 +589,13 @@ impl VulkanProductBackend {
                 self.surface.take();
                 if let Err(recovery) = self.recover_failed_submission() {
                     self.frame_recovery_error = Some(recovery.to_string());
+                    return Err(recovery);
+                }
+                if surface_changed {
+                    // The scene was flushed and submitted before presentation
+                    // rejected the surface; recovery has drained that submission.
+                    self.active_frame = false;
+                    return Ok(NativeVulkanPresentation::Reattach);
                 }
                 Err(error)
             }

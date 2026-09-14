@@ -1763,12 +1763,16 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
  * reference until detach, replacement or renderer destruction. The native alpha
  * flag must only be true when window composition guarantees premultiplied alpha.
  * Attachment preserves the renderer domain and adopts the reported surface extent.
+ * out_attached is required and reset on entry. OK with false means the device or
+ * surface lacks a required capability; no Vulkan surface remains attached and
+ * headless rendering remains available. Other failures retain their error status.
  */
 NuxStatus nux_renderer_android_vulkan_attach_surface(struct NuxAndroidVulkanRenderer *renderer,
                                                      void *native_window,
                                                      uint32_t pixel_width,
                                                      uint32_t pixel_height,
                                                      bool native_premultiplied_alpha,
+                                                     bool *out_attached,
                                                      struct NuxCapiResult **out_result);
 #endif
 

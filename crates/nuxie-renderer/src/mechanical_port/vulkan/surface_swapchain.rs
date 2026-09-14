@@ -209,6 +209,43 @@ impl SurfaceSwapchain {
     }
 }
 
+/// Poll without destroying presentation resources. Reattachment/detach owns the
+/// eventual drain, including presentation fences that may outlive submission.
+/// A configured Android surface with no swapchain is suspended (zero extent).
+#[cfg(any(target_os = "android", test))]
+pub(super) fn prepare_surface_frame(
+    swapchain: Option<&mut SurfaceSwapchain>,
+    pending: &mut Option<bool>,
+) -> Result<crate::native_vulkan::NativeVulkanSurfaceAdmission, vk::Result> {
+    use crate::native_vulkan::NativeVulkanSurfaceAdmission as Admission;
+    let Some(swapchain) = swapchain else {
+        return Ok(Admission::Reattach);
+    };
+    if let Some(suboptimal) = *pending {
+        if !swapchain.wait_submission_for(0)? {
+            return Ok(Admission::Submitted);
+        }
+        *pending = None;
+        swapchain.unusable |= suboptimal;
+        return Ok(if suboptimal { Admission::Suboptimal } else { Admission::Presented });
+    }
+    if swapchain.unusable {
+        return Ok(Admission::Reattach);
+    }
+    match swapchain.acquire(0) {
+        Ok(Some(_)) => Ok(Admission::Ready),
+        Ok(None) => Ok(Admission::Unavailable),
+        Err(error) => {
+            swapchain.unusable = true;
+            if surface_requires_reattachment(error) {
+                Ok(Admission::Reattach)
+            } else {
+                Err(error)
+            }
+        }
+    }
+}
+
 /// Pending ownership clears only after the actual Vulkan fence signals.
 /// In particular, timeout leaves the same fence and its resources live.
 pub(super) fn wait_pending_fence(
@@ -291,6 +328,78 @@ impl Drop for SurfaceSwapchain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ash::vk::Handle;
+    use std::mem::ManuallyDrop;
+
+    // Only status queries are supplied. Any wait, destruction, reset or second
+    // acquisition during admission is a test failure through ash's missing entry.
+    unsafe extern "system" fn fence_status(device: vk::Device, _: vk::Fence) -> vk::Result {
+        if device.as_raw() == 1 { vk::Result::NOT_READY } else { vk::Result::SUCCESS }
+    }
+    unsafe extern "system" fn device_proc(
+        _: vk::Device, _: *const std::ffi::c_char,
+    ) -> vk::PFN_vkVoidFunction { None }
+
+    fn test_device(ready: bool) -> ash::Device {
+        unsafe { ash::Device::load_with(|name| match name.to_bytes() {
+            b"vkGetFenceStatus" => fence_status as *const () as *const _,
+            _ => std::ptr::null(),
+        }, vk::Device::from_raw(if ready { 2 } else { 1 })) }
+    }
+
+    fn reserved_swapchain() -> ManuallyDrop<SurfaceSwapchain> {
+        let instance = unsafe { ash::Instance::load_with(|name| match name.to_bytes() {
+            b"vkGetDeviceProcAddr" => device_proc as *const () as *const _,
+            _ => std::ptr::null(),
+        }, vk::Instance::null()) };
+        let device = test_device(false);
+        let loader = ash::khr::swapchain::Device::new(&instance, &device);
+        ManuallyDrop::new(SurfaceSwapchain {
+            device, loader, handle: vk::SwapchainKHR::null(),
+            images: vec![vk::Image::from_raw(1)],
+            acquire_semaphore: vk::Semaphore::null(), acquire_done: vk::Fence::null(),
+            acquire_pending: true, render_done: vec![vk::Semaphore::null()],
+            present_done: vec![vk::Fence::null()], present_pending: vec![true],
+            submit_done: vk::Fence::null(), submit_pending: true,
+            acquired: Some((0, false)), unusable: false,
+        })
+    }
+
+    #[test]
+    fn suboptimal_completion_keeps_presentation_owned_until_explicit_reattachment() {
+        use crate::native_vulkan::NativeVulkanSurfaceAdmission as Admission;
+        let mut swapchain = reserved_swapchain();
+        swapchain.acquired = None;
+        let mut pending = Some(true);
+        assert_eq!(prepare_surface_frame(Some(&mut swapchain), &mut pending), Ok(Admission::Submitted));
+        assert_eq!(pending, Some(true));
+        assert!(swapchain.submit_pending);
+        swapchain.device = test_device(true);
+        assert_eq!(prepare_surface_frame(Some(&mut swapchain), &mut pending), Ok(Admission::Suboptimal));
+        assert_eq!(pending, None);
+        assert!(!swapchain.submit_pending);
+        assert!(swapchain.present_pending[0], "submission completion cannot release presentation resources");
+        assert_eq!(prepare_surface_frame(Some(&mut swapchain), &mut pending), Ok(Admission::Reattach));
+        assert!(swapchain.present_pending[0]);
+    }
+
+    #[test]
+    fn suspended_surface_can_request_reattachment_then_admit_a_usable_swapchain() {
+        use crate::native_vulkan::NativeVulkanSurfaceAdmission as Admission;
+        let config = SurfaceConfig::choose(
+            &vk::SurfaceCapabilitiesKHR::default(), &[],
+            vk::Extent2D { width: 100, height: 100 }, true,
+        ).unwrap();
+        assert!(config.is_none(), "fixed zero extent suspends even a nonzero window request");
+        let mut pending = None;
+        assert_eq!(prepare_surface_frame(None, &mut pending), Ok(Admission::Reattach));
+        let mut replacement = reserved_swapchain();
+        replacement.submit_pending = false;
+        replacement.present_pending[0] = false;
+        assert_eq!(prepare_surface_frame(Some(&mut replacement), &mut pending), Ok(Admission::Ready));
+        assert_eq!(replacement.acquired, Some((0, false)));
+    }
+
     #[test]
     fn only_surface_changes_request_reattachment() {
         for error in [vk::Result::ERROR_OUT_OF_DATE_KHR, vk::Result::ERROR_SURFACE_LOST_KHR] {

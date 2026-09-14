@@ -29,7 +29,7 @@ pub enum NativeVulkanPresentation {
 }
 
 /// Admission before recording a frame for an Android surface.
-#[cfg(target_os = "android")]
+#[cfg(any(target_os = "android", test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeVulkanSurfaceAdmission {
     Submitted,

@@ -17,6 +17,8 @@ use crate::{RenderMode, RendererError};
 #[cfg(target_os = "android")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeVulkanPresentation {
+    /// Submission owns GPU resources until a later admission poll completes.
+    Submitted,
     Presented,
     /// The frame was presented, but the caller must reattach with fresh geometry.
     Suboptimal,
@@ -30,6 +32,9 @@ pub enum NativeVulkanPresentation {
 #[cfg(target_os = "android")]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NativeVulkanSurfaceAdmission {
+    Submitted,
+    Presented,
+    Suboptimal,
     Ready,
     Unavailable,
     Reattach,
@@ -90,6 +95,12 @@ impl NativeVulkanFactory {
     #[cfg(target_os = "android")]
     pub fn prepare_surface_frame(&self) -> Result<NativeVulkanSurfaceAdmission, RendererError> {
         self.core.with_backend_mut(VulkanProductBackend::prepare_surface_frame)
+    }
+
+    /// Drain and discard an outstanding surface completion before CPU export.
+    #[cfg(target_os = "android")]
+    pub fn drain_surface_frame(&self) -> Result<(), RendererError> {
+        self.core.with_backend_mut(VulkanProductBackend::drain_surface_frame)
     }
 
     /// Actual retained target extent, including surface-driven attachment resize.

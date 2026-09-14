@@ -15,6 +15,7 @@ use nuxie_renderer::deferred::cmd::deferred_replayer::take_frame;
 use nuxie_renderer::{NativeVulkanFactory, RendererError};
 use std::cell::RefCell;
 use std::ptr;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
@@ -32,10 +33,65 @@ pub type NuxAndroidVulkanPixelFormat = u32;
 /// Tightly packed, top-row-first RGBA8 UNORM with premultiplied alpha.
 pub const NUX_ANDROID_VULKAN_PIXEL_FORMAT_RGBA8_PREMULTIPLIED: NuxAndroidVulkanPixelFormat = 1;
 
+struct PendingPresentation {
+    occurrence: Rc<super::ArtboardOccurrence>,
+    revision: u64,
+}
+
+enum RenderDelivery { Undelivered, Completed, Submitted }
+
 struct AndroidVulkanRendererState {
+    pending: RefCell<Option<PendingPresentation>>,
     factory: PersistentFactory<crate::asset_hooks::AssetFactory<AndroidVulkanFactory>>,
     pixel_width: u32,
     pixel_height: u32,
+}
+
+impl AndroidVulkanRendererState {
+    fn validate_pending(&self, player: &NuxPlayer) -> Result<(), ApiFailure> {
+        if let Some(pending) = self.pending.borrow().as_ref() {
+            if !Rc::ptr_eq(&pending.occurrence, &player.artboard) {
+                return Err(ApiFailure::new(NuxStatus::HandleMismatch,
+                    "pending surface frame belongs to another occurrence"));
+            }
+        }
+        Ok(())
+    }
+
+    fn complete_pending(&self, player: &NuxPlayer) -> Result<(), ApiFailure> {
+        self.validate_pending(player)?;
+        let pending = self.pending.borrow_mut().take().ok_or_else(||
+            ApiFailure::new(NuxStatus::RuntimeError, "surface completion has no submitted occurrence"))?;
+        pending.occurrence.refresh_bound_view_model_invalidation()
+            .map_err(|status| ApiFailure::new(status, "pending occurrence revision overflowed"))?;
+        // Completion names the submitted revision, never a later phase/input
+        // write. Leave a newer revision dirty so it receives its own frame.
+        if pending.occurrence.render_revision.get() == pending.revision {
+            pending.occurrence.acknowledge_presented(pending.revision)
+                .map_err(|status| ApiFailure::new(status, "pending occurrence acknowledgement failed"))?;
+        }
+        Ok(())
+    }
+
+    fn discard_pending(&self) -> Result<(), ApiFailure> {
+        #[cfg(target_os = "android")]
+        self.factory.borrow().native.borrow_mut().drain_surface_frame()
+            .map_err(renderer_failure)?;
+        self.pending.borrow_mut().take();
+        Ok(())
+    }
+}
+
+impl Drop for AndroidVulkanRendererState {
+    fn drop(&mut self) {
+        // Keep the submitted occurrence alive until native work is drained.
+        // Imported players may retain the factory after this renderer is freed.
+        #[cfg(target_os = "android")]
+        {
+            let _ = self.factory.borrow().native.borrow_mut().detach_android_surface();
+        }
+        self.pending.get_mut().take();
+    }
 }
 
 /// Vulkan renderer with CPU export and optional Android surface presentation.
@@ -298,6 +354,7 @@ pub unsafe extern "C" fn nux_renderer_new_android_vulkan(
             let pending = PendingHandlePublication::new(
                 NuxAndroidVulkanRenderer {
                     state: RefCell::new(AndroidVulkanRendererState {
+                        pending: RefCell::new(None),
                         factory: PersistentFactory::new(crate::asset_hooks::AssetFactory::new(
                             AndroidVulkanFactory::new(factory),
                         )),
@@ -340,6 +397,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_resize(
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
+        state.discard_pending()?;
         state
             .factory
             .borrow_mut()
@@ -359,11 +417,11 @@ fn with_rendered_player<T>(
     player: *mut NuxPlayer,
     clear_color: u32,
     fit: NuxAndroidVulkanRendererFit,
-    admit: impl FnOnce(&AndroidVulkanRendererState) -> Result<Option<T>, ApiFailure>,
+    admit: impl FnOnce(&AndroidVulkanRendererState, &NuxPlayer) -> Result<Option<T>, ApiFailure>,
     complete: impl FnOnce(
         AndroidVulkanFrameSink,
         &AndroidVulkanRendererState,
-    ) -> Result<(T, bool), ApiFailure>,
+    ) -> Result<(T, RenderDelivery), ApiFailure>,
 ) -> Result<T, ApiFailure> {
     if fit != NUX_ANDROID_VULKAN_RENDERER_FIT_NONE
         && fit != NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER
@@ -404,10 +462,13 @@ fn with_rendered_player<T>(
         }
     }
 
-    if let Some(output) = admit(&state)? {
+    if let Some(output) = admit(&state, player)? {
         return Ok(output);
     }
 
+    if state.pending.borrow().is_some() {
+        return Err(ApiFailure::new(NuxStatus::ReentrantCall, "surface frame is still pending"));
+    }
     player
         .artboard
         .refresh_bound_view_model_invalidation()
@@ -444,7 +505,12 @@ fn with_rendered_player<T>(
     let mut sink = AndroidVulkanFrameSink::new(native, clear_color);
     replayer.borrow_mut().replay_frame(&frame, &mut sink);
     let (output, delivered) = complete(sink, &state)?;
-    if delivered {
+    if matches!(delivered, RenderDelivery::Submitted) {
+        *state.pending.borrow_mut() = Some(PendingPresentation {
+            occurrence: Rc::clone(&player.artboard), revision: rendered_revision,
+        });
+    }
+    if matches!(delivered, RenderDelivery::Completed) {
         player
             .artboard
             .acknowledge_presented(rendered_revision)
@@ -463,6 +529,8 @@ pub const NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE: NuxAndroidVulkanPresentat
 pub const NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED: NuxAndroidVulkanPresentation = 1;
 pub const NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL: NuxAndroidVulkanPresentation = 2;
 pub const NUX_ANDROID_VULKAN_PRESENTATION_REATTACH: NuxAndroidVulkanPresentation = 3;
+/// Queued but not completed. Poll with the same occurrence without stepping.
+pub const NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED: NuxAndroidVulkanPresentation = 4;
 
 /// Attaches a live ANativeWindow on the renderer's owning thread. The caller must
 /// exclude other graphics producers for this window. Vulkan retains a window
@@ -491,6 +559,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_attach_surface(
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
+        state.discard_pending()?;
         let extent = {
             let factory = state.factory.borrow();
             let mut native = factory.native.borrow_mut();
@@ -527,6 +596,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_detach_surface(
             .state
             .try_borrow_mut()
             .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
+        state.discard_pending()?;
         state
             .factory
             .borrow()
@@ -538,7 +608,10 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_detach_surface(
 }
 
 /// Renders into the attached surface without CPU pixel readback. A successful
-/// call writes PRESENTED, UNAVAILABLE, SUBOPTIMAL or REATTACH; only a delivered frame
+/// call writes PRESENTED, UNAVAILABLE, SUBOPTIMAL, REATTACH or SUBMITTED.
+/// SUBMITTED retains the exact occurrence/revision; call again with that occurrence
+/// to poll without stepping. A completing poll does not record another frame.
+/// Phase/input writes remain dirty if newer than the completed revision. Only a delivered frame
 /// acknowledges the player's rendered revision. SUBOPTIMAL and REATTACH require
 /// reattachment; REATTACH did not deliver this frame and preserves the player.
 /// Errors require caller recovery. out_result is optional and failure-only;
@@ -563,30 +636,46 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
             }
             unsafe { *out_presentation = NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE };
             let outcome =
-                with_rendered_player(renderer, player, clear_color, fit, |state| {
+                with_rendered_player(renderer, player, clear_color, fit, |state, player| {
+                    state.validate_pending(player)?;
                     let factory = state.factory.borrow();
                     let admission = factory.native.borrow_mut().prepare_surface_frame()
                         .map_err(renderer_failure)?;
                     Ok(match admission {
                         nuxie_renderer::NativeVulkanSurfaceAdmission::Ready => None,
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Submitted =>
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED),
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Presented => {
+                            state.complete_pending(player)?;
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED)
+                        }
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Suboptimal => {
+                            state.complete_pending(player)?;
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL)
+                        }
                         nuxie_renderer::NativeVulkanSurfaceAdmission::Unavailable =>
                             Some(NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE),
-                        nuxie_renderer::NativeVulkanSurfaceAdmission::Reattach =>
-                            Some(NUX_ANDROID_VULKAN_PRESENTATION_REATTACH),
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Reattach => {
+                            state.pending.borrow_mut().take();
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_REATTACH)
+                        }
                     })
                 }, |sink, _state| {
                     let (outcome, delivered) = match sink.finish_and_present()? {
+                        nuxie_renderer::NativeVulkanPresentation::Submitted => {
+                            (NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED, RenderDelivery::Submitted)
+                        }
                         nuxie_renderer::NativeVulkanPresentation::Presented => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED, true)
+                            (NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED, RenderDelivery::Completed)
                         }
                         nuxie_renderer::NativeVulkanPresentation::Suboptimal => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL, true)
+                            (NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL, RenderDelivery::Completed)
                         }
                         nuxie_renderer::NativeVulkanPresentation::Reattach => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_REATTACH, false)
+                            (NUX_ANDROID_VULKAN_PRESENTATION_REATTACH, RenderDelivery::Undelivered)
                         }
                         nuxie_renderer::NativeVulkanPresentation::Unavailable => {
-                            (NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE, false)
+                            (NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE, RenderDelivery::Undelivered)
                         }
                     };
                     Ok((outcome, delivered))
@@ -625,7 +714,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         "out_frame is null",
                     ));
                 }
-                with_rendered_player(renderer, player, clear_color, fit, |_| Ok(None), |sink, state| {
+                with_rendered_player(renderer, player, clear_color, fit, |state, _| { state.discard_pending()?; Ok(None) }, |sink, state| {
                     let pixels = sink.finish()?;
                     let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {
                         ApiFailure::new(NuxStatus::RuntimeError, "frame row stride overflowed")
@@ -660,7 +749,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         thread::current().id(),
                     );
                     unsafe { *out_frame = pending.finish() };
-                    Ok(((), true))
+                    Ok(((), RenderDelivery::Completed))
                 })
             })();
             match result {
@@ -784,7 +873,7 @@ pub unsafe extern "C" fn nux_android_vulkan_frame_free(
 mod tests {
     use super::*;
     #[test]
-    fn unavailable_admission_skips_rendering_and_does_not_acknowledge_revision() {
+    fn surface_admission_and_pending_completion_preserve_exact_revision() {
         use crate::*;
         fn varint(bytes: &mut Vec<u8>, mut value: u64) {
             while value >= 128 {
@@ -829,19 +918,75 @@ mod tests {
             let revision = (&*player).artboard.render_revision.get();
             assert_eq!((&*player).artboard.presented_render_revision.get(), 0);
             let skipped = with_rendered_player(renderer, player, 0xff112233,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_| Ok(Some(42)),
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(Some(42)),
                 |_, _| panic!("unavailable admission must not render")).unwrap();
             assert_eq!(skipped, 42);
             assert_eq!((&*player).artboard.presented_render_revision.get(), 0);
             let invalid = with_rendered_player::<u32>(renderer, player, 0, 999,
-                |_| panic!("fit validation must precede admission"),
+                |_, _| panic!("fit validation must precede admission"),
                 |_, _| unreachable!());
             assert!(invalid.is_err());
             let pixels = with_rendered_player(renderer, player, 0xff112233,
-                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_| Ok(None),
-                |sink, _| Ok((sink.finish()?, true))).unwrap();
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(None),
+                |sink, _| Ok((sink.finish()?, RenderDelivery::Completed))).unwrap();
             assert_eq!(pixels, [0x11, 0x22, 0x33, 0xff].repeat(4));
             assert_eq!((&*player).artboard.presented_render_revision.get(), revision);
+            let mut other_artboard = ptr::null_mut();
+            let mut other_player = ptr::null_mut();
+            assert_eq!(nux_artboard_instance_new(file, 0, &mut other_artboard), NuxStatus::Ok);
+            assert_eq!(nux_player_new_default(other_artboard, &mut other_player), NuxStatus::Ok);
+            for mutate_while_pending in [false, true] {
+                let occurrence = &(&*player).artboard;
+                occurrence.invalidate_render().unwrap();
+                let submitted_revision = occurrence.render_revision.get();
+                let old_presented = occurrence.presented_render_revision.get();
+                let submitted = with_rendered_player(renderer, player, 0xff112233,
+                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(None),
+                    |sink, _| { sink.finish()?; Ok((4, RenderDelivery::Submitted)) }).unwrap();
+                assert_eq!(submitted, 4);
+                assert_eq!(occurrence.presented_render_revision.get(), old_presented);
+                for _ in 0..3 {
+                    let polled = with_rendered_player(renderer, player, 0,
+                        NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                        |state, player| { state.validate_pending(player)?; Ok(Some(4)) },
+                        |_, _| panic!("pending polls must not record another frame")).unwrap();
+                    assert_eq!(polled, 4);
+                }
+                let wrong = with_rendered_player::<u32>(renderer, other_player, 0,
+                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    |state, player| { state.complete_pending(player)?; Ok(Some(1)) },
+                    |_, _| unreachable!()).unwrap_err();
+                assert_eq!(wrong.status, NuxStatus::HandleMismatch);
+                if mutate_while_pending { occurrence.invalidate_render().unwrap(); }
+                let completed = with_rendered_player(renderer, player, 0,
+                    NUX_ANDROID_VULKAN_RENDERER_FIT_NONE,
+                    |state, player| { state.complete_pending(player)?; Ok(Some(1)) },
+                    |_, _| panic!("completing a poll must not record another frame")).unwrap();
+                assert_eq!(completed, 1);
+                assert_eq!(occurrence.presented_render_revision.get(),
+                    if mutate_while_pending { old_presented } else { submitted_revision });
+                let duplicate = (&*renderer).state.borrow().complete_pending(&*player).unwrap_err();
+                assert_eq!(duplicate.status, NuxStatus::RuntimeError);
+            }
+            let occurrence = &(&*player).artboard;
+            occurrence.invalidate_render().unwrap();
+            with_rendered_player(renderer, player, 0,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_, _| Ok(None),
+                |sink, _| { sink.finish()?; Ok(((), RenderDelivery::Submitted)) }).unwrap();
+            let old_presented = occurrence.presented_render_revision.get();
+            assert!((&*renderer).state.borrow().pending.borrow().is_some());
+            result = ptr::null_mut();
+            assert_eq!(nux_renderer_android_vulkan_resize(renderer, 2, 2, &mut result), NuxStatus::Ok);
+            nux_capi_result_free(result);
+            assert!((&*renderer).state.borrow().pending.borrow().is_none());
+            assert_eq!(occurrence.presented_render_revision.get(), old_presented);
+            let mut cpu_frame = ptr::null_mut();
+            assert_eq!(nux_renderer_android_vulkan_render_player(renderer, player, 0,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, &mut cpu_frame, ptr::null_mut()), NuxStatus::Ok);
+            assert_eq!(occurrence.presented_render_revision.get(), occurrence.render_revision.get());
+            nux_android_vulkan_frame_free(cpu_frame);
+            nux_player_free(other_player);
+            nux_artboard_instance_free(other_artboard);
             nux_player_free(player);
             nux_artboard_instance_free(artboard);
             nux_file_free(file);

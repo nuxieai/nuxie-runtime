@@ -28,6 +28,18 @@ pub(super) struct SurfaceSwapchain {
 }
 
 impl SurfaceSwapchain {
+    /// Wait before reusing the renderer's command pool or target resources.
+    pub(super) fn wait_submission(&mut self) -> Result<(), vk::Result> {
+        if self.submit_pending {
+            unsafe {
+                self.device
+                    .wait_for_fences(&[self.submit_done], true, u64::MAX)?
+            };
+            self.submit_pending = false;
+            self.acquire_pending = false;
+        }
+        Ok(())
+    }
     /// # Safety
     /// Device extensions KHR_swapchain and EXT_swapchain_maintenance1 (including
     /// its feature) must be enabled. The surface/configuration must be admitted

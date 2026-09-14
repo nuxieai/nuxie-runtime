@@ -13,6 +13,17 @@ use crate::exact_source_adapter::{ExactSourceFactoryCore, ExactSourceFrameCore};
 use crate::mechanical_port::vulkan::VulkanProductBackend;
 use crate::{RenderMode, RendererError};
 
+/// Result of submitting a frame to an attached Android surface.
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeVulkanPresentation {
+    Presented,
+    /// The frame was presented, but the caller must reattach with fresh geometry.
+    Suboptimal,
+    /// No swapchain image was available; this frame completed offscreen.
+    Unavailable,
+}
+
 /// A headless exact-source Vulkan renderer factory.
 pub struct NativeVulkanFactory {
     core: ExactSourceFactoryCore<VulkanProductBackend>,
@@ -37,6 +48,36 @@ impl NativeVulkanFactory {
     /// factory's device, exact-source context, and render-resource domain.
     pub fn resize(&mut self, width: u32, height: u32) -> Result<(), RendererError> {
         self.core.resize(width, height)
+    }
+
+    /// Attach a window while preserving this factory's imported resource domain.
+    /// The native surface retains the window until detach or factory destruction.
+    ///
+    /// # Safety
+    /// `window` must be a live ANativeWindow with no other graphics producer.
+    /// Calls and rendering must be serialized on the owning native lane.
+    /// Set `native_premultiplied_alpha` only when native composition guarantees it.
+    #[cfg(target_os = "android")]
+    pub unsafe fn attach_android_surface(
+        &mut self,
+        window: std::ptr::NonNull<std::ffi::c_void>,
+        width: u32,
+        height: u32,
+        native_premultiplied_alpha: bool,
+    ) -> Result<(), RendererError> {
+        self.core.with_backend_mut(|backend| unsafe {
+            backend.attach_android_surface(
+                window,
+                ash::vk::Extent2D { width, height },
+                native_premultiplied_alpha,
+            )
+        })
+    }
+
+    #[cfg(target_os = "android")]
+    pub fn detach_android_surface(&mut self) -> Result<(), RendererError> {
+        self.core
+            .with_backend_mut(VulkanProductBackend::detach_android_surface)
     }
 
     pub fn begin_frame(
@@ -186,6 +227,15 @@ pub struct NativeVulkanFrame {
 }
 
 impl NativeVulkanFrame {
+    /// Render and present without CPU pixel readback. Render-target dimensions
+    /// must match the attached surface's extent. Errors retain normal frame-abort
+    /// cleanup; acquisition/presentation errors retire the attached surface.
+    #[cfg(target_os = "android")]
+    pub fn finish_and_present(self) -> Result<NativeVulkanPresentation, RendererError> {
+        self.core
+            .finish_with(VulkanProductBackend::finish_surface_frame)
+    }
+
     /// Submit the frame while retaining its pixels on the GPU.
     /// This does not present to a window; surface presentation owns that step.
     pub fn finish_without_readback(self) -> Result<(), RendererError> {

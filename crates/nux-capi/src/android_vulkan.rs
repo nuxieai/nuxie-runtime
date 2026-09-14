@@ -359,6 +359,7 @@ fn with_rendered_player<T>(
     player: *mut NuxPlayer,
     clear_color: u32,
     fit: NuxAndroidVulkanRendererFit,
+    admit: impl FnOnce(&AndroidVulkanRendererState) -> Result<Option<T>, ApiFailure>,
     complete: impl FnOnce(
         AndroidVulkanFrameSink,
         &AndroidVulkanRendererState,
@@ -401,6 +402,10 @@ fn with_rendered_player<T>(
                 "player was not imported through this Vulkan renderer generation",
             ));
         }
+    }
+
+    if let Some(output) = admit(&state)? {
+        return Ok(output);
     }
 
     player
@@ -558,7 +563,18 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
             }
             unsafe { *out_presentation = NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE };
             let outcome =
-                with_rendered_player(renderer, player, clear_color, fit, |sink, _state| {
+                with_rendered_player(renderer, player, clear_color, fit, |state| {
+                    let factory = state.factory.borrow();
+                    let admission = factory.native.borrow_mut().prepare_surface_frame()
+                        .map_err(renderer_failure)?;
+                    Ok(match admission {
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Ready => None,
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Unavailable =>
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE),
+                        nuxie_renderer::NativeVulkanSurfaceAdmission::Reattach =>
+                            Some(NUX_ANDROID_VULKAN_PRESENTATION_REATTACH),
+                    })
+                }, |sink, _state| {
                     let (outcome, delivered) = match sink.finish_and_present()? {
                         nuxie_renderer::NativeVulkanPresentation::Presented => {
                             (NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED, true)
@@ -609,7 +625,7 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         "out_frame is null",
                     ));
                 }
-                with_rendered_player(renderer, player, clear_color, fit, |sink, state| {
+                with_rendered_player(renderer, player, clear_color, fit, |_| Ok(None), |sink, state| {
                     let pixels = sink.finish()?;
                     let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {
                         ApiFailure::new(NuxStatus::RuntimeError, "frame row stride overflowed")
@@ -767,6 +783,72 @@ pub unsafe extern "C" fn nux_android_vulkan_frame_free(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unavailable_admission_skips_rendering_and_does_not_acknowledge_revision() {
+        use crate::*;
+        fn varint(bytes: &mut Vec<u8>, mut value: u64) {
+            while value >= 128 {
+                bytes.push((value as u8 & 127) | 128);
+                value >>= 7;
+            }
+            bytes.push(value as u8);
+        }
+        let mut bytes = b"RIVE".to_vec();
+        for value in [7, 2, 0, 0] { varint(&mut bytes, value); }
+        for name in ["Backboard", "Artboard"] {
+            varint(&mut bytes, nuxie_schema::definition_by_name(name).unwrap().type_key.int.into());
+            bytes.push(0);
+        }
+        unsafe {
+            let mut renderer = ptr::null_mut();
+            let mut result = ptr::null_mut();
+            let status = nux_renderer_new_android_vulkan(2, 2, &mut renderer, &mut result);
+            if status != NuxStatus::Ok {
+                let mut diagnostic: NuxCapiDiagnosticView = std::mem::zeroed();
+                diagnostic.struct_size = std::mem::size_of::<NuxCapiDiagnosticView>() as u32;
+                let message = if !result.is_null() &&
+                    nux_capi_result_diagnostic(result, &mut diagnostic) == NuxStatus::Ok {
+                    String::from_utf8_lossy(std::slice::from_raw_parts(
+                        diagnostic.message.data.cast::<u8>(), diagnostic.message.len)).into_owned()
+                } else { format!("{status:?}") };
+                nux_capi_result_free(result);
+                assert_ne!(std::env::var("NUXIE_REQUIRE_LIVE_VULKAN_TESTS").as_deref(), Ok("1"),
+                    "Vulkan unavailable: {message}");
+                return;
+            }
+            nux_capi_result_free(result);
+            let mut file = ptr::null_mut();
+            result = ptr::null_mut();
+            assert_eq!(nux_file_import_android_vulkan(renderer, bytes.as_ptr(), bytes.len(),
+                &NuxFileImportConfig::default(), &mut file, &mut result), NuxStatus::Ok);
+            nux_capi_result_free(result);
+            let mut artboard = ptr::null_mut();
+            assert_eq!(nux_artboard_instance_new(file, 0, &mut artboard), NuxStatus::Ok);
+            let mut player = ptr::null_mut();
+            assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
+            let revision = (&*player).artboard.render_revision.get();
+            assert_eq!((&*player).artboard.presented_render_revision.get(), 0);
+            let skipped = with_rendered_player(renderer, player, 0xff112233,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_| Ok(Some(42)),
+                |_, _| panic!("unavailable admission must not render")).unwrap();
+            assert_eq!(skipped, 42);
+            assert_eq!((&*player).artboard.presented_render_revision.get(), 0);
+            let invalid = with_rendered_player::<u32>(renderer, player, 0, 999,
+                |_| panic!("fit validation must precede admission"),
+                |_, _| unreachable!());
+            assert!(invalid.is_err());
+            let pixels = with_rendered_player(renderer, player, 0xff112233,
+                NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, |_| Ok(None),
+                |sink, _| Ok((sink.finish()?, true))).unwrap();
+            assert_eq!(pixels, [0x11, 0x22, 0x33, 0xff].repeat(4));
+            assert_eq!((&*player).artboard.presented_render_revision.get(), revision);
+            nux_player_free(player);
+            nux_artboard_instance_free(artboard);
+            nux_file_free(file);
+            nux_renderer_android_vulkan_free(renderer);
+        }
+    }
+
     #[test]
     fn centered_contain_fit_scales_and_letterboxes_authored_bounds() {
         assert_eq!(NUX_ANDROID_VULKAN_RENDERER_FIT_NONE, 0);

@@ -466,6 +466,38 @@ impl VulkanProductBackend {
         Ok(())
     }
 
+    #[cfg(target_os = "android")]
+    pub(crate) fn prepare_surface_frame(
+        &mut self,
+    ) -> Result<crate::native_vulkan::NativeVulkanSurfaceAdmission, RendererError> {
+        use crate::native_vulkan::NativeVulkanSurfaceAdmission;
+        use super::surface_swapchain::surface_requires_reattachment;
+        if self.active_frame {
+            return Err(RendererError::Device("cannot admit an active Vulkan frame".into()));
+        }
+        if let Some(error) = &self.frame_recovery_error {
+            return Err(RendererError::Device(format!(
+                "exact Vulkan frame synchronization is unavailable: {error}"
+            )));
+        }
+        let acquired = self.surface.as_mut()
+            .and_then(|surface| surface.swapchain.as_mut())
+            .ok_or(RendererError::Unsupported("active Android Vulkan surface"))?
+            .acquire(0);
+        match acquired {
+            Ok(Some(_)) => Ok(NativeVulkanSurfaceAdmission::Ready),
+            Ok(None) => Ok(NativeVulkanSurfaceAdmission::Unavailable),
+            Err(error) => {
+                self.surface.take();
+                if surface_requires_reattachment(error) {
+                    Ok(NativeVulkanSurfaceAdmission::Reattach)
+                } else {
+                    Err(RendererError::Device(format!("admit Android Vulkan surface: {error:?}")))
+                }
+            }
+        }
+    }
+
     /// Completes a frame with GPU transfer and presentation, reporting surface
     /// availability and suboptimal presentation separately.
     #[cfg(target_os = "android")]

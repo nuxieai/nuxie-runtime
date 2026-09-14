@@ -148,10 +148,15 @@
  *    attachment also preserves this domain and retains its ANativeWindow until
  *    detach, replacement, or renderer destruction. The caller must exclude other
  *    graphics producers and serialize all operations on the renderer thread.
- *    present_player transfers pixels on the GPU and returns PRESENTED,
- *    UNAVAILABLE, or SUBOPTIMAL. UNAVAILABLE does not acknowledge the player's
- *    render revision; SUBOPTIMAL requires reattachment. Detach before releasing
- *    the caller's window reference. CPU export remains available independently.
+ *    present_player transfers pixels on the GPU and returns SUBMITTED, PRESENTED,
+ *    UNAVAILABLE, SUBOPTIMAL, or REATTACH. SUBMITTED retains the exact occurrence
+ *    and revision: poll again with that occurrence without stepping it. Completion
+ *    polls do not record another frame. Only PRESENTED and SUBOPTIMAL acknowledge
+ *    the delivered revision. SUBOPTIMAL and REATTACH require reattachment; a
+ *    suspended zero-extent surface returns REATTACH without delivering a frame.
+ *    Polls retain surface resources; attachment, detach, and destruction drain
+ *    outstanding native work. Detach before releasing the caller's window
+ *    reference. CPU export remains available independently.
  *
  * PANIC SAFETY
  *

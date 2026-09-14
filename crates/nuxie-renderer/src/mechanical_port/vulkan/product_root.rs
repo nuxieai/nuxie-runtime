@@ -500,8 +500,6 @@ impl VulkanProductBackend {
     pub(crate) fn prepare_surface_frame(
         &mut self,
     ) -> Result<crate::native_vulkan::NativeVulkanSurfaceAdmission, RendererError> {
-        use crate::native_vulkan::NativeVulkanSurfaceAdmission;
-        use super::surface_swapchain::surface_requires_reattachment;
         if self.active_frame {
             return Err(RendererError::Device("cannot admit an active Vulkan frame".into()));
         }
@@ -510,40 +508,11 @@ impl VulkanProductBackend {
                 "exact Vulkan frame synchronization is unavailable: {error}"
             )));
         }
-        if let Some(suboptimal) = self.pending_surface {
-            let ready = self.surface.as_mut().and_then(|s| s.swapchain.as_mut())
-                .ok_or(RendererError::Unsupported("pending Android Vulkan surface"))?
-                .wait_submission_for(0);
-            return match ready {
-                Ok(false) => Ok(NativeVulkanSurfaceAdmission::Submitted),
-                Ok(true) => {
-                    self.pending_surface = None;
-                    if suboptimal { self.retire_surface(); }
-                    Ok(if suboptimal { NativeVulkanSurfaceAdmission::Suboptimal }
-                       else { NativeVulkanSurfaceAdmission::Presented })
-                }
-                Err(error) => {
-                    self.retire_surface();
-                    Err(RendererError::Device(format!("poll Android Vulkan surface: {error:?}")))
-                }
-            };
-        }
-        let acquired = self.surface.as_mut()
-            .and_then(|surface| surface.swapchain.as_mut())
-            .ok_or(RendererError::Unsupported("active Android Vulkan surface"))?
-            .acquire(0);
-        match acquired {
-            Ok(Some(_)) => Ok(NativeVulkanSurfaceAdmission::Ready),
-            Ok(None) => Ok(NativeVulkanSurfaceAdmission::Unavailable),
-            Err(error) => {
-                self.retire_surface();
-                if surface_requires_reattachment(error) {
-                    Ok(NativeVulkanSurfaceAdmission::Reattach)
-                } else {
-                    Err(RendererError::Device(format!("admit Android Vulkan surface: {error:?}")))
-                }
-            }
-        }
+        let surface = self.surface.as_mut()
+            .ok_or(RendererError::Unsupported("attached Android Vulkan surface"))?;
+        super::surface_swapchain::prepare_surface_frame(
+            surface.swapchain.as_mut(), &mut self.pending_surface,
+        ).map_err(|error| RendererError::Device(format!("admit Android Vulkan surface: {error:?}")))
     }
 
     /// Completes a frame with GPU transfer and presentation, reporting surface

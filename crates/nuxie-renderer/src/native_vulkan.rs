@@ -26,6 +26,15 @@ pub enum NativeVulkanPresentation {
     Reattach,
 }
 
+/// Admission before recording a frame for an Android surface.
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NativeVulkanSurfaceAdmission {
+    Ready,
+    Unavailable,
+    Reattach,
+}
+
 /// An exact-source Vulkan renderer factory with CPU export and Android surfaces.
 pub struct NativeVulkanFactory {
     core: ExactSourceFactoryCore<VulkanProductBackend>,
@@ -74,6 +83,13 @@ impl NativeVulkanFactory {
                 native_premultiplied_alpha,
             )
         })
+    }
+
+    /// Reserve a ready swapchain image without recording or blocking on fences.
+    /// Repeated calls retain the same reservation until it is submitted.
+    #[cfg(target_os = "android")]
+    pub fn prepare_surface_frame(&self) -> Result<NativeVulkanSurfaceAdmission, RendererError> {
+        self.core.with_backend_mut(VulkanProductBackend::prepare_surface_frame)
     }
 
     /// Actual retained target extent, including surface-driven attachment resize.

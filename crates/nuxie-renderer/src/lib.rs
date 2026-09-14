@@ -30,7 +30,7 @@ mod native_vulkan;
 #[cfg(feature = "renderer-vulkan")]
 pub use native_vulkan::{NativeVulkanFactory, NativeVulkanFrame};
 #[cfg(all(feature = "renderer-vulkan", target_os = "android"))]
-pub use native_vulkan::NativeVulkanPresentation;
+pub use native_vulkan::{NativeVulkanPresentation, NativeVulkanSurfaceAdmission};
 
 #[cfg(feature = "renderer-webgpu")]
 mod native_webgpu;

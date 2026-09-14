@@ -30,15 +30,22 @@ pub(super) struct SurfaceSwapchain {
 impl SurfaceSwapchain {
     /// Wait before reusing the renderer's command pool or target resources.
     pub(super) fn wait_submission(&mut self) -> Result<(), vk::Result> {
-        if self.submit_pending {
-            unsafe {
-                self.device
-                    .wait_for_fences(&[self.submit_done], true, u64::MAX)?
-            };
-            self.submit_pending = false;
+        if self.wait_submission_for(u64::MAX)? {
+            Ok(())
+        } else {
+            Err(vk::Result::TIMEOUT)
+        }
+    }
+
+    fn wait_submission_for(&mut self, timeout_ns: u64) -> Result<bool, vk::Result> {
+        let was_pending = self.submit_pending;
+        let ready = wait_pending_fence(
+            &self.device, self.submit_done, &mut self.submit_pending, timeout_ns,
+        )?;
+        if was_pending && ready {
             self.acquire_pending = false;
         }
-        Ok(())
+        Ok(ready)
     }
     /// # Safety
     /// Device extensions KHR_swapchain and EXT_swapchain_maintenance1 (including
@@ -99,55 +106,50 @@ impl SurfaceSwapchain {
         Ok(owned)
     }
 
-    /// Returns None when no image is ready within the caller's finite budget.
+    /// Returns None when acquisition or either completion fence is unavailable.
+    /// Each wait uses the caller's timeout (zero for nonblocking admission).
+    /// An acquired image stays reserved across calls while its previous present
+    /// fence is pending. Repeated admission returns that same image until submit.
     /// OUT_OF_DATE and SURFACE_LOST stay distinct for the surface owner.
     pub(super) fn acquire(&mut self, timeout_ns: u64) -> Result<Option<AcquiredImage>, vk::Result> {
-        if self.unusable || self.acquired.is_some() {
+        if self.unusable {
             return Err(vk::Result::ERROR_INITIALIZATION_FAILED);
         }
-        if self.submit_pending {
-            match unsafe {
-                self.device
-                    .wait_for_fences(&[self.submit_done], true, timeout_ns)
-            } {
-                Ok(()) => {
-                    self.submit_pending = false;
-                    self.acquire_pending = false;
-                }
-                Err(vk::Result::TIMEOUT) => return Ok(None),
-                Err(error) => return Err(error),
-            }
+        if !self.wait_submission_for(timeout_ns)? {
+            return Ok(None);
         }
-        unsafe { self.device.reset_fences(&[self.acquire_done])? };
-        let (index, suboptimal) = match unsafe {
-            self.loader.acquire_next_image(
-                self.handle,
-                timeout_ns,
-                self.acquire_semaphore,
-                self.acquire_done,
-            )
-        } {
-            Ok(image) => image,
-            Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => return Ok(None),
-            Err(error) => return Err(error),
-        };
-        self.acquire_pending = true;
-        // Per-image presentation fences guard reuse as well as final teardown.
-        if self.present_pending[index as usize] {
-            if let Err(error) = unsafe {
-                self.device
-                    .wait_for_fences(&[self.present_done[index as usize]], true, u64::MAX)
+        if self.acquired.is_none() {
+            unsafe { self.device.reset_fences(&[self.acquire_done])? };
+            let image = match unsafe {
+                self.loader.acquire_next_image(
+                    self.handle, timeout_ns, self.acquire_semaphore, self.acquire_done,
+                )
             } {
+                Ok(image) => image,
+                Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => return Ok(None),
+                Err(error) => return Err(error),
+            };
+            self.acquire_pending = true;
+            self.acquired = Some(image);
+        }
+        let (index, suboptimal) = self.acquired.expect("image is reserved");
+        // Keep acquisition and its semaphore when presentation completion has
+        // not arrived. Acquiring again would reuse a signaled binary semaphore.
+        match wait_pending_fence(
+            &self.device,
+            self.present_done[index as usize],
+            &mut self.present_pending[index as usize],
+            timeout_ns,
+        ) {
+            Ok(false) => return Ok(None),
+            Ok(true) => {}
+            Err(error) => {
                 self.unusable = true;
                 return Err(error);
             }
-            self.present_pending[index as usize] = false;
         }
-        self.acquired = Some((index, suboptimal));
         Ok(Some(AcquiredImage {
-            image: self.images[index as usize],
-            index,
-            suboptimal,
+            image: self.images[index as usize], index, suboptimal,
         }))
     }
 
@@ -161,6 +163,9 @@ impl SurfaceSwapchain {
         queue: vk::Queue,
         command: vk::CommandBuffer,
     ) -> Result<bool, vk::Result> {
+        if self.acquired.is_some_and(|(index, _)| self.present_pending[index as usize]) {
+            return Err(vk::Result::NOT_READY);
+        }
         let Some((index, acquired_suboptimal)) = self.acquired.take() else {
             return Err(vk::Result::ERROR_INITIALIZATION_FAILED);
         };
@@ -201,6 +206,27 @@ impl SurfaceSwapchain {
             self.unusable = false;
         }
         result.map(|suboptimal| suboptimal || acquired_suboptimal)
+    }
+}
+
+/// Pending ownership clears only after the actual Vulkan fence signals.
+/// In particular, timeout leaves the same fence and its resources live.
+pub(super) fn wait_pending_fence(
+    device: &ash::Device,
+    fence: vk::Fence,
+    pending: &mut bool,
+    timeout_ns: u64,
+) -> Result<bool, vk::Result> {
+    if !*pending {
+        return Ok(true);
+    }
+    match unsafe { device.wait_for_fences(&[fence], true, timeout_ns) } {
+        Ok(()) => {
+            *pending = false;
+            Ok(true)
+        }
+        Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => Ok(false),
+        Err(error) => Err(error),
     }
 }
 

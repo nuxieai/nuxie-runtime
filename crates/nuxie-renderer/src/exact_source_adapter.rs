@@ -367,6 +367,11 @@ impl<B: ExactSourceBackend> ExactSourceFactoryCore<B> {
         })
     }
 
+    #[cfg(target_os = "android")]
+    pub(crate) fn with_backend_mut<T>(&self, callback: impl FnOnce(&mut B) -> T) -> T {
+        callback(&mut self.backend.borrow_mut())
+    }
+
     pub(crate) fn resize(&self, width: u32, height: u32) -> Result<(), RendererError> {
         self.backend.borrow_mut().resize(width, height)
     }
@@ -1005,6 +1010,16 @@ pub(crate) struct ExactSourceFrameCore<B: ExactSourceBackend> {
 }
 
 impl<B: ExactSourceBackend> ExactSourceFrameCore<B> {
+    #[cfg(target_os = "android")]
+    pub(crate) fn finish_with<T>(
+        mut self,
+        callback: impl FnOnce(&mut B, u64) -> Result<T, RendererError>,
+    ) -> Result<T, RendererError> {
+        let result = callback(&mut self.backend.borrow_mut(), self.frame_number);
+        self.finished = result.is_ok();
+        result
+    }
+
     pub(crate) fn finish(mut self) -> Result<Vec<u8>, RendererError> {
         let result = self.backend.borrow_mut().finish_frame(self.frame_number);
         self.finished = result.is_ok();

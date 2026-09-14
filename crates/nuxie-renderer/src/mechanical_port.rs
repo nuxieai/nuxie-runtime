@@ -332,6 +332,8 @@ pub(crate) mod vulkan {
     mod surface_config;
     #[path = "surface_swapchain.rs"]
     mod surface_swapchain;
+    #[path = "surface_transfer.rs"]
+    mod surface_transfer;
     #[cfg(target_os = "android")]
     #[path = "android_surface.rs"]
     mod android_surface;

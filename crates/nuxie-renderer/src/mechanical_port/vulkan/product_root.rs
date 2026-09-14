@@ -263,6 +263,12 @@ impl VulkanProductBackend {
                 native_premultiplied_alpha,
             )?
         });
+        if let Some(config) = self.surface.as_ref().and_then(|surface| surface.config) {
+            if let Err(error) = self.resize(config.extent.width, config.extent.height) {
+                self.surface.take();
+                return Err(error);
+            }
+        }
         Ok(())
     }
 
@@ -364,7 +370,7 @@ impl VulkanProductBackend {
         Ok(())
     }
 
-    fn finish_target(&mut self, frame_number: u64, readback: bool) -> Result<(), RendererError> {
+    fn flush_target(&mut self, frame_number: u64) -> Result<vk::CommandBuffer, RendererError> {
         if !self.active_frame || frame_number != self.frame_number {
             return Err(RendererError::Device(
                 "exact Vulkan frame ownership mismatch".into(),
@@ -387,7 +393,11 @@ impl VulkanProductBackend {
         };
         let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
         unsafe { context.flushExecutable(&resources) };
+        Ok(command)
+    }
 
+    fn finish_target(&mut self, frame_number: u64, readback: bool) -> Result<(), RendererError> {
+        let command = self.flush_target(frame_number)?;
         if readback {
             #[cfg(test)]
             {
@@ -449,6 +459,128 @@ impl VulkanProductBackend {
         }
         self.active_frame = false;
         Ok(())
+    }
+
+    /// Completes a frame with GPU transfer and presentation, reporting surface
+    /// availability and suboptimal presentation separately.
+    #[cfg(target_os = "android")]
+    pub(crate) fn finish_surface_frame(
+        &mut self,
+        frame_number: u64,
+    ) -> Result<crate::native_vulkan::NativeVulkanPresentation, RendererError> {
+        use super::surface_transfer::SurfaceTransfer;
+        use crate::native_vulkan::NativeVulkanPresentation;
+        let config = self
+            .surface
+            .as_ref()
+            .and_then(|surface| surface.config)
+            .ok_or(RendererError::Unsupported("active Android Vulkan surface"))?;
+        if config.extent.width != self.width
+            || config.extent.height != self.height
+            || self.width > i32::MAX as u32
+            || self.height > i32::MAX as u32
+        {
+            return Err(RendererError::Unsupported(
+                "surface and render-target extent agreement",
+            ));
+        }
+        if config.transform != vk::SurfaceTransformFlagsKHR::IDENTITY {
+            return Err(RendererError::Unsupported(
+                "rotated Vulkan surface transfer",
+            ));
+        }
+        let source_features = unsafe {
+            self.instance
+                .get_physical_device_format_properties(self.physical_device, TARGET_FORMAT)
+        }
+        .optimal_tiling_features;
+        let destination_features = unsafe {
+            self.instance
+                .get_physical_device_format_properties(self.physical_device, config.format.format)
+        }
+        .optimal_tiling_features;
+        let transfer = SurfaceTransfer::choose(
+            TARGET_FORMAT,
+            config.format.format,
+            source_features,
+            destination_features,
+        )?;
+        let acquired = self
+            .surface
+            .as_mut()
+            .and_then(|surface| surface.swapchain.as_mut())
+            .expect("configured surface has a swapchain")
+            .acquire(0);
+        let acquired = match acquired {
+            Ok(Some(image)) => image,
+            Ok(None) => {
+                self.finish_target(frame_number, false)?;
+                return Ok(NativeVulkanPresentation::Unavailable);
+            }
+            Err(error) => {
+                self.surface.take();
+                return Err(RendererError::Device(format!(
+                    "acquire Android Vulkan surface: {error:?}"
+                )));
+            }
+        };
+        // After acquisition every failure retires its semaphore owner. The
+        // owner's Drop waits pending native work before the command pool can be
+        // reused or destroyed, including failed submission/presentation.
+        let result = (|| {
+            let command = self.flush_target(frame_number)?;
+            let source = self.target_mut().accessTargetImage(
+                command,
+                ImageAccess {
+                    pipelineStages: vk::PipelineStageFlags::TRANSFER,
+                    accessMask: vk::AccessFlags::TRANSFER_READ,
+                    layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                },
+                ImageAccessAction::preserveContents,
+            );
+            unsafe {
+                transfer.record(&self.device, command, source, acquired.image, config.extent);
+                SurfaceTransfer::release_for_present(&self.device, command, acquired.image);
+                self.device.end_command_buffer(command).map_err(|error| {
+                    RendererError::Device(format!("end Vulkan surface frame: {error:?}"))
+                })?;
+            }
+            let swapchain = self
+                .surface
+                .as_mut()
+                .and_then(|surface| surface.swapchain.as_mut())
+                .expect("acquired surface is retained");
+            let suboptimal =
+                unsafe { swapchain.submit_and_present(self.queue, command) }.map_err(|error| {
+                    RendererError::Device(format!("present Android Vulkan surface: {error:?}"))
+                })?;
+            swapchain.wait_submission().map_err(|error| {
+                RendererError::Device(format!("complete Android Vulkan surface frame: {error:?}"))
+            })?;
+            Ok(suboptimal)
+        })();
+        match result {
+            Ok(suboptimal) => {
+                self.active_frame = false;
+                // Keep suboptimal presentation visible, but require reattachment
+                // before another frame rather than continuing with stale geometry.
+                if suboptimal {
+                    self.surface.take();
+                }
+                Ok(if suboptimal {
+                    NativeVulkanPresentation::Suboptimal
+                } else {
+                    NativeVulkanPresentation::Presented
+                })
+            }
+            Err(error) => {
+                self.surface.take();
+                if let Err(recovery) = self.recover_failed_submission() {
+                    self.frame_recovery_error = Some(recovery.to_string());
+                }
+                Err(error)
+            }
+        }
     }
 
     fn context_pin(&mut self) -> Pin<&mut RenderContext> {
@@ -1191,6 +1323,196 @@ mod gpu_canvas_frame_number_tests {
     use super::super::ore_texture_vulkan_decl::{TextureViewVulkan, TextureVulkan};
     use super::super::vkutil_decl::Texture2D;
     use super::*;
+
+    #[test]
+    #[ignore = "requires a configured Vulkan test host"]
+    fn surface_transfer_preserves_premultiplied_channels_on_gpu() {
+        use super::super::surface_transfer::SurfaceTransfer;
+        let mut backend = VulkanProductBackend::new(2, 2).expect("Vulkan host");
+        let device = backend.device.clone();
+        let memory = unsafe {
+            backend
+                .instance
+                .get_physical_device_memory_properties(backend.physical_device)
+        };
+        for (format, expected) in [
+            (vk::Format::B8G8R8A8_UNORM, [51u8, 34, 17, 128]),
+            (vk::Format::R8G8B8A8_UNORM, [17u8, 34, 51, 128]),
+        ] {
+            let mut destination = TargetResourcesGuard::new(&device);
+            unsafe {
+                destination.resources.image = device
+                    .create_image(
+                        &vk::ImageCreateInfo::default()
+                            .image_type(vk::ImageType::TYPE_2D)
+                            .format(format)
+                            .extent(vk::Extent3D {
+                                width: 2,
+                                height: 2,
+                                depth: 1,
+                            })
+                            .mip_levels(1)
+                            .array_layers(1)
+                            .samples(vk::SampleCountFlags::TYPE_1)
+                            .tiling(vk::ImageTiling::OPTIMAL)
+                            .usage(
+                                vk::ImageUsageFlags::TRANSFER_DST
+                                    | vk::ImageUsageFlags::TRANSFER_SRC,
+                            ),
+                        None,
+                    )
+                    .unwrap();
+                let requirements =
+                    device.get_image_memory_requirements(destination.resources.image);
+                destination.resources.image_memory = device
+                    .allocate_memory(
+                        &vk::MemoryAllocateInfo::default()
+                            .allocation_size(requirements.size)
+                            .memory_type_index(
+                                find_memory_type(
+                                    &memory,
+                                    requirements.memory_type_bits,
+                                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                                )
+                                .unwrap(),
+                            ),
+                        None,
+                    )
+                    .unwrap();
+                device
+                    .bind_image_memory(
+                        destination.resources.image,
+                        destination.resources.image_memory,
+                        0,
+                    )
+                    .unwrap();
+            }
+            let frame = backend.begin_frame(0, RenderMode::Msaa).unwrap();
+            let command = backend.flush_target(frame).unwrap();
+            let range = vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .level_count(1)
+                .layer_count(1);
+            let source = backend.target_mut().accessTargetImage(
+                command,
+                ImageAccess {
+                    pipelineStages: vk::PipelineStageFlags::TRANSFER,
+                    accessMask: vk::AccessFlags::TRANSFER_WRITE,
+                    layout: vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                },
+                ImageAccessAction::preserveContents,
+            );
+            unsafe {
+                device.cmd_clear_color_image(
+                    command,
+                    source,
+                    vk::ImageLayout::TRANSFER_DST_OPTIMAL,
+                    &vk::ClearColorValue {
+                        float32: [17.0 / 255.0, 34.0 / 255.0, 51.0 / 255.0, 128.0 / 255.0],
+                    },
+                    &[range],
+                );
+            }
+            backend.target_mut().accessTargetImage(
+                command,
+                ImageAccess {
+                    pipelineStages: vk::PipelineStageFlags::TRANSFER,
+                    accessMask: vk::AccessFlags::TRANSFER_READ,
+                    layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                },
+                ImageAccessAction::preserveContents,
+            );
+            let features = |format| unsafe { backend.instance.get_physical_device_format_properties(
+                backend.physical_device, format) }.optimal_tiling_features;
+            let transfer = SurfaceTransfer::choose(
+                TARGET_FORMAT,
+                format,
+                features(TARGET_FORMAT),
+                features(format),
+            )
+            .unwrap();
+            unsafe {
+                transfer.record(
+                    &device,
+                    command,
+                    source,
+                    destination.resources.image,
+                    vk::Extent2D {
+                        width: 2,
+                        height: 2,
+                    },
+                );
+                // Readback is only the test oracle. Production releases this image
+                // to PRESENT_SRC_KHR instead and never records this buffer copy.
+                device.cmd_pipeline_barrier(
+                    command,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[vk::ImageMemoryBarrier::default()
+                        .image(destination.resources.image)
+                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .subresource_range(range)
+                        .old_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
+                        .new_layout(vk::ImageLayout::TRANSFER_SRC_OPTIMAL)
+                        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                        .dst_access_mask(vk::AccessFlags::TRANSFER_READ)],
+                );
+                device.cmd_copy_image_to_buffer(
+                    command,
+                    destination.resources.image,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    backend.resources.readback,
+                    &[vk::BufferImageCopy::default()
+                        .image_subresource(
+                            vk::ImageSubresourceLayers::default()
+                                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                                .layer_count(1),
+                        )
+                        .image_extent(vk::Extent3D {
+                            width: 2,
+                            height: 2,
+                            depth: 1,
+                        })],
+                );
+                device.cmd_pipeline_barrier(
+                    command,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::HOST,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[vk::BufferMemoryBarrier::default()
+                        .buffer(backend.resources.readback)
+                        .size(vk::WHOLE_SIZE)
+                        .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
+                        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                        .dst_access_mask(vk::AccessFlags::HOST_READ)],
+                    &[],
+                );
+            }
+            backend.finish_submission(command).unwrap();
+            backend.active_frame = false;
+            let pixels = unsafe {
+                let pointer = device
+                    .map_memory(
+                        backend.resources.readback_memory,
+                        0,
+                        16,
+                        vk::MemoryMapFlags::empty(),
+                    )
+                    .unwrap();
+                let pixels = std::slice::from_raw_parts(pointer.cast::<u8>(), 16).to_vec();
+                device.unmap_memory(backend.resources.readback_memory);
+                pixels
+            };
+            assert_eq!(pixels, expected.repeat(4), "destination {format:?}");
+            assert_eq!(backend.readback_count, 0);
+        }
+    }
 
     #[test]
     #[ignore = "requires a configured Vulkan test host"]

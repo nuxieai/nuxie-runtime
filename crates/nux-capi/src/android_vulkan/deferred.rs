@@ -311,7 +311,7 @@ impl AndroidVulkanFrameSink {
         }
     }
 
-    pub(super) fn finish(mut self) -> Result<Vec<u8>, ApiFailure> {
+    fn take_screen(mut self) -> Result<nuxie_renderer::NativeVulkanFrame, ApiFailure> {
         // Empty artboards still produce a cleared frame.
         if self.failure.is_none() && self.screen.borrow().is_none() {
             self.begin_screen_frame(0);
@@ -323,7 +323,20 @@ impl AndroidVulkanFrameSink {
         let Some(ReplayFrame::Screen(frame)) = frame else {
             unreachable!("successful replay opened the screen frame")
         };
-        frame.finish().map_err(renderer_failure)
+        Ok(frame)
+    }
+
+    pub(super) fn finish(self) -> Result<Vec<u8>, ApiFailure> {
+        self.take_screen()?.finish().map_err(renderer_failure)
+    }
+
+    #[cfg(target_os = "android")]
+    pub(super) fn finish_and_present(
+        self,
+    ) -> Result<nuxie_renderer::NativeVulkanPresentation, ApiFailure> {
+        self.take_screen()?
+            .finish_and_present()
+            .map_err(renderer_failure)
     }
 }
 

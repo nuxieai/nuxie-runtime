@@ -24,7 +24,7 @@ pub enum NativeVulkanPresentation {
     Unavailable,
 }
 
-/// A headless exact-source Vulkan renderer factory.
+/// An exact-source Vulkan renderer factory with CPU export and Android surfaces.
 pub struct NativeVulkanFactory {
     core: ExactSourceFactoryCore<VulkanProductBackend>,
     adapter_name: String,
@@ -72,6 +72,12 @@ impl NativeVulkanFactory {
                 native_premultiplied_alpha,
             )
         })
+    }
+
+    /// Actual retained target extent, including surface-driven attachment resize.
+    #[cfg(target_os = "android")]
+    pub fn pixel_extent(&self) -> (u32, u32) {
+        self.core.with_backend_mut(|backend| backend.pixel_extent())
     }
 
     #[cfg(target_os = "android")]

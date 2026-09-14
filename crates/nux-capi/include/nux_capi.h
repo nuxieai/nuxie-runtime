@@ -139,12 +139,19 @@
  *    Canonical CPU pixels remain File-owned for that import session. A fresh
  *    import after renderer reattach invokes the configured hooks again and
  *    creates resources in the new exact Factory generation.
- * 17. Android Vulkan renderer handles are headless and never retain an
- *    ANativeWindow. Each successful render returns an owned frame handle whose
+ * 17. Android Vulkan renderers support headless CPU export and Android-only
+ *    surface attachment. CPU export returns an owned frame handle whose
  *    borrowed data is tightly packed, top-row-first RGBA8 UNORM with
  *    premultiplied alpha. The data pointer expires when
  *    nux_android_vulkan_frame_free succeeds. Resize preserves the renderer's
- *    durable domain and generation, so bound players remain valid.
+ *    durable domain and generation, so bound players remain valid. Surface
+ *    attachment also preserves this domain and retains its ANativeWindow until
+ *    detach, replacement, or renderer destruction. The caller must exclude other
+ *    graphics producers and serialize all operations on the renderer thread.
+ *    present_player transfers pixels on the GPU and returns PRESENTED,
+ *    UNAVAILABLE, or SUBOPTIMAL. UNAVAILABLE does not acknowledge the player's
+ *    render revision; SUBOPTIMAL requires reattachment. Detach before releasing
+ *    the caller's window reference. CPU export remains available independently.
  *
  * PANIC SAFETY
  *

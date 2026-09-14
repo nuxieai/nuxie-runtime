@@ -396,8 +396,8 @@ typedef struct NuxAndroidVulkanFrame NuxAndroidVulkanFrame;
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 /**
- * Product-neutral headless Vulkan renderer. The handle and every frame it
- * returns are affine to the thread that created them.
+ * Vulkan renderer with CPU export and optional Android surface presentation.
+ * The handle and every CPU frame are affine to the thread that created them.
  */
 typedef struct NuxAndroidVulkanRenderer NuxAndroidVulkanRenderer;
 #endif
@@ -1013,6 +1013,10 @@ typedef struct NuxViewModelChangeView {
 typedef uint32_t NuxAndroidVulkanRendererFit;
 #endif
 
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+typedef uint32_t NuxAndroidVulkanPresentation;
+#endif
+
 #if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
 typedef uint32_t NuxRendererDisposition;
 #endif
@@ -1220,6 +1224,18 @@ typedef struct NuxViewModelSnapshotValueView {
  * Tightly packed, top-row-first RGBA8 UNORM with premultiplied alpha.
  */
 #define NUX_ANDROID_VULKAN_PIXEL_FORMAT_RGBA8_PREMULTIPLIED 1
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+#define NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED 1
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+#define NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL 2
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+#define NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE 0
 #endif
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
@@ -1729,8 +1745,49 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
 
+#if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
+/**
+ * Attaches a live ANativeWindow on the renderer's owning thread. The caller must
+ * exclude other graphics producers for this window. Vulkan retains a window
+ * reference until detach, replacement or renderer destruction. The native alpha
+ * flag must only be true when window composition guarantees premultiplied alpha.
+ * Attachment preserves the renderer domain and adopts the reported surface extent.
+ */
+NuxStatus nux_renderer_android_vulkan_attach_surface(struct NuxAndroidVulkanRenderer *renderer,
+                                                     void *native_window,
+                                                     uint32_t pixel_width,
+                                                     uint32_t pixel_height,
+                                                     bool native_premultiplied_alpha,
+                                                     struct NuxCapiResult **out_result);
+#endif
+
+#if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
+/**
+ * Drains and releases the attached Vulkan surface before the caller releases
+ * its own ANativeWindow reference. The renderer and its imported players survive.
+ */
+NuxStatus nux_renderer_android_vulkan_detach_surface(struct NuxAndroidVulkanRenderer *renderer,
+                                                     struct NuxCapiResult **out_result);
+#endif
+
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 NuxStatus nux_renderer_android_vulkan_free(struct NuxAndroidVulkanRenderer *renderer);
+#endif
+
+#if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
+/**
+ * Renders into the attached surface without CPU pixel readback. A successful
+ * call writes PRESENTED, UNAVAILABLE or SUBOPTIMAL; only a delivered frame
+ * acknowledges the player's rendered revision. SUBOPTIMAL requires reattachment.
+ * Errors require caller recovery. out_result is optional and failure-only;
+ * out_presentation is required and reset on entry.
+ */
+NuxStatus nux_renderer_android_vulkan_present_player(struct NuxAndroidVulkanRenderer *renderer,
+                                                     struct NuxPlayer *player,
+                                                     uint32_t clear_color,
+                                                     NuxAndroidVulkanRendererFit fit,
+                                                     NuxAndroidVulkanPresentation *out_presentation,
+                                                     struct NuxCapiResult **out_result);
 #endif
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)

@@ -30,3 +30,5 @@ parse_deps = false
 "feature = android-authored-wgsl" = "NUX_CAPI_ANDROID_AUTHORED_WGSL"
 "target_os = ios" = "__APPLE__"
 "target_os = macos" = "__APPLE__"
+
+"target_os = android" = "__ANDROID__"

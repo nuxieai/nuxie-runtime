@@ -97,6 +97,20 @@ impl SurfaceConfig {
                 "invalid Vulkan surface image count bounds".into(),
             ));
         }
+        // The renderer produces upright TextureView coordinates. When identity
+        // is advertised, let the presentation engine apply currentTransform.
+        // Setting currentTransform here would falsely claim our pixels were
+        // already pre-rotated. Native pre-rotation remains a separate path.
+        let transform = if capabilities
+            .supported_transforms
+            .contains(vk::SurfaceTransformFlagsKHR::IDENTITY)
+        {
+            vk::SurfaceTransformFlagsKHR::IDENTITY
+        } else {
+            return Err(RendererError::Unsupported(
+                "upright Vulkan surface presentation",
+            ));
+        };
         let desired = min.saturating_add(1);
         let image_count = if max == 0 { desired } else { desired.min(max) };
         Ok(Some(Self {
@@ -104,7 +118,7 @@ impl SurfaceConfig {
             extent,
             image_count,
             alpha,
-            transform: capabilities.current_transform,
+            transform,
         }))
     }
 }
@@ -132,6 +146,8 @@ mod tests {
             supported_usage_flags: vk::ImageUsageFlags::TRANSFER_DST,
             supported_composite_alpha: vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED,
             current_transform: vk::SurfaceTransformFlagsKHR::ROTATE_90,
+            supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY
+                | vk::SurfaceTransformFlagsKHR::ROTATE_90,
             ..Default::default()
         }
     }
@@ -160,7 +176,35 @@ mod tests {
         );
         assert_eq!(plan.image_count, 3);
         assert_eq!(plan.format.format, vk::Format::R8G8B8A8_UNORM);
-        assert_eq!(plan.transform, vk::SurfaceTransformFlagsKHR::ROTATE_90);
+        assert_eq!(plan.transform, vk::SurfaceTransformFlagsKHR::IDENTITY);
+    }
+
+    #[test]
+    fn presentation_engine_handles_supported_rotation_without_claiming_prerotation() {
+        for current in [
+            vk::SurfaceTransformFlagsKHR::IDENTITY,
+            vk::SurfaceTransformFlagsKHR::ROTATE_90,
+            vk::SurfaceTransformFlagsKHR::ROTATE_180,
+            vk::SurfaceTransformFlagsKHR::ROTATE_270,
+        ] {
+            let mut caps = capabilities();
+            caps.current_transform = current;
+            caps.supported_transforms = current | vk::SurfaceTransformFlagsKHR::IDENTITY;
+            let config = SurfaceConfig::choose(&caps, &formats(), REQUESTED, false)
+                .unwrap()
+                .unwrap();
+            assert_eq!(config.transform, vk::SurfaceTransformFlagsKHR::IDENTITY);
+            assert_eq!(
+                config.extent,
+                vk::Extent2D {
+                    width: 1080,
+                    height: 2048
+                }
+            );
+        }
+        let mut caps = capabilities();
+        caps.supported_transforms = vk::SurfaceTransformFlagsKHR::ROTATE_90;
+        assert!(SurfaceConfig::choose(&caps, &formats(), REQUESTED, false).is_err());
     }
 
     #[test]

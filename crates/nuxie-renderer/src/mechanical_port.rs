@@ -332,6 +332,9 @@ pub(crate) mod vulkan {
     mod surface_config;
     #[path = "surface_swapchain.rs"]
     mod surface_swapchain;
+    #[cfg(target_os = "android")]
+    #[path = "android_surface.rs"]
+    mod android_surface;
 
     pub(crate) use ore_context_vulkan_decl::ContextVulkan;
     pub(crate) use product_root::VulkanProductBackend;

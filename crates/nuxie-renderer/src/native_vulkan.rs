@@ -94,13 +94,15 @@ impl NativeVulkanFactory {
     /// Repeated calls retain the same reservation until it is submitted.
     #[cfg(target_os = "android")]
     pub fn prepare_surface_frame(&self) -> Result<NativeVulkanSurfaceAdmission, RendererError> {
-        self.core.with_backend_mut(VulkanProductBackend::prepare_surface_frame)
+        self.core
+            .with_backend_mut(VulkanProductBackend::prepare_surface_frame)
     }
 
     /// Drain and discard an outstanding surface completion before CPU export.
     #[cfg(target_os = "android")]
     pub fn drain_surface_frame(&self) -> Result<(), RendererError> {
-        self.core.with_backend_mut(VulkanProductBackend::drain_surface_frame)
+        self.core
+            .with_backend_mut(VulkanProductBackend::drain_surface_frame)
     }
 
     /// Actual retained target extent, including surface-driven attachment resize.

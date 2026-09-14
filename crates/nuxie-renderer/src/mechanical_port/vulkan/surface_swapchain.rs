@@ -220,12 +220,19 @@ pub(super) fn wait_pending_fence(
     if !*pending {
         return Ok(true);
     }
-    match unsafe { device.wait_for_fences(&[fence], true, timeout_ns) } {
-        Ok(()) => {
+    // A readiness poll is a status query, not a scheduled wait. In particular,
+    // Android presentation fences may carry an imported sync-FD payload.
+    let ready = if timeout_ns == 0 {
+        unsafe { device.get_fence_status(fence) }
+    } else {
+        unsafe { device.wait_for_fences(&[fence], true, timeout_ns) }.map(|()| true)
+    };
+    match ready {
+        Ok(true) => {
             *pending = false;
             Ok(true)
         }
-        Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => Ok(false),
+        Ok(false) | Err(vk::Result::TIMEOUT | vk::Result::NOT_READY) => Ok(false),
         Err(error) => Err(error),
     }
 }

@@ -44,6 +44,12 @@ case "$features" in
         ;;
 esac
 
+# This script builds for the host. Android window functions are declared in
+# the all-platform header but are exported only by Android-target artifacts.
+android_surface_extension='^nux_renderer_android_vulkan_(attach_surface|detach_surface|present_player)$'
+grep -Ev "$android_surface_extension" "$expected" > "$work_dir/expected-host.txt"
+expected="$work_dir/expected-host.txt"
+
 # shellcheck disable=SC2086 # an empty or one-feature Cargo argument pair
 cargo build --quiet --manifest-path "$repo_dir/Cargo.toml" -p nux-capi $feature_args
 
@@ -91,7 +97,8 @@ case "$features" in
             "$header_actual" > "$work_dir/header-selected.txt"
         ;;
 esac
-header_actual="$work_dir/header-selected.txt"
+grep -Ev "$android_surface_extension" "$work_dir/header-selected.txt" > "$work_dir/header-host.txt"
+header_actual="$work_dir/header-host.txt"
 diff -u "$expected" "$header_actual"
 
 echo "nux-capi ABI-v4 ${features:-portable} export inventory ok"

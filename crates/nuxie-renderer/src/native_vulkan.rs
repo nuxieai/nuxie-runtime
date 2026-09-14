@@ -186,6 +186,12 @@ pub struct NativeVulkanFrame {
 }
 
 impl NativeVulkanFrame {
+    /// Submit the frame while retaining its pixels on the GPU.
+    /// This does not present to a window; surface presentation owns that step.
+    pub fn finish_without_readback(self) -> Result<(), RendererError> {
+        self.core.finish_without_readback()
+    }
+
     pub fn finish(self) -> Result<Vec<u8>, RendererError> {
         self.core.finish()
     }

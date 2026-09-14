@@ -118,6 +118,8 @@ pub(crate) struct VulkanProductBackend {
     frame_recovery_error: Option<String>,
     #[cfg(test)]
     fail_next_finish: bool,
+    #[cfg(test)]
+    readback_count: usize,
     adapter_name: String,
 }
 
@@ -208,6 +210,8 @@ impl VulkanProductBackend {
             frame_recovery_error: None,
             #[cfg(test)]
             fail_next_finish: false,
+            #[cfg(test)]
+            readback_count: 0,
             adapter_name,
         })
     }
@@ -300,6 +304,93 @@ impl VulkanProductBackend {
         self.height = height;
         old_target.operator_assign_null();
         unsafe { destroy_target_resources(&self.device, &old_resources) };
+        Ok(())
+    }
+
+    fn finish_target(&mut self, frame_number: u64, readback: bool) -> Result<(), RendererError> {
+        if !self.active_frame || frame_number != self.frame_number {
+            return Err(RendererError::Device(
+                "exact Vulkan frame ownership mismatch".into(),
+            ));
+        }
+        #[cfg(feature = "native-ore-vulkan-experimental")]
+        self.gpu_canvas
+            .as_mut()
+            .expect("active ORE frame")
+            .end_frame();
+        let target = self.target.get().cast();
+        let command = self.resources.command_buffer;
+        let external_command = NonNull::new(command.as_raw() as usize as *mut c_void)
+            .ok_or_else(|| RendererError::Device("null Vulkan command buffer".into()))?;
+        let resources = FlushResources {
+            renderTarget: target,
+            externalCommandBuffer: external_command.as_ptr(),
+            currentFrameNumber: frame_number,
+            safeFrameNumber: frame_number.saturating_sub(1),
+        };
+        let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
+        unsafe { context.flushExecutable(&resources) };
+
+        if readback {
+            #[cfg(test)]
+            {
+                self.readback_count += 1;
+            }
+            let transfer = ImageAccess {
+                pipelineStages: vk::PipelineStageFlags::TRANSFER,
+                accessMask: vk::AccessFlags::TRANSFER_READ,
+                layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+            };
+            let image = self.target_mut().accessTargetImage(
+                command,
+                transfer,
+                ImageAccessAction::preserveContents,
+            );
+            let copy = vk::BufferImageCopy::default()
+                .image_subresource(
+                    vk::ImageSubresourceLayers::default()
+                        .aspect_mask(vk::ImageAspectFlags::COLOR)
+                        .layer_count(1),
+                )
+                .image_extent(vk::Extent3D {
+                    width: self.width,
+                    height: self.height,
+                    depth: 1,
+                });
+            unsafe {
+                self.device.cmd_copy_image_to_buffer(
+                    command,
+                    image,
+                    vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
+                    self.resources.readback,
+                    &[copy],
+                );
+                self.device.cmd_pipeline_barrier(
+                    command,
+                    vk::PipelineStageFlags::TRANSFER,
+                    vk::PipelineStageFlags::HOST,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[vk::BufferMemoryBarrier::default()
+                        .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
+                        .dst_access_mask(vk::AccessFlags::HOST_READ)
+                        .buffer(self.resources.readback)
+                        .size(vk::WHOLE_SIZE)],
+                    &[],
+                );
+            }
+        }
+        if let Err(finish_error) = self.finish_submission(command) {
+            if let Err(recovery_error) = self.recover_failed_submission() {
+                let recovery_error = recovery_error.to_string();
+                self.frame_recovery_error = Some(recovery_error.clone());
+                return Err(RendererError::Device(format!(
+                    "{finish_error}; Vulkan frame recovery failed: {recovery_error}"
+                )));
+            }
+            return Err(finish_error);
+        }
+        self.active_frame = false;
         Ok(())
     }
 
@@ -521,84 +612,12 @@ impl ExactSourceBackend for VulkanProductBackend {
     }
 
     fn finish_frame(&mut self, frame_number: u64) -> Result<Vec<u8>, RendererError> {
-        if !self.active_frame || frame_number != self.frame_number {
-            return Err(RendererError::Device(
-                "exact Vulkan frame ownership mismatch".into(),
-            ));
-        }
-        #[cfg(feature = "native-ore-vulkan-experimental")]
-        self.gpu_canvas
-            .as_mut()
-            .expect("active ORE frame")
-            .end_frame();
-        let target = self.target.get().cast();
-        let command = self.resources.command_buffer;
-        let external_command = NonNull::new(command.as_raw() as usize as *mut c_void)
-            .ok_or_else(|| RendererError::Device("null Vulkan command buffer".into()))?;
-        let resources = FlushResources {
-            renderTarget: target,
-            externalCommandBuffer: external_command.as_ptr(),
-            currentFrameNumber: frame_number,
-            safeFrameNumber: frame_number.saturating_sub(1),
-        };
-        let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
-        unsafe { context.flushExecutable(&resources) };
-
-        let transfer = ImageAccess {
-            pipelineStages: vk::PipelineStageFlags::TRANSFER,
-            accessMask: vk::AccessFlags::TRANSFER_READ,
-            layout: vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-        };
-        let image = self.target_mut().accessTargetImage(
-            command,
-            transfer,
-            ImageAccessAction::preserveContents,
-        );
-        let copy = vk::BufferImageCopy::default()
-            .image_subresource(
-                vk::ImageSubresourceLayers::default()
-                    .aspect_mask(vk::ImageAspectFlags::COLOR)
-                    .layer_count(1),
-            )
-            .image_extent(vk::Extent3D {
-                width: self.width,
-                height: self.height,
-                depth: 1,
-            });
-        unsafe {
-            self.device.cmd_copy_image_to_buffer(
-                command,
-                image,
-                vk::ImageLayout::TRANSFER_SRC_OPTIMAL,
-                self.resources.readback,
-                &[copy],
-            );
-            self.device.cmd_pipeline_barrier(
-                command,
-                vk::PipelineStageFlags::TRANSFER,
-                vk::PipelineStageFlags::HOST,
-                vk::DependencyFlags::empty(),
-                &[],
-                &[vk::BufferMemoryBarrier::default()
-                    .src_access_mask(vk::AccessFlags::TRANSFER_WRITE)
-                    .dst_access_mask(vk::AccessFlags::HOST_READ)
-                    .buffer(self.resources.readback)
-                    .size(vk::WHOLE_SIZE)],
-                &[],
-            );
-        }
-        if let Err(finish_error) = self.finish_submission(command) {
-            if let Err(recovery_error) = self.recover_failed_submission() {
-                let recovery_error = recovery_error.to_string();
-                self.frame_recovery_error = Some(recovery_error.clone());
-                return Err(RendererError::Device(format!(
-                    "{finish_error}; Vulkan frame recovery failed: {recovery_error}"
-                )));
-            }
-            return Err(finish_error);
-        }
-        self.active_frame = false;
+        self.finish_target(frame_number, true)?;
         self.read_pixels()
+    }
+
+    fn finish_frame_without_readback(&mut self, frame_number: u64) -> Result<(), RendererError> {
+        self.finish_target(frame_number, false)
     }
 
     fn abort_frame(&mut self) {
@@ -1075,6 +1094,42 @@ mod gpu_canvas_frame_number_tests {
     use super::super::ore_texture_vulkan_decl::{TextureViewVulkan, TextureVulkan};
     use super::super::vkutil_decl::Texture2D;
     use super::*;
+
+    #[test]
+    #[ignore = "requires a configured Vulkan test host"]
+    fn gpu_only_finish_submits_without_readback_and_preserves_next_frame() {
+        let mut backend = VulkanProductBackend::new(2, 2).expect("configured Vulkan test host");
+        let frame = backend
+            .begin_frame(0xff112233, RenderMode::Msaa)
+            .expect("GPU frame");
+        backend
+            .finish_frame_without_readback(frame)
+            .expect("submit GPU frame");
+        assert_eq!(backend.readback_count, 0);
+        assert!(!backend.active_frame);
+        let frame = backend
+            .begin_frame(0xff112233, RenderMode::Msaa)
+            .expect("headless frame");
+        let pixels = backend.finish_frame(frame).expect("read headless frame");
+        assert_eq!(backend.readback_count, 1);
+        assert_eq!(pixels, [17, 34, 51, 255].repeat(4));
+
+        backend.fail_next_finish_for_test();
+        let frame = backend
+            .begin_frame(0xff445566, RenderMode::Msaa)
+            .expect("failing GPU frame");
+        assert!(backend.finish_frame_without_readback(frame).is_err());
+        // ExactSourceFrameCore drops an unsuccessful frame and invokes this
+        // cleanup; this backend-level probe must honor the same contract.
+        backend.abort_frame();
+        let frame = backend
+            .begin_frame(0xff445566, RenderMode::Msaa)
+            .expect("recovered frame");
+        assert_eq!(
+            backend.finish_frame(frame).expect("recovered readback"),
+            [68, 85, 102, 255].repeat(4)
+        );
+    }
 
     #[test]
     fn gpu_canvas_uses_the_single_monotonic_host_frame_stream() {

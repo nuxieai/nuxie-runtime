@@ -3,12 +3,12 @@ set -euo pipefail
 
 script_dir="$(cd -P "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 repo_root="$(cd -P "${script_dir}/.." && pwd -P)"
-expected_tag="android-runtime-v0.3.9"
+expected_tag="$(python3 "${script_dir}/android_runtime_contract.py" release-tag)"
 
 if [[ "${1:-}" == "--plan" ]]; then
     printf '%s\n' \
         '1. require clean source commit equal to origin/main' \
-        '2. require local and remote android-runtime-v0.3.9 tags at that source commit' \
+        "2. require local and remote ${expected_tag} tags at that source commit" \
         '3. verify ABI4, ELF, provenance, checksums, and size evidence' \
         '4. create a GitHub draft with the immutable archive and three evidence assets' \
         '5. download every draft asset and compare it byte-for-byte with the qualified local asset' \
@@ -20,7 +20,7 @@ fi
 release_tag="${1:-}"
 artifact_root="${2:-${repo_root}/target/nux-capi-android}"
 if [[ -z "${release_tag}" || $# -gt 2 ]]; then
-    echo "usage: $0 android-runtime-v0.3.9 [artifact-directory] | --plan" >&2
+    echo "usage: $0 ${expected_tag} [artifact-directory] | --plan" >&2
     exit 2
 fi
 if [[ "${release_tag}" != "${expected_tag}" ]]; then
@@ -124,7 +124,7 @@ gh release create "${release_tag}" \
     --repo nuxieai/nuxie-runtime \
     --draft \
     --verify-tag \
-    --title "Nuxie Android runtime 0.3.9" \
+    --title "Nuxie Android runtime ${release_tag#android-runtime-v}" \
     --notes-file "${notes}"
 
 for asset in \

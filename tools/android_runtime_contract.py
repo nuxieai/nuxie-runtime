@@ -24,7 +24,7 @@ ARTIFACT_NAME = "NuxieRuntimeAndroid.zip"
 METADATA_NAME = "NuxieRuntimeAndroid.json"
 BUILD_INPUTS_NAME = "NuxieRuntimeAndroid-BUILD_INPUTS.json"
 SIZE_REPORT_NAME = "NuxieRuntimeAndroid-SIZE_REPORT.json"
-ARTIFACT_VERSION = "0.3.9"
+ARTIFACT_VERSION = "0.3.10"
 RELEASE_TAG = f"android-runtime-v{ARTIFACT_VERSION}"
 RUST_TOOLCHAIN = "1.94.1"
 CARGO_NDK_VERSION = "4.1.2"
@@ -1315,6 +1315,8 @@ def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    subparsers.add_parser("release-tag")
+
     fingerprint = subparsers.add_parser("fingerprint")
     fingerprint.add_argument("--repo-root", type=pathlib.Path, default=REPO_ROOT)
 
@@ -1348,7 +1350,9 @@ def create_parser() -> argparse.ArgumentParser:
 
 def main(arguments: Sequence[str]) -> int:
     parsed = create_parser().parse_args(arguments)
-    if parsed.command == "fingerprint":
+    if parsed.command == "release-tag":
+        print(RELEASE_TAG)
+    elif parsed.command == "fingerprint":
         print(contract_fingerprint(parsed.repo_root.resolve()))
     elif parsed.command == "inputs":
         document = build_input_document(

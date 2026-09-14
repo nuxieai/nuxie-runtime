@@ -122,6 +122,8 @@ pub(crate) struct VulkanProductBackend {
     readback_count: usize,
     adapter_name: String,
     presentation_extensions_enabled: bool,
+    #[cfg(target_os = "android")]
+    surface: Option<super::android_surface::AndroidSurface>,
 }
 
 impl VulkanProductBackend {
@@ -217,11 +219,62 @@ impl VulkanProductBackend {
             readback_count: 0,
             adapter_name,
             presentation_extensions_enabled,
+            #[cfg(target_os = "android")]
+            surface: None,
         })
     }
 
     pub(crate) fn adapter_name(&self) -> &str {
         &self.adapter_name
+    }
+
+    /// # Safety
+    /// `window` must point to a live ANativeWindow with no other producer. The
+    /// caller must serialize this operation with rendering on the native lane.
+    #[cfg(target_os = "android")]
+    pub(crate) unsafe fn attach_android_surface(
+        &mut self,
+        window: NonNull<c_void>,
+        requested: vk::Extent2D,
+        native_premultiplied_alpha: bool,
+    ) -> Result<(), RendererError> {
+        if self.active_frame {
+            return Err(RendererError::Device(
+                "cannot replace surface during a frame".into(),
+            ));
+        }
+        if !self.presentation_extensions_enabled {
+            return Err(RendererError::Unsupported(
+                "Android Vulkan presentation extensions",
+            ));
+        }
+        // Android permits only one VkSurfaceKHR per window, including when
+        // reattaching the same window. Retire the old owner before creation.
+        self.surface.take();
+        self.surface = Some(unsafe {
+            super::android_surface::AndroidSurface::new(
+                &self.entry,
+                &self.instance,
+                &self.device,
+                self.physical_device,
+                self.queue_family_index,
+                window,
+                requested,
+                native_premultiplied_alpha,
+            )?
+        });
+        Ok(())
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn detach_android_surface(&mut self) -> Result<(), RendererError> {
+        if self.active_frame {
+            return Err(RendererError::Device(
+                "cannot detach surface during a frame".into(),
+            ));
+        }
+        self.surface.take();
+        Ok(())
     }
 
     #[cfg(feature = "native-ore-vulkan-experimental")]
@@ -743,6 +796,8 @@ fn gpu_canvas_frame_numbers(frame_number: &mut u64, active_frame: bool) -> (u64,
 impl Drop for VulkanProductBackend {
     fn drop(&mut self) {
         self.abort_frame();
+        #[cfg(target_os = "android")]
+        self.surface.take();
         unsafe {
             let _ = self.device.device_wait_idle();
         }

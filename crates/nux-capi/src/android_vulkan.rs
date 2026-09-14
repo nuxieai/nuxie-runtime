@@ -1,7 +1,5 @@
-//! Headless Android/Vulkan extension for the portable C ABI.
-//!
-//! Android windowing remains entirely outside this crate. The SDK's JNI shim
-//! owns `ANativeWindow` and blits the owned CPU frame returned here.
+//! Android/Vulkan extension: CPU export and GPU window presentation share
+//! the same retained factory, handle admission and deferred scene recording.
 
 use super::{
     HandleKind, NuxCapiResult, NuxFile, NuxFileImportConfig, NuxPlayer, NuxStatus,
@@ -40,8 +38,8 @@ struct AndroidVulkanRendererState {
     pixel_height: u32,
 }
 
-/// Product-neutral headless Vulkan renderer. The handle and every frame it
-/// returns are affine to the thread that created them.
+/// Vulkan renderer with CPU export and optional Android surface presentation.
+/// The handle and every CPU frame are affine to the thread that created them.
 pub struct NuxAndroidVulkanRenderer {
     state: RefCell<AndroidVulkanRendererState>,
     domain: Arc<RendererDomain>,
@@ -353,6 +351,235 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_resize(
     })
 }
 
+// Keep handle/domain admission, recording, replay and revision acknowledgement
+// identical for CPU export and Android presentation. The completion callback
+// decides whether an output was actually delivered before acknowledging it.
+fn with_rendered_player<T>(
+    renderer: *mut NuxAndroidVulkanRenderer,
+    player: *mut NuxPlayer,
+    clear_color: u32,
+    fit: NuxAndroidVulkanRendererFit,
+    complete: impl FnOnce(
+        AndroidVulkanFrameSink,
+        &AndroidVulkanRendererState,
+    ) -> Result<(T, bool), ApiFailure>,
+) -> Result<T, ApiFailure> {
+    if fit != NUX_ANDROID_VULKAN_RENDERER_FIT_NONE
+        && fit != NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER
+    {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidArgument,
+            "unknown Android Vulkan renderer fit",
+        ));
+    }
+    let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
+        .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
+    let _player_call = enter_handle(player, HandleKind::Player)
+        .map_err(|status| ApiFailure::new(status, "player handle is unavailable"))?;
+    let renderer_ref = unsafe { renderer.as_ref() }
+        .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
+    let player = unsafe { player.as_ref() }
+        .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "player is null"))?;
+    let _occurrence_call = enter_occurrence(&player.artboard)
+        .map_err(|status| ApiFailure::new(status, "player occurrence is unavailable"))?;
+    let state = renderer_ref
+        .state
+        .try_borrow_mut()
+        .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
+
+    let generation = renderer_ref.domain.generation.load(Ordering::Relaxed);
+    match &player.artboard.renderer_domain {
+        RendererDomainBinding::AndroidVulkan {
+            domain: bound_domain,
+            generation: bound_generation,
+        } if bound_domain.id == renderer_ref.domain.id
+            && Arc::ptr_eq(&bound_domain, &renderer_ref.domain)
+            && *bound_generation == generation => {}
+        _ => {
+            return Err(ApiFailure::new(
+                NuxStatus::HandleMismatch,
+                "player was not imported through this Vulkan renderer generation",
+            ));
+        }
+    }
+
+    player
+        .artboard
+        .refresh_bound_view_model_invalidation()
+        .map_err(|status| ApiFailure::new(status, "player render revision overflowed"))?;
+    let rendered_revision = player.artboard.render_revision.get();
+    // Script callbacks allocate into the producer factory, so do
+    // not hold its borrow while recording the artboard.
+    let (mut session, replayer, native) = {
+        let factory = state.factory.borrow();
+        (
+            factory.session.clone(),
+            factory.replayer.clone(),
+            factory.native.clone(),
+        )
+    };
+    session.record_ore_replay_marker();
+    let mut recording = session.make_screen_renderer(0);
+    recording.save();
+    {
+        let artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
+            ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
+        })?;
+        if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER {
+            recording.transform(centered_contain_transform(
+                artboard.artboard_bounds(),
+                (state.pixel_width, state.pixel_height),
+            )?);
+        }
+        artboard.draw(recording.as_mut());
+    }
+    recording.restore();
+    drop(recording);
+    let frame = take_frame(&mut session);
+    let mut sink = AndroidVulkanFrameSink::new(native, clear_color);
+    replayer.borrow_mut().replay_frame(&frame, &mut sink);
+    let (output, delivered) = complete(sink, &state)?;
+    if delivered {
+        player
+            .artboard
+            .acknowledge_presented(rendered_revision)
+            .map_err(|status| {
+                ApiFailure::new(
+                    status,
+                    "presented player revision no longer matches the rendered occurrence",
+                )
+            })?;
+    }
+    Ok(output)
+}
+
+pub type NuxAndroidVulkanPresentation = u32;
+pub const NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE: NuxAndroidVulkanPresentation = 0;
+pub const NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED: NuxAndroidVulkanPresentation = 1;
+pub const NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL: NuxAndroidVulkanPresentation = 2;
+
+/// Attaches a live ANativeWindow on the renderer's owning thread. The caller must
+/// exclude other graphics producers for this window. Vulkan retains a window
+/// reference until detach, replacement or renderer destruction. The native alpha
+/// flag must only be true when window composition guarantees premultiplied alpha.
+/// Attachment preserves the renderer domain and adopts the reported surface extent.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_renderer_android_vulkan_attach_surface(
+    renderer: *mut NuxAndroidVulkanRenderer,
+    native_window: *mut std::ffi::c_void,
+    pixel_width: u32,
+    pixel_height: u32,
+    native_premultiplied_alpha: bool,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    with_result(out_result, || {
+        let window = std::ptr::NonNull::new(native_window)
+            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "native window is null"))?;
+        validate_extent(pixel_width, pixel_height)?;
+        let _call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
+            .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
+        let renderer = unsafe { renderer.as_ref() }
+            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
+        let mut state = renderer
+            .state
+            .try_borrow_mut()
+            .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
+        let extent = {
+            let factory = state.factory.borrow();
+            let mut native = factory.native.borrow_mut();
+            unsafe {
+                native.attach_android_surface(
+                    window,
+                    pixel_width,
+                    pixel_height,
+                    native_premultiplied_alpha,
+                )
+            }
+            .map_err(renderer_failure)?;
+            native.pixel_extent()
+        };
+        (state.pixel_width, state.pixel_height) = extent;
+        Ok(())
+    })
+}
+
+/// Drains and releases the attached Vulkan surface before the caller releases
+/// its own ANativeWindow reference. The renderer and its imported players survive.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_renderer_android_vulkan_detach_surface(
+    renderer: *mut NuxAndroidVulkanRenderer,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    with_result(out_result, || {
+        let _call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
+            .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
+        let renderer = unsafe { renderer.as_ref() }
+            .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
+        let state = renderer
+            .state
+            .try_borrow_mut()
+            .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
+        state
+            .factory
+            .borrow()
+            .native
+            .borrow_mut()
+            .detach_android_surface()
+            .map_err(renderer_failure)
+    })
+}
+
+/// Renders into the attached surface without CPU pixel readback. A successful
+/// call writes PRESENTED, UNAVAILABLE or SUBOPTIMAL; only a delivered frame
+/// acknowledges the player's rendered revision. SUBOPTIMAL requires reattachment.
+/// Errors require caller recovery. out_result is optional and failure-only;
+/// out_presentation is required and reset on entry.
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_renderer_android_vulkan_present_player(
+    renderer: *mut NuxAndroidVulkanRenderer,
+    player: *mut NuxPlayer,
+    clear_color: u32,
+    fit: NuxAndroidVulkanRendererFit,
+    out_presentation: *mut NuxAndroidVulkanPresentation,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    ffi_guard_with_result(out_result, || {
+        let result = (|| -> Result<(), ApiFailure> {
+            if out_presentation.is_null() {
+                return Err(ApiFailure::new(
+                    NuxStatus::NullArgument,
+                    "out_presentation is null",
+                ));
+            }
+            unsafe { *out_presentation = NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE };
+            let outcome =
+                with_rendered_player(renderer, player, clear_color, fit, |sink, _state| {
+                    let (outcome, delivered) = match sink.finish_and_present()? {
+                        nuxie_renderer::NativeVulkanPresentation::Presented => {
+                            (NUX_ANDROID_VULKAN_PRESENTATION_PRESENTED, true)
+                        }
+                        nuxie_renderer::NativeVulkanPresentation::Suboptimal => {
+                            (NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL, true)
+                        }
+                        nuxie_renderer::NativeVulkanPresentation::Unavailable => {
+                            (NUX_ANDROID_VULKAN_PRESENTATION_UNAVAILABLE, false)
+                        }
+                    };
+                    Ok((outcome, delivered))
+                })?;
+            unsafe { *out_presentation = outcome };
+            Ok(())
+        })();
+        match result {
+            Ok(()) => NuxStatus::Ok,
+            Err(failure) => publish_optional_failure(out_result, failure),
+        }
+    })
+}
+
 /// Renders a player into a newly owned CPU frame. `out_result` is optional and
 /// failure-only: when supplied it stays NULL on success and owns a diagnostic
 /// on failure.
@@ -377,129 +604,43 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_render_player(
                         "out_frame is null",
                     ));
                 }
-                if fit != NUX_ANDROID_VULKAN_RENDERER_FIT_NONE
-                    && fit != NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER
-                {
-                    return Err(ApiFailure::new(
-                        NuxStatus::InvalidArgument,
-                        "unknown Android Vulkan renderer fit",
-                    ));
-                }
-                let _renderer_call = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)
-                    .map_err(|status| ApiFailure::new(status, "renderer handle is unavailable"))?;
-                let _player_call = enter_handle(player, HandleKind::Player)
-                    .map_err(|status| ApiFailure::new(status, "player handle is unavailable"))?;
-                let renderer_ref = unsafe { renderer.as_ref() }
-                    .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "renderer is null"))?;
-                let player = unsafe { player.as_ref() }
-                    .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "player is null"))?;
-                let _occurrence_call = enter_occurrence(&player.artboard).map_err(|status| {
-                    ApiFailure::new(status, "player occurrence is unavailable")
-                })?;
-                let state = renderer_ref
-                    .state
-                    .try_borrow_mut()
-                    .map_err(|_| ApiFailure::new(NuxStatus::ReentrantCall, "renderer is active"))?;
-
-                let generation = renderer_ref.domain.generation.load(Ordering::Relaxed);
-                match &player.artboard.renderer_domain {
-                    RendererDomainBinding::AndroidVulkan {
-                        domain: bound_domain,
-                        generation: bound_generation,
-                    } if bound_domain.id == renderer_ref.domain.id
-                        && Arc::ptr_eq(&bound_domain, &renderer_ref.domain)
-                        && *bound_generation == generation => {}
-                    _ => {
+                with_rendered_player(renderer, player, clear_color, fit, |sink, state| {
+                    let pixels = sink.finish()?;
+                    let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {
+                        ApiFailure::new(NuxStatus::RuntimeError, "frame row stride overflowed")
+                    })?;
+                    let expected_len = usize::try_from(
+                        u64::from(row_stride_bytes) * u64::from(state.pixel_height),
+                    )
+                    .map_err(|_| {
+                        ApiFailure::new(NuxStatus::RuntimeError, "frame byte length overflowed")
+                    })?;
+                    if pixels.len() != expected_len {
                         return Err(ApiFailure::new(
-                            NuxStatus::HandleMismatch,
-                            "player was not imported through this Vulkan renderer generation",
+                            NuxStatus::RuntimeError,
+                            format!(
+                                "Vulkan readback returned {} bytes, expected {expected_len}",
+                                pixels.len()
+                            ),
                         ));
                     }
-                }
-
-                player
-                    .artboard
-                    .refresh_bound_view_model_invalidation()
-                    .map_err(|status| {
-                        ApiFailure::new(status, "player render revision overflowed")
-                    })?;
-                let rendered_revision = player.artboard.render_revision.get();
-                // Script callbacks allocate into the producer factory, so do
-                // not hold its borrow while recording the artboard.
-                let (mut session, replayer, native) = {
-                    let factory = state.factory.borrow();
-                    (
-                        factory.session.clone(),
-                        factory.replayer.clone(),
-                        factory.native.clone(),
-                    )
-                };
-                session.record_ore_replay_marker();
-                let mut recording = session.make_screen_renderer(0);
-                recording.save();
-                {
-                    let artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
-                        ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
-                    })?;
-                    if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER {
-                        recording.transform(centered_contain_transform(
-                            artboard.artboard_bounds(),
-                            (state.pixel_width, state.pixel_height),
-                        )?);
-                    }
-                    artboard.draw(recording.as_mut());
-                }
-                recording.restore();
-                drop(recording);
-                let frame = take_frame(&mut session);
-                let mut sink = AndroidVulkanFrameSink::new(native, clear_color);
-                replayer.borrow_mut().replay_frame(&frame, &mut sink);
-                let pixels = sink.finish()?;
-                let row_stride_bytes = state.pixel_width.checked_mul(4).ok_or_else(|| {
-                    ApiFailure::new(NuxStatus::RuntimeError, "frame row stride overflowed")
-                })?;
-                let expected_len =
-                    usize::try_from(u64::from(row_stride_bytes) * u64::from(state.pixel_height))
-                        .map_err(|_| {
-                            ApiFailure::new(NuxStatus::RuntimeError, "frame byte length overflowed")
-                        })?;
-                if pixels.len() != expected_len {
-                    return Err(ApiFailure::new(
-                        NuxStatus::RuntimeError,
-                        format!(
-                            "Vulkan readback returned {} bytes, expected {expected_len}",
-                            pixels.len()
-                        ),
-                    ));
-                }
-                let pending = PendingHandlePublication::new(
-                    NuxAndroidVulkanFrame {
-                        pixels: pixels.into_boxed_slice(),
-                        width: state.pixel_width,
-                        height: state.pixel_height,
-                        row_stride_bytes,
-                    },
-                    HandleKind::AndroidVulkanFrame,
-                );
-                register_handle(
-                    pending.handle,
-                    HandleKind::AndroidVulkanFrame,
-                    thread::current().id(),
-                );
-                unsafe { *out_frame = pending.finish() };
-                // Publication only proves the headless host received the pixels. True
-                // window-presentation acknowledgement needs an explicit host call and
-                // belongs with the needsFrame/wake/idle contract.
-                player
-                    .artboard
-                    .acknowledge_presented(rendered_revision)
-                    .map_err(|status| {
-                        ApiFailure::new(
-                            status,
-                            "presented player revision no longer matches the rendered occurrence",
-                        )
-                    })?;
-                Ok(())
+                    let pending = PendingHandlePublication::new(
+                        NuxAndroidVulkanFrame {
+                            pixels: pixels.into_boxed_slice(),
+                            width: state.pixel_width,
+                            height: state.pixel_height,
+                            row_stride_bytes,
+                        },
+                        HandleKind::AndroidVulkanFrame,
+                    );
+                    register_handle(
+                        pending.handle,
+                        HandleKind::AndroidVulkanFrame,
+                        thread::current().id(),
+                    );
+                    unsafe { *out_frame = pending.finish() };
+                    Ok(((), true))
+                })
             })();
             match result {
                 Ok(()) => NuxStatus::Ok,

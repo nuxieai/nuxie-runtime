@@ -224,6 +224,11 @@ impl VulkanProductBackend {
         })
     }
 
+    #[cfg(target_os = "android")]
+    pub(crate) fn pixel_extent(&self) -> (u32, u32) {
+        (self.width, self.height)
+    }
+
     pub(crate) fn adapter_name(&self) -> &str {
         &self.adapter_name
     }

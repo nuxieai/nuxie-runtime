@@ -121,6 +121,7 @@ pub(crate) struct VulkanProductBackend {
     #[cfg(test)]
     readback_count: usize,
     adapter_name: String,
+    presentation_extensions_enabled: bool,
 }
 
 impl VulkanProductBackend {
@@ -134,18 +135,20 @@ impl VulkanProductBackend {
             });
         }
         let entry = load_vulkan_entry()?;
-        let (instance, get_instance_proc_addr, instance_api_version) = create_instance(&entry)?;
+        let (instance, get_instance_proc_addr, instance_api_version, surface_extensions_enabled) =
+            create_instance(&entry)?;
         let (physical_device, queue_family_index) = select_physical_device(&instance)?;
         let properties = unsafe { instance.get_physical_device_properties(physical_device) };
         let adapter_name = unsafe { CStr::from_ptr(properties.device_name.as_ptr()) }
             .to_string_lossy()
             .into_owned();
-        let (device, features) = create_device(
+        let (device, features, presentation_extensions_enabled) = create_device(
             &instance,
             physical_device,
             queue_family_index,
             // Core features require both the instance request and device support.
             instance_api_version.min(properties.api_version),
+            surface_extensions_enabled,
         )?;
         let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
         let context = unsafe {
@@ -213,6 +216,7 @@ impl VulkanProductBackend {
             #[cfg(test)]
             readback_count: 0,
             adapter_name,
+            presentation_extensions_enabled,
         })
     }
 
@@ -783,7 +787,7 @@ unsafe fn destroy_target_resources(device: &ash::Device, resources: &TargetResou
 
 fn create_instance(
     entry: &ash::Entry,
-) -> Result<(ash::Instance, vk::PFN_vkGetInstanceProcAddr, u32), RendererError> {
+) -> Result<(ash::Instance, vk::PFN_vkGetInstanceProcAddr, u32, bool), RendererError> {
     let application_name = CString::new("Nuxie exact Vulkan renderer").unwrap();
     let supported =
         unsafe { entry.enumerate_instance_extension_properties(None) }.map_err(|error| {
@@ -798,6 +802,21 @@ fn create_instance(
     if has_portability {
         extensions.push(portability.as_ptr());
         flags |= vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR;
+    }
+    let android_surface_extensions = [
+        ash::khr::surface::NAME,
+        ash::khr::android_surface::NAME,
+        ash::khr::get_surface_capabilities2::NAME,
+        ash::ext::surface_maintenance1::NAME,
+    ];
+    let surface_extensions_enabled = cfg!(target_os = "android")
+        && android_surface_extensions.iter().all(|name| {
+            supported.iter().any(|property| unsafe {
+                CStr::from_ptr(property.extension_name.as_ptr()) == *name
+            })
+        });
+    if surface_extensions_enabled {
+        extensions.extend(android_surface_extensions.iter().map(|name| name.as_ptr()));
     }
     let supported_version = unsafe { entry.try_enumerate_instance_version() }
         .map_err(|error| RendererError::Adapter(format!("query Vulkan version: {error:?}")))?
@@ -820,6 +839,7 @@ fn create_instance(
         instance,
         entry.static_fn().get_instance_proc_addr,
         api_version,
+        surface_extensions_enabled,
     ))
 }
 
@@ -857,7 +877,8 @@ fn create_device(
     physical_device: vk::PhysicalDevice,
     queue_family_index: u32,
     api_version: u32,
-) -> Result<(ash::Device, VulkanFeatures), RendererError> {
+    surface_extensions_enabled: bool,
+) -> Result<(ash::Device, VulkanFeatures, bool), RendererError> {
     let supported_features = unsafe { instance.get_physical_device_features(physical_device) };
     let requested_features = vk::PhysicalDeviceFeatures::default()
         .independent_blend(supported_features.independent_blend != 0)
@@ -911,6 +932,23 @@ fn create_device(
             .rasterization_order_color_attachment_access(selected_raster_extension.is_some());
     let mut interlock_features = vk::PhysicalDeviceFragmentShaderInterlockFeaturesEXT::default()
         .fragment_shader_pixel_interlock(has_fragment_interlock);
+    let mut presentation_features = vk::PhysicalDeviceSwapchainMaintenance1FeaturesEXT::default();
+    let presentation_advertised = surface_extensions_enabled
+        && supports(ash::khr::swapchain::NAME)
+        && supports(ash::ext::swapchain_maintenance1::NAME);
+    if presentation_advertised {
+        let mut query =
+            vk::PhysicalDeviceFeatures2::default().push_next(&mut presentation_features);
+        unsafe { instance.get_physical_device_features2(physical_device, &mut query) };
+    }
+    let presentation_extensions_enabled =
+        presentation_advertised && presentation_features.swapchain_maintenance1 != 0;
+    if presentation_extensions_enabled {
+        extensions.extend([
+            ash::khr::swapchain::NAME.as_ptr(),
+            ash::ext::swapchain_maintenance1::NAME.as_ptr(),
+        ]);
+    }
     let priority = [1.0f32];
     let queues = [vk::DeviceQueueCreateInfo::default()
         .queue_family_index(queue_family_index)
@@ -924,6 +962,9 @@ fn create_device(
     }
     if has_fragment_interlock {
         create = create.push_next(&mut interlock_features);
+    }
+    if presentation_extensions_enabled {
+        create = create.push_next(&mut presentation_features);
     }
     let device = unsafe { instance.create_device(physical_device, &create, None) }
         .map_err(|error| RendererError::Device(format!("create Vulkan device: {error:?}")))?;
@@ -943,6 +984,7 @@ fn create_device(
             textureCompressionASTC_LDR: requested_features.texture_compression_astc_ldr != 0,
             textureCompressionETC2: requested_features.texture_compression_etc2 != 0,
         },
+        presentation_extensions_enabled,
     ))
 }
 

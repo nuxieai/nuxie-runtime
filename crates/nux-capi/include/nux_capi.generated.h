@@ -1235,6 +1235,13 @@ typedef struct NuxViewModelSnapshotValueView {
 #endif
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Queued but not completed. Poll with the same occurrence without stepping.
+ */
+#define NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED 4
+#endif
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
 #define NUX_ANDROID_VULKAN_PRESENTATION_SUBOPTIMAL 2
 #endif
 
@@ -1781,7 +1788,10 @@ NuxStatus nux_renderer_android_vulkan_free(struct NuxAndroidVulkanRenderer *rend
 #if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
 /**
  * Renders into the attached surface without CPU pixel readback. A successful
- * call writes PRESENTED, UNAVAILABLE, SUBOPTIMAL or REATTACH; only a delivered frame
+ * call writes PRESENTED, UNAVAILABLE, SUBOPTIMAL, REATTACH or SUBMITTED.
+ * SUBMITTED retains the exact occurrence/revision; call again with that occurrence
+ * to poll without stepping. A completing poll does not record another frame.
+ * Phase/input writes remain dirty if newer than the completed revision. Only a delivered frame
  * acknowledges the player's rendered revision. SUBOPTIMAL and REATTACH require
  * reattachment; REATTACH did not deliver this frame and preserves the player.
  * Errors require caller recovery. out_result is optional and failure-only;

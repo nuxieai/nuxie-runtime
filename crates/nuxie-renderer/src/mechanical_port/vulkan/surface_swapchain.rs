@@ -37,7 +37,7 @@ impl SurfaceSwapchain {
         }
     }
 
-    fn wait_submission_for(&mut self, timeout_ns: u64) -> Result<bool, vk::Result> {
+    pub(super) fn wait_submission_for(&mut self, timeout_ns: u64) -> Result<bool, vk::Result> {
         let was_pending = self.submit_pending;
         let ready = wait_pending_fence(
             &self.device, self.submit_done, &mut self.submit_pending, timeout_ns,

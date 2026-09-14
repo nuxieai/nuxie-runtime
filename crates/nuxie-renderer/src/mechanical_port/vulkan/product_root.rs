@@ -124,6 +124,8 @@ pub(crate) struct VulkanProductBackend {
     presentation_extensions_enabled: bool,
     #[cfg(target_os = "android")]
     surface: Option<super::android_surface::AndroidSurface>,
+    #[cfg(target_os = "android")]
+    pending_surface: Option<bool>,
 }
 
 impl VulkanProductBackend {
@@ -221,6 +223,8 @@ impl VulkanProductBackend {
             presentation_extensions_enabled,
             #[cfg(target_os = "android")]
             surface: None,
+            #[cfg(target_os = "android")]
+            pending_surface: None,
         })
     }
 
@@ -255,7 +259,7 @@ impl VulkanProductBackend {
         }
         // Android permits only one VkSurfaceKHR per window, including when
         // reattaching the same window. Retire the old owner before creation.
-        self.surface.take();
+        self.retire_surface();
         self.surface = Some(unsafe {
             super::android_surface::AndroidSurface::new(
                 &self.entry,
@@ -270,7 +274,7 @@ impl VulkanProductBackend {
         });
         if let Some(config) = self.surface.as_ref().and_then(|surface| surface.config) {
             if let Err(error) = self.resize(config.extent.width, config.extent.height) {
-                self.surface.take();
+                self.retire_surface();
                 return Err(error);
             }
         }
@@ -284,7 +288,7 @@ impl VulkanProductBackend {
                 "cannot detach surface during a frame".into(),
             ));
         }
-        self.surface.take();
+        self.retire_surface();
         Ok(())
     }
 
@@ -467,6 +471,32 @@ impl VulkanProductBackend {
     }
 
     #[cfg(target_os = "android")]
+    fn retire_surface(&mut self) {
+        self.pending_surface = None;
+        self.surface.take();
+    }
+
+    // Direct/headless frames and standalone GPU-canvas work share the resource
+    // manager and target with surface submissions. They must drain before pool
+    // reuse or advancing the safe frame number, even outside C API admission.
+    fn wait_surface_submission(&mut self) -> Result<(), RendererError> {
+        #[cfg(target_os = "android")]
+        if let Some(swapchain) = self.surface.as_mut().and_then(|s| s.swapchain.as_mut()) {
+            swapchain.wait_submission().map_err(|error| {
+                RendererError::Device(format!("drain Android Vulkan surface: {error:?}"))
+            })?;
+        }
+        Ok(())
+    }
+
+    #[cfg(target_os = "android")]
+    pub(crate) fn drain_surface_frame(&mut self) -> Result<(), RendererError> {
+        self.wait_surface_submission()?;
+        self.pending_surface = None;
+        Ok(())
+    }
+
+    #[cfg(target_os = "android")]
     pub(crate) fn prepare_surface_frame(
         &mut self,
     ) -> Result<crate::native_vulkan::NativeVulkanSurfaceAdmission, RendererError> {
@@ -480,6 +510,24 @@ impl VulkanProductBackend {
                 "exact Vulkan frame synchronization is unavailable: {error}"
             )));
         }
+        if let Some(suboptimal) = self.pending_surface {
+            let ready = self.surface.as_mut().and_then(|s| s.swapchain.as_mut())
+                .ok_or(RendererError::Unsupported("pending Android Vulkan surface"))?
+                .wait_submission_for(0);
+            return match ready {
+                Ok(false) => Ok(NativeVulkanSurfaceAdmission::Submitted),
+                Ok(true) => {
+                    self.pending_surface = None;
+                    if suboptimal { self.retire_surface(); }
+                    Ok(if suboptimal { NativeVulkanSurfaceAdmission::Suboptimal }
+                       else { NativeVulkanSurfaceAdmission::Presented })
+                }
+                Err(error) => {
+                    self.retire_surface();
+                    Err(RendererError::Device(format!("poll Android Vulkan surface: {error:?}")))
+                }
+            };
+        }
         let acquired = self.surface.as_mut()
             .and_then(|surface| surface.swapchain.as_mut())
             .ok_or(RendererError::Unsupported("active Android Vulkan surface"))?
@@ -488,7 +536,7 @@ impl VulkanProductBackend {
             Ok(Some(_)) => Ok(NativeVulkanSurfaceAdmission::Ready),
             Ok(None) => Ok(NativeVulkanSurfaceAdmission::Unavailable),
             Err(error) => {
-                self.surface.take();
+                self.retire_surface();
                 if surface_requires_reattachment(error) {
                     Ok(NativeVulkanSurfaceAdmission::Reattach)
                 } else {
@@ -508,6 +556,9 @@ impl VulkanProductBackend {
         use super::surface_swapchain::surface_requires_reattachment;
         use super::surface_transfer::SurfaceTransfer;
         use crate::native_vulkan::NativeVulkanPresentation;
+        if self.pending_surface.is_some() {
+            return Err(RendererError::Device("poll pending surface completion before submitting another frame".into()));
+        }
         let config = self
             .surface
             .as_ref()
@@ -556,7 +607,7 @@ impl VulkanProductBackend {
                 return Ok(NativeVulkanPresentation::Unavailable);
             }
             Err(error) => {
-                self.surface.take();
+                self.retire_surface();
                 if surface_requires_reattachment(error) {
                     self.finish_target(frame_number, false)?;
                     return Ok(NativeVulkanPresentation::Reattach);
@@ -598,27 +649,16 @@ impl VulkanProductBackend {
                     surface_changed = surface_requires_reattachment(error);
                     RendererError::Device(format!("present Android Vulkan surface: {error:?}"))
                 })?;
-            swapchain.wait_submission().map_err(|error| {
-                RendererError::Device(format!("complete Android Vulkan surface frame: {error:?}"))
-            })?;
             Ok(suboptimal)
         })();
         match result {
             Ok(suboptimal) => {
                 self.active_frame = false;
-                // Keep suboptimal presentation visible, but require reattachment
-                // before another frame rather than continuing with stale geometry.
-                if suboptimal {
-                    self.surface.take();
-                }
-                Ok(if suboptimal {
-                    NativeVulkanPresentation::Suboptimal
-                } else {
-                    NativeVulkanPresentation::Presented
-                })
+                self.pending_surface = Some(suboptimal);
+                Ok(NativeVulkanPresentation::Submitted)
             }
             Err(error) => {
-                self.surface.take();
+                self.retire_surface();
                 if let Err(recovery) = self.recover_failed_submission() {
                     self.frame_recovery_error = Some(recovery.to_string());
                     return Err(recovery);
@@ -793,6 +833,7 @@ impl ExactSourceBackend for VulkanProductBackend {
                 "exact Vulkan context already has an active frame".into(),
             ));
         }
+        self.wait_surface_submission()?;
         unsafe {
             self.device
                 .wait_for_fences(&[self.resources.fence], true, u64::MAX)
@@ -920,6 +961,8 @@ impl ExactSourceBackend for VulkanProductBackend {
                 &execution_anchor,
             );
         }
+        self.wait_surface_submission()
+            .map_err(|error| GpuCanvasError::new(error.to_string()))?;
         let command = {
             let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
             let implementation =
@@ -980,7 +1023,7 @@ impl Drop for VulkanProductBackend {
     fn drop(&mut self) {
         self.abort_frame();
         #[cfg(target_os = "android")]
-        self.surface.take();
+        self.retire_surface();
         unsafe {
             let _ = self.device.device_wait_idle();
         }

@@ -261,6 +261,15 @@ fn renderer_failure(error: RendererError) -> ApiFailure {
     ApiFailure::new(status, error.to_string())
 }
 
+// Unsupported attachment is a capability result, not a swallowed driver error.
+fn surface_attachment(result: Result<(), RendererError>) -> Result<bool, ApiFailure> {
+    match result {
+        Ok(()) => Ok(true),
+        Err(RendererError::Unsupported(_)) => Ok(false),
+        Err(error) => Err(renderer_failure(error)),
+    }
+}
+
 fn with_result(
     out_result: *mut *mut NuxCapiResult,
     body: impl FnOnce() -> Result<(), ApiFailure>,
@@ -566,6 +575,9 @@ pub const NUX_ANDROID_VULKAN_PRESENTATION_SUBMITTED: NuxAndroidVulkanPresentatio
 /// reference until detach, replacement or renderer destruction. The native alpha
 /// flag must only be true when window composition guarantees premultiplied alpha.
 /// Attachment preserves the renderer domain and adopts the reported surface extent.
+/// out_attached is required and reset on entry. OK with false means the device or
+/// surface lacks a required capability; no Vulkan surface remains attached and
+/// headless rendering remains available. Other failures retain their error status.
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_renderer_android_vulkan_attach_surface(
@@ -574,9 +586,17 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_attach_surface(
     pixel_width: u32,
     pixel_height: u32,
     native_premultiplied_alpha: bool,
+    out_attached: *mut bool,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
     with_result(out_result, || {
+        if out_attached.is_null() {
+            return Err(ApiFailure::new(
+                NuxStatus::NullArgument,
+                "out_attached is null",
+            ));
+        }
+        unsafe { *out_attached = false };
         let window = std::ptr::NonNull::new(native_window)
             .ok_or_else(|| ApiFailure::new(NuxStatus::NullArgument, "native window is null"))?;
         validate_extent(pixel_width, pixel_height)?;
@@ -592,18 +612,22 @@ pub unsafe extern "C" fn nux_renderer_android_vulkan_attach_surface(
         let extent = {
             let factory = state.factory.borrow();
             let mut native = factory.native.borrow_mut();
-            unsafe {
+            let attached = surface_attachment(unsafe {
                 native.attach_android_surface(
                     window,
                     pixel_width,
                     pixel_height,
                     native_premultiplied_alpha,
                 )
+            })?;
+            if !attached {
+                native.detach_android_surface().map_err(renderer_failure)?;
+                return Ok(());
             }
-            .map_err(renderer_failure)?;
             native.pixel_extent()
         };
         (state.pixel_width, state.pixel_height) = extent;
+        unsafe { *out_attached = true };
         Ok(())
     })
 }
@@ -931,6 +955,32 @@ pub unsafe extern "C" fn nux_android_vulkan_frame_free(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unsupported_surface_is_distinct_from_driver_and_argument_failures() {
+        assert!(surface_attachment(Ok(())).unwrap());
+        assert!(
+            !surface_attachment(Err(RendererError::Unsupported("presentation extension"))).unwrap()
+        );
+        assert_eq!(
+            surface_attachment(Err(RendererError::Device("device lost".into())))
+                .unwrap_err()
+                .status,
+            NuxStatus::RuntimeError
+        );
+        assert_eq!(
+            surface_attachment(Err(RendererError::InvalidTextureExtent {
+                label: "surface",
+                width: 0,
+                height: 1,
+                max_dimension: 4096,
+            }))
+            .unwrap_err()
+            .status,
+            NuxStatus::InvalidArgument
+        );
+    }
+
     #[test]
     fn surface_admission_and_pending_completion_preserve_exact_revision() {
         use crate::*;

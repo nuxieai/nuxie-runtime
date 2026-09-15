@@ -269,7 +269,8 @@ pub unsafe extern "C" fn nux_player_validate_semantic_snapshot(
 }
 
 /// Associate an exact-name root text run with its presented semantic text-field node.
-/// The lookup uses the same root scope as text mutation, never labels or geometry.
+/// The lookup uses the same root scope as text mutation and the native text owner
+/// or its enclosing field ancestors, never labels or geometry.
 /// Missing/non-field/hidden nodes return NOT_FOUND; ambiguous names or owners return
 /// INVALID_ARGUMENT. Stale captures return HANDLE_MISMATCH. No text value is read.
 #[unsafe(no_mangle)]
@@ -333,6 +334,20 @@ pub unsafe extern "C" fn nux_player_semantic_node_for_text_run(
         }) else {
             return NuxStatus::NotFound;
         };
+        let mut owners = std::collections::HashSet::new();
+        let mut ancestor = Some(owner);
+        while let Some(owner) = ancestor {
+            if !owners.insert(owner.identity_key()) {
+                return NuxStatus::InvalidArgument;
+            }
+            ancestor = owner
+                .with(|object| {
+                    object
+                        .as_component()
+                        .and_then(|component| component.parent_handle())
+                })
+                .flatten();
+        }
         let Some(manager) = artboard.with_artboard(|artboard| artboard.semantic_manager()) else {
             return NuxStatus::NotFound;
         };
@@ -348,7 +363,11 @@ pub unsafe extern "C" fn nux_player_semantic_node_for_text_run(
                         return None;
                     }
                     let node = manager.node_by_id(captured.id)?;
-                    (node.borrow().core_owner.as_ref() == Some(&owner)).then_some(captured.id)
+                    node.borrow()
+                        .core_owner
+                        .as_ref()
+                        .is_some_and(|owner| owners.contains(&owner.identity_key()))
+                        .then_some(captured.id)
                 })
                 .collect::<Vec<_>>())
         });
@@ -499,6 +518,11 @@ mod tests {
 
     #[test]
     fn text_run_association_uses_the_presented_owner_and_rejects_ambiguity() {
+        check_text_run_association(false);
+        check_text_run_association(true);
+    }
+
+    fn check_text_run_association(compound: bool) {
         use nuxie::runtime::{core::CoreType, text::text_value_run::TextValueRun};
         mod fixture {
             include!(concat!(
@@ -506,7 +530,11 @@ mod tests {
                 "/tests/support/semantic_text.rs"
             ));
         }
-        let bytes = fixture::semantic_text_artboard();
+        let bytes = if compound {
+            fixture::compound_semantic_text_artboard()
+        } else {
+            fixture::semantic_text_artboard()
+        };
         unsafe {
             let mut file = ptr::null_mut();
             assert_eq!(
@@ -565,10 +593,14 @@ mod tests {
             });
             assert_eq!(
                 (&(*first).nodes).len(),
-                1,
-                "fixture has one authored semantic owner"
+                if compound { 2 } else { 1 },
+                "fixture has the authored field owner and optional inner text"
             );
-            let id = (&(*first).nodes)[0].id;
+            let id = (&(*first).nodes)
+                .iter()
+                .find(|node| node.label == "Name")
+                .unwrap()
+                .id;
             let data = artboard
                 .with_artboard(|a| {
                     a.objects()
@@ -592,12 +624,42 @@ mod tests {
             assert_eq!(found, 0);
             assert_eq!(nux_semantic_snapshot_free(first), NuxStatus::Ok);
             data.with_downcast_mut::<SemanticData, _>(|data| data.set_role(6));
-            let snapshot = capture();
+            let mut snapshot = capture();
             assert_eq!(
                 nux_player_semantic_node_for_text_run(player, snapshot, view, &mut found),
                 NuxStatus::Ok
             );
             assert_eq!(found, id);
+            if compound {
+                let inner = artboard.with_artboard(|artboard| {
+                    artboard
+                        .objects()
+                        .iter()
+                        .flatten()
+                        .find(|object| {
+                            object.is_type_of(SemanticData::TYPE_KEY) && *object != &data
+                        })
+                        .cloned()
+                        .unwrap()
+                });
+                inner.with_downcast_mut::<SemanticData, _>(|data| data.set_role(6));
+                let ambiguous = capture();
+                assert_eq!(
+                    nux_player_semantic_node_for_text_run(player, ambiguous, view, &mut found),
+                    NuxStatus::InvalidArgument,
+                    "two semantic field owners on the exact text ancestry must not silently choose one"
+                );
+                assert_eq!(found, 0);
+                assert_eq!(nux_semantic_snapshot_free(ambiguous), NuxStatus::Ok);
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+                inner.with_downcast_mut::<SemanticData, _>(|data| data.set_role(7));
+                snapshot = capture();
+                assert_eq!(
+                    nux_player_semantic_node_for_text_run(player, snapshot, view, &mut found),
+                    NuxStatus::Ok
+                );
+                assert_eq!(found, id);
+            }
             let missing = "not an authored run";
             assert_eq!(
                 nux_player_semantic_node_for_text_run(

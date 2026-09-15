@@ -5,10 +5,14 @@ use std::path::PathBuf;
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
-    animation::semantic_listener_group::SemanticActionType,
+    animation::{
+        semantic_listener_group::SemanticActionType,
+        state_machine_instance::RuntimeStateMachineInstanceHandle,
+    },
     semantic::semantic_state::{SemanticState, has_semantic_state},
+    semantic::{semantic_data::SemanticData, semantic_manager::RuntimeSemanticManagerHandle},
 };
-use nuxie_runtime::{File, RuntimeFactoryHandle};
+use nuxie_runtime::{File, RuntimeArtboardInstanceHandle, RuntimeFactoryHandle, RuntimeFileHandle};
 
 const DROPDOWN_LABEL: &str = "Select a fandom";
 
@@ -22,8 +26,15 @@ fn pinned_fixture(name: &str) -> Vec<u8> {
         .unwrap_or_else(|error| panic!("read pinned fixture {}: {error}", path.display()))
 }
 
-#[test]
-fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
+struct Dropdown {
+    _file: RuntimeFileHandle,
+    _artboard: RuntimeArtboardInstanceHandle,
+    machine: RuntimeStateMachineInstanceHandle,
+    manager: RuntimeSemanticManagerHandle,
+    button_id: u32,
+}
+
+fn dropdown() -> Dropdown {
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let factory = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
     let file = File::import(
@@ -65,6 +76,25 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
         SemanticState::EXPANDED
     ));
     let button_id = initial_button.id;
+    Dropdown {
+        _file: file,
+        _artboard: artboard,
+        machine: state_machine,
+        manager,
+        button_id,
+    }
+}
+
+#[test]
+fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
+    let fixture = dropdown();
+    let Dropdown {
+        machine: state_machine,
+        manager,
+        button_id,
+        ..
+    } = &fixture;
+    let button_id = *button_id;
 
     state_machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
     for _ in 0..10 {
@@ -81,4 +111,47 @@ fn wave_c15_019_state_machine_property_change_appears_in_updated_semantic() {
         updated.state_flags,
         SemanticState::EXPANDED
     ));
+}
+
+#[test]
+fn disabled_and_hidden_semantic_nodes_do_not_execute_taps() {
+    for (hidden, queued) in [(false, false), (true, false), (false, true), (true, true)] {
+        let fixture = dropdown();
+        let Dropdown {
+            machine,
+            manager,
+            button_id,
+            ..
+        } = &fixture;
+        let button_id = *button_id;
+        let data = manager
+            .with_semantic_manager(|manager| manager.node_by_id(button_id))
+            .expect("dropdown node")
+            .borrow()
+            .semantic_data
+            .clone()
+            .expect("authored semantics");
+        if queued {
+            machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
+        }
+        data.with_downcast_mut::<SemanticData, _>(|data| {
+            if hidden {
+                data.set_is_hidden(true);
+            } else {
+                data.set_is_disabled(true);
+            }
+        })
+        .expect("semantic data");
+        if !queued {
+            machine.fire_semantic_action(button_id, SemanticActionType::Tap as u8);
+        }
+        for _ in 0..10 {
+            machine.advance_and_apply(0.1);
+        }
+        assert!(
+            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            "ineligible semantic tap must not close the dropdown (hidden={hidden}, queued={queued})"
+        );
+    }
 }

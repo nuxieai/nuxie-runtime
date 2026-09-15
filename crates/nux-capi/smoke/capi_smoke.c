@@ -295,6 +295,7 @@ int main(int argc, char** argv)
         .input_count = sizeof(step_inputs) / sizeof(step_inputs[0]),
         .elapsed_seconds = 0.016f,
     };
+    CHECK(nux_player_enable_semantics(player) == NUX_STATUS_OK);
     NuxPlayerStepResult* step_result = NULL;
     CHECK(nux_player_step(player, &player_step, &step_result) == NUX_STATUS_OK);
     CHECK(step_result != NULL);
@@ -317,6 +318,18 @@ int main(int argc, char** argv)
     CHECK(nux_player_acknowledge_presented(player,
                                            scheduling.render_revision) ==
           NUX_STATUS_OK);
+    NuxSemanticSnapshot* semantic_snapshot = NULL;
+    CHECK(nux_player_semantic_snapshot(player, &semantic_snapshot) == NUX_STATUS_OK);
+    CHECK(semantic_snapshot != NULL);
+    NuxSemanticSnapshotInfo semantic_info = {
+        .struct_size = sizeof(NuxSemanticSnapshotInfo)};
+    CHECK(nux_semantic_snapshot_info(semantic_snapshot, &semantic_info) == NUX_STATUS_OK);
+    CHECK(semantic_info.render_revision == scheduling.render_revision);
+    CHECK(nux_player_validate_semantic_snapshot(player, semantic_snapshot) == NUX_STATUS_OK);
+    NuxSemanticNodeView semantic_node = {.struct_size = sizeof(NuxSemanticNodeView)};
+    CHECK(nux_semantic_snapshot_node(semantic_snapshot, semantic_info.node_count,
+                                      &semantic_node) == NUX_STATUS_NOT_FOUND);
+    CHECK(nux_semantic_snapshot_free(semantic_snapshot) == NUX_STATUS_OK);
     NuxViewModelChangeView step_change = {
         .struct_size = sizeof(NuxViewModelChangeView)};
     CHECK(nux_player_step_result_view_model_change(

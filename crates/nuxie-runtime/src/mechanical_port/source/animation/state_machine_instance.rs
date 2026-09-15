@@ -81,7 +81,7 @@ use crate::mechanical_port::source::{
     semantic::{
         semantic_data::SemanticData,
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
-        semantic_node::SemanticNodeRef,
+        semantic_node::{SemanticNode, SemanticNodeRef},
     },
     view_model_type::ViewModelType,
     viewmodel::{
@@ -2043,7 +2043,12 @@ impl RuntimeStateMachineInstanceHandle {
             let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
                 return;
             };
-            if semantic_data.is_disabled() || semantic_data.is_hidden() {
+            if semantic_data.is_disabled()
+                || semantic_data.is_hidden()
+                || !semantic_data
+                    .existing_semantic_node()
+                    .is_some_and(|node| SemanticNode::is_action_eligible(&node))
+            {
                 return;
             }
             match SemanticActionType::from_raw(action_type as u32) {
@@ -3439,17 +3444,25 @@ impl StateMachineInstance {
             let eligible = event
                 .group
                 .with_group(|group| group.semantic_data())
-                .with_downcast::<SemanticData, _>(|data| !data.is_disabled() && !data.is_hidden())
+                .with_downcast::<SemanticData, _>(|data| {
+                    !data.is_disabled()
+                        && !data.is_hidden()
+                        && data
+                            .existing_semantic_node()
+                            .is_some_and(|node| SemanticNode::is_action_eligible(&node))
+                })
                 .unwrap_or(false);
             if !eligible {
                 continue;
             }
             let listener = event.group.with_group(|group| group.listener());
-            let listener_index = self
+            let Some(listener_index) = self
                 .semantic_listener_groups
                 .iter()
                 .position(|group| group.ptr_eq(&event.group))
-                .expect("a queued semantic listener remains owned until dispatch");
+            else {
+                continue;
+            };
             let invocation = ListenerInvocation::semantic(listener_index, event.action_type as u8);
             self.perform_listener_changes(&listener, invocation);
         }

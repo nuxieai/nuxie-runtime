@@ -123,6 +123,10 @@ impl SemanticManager {
         self.nodes_by_id.get(&id).cloned()
     }
 
+    pub(crate) fn contains_root(&self, node: &SemanticNodeRef) -> bool {
+        self.roots.iter().any(|root| Rc::ptr_eq(root, node))
+    }
+
     #[cfg(any(test, feature = "tools"))]
     pub fn node_count(&self) -> usize {
         self.nodes_by_id.len()

@@ -434,3 +434,55 @@ fn invisible_controls_leave_semantics_and_return_when_visible() {
         );
     }
 }
+
+#[test]
+fn fresh_semantic_registration_uses_authored_opacity_before_the_first_advance() {
+    use nuxie_runtime::source::generated::{
+        core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
+    };
+    for opacity in [1.0, 0.0] {
+        let mut factory = PersistentFactory::new(RecordingFactory::default());
+        let file = File::import(
+            &pinned_fixture("simpsons.riv"),
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let artboard = file.with_file(|file| file.artboard_default()).unwrap();
+        let data = artboard.with_artboard(|artboard| {
+            artboard
+                .objects_typed::<SemanticData>()
+                .iter()
+                .next()
+                .unwrap()
+        });
+        data.with_downcast_mut::<SemanticData, _>(|data| {
+            data.set_label("Fresh semantic control".to_owned());
+            data.set_role(1);
+            data.set_is_hidden(false);
+        })
+        .unwrap();
+        let owner = data
+            .with(|data| data.component_parent_handle())
+            .flatten()
+            .unwrap();
+        assert!(CoreRegistry::set_double_handle(
+            &owner,
+            i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY),
+            opacity,
+        ));
+        let manager = RuntimeSemanticManagerHandle::new(
+            nuxie_runtime::source::semantic::semantic_manager::SemanticManager::new(),
+        );
+        artboard.build_semantic_tree(Some(manager.clone()), None);
+        let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+        assert_eq!(
+            nodes
+                .iter()
+                .any(|node| node.label == "Fresh semantic control"),
+            opacity > 0.0
+        );
+    }
+}

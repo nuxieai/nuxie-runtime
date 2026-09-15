@@ -344,7 +344,7 @@ pub unsafe extern "C" fn nux_player_semantic_node_for_text_run(
                 .nodes
                 .iter()
                 .filter_map(|captured| {
-                    if captured.role != 6 {
+                    if captured.role != NUX_SEMANTIC_ROLE_TEXT_FIELD {
                         return None;
                     }
                     let node = manager.node_by_id(captured.id)?;

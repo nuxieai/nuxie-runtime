@@ -1827,7 +1827,8 @@ NuxStatus nux_player_queue_semantic_action(struct NuxPlayer *player,
 
 /**
  * Associate an exact-name root text run with its presented semantic text-field node.
- * The lookup uses the same root scope as text mutation, never labels or geometry.
+ * The lookup uses the same root scope as text mutation and the native text owner
+ * or its enclosing field ancestors, never labels or geometry.
  * Missing/non-field/hidden nodes return NOT_FOUND; ambiguous names or owners return
  * INVALID_ARGUMENT. Stale captures return HANDLE_MISMATCH. No text value is read.
  */

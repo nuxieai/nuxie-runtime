@@ -1103,3 +1103,61 @@ fn live_pinned_cpp_player_step_oracle_matches_c_and_rust() {
         nux_file_free(file);
     }
 }
+
+#[test]
+fn semantic_snapshot_requires_presented_occurrence_and_survives_player_release() {
+    let file = import("smi_test.riv");
+    let instance = artboard(file, 1);
+    let other_instance = artboard(file, 1);
+    let mut player = std::ptr::null_mut();
+    let mut other = std::ptr::null_mut();
+    unsafe {
+        assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_new_static(other_instance, &mut other),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+        let mut snapshot = std::ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(player, &mut snapshot),
+            NuxStatus::HandleMismatch
+        );
+        assert!(snapshot.is_null());
+        let (status, result) = step(player, &[], &[], 0.0);
+        assert_eq!(status, NuxStatus::Ok);
+        let revision = scheduling(result).render_revision;
+        assert_eq!(
+            nux_player_acknowledge_presented(player, revision),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_semantic_snapshot(player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_validate_semantic_snapshot(player, snapshot),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_validate_semantic_snapshot(other, snapshot),
+            NuxStatus::HandleMismatch
+        );
+        assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_player_free(other), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(other_instance), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        let mut info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        assert_eq!(info.render_revision, revision);
+        assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+    }
+}

@@ -435,6 +435,12 @@ typedef struct NuxRenderer NuxRenderer;
 #endif
 
 /**
+ * Immutable capture. Text views remain valid until this handle is freed.
+ * Like other runtime handles, all access is restricted to the creator thread.
+ */
+typedef struct NuxSemanticSnapshot NuxSemanticSnapshot;
+
+/**
  * Owned state machine instance. Advance it through the
  * [`NuxArtboardInstance`] it was created from.
  */
@@ -1099,6 +1105,31 @@ typedef struct NuxMetalRenderOperation {
 } NuxMetalRenderOperation;
 #endif
 
+typedef struct NuxSemanticSnapshotInfo {
+  uint32_t struct_size;
+  uint64_t render_revision;
+  uint64_t tree_version;
+  size_t node_count;
+} NuxSemanticSnapshotInfo;
+
+typedef struct NuxSemanticNodeView {
+  uint32_t struct_size;
+  uint32_t id;
+  int32_t parent_id;
+  uint32_t sibling_index;
+  uint32_t role;
+  uint32_t state_flags;
+  uint32_t trait_flags;
+  uint32_t heading_level;
+  float min_x;
+  float min_y;
+  float max_x;
+  float max_y;
+  struct NuxStringView label;
+  struct NuxStringView value;
+  struct NuxStringView hint;
+} NuxSemanticNodeView;
+
 typedef struct NuxViewModelAuthoredInstanceView {
   uint32_t struct_size;
   size_t schema_index;
@@ -1621,6 +1652,13 @@ NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
  */
 NuxStatus nux_player_acknowledge_presented(struct NuxPlayer *player, uint64_t render_revision);
 
+/**
+ * Enable semantic tracking for the player's shared artboard occurrence.
+ * Call before advancing/presenting. Static, animation, and state-machine
+ * players sharing this occurrence observe the same tree.
+ */
+NuxStatus nux_player_enable_semantics(struct NuxPlayer *player);
+
 NuxStatus nux_player_free(struct NuxPlayer *player);
 
 /**
@@ -1690,6 +1728,15 @@ NuxStatus nux_player_new_static_with_result(struct NuxArtboardInstance *instance
                                             struct NuxCapiResult **out_result);
 
 /**
+ * Capture only the current acknowledged presentation. Returns HANDLE_MISMATCH
+ * for an unpresented revision and NOT_FOUND until semantics are enabled.
+ * At most 16,384 nodes and 4 MiB of source UTF-8 text are accepted; larger
+ * trees fail as a whole with LIMIT_EXCEEDED. Obscured values are omitted.
+ */
+NuxStatus nux_player_semantic_snapshot(const struct NuxPlayer *player,
+                                       struct NuxSemanticSnapshot **out_snapshot);
+
+/**
  * Apply all input changes and pointer events, then advance exactly once. The
  * operation validates the complete batch before mutation. Any unexpected
  * post-mutation failure rolls back pending script-host effects and terminally
@@ -1755,6 +1802,14 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t change_index,
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
+
+/**
+ * Check that this capture still names this player's current presented
+ * occurrence. A readable snapshot may outlive its player, but cannot then
+ * authorize interaction or publication on a replacement occurrence.
+ */
+NuxStatus nux_player_validate_semantic_snapshot(const struct NuxPlayer *player,
+                                                const struct NuxSemanticSnapshot *snapshot);
 
 #if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
 /**
@@ -1912,6 +1967,15 @@ NuxStatus nux_renderer_resize(struct NuxRenderer *renderer,
                               struct NuxRendererOutcome *out_outcome,
                               struct NuxCapiResult **out_result);
 #endif
+
+NuxStatus nux_semantic_snapshot_free(struct NuxSemanticSnapshot *snapshot);
+
+NuxStatus nux_semantic_snapshot_info(const struct NuxSemanticSnapshot *snapshot,
+                                     struct NuxSemanticSnapshotInfo *out_info);
+
+NuxStatus nux_semantic_snapshot_node(const struct NuxSemanticSnapshot *snapshot,
+                                     size_t index,
+                                     struct NuxSemanticNodeView *out_node);
 
 /**
  * Advance the artboard while driving `state_machine`. The state machine must

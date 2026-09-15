@@ -81,10 +81,15 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.9 release prepares the presented semantic snapshot/action APIs and exact
-native text-run ownership lookup for UIKit consumers. Runtime publication does
-not enable the SDK scene-semantics capability or qualify VoiceOver behavior;
-the native adapter and cross-platform acceptance remain separate delivery gates.
+The v0.9.10 candidate preserves host reports from semantic actions and resolves
+native editable fields through exact component ancestry, including metadata on
+the field's enclosing layout. Ambiguous field owners, stale captures and duplicate
+text-run names remain rejected. The ABI and existing release size ceilings are
+unchanged; candidate artifact qualification must pass before publication.
+
+Runtime publication does not enable the SDK scene-semantics capability or qualify
+VoiceOver behavior. SDK adoption, publisher-generated signed fixtures and device
+acceptance remain separate delivery gates.
 
 Tag the landed commit as `apple-runtime-v<crate-version>`, then run:
 

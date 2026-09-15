@@ -1565,6 +1565,11 @@ impl LayoutComponent {
                 }
             }
         }
+        if self.base.clip() {
+            crate::mechanical_port::source::semantic::semantic_provider::invalidate_clipped_semantics(
+                self.base.children(),
+            );
+        }
     }
     pub fn measure_layout(
         &mut self,

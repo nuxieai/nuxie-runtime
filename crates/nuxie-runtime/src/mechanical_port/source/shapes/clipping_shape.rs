@@ -396,13 +396,38 @@ impl ClippingShape {
                     self.clip_path = true;
                 }
             }
+            self.invalidate_semantics();
         }
+    }
+
+    fn invalidate_semantics(&self) {
+        let Some(parent) = self.base.parent_handle() else {
+            return;
+        };
+        let this = self.base.handle();
+        let children = parent
+            .with(|object| {
+                object.as_container_component().map(|container| {
+                    container
+                        .children()
+                        .iter()
+                        .filter(|child| Some(*child) != this.as_ref())
+                        .cloned()
+                        .collect::<Vec<_>>()
+                })
+            })
+            .flatten()
+            .unwrap_or_default();
+        crate::mechanical_port::source::semantic::semantic_provider::invalidate_clipped_semantics(
+            &children,
+        );
     }
 
     pub fn is_visible_changed(&mut self) {
         self.base.with_artboard_mut(|artboard| {
             artboard.add_dirt(ComponentDirt::CLIPPING, false);
         });
+        self.invalidate_semantics();
     }
 
     pub fn path(&mut self) -> Option<&mut ShapePaintPath> {

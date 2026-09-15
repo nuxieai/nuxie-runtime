@@ -745,3 +745,238 @@ fn rotated_target_cannot_use_its_empty_bounding_box_corner_as_visible_geometry()
     assert!(semantic_bounds(Some(&owner)).is_empty_or_nan());
     assert!(!semantic_source_is_visible(&owner));
 }
+
+#[test]
+fn rounded_layout_clip_rejects_a_control_inside_its_empty_corner() {
+    use nuxie_runtime::source::{
+        generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+        math::{
+            aabb::IAabb,
+            hit_test::HitTester,
+            mat2d::Mat2D,
+            path_types::{FillRule, PathVerb},
+        },
+        semantic::semantic_provider::{semantic_bounds, semantic_source_is_visible},
+    };
+    let fixture = dropdown();
+    let data = fixture
+        .manager
+        .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
+        .unwrap()
+        .borrow()
+        .semantic_data
+        .clone()
+        .unwrap();
+    let owner = data
+        .with(|data| data.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let parent = owner
+        .with(|object| object.component_parent_handle())
+        .flatten()
+        .unwrap();
+    assert!(CoreRegistry::set_bool_handle(
+        &parent,
+        i32::from(LayoutComponentBase::CLIP_PROPERTY_KEY),
+        true
+    ));
+    let style = parent
+        .with(|object| object.as_layout_component().unwrap().style_handle())
+        .flatten()
+        .unwrap();
+    use nuxie_runtime::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase;
+    assert!(CoreRegistry::set_bool_handle(
+        &style,
+        i32::from(LayoutComponentStyleBase::LINK_CORNER_RADIUS_PROPERTY_KEY),
+        true
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &style,
+        i32::from(LayoutComponentStyleBase::CORNER_RADIUS_TL_PROPERTY_KEY),
+        1000.0
+    ));
+    fixture._artboard.advance_default(0.0);
+    let local = owner
+        .with(|object| object.semantic_provider_local_bounds().unwrap())
+        .unwrap();
+    let parent_local = parent
+        .with(|object| object.as_layout_component().unwrap().local_bounds())
+        .unwrap();
+    assert_eq!(local.min_x, 0.0);
+    assert_eq!(local.min_y, 0.0);
+    owner.with_mut(|object| {
+        object
+            .as_world_transform_component_mut()
+            .unwrap()
+            .set_world_transform(Mat2D::from_scale(0.025 / local.max_x, 0.025 / local.max_y))
+    });
+    parent.with_mut(|object| {
+        object
+            .as_world_transform_component_mut()
+            .unwrap()
+            .set_world_transform(Mat2D::from_scale(
+                1.0 / parent_local.max_x,
+                1.0 / parent_local.max_y,
+            ))
+    });
+    let path = parent
+        .with_mut(|object| {
+            let layout = object.as_layout_component_mut().unwrap();
+            layout.update_render_path();
+            layout.world_path().unwrap().raw_path().clone()
+        })
+        .unwrap()
+        .morph(|point| point * 1000.0);
+    // The renderer's path, independently raster-tested over the entire target,
+    // proves the control lies in an empty rounded corner.
+    let mut hit = HitTester::from_area(IAabb {
+        left: 0,
+        top: 0,
+        right: 25,
+        bottom: 25,
+    });
+    for segment in path.segments() {
+        match segment.verb {
+            PathVerb::Move => hit.move_to(segment.points[0]),
+            PathVerb::Line => hit.line_to(segment.points[1]),
+            PathVerb::Quad => hit.quad_to(segment.points[1], segment.points[2]),
+            PathVerb::Cubic => {
+                hit.cubic_to(segment.points[1], segment.points[2], segment.points[3])
+            }
+            PathVerb::Close => hit.close(),
+        }
+    }
+    assert!(!hit.test(FillRule::NonZero));
+    assert!(semantic_bounds(Some(&owner)).is_empty_or_nan());
+    assert!(!semantic_source_is_visible(&owner));
+}
+
+#[test]
+fn authored_corner_radius_updates_stationary_semantic_snapshot() {
+    use nuxie_runtime::source::{
+        generated::{
+            core_registry::CoreRegistry,
+            layout::layout_component_style_base::LayoutComponentStyleBase,
+            layout_component_base::LayoutComponentBase,
+        },
+        semantic::semantic_provider::semantic_bounds,
+    };
+    let fixture = dropdown();
+    let data = fixture
+        .manager
+        .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
+        .unwrap()
+        .borrow()
+        .semantic_data
+        .clone()
+        .unwrap();
+    let owner = data
+        .with(|data| data.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let parent = owner
+        .with(|object| object.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let style = parent
+        .with(|object| object.as_layout_component().unwrap().style_handle())
+        .flatten()
+        .unwrap();
+    assert!(CoreRegistry::set_bool_handle(
+        &parent,
+        LayoutComponentBase::CLIP_PROPERTY_KEY.into(),
+        true
+    ));
+    assert!(CoreRegistry::set_bool_handle(
+        &style,
+        LayoutComponentStyleBase::LINK_CORNER_RADIUS_PROPERTY_KEY.into(),
+        true
+    ));
+    let mut bounds = Vec::new();
+    let mut transforms = Vec::new();
+    for radius in [0.0, 1000.0, 0.0] {
+        assert!(CoreRegistry::set_double_handle(
+            &style,
+            LayoutComponentStyleBase::CORNER_RADIUS_TL_PROPERTY_KEY.into(),
+            radius
+        ));
+        fixture._artboard.advance_default(0.0);
+        let expected = semantic_bounds(Some(&owner));
+        let snapshot = fixture
+            .manager
+            .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+        let actual = snapshot.iter().find(|node| node.id == fixture.button_id);
+        if expected.is_empty_or_nan() {
+            assert!(actual.is_none(), "rounded clip must retire the control");
+        } else {
+            assert_eq!(
+                actual.expect("visible control").bounds(),
+                expected,
+                "snapshot must follow the rendered clip"
+            );
+        }
+        bounds.push(expected);
+        transforms.push(
+            owner
+                .with(|object| *object.as_node().unwrap().world_transform())
+                .unwrap(),
+        );
+    }
+    assert!(
+        bounds[1].min_x > bounds[0].min_x && bounds[1].max_x < bounds[0].max_x,
+        "rounding the enclosing parent must trim both ends of the control"
+    );
+    assert_eq!(bounds[0], bounds[2]);
+    assert_eq!(
+        transforms[0], transforms[1],
+        "control must remain stationary"
+    );
+    assert_eq!(transforms[0], transforms[2]);
+}
+
+#[test]
+fn semantic_bounds_follow_artboard_frame_origin_translation() {
+    use nuxie_runtime::source::generated::{
+        artboard_base::ArtboardBase, core_registry::CoreRegistry,
+    };
+    let fixture = dropdown();
+    let root = fixture._artboard.core_handle();
+    assert!(CoreRegistry::set_double_handle(
+        &root,
+        ArtboardBase::ORIGIN_X_PROPERTY_KEY.into(),
+        0.5
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &root,
+        ArtboardBase::ORIGIN_Y_PROPERTY_KEY.into(),
+        0.5
+    ));
+    let (width, height) = fixture
+        ._artboard
+        .with_artboard(|artboard| (artboard.layout_width(), artboard.layout_height()));
+    let mut bounds = Vec::new();
+    for frame_origin in [false, true] {
+        fixture
+            ._artboard
+            .with_artboard_mut(|artboard| artboard.set_frame_origin(frame_origin));
+        fixture._artboard.advance_default(0.0);
+        let snapshot = fixture
+            .manager
+            .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+        bounds.push(
+            snapshot
+                .iter()
+                .find(|node| node.id == fixture.button_id)
+                .expect("visible control")
+                .bounds(),
+        );
+    }
+    assert!(
+        (bounds[1].min_x - bounds[0].min_x - width * 0.5).abs() < 0.01,
+        "semantic x must include the renderer's frame-origin translation: {bounds:?}"
+    );
+    assert!(
+        (bounds[1].min_y - bounds[0].min_y - height * 0.5).abs() < 0.01,
+        "semantic y must include the renderer's frame-origin translation: {bounds:?}"
+    );
+}

@@ -1,12 +1,15 @@
+pub use super::semantic_clip::SemanticGeometryError;
 use crate::mechanical_port::source::{
     artboard::Artboard,
     core::CoreHandle,
     generated::{container_component_base::ContainerComponentBase, node_base::NodeBase},
     math::{aabb::Aabb, vec2d::Vec2D},
     semantic::{
+        semantic_clip::SemanticClipRegion,
         semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics},
         semantic_snapshot::Bounds,
     },
+    shapes::clipping_shape::ClippingShape,
 };
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -63,7 +66,7 @@ pub fn root_transform_aabb(artboard: &CoreHandle, bounds: Bounds) -> Bounds {
         (bounds.min_x, bounds.max_y),
     ];
     let mapped = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-        points.map(|(x, y)| artboard.root_transform(Vec2D::new(x, y)))
+        points.map(|(x, y)| artboard.semantic_root_transform(Vec2D::new(x, y)))
     });
     let Some(mapped) = mapped else {
         return bounds;
@@ -147,21 +150,26 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
 fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
     let geometry = semantic_geometry(component);
     !geometry.is_empty()
-        && geometry.into_iter().all(|(owner, polygon)| {
-            !polygon_has_area(&clip_to_ancestor_layouts(&owner, polygon.to_vec()))
-        })
+        && geometry
+            .into_iter()
+            .all(|(owner, polygon)| clip_to_rendered_ancestors(&owner, polygon.to_vec()).is_empty())
 }
 
-fn clip_to_ancestor_layouts(component: &CoreHandle, mut polygon: Vec<Vec2D>) -> Vec<Vec2D> {
+fn clip_to_rendered_ancestors(component: &CoreHandle, polygon: Vec<Vec2D>) -> SemanticClipRegion {
+    let mut region = SemanticClipRegion::from_polygon(&polygon);
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
+    let mut applied_shapes = std::collections::HashSet::new();
     while let Some(owner) = current {
         if !visited.insert(owner.clone()) {
-            return Vec::new();
+            return SemanticClipRegion::default();
         }
-        let Some((clip, parent)) = owner.with(|object| {
-            let artboard = object.as_artboard();
-            let clip = if let Some(artboard) = artboard {
+        let Some((clip, parent)) = owner.with_mut(|object| {
+            let is_artboard = object.as_artboard().is_some();
+            let parent = object
+                .component_parent_handle()
+                .or_else(|| object.as_artboard().and_then(Artboard::host));
+            let fallback = if let Some(artboard) = object.as_artboard() {
                 artboard
                     .clip()
                     .then(|| (bounds_corners(artboard.bounds()), Some(owner.clone())))
@@ -170,37 +178,102 @@ fn clip_to_ancestor_layouts(component: &CoreHandle, mut polygon: Vec<Vec2D>) -> 
                     .as_layout_component()
                     .filter(|layout| layout.base.clip())
                     .map(|layout| {
-                        let transform = layout.shape_world_transform();
                         (
-                            bounds_corners(layout.local_bounds()).map(|point| transform * point),
+                            bounds_corners(layout.local_bounds())
+                                .map(|point| layout.shape_world_transform() * point),
                             layout.artboard_handle(),
                         )
                     })
             };
-            let parent = object
-                .component_parent_handle()
-                .or_else(|| artboard.and_then(Artboard::host));
+            let clip = fallback.map(|(corners, artboard)| {
+                let layout = object.as_layout_component_mut().expect("layout clip owner");
+                let path = if is_artboard {
+                    layout.local_path()
+                } else {
+                    layout.world_path()
+                };
+                let path = path.map(|path| (path.raw_path().clone(), path.fill_rule()));
+                (corners, artboard, path)
+            });
             (clip, parent)
         }) else {
-            return Vec::new();
+            return SemanticClipRegion::default();
         };
-        if let Some((mut clip, artboard)) = clip {
+        let shapes = owner
+            .with(|object| {
+                object
+                    .as_drawable()
+                    .map(|drawable| drawable.clipping_shapes().to_vec())
+            })
+            .flatten()
+            .unwrap_or_default();
+        for shape in shapes {
+            if !applied_shapes.insert(shape.clone()) {
+                continue;
+            }
+            let Some(clip) = shape.with_downcast_mut::<ClippingShape, _>(|shape| {
+                if !shape.base.is_visible() {
+                    return None;
+                }
+                let artboard = shape.base.artboard_handle();
+                let path = shape
+                    .path()
+                    .map(|path| (path.raw_path().clone(), path.fill_rule()));
+                Some((artboard, path))
+            }) else {
+                return SemanticClipRegion::default();
+            };
+            let Some((artboard, path)) = clip else {
+                continue;
+            };
+            // A visible clip without a path suppresses drawing altogether.
+            let Some((mut path, rule)) = path else {
+                return SemanticClipRegion::default();
+            };
             if let Some(artboard) = artboard {
                 let Some(mapped) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-                    clip.map(|point| artboard.root_transform(point))
+                    path.morph(|point| artboard.semantic_root_transform(point))
                 }) else {
-                    return Vec::new();
+                    return SemanticClipRegion::default();
                 };
-                clip = mapped;
+                path = mapped;
             }
-            polygon = intersect_convex_clip(polygon, &clip);
-            if polygon.is_empty() {
-                return Vec::new();
+            region.intersect_path(&path, rule);
+            if region.is_empty() {
+                return region;
+            }
+        }
+        if let Some((mut corners, artboard, mut path)) = clip {
+            if let Some(artboard) = artboard {
+                let Some((mapped, mapped_path)) =
+                    artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                        let corners = corners.map(|point| artboard.semantic_root_transform(point));
+                        let path = path.map(|(path, rule)| {
+                            (
+                                path.morph(|point| artboard.semantic_root_transform(point)),
+                                rule,
+                            )
+                        });
+                        (corners, path)
+                    })
+                else {
+                    return SemanticClipRegion::default();
+                };
+                corners = mapped;
+                path = mapped_path;
+            }
+            if let Some((path, rule)) = path {
+                region.intersect_path(&path, rule);
+            } else {
+                region.intersect_polygon(&corners);
+            }
+            if region.is_empty() {
+                return region;
             }
         }
         current = parent;
     }
-    polygon
+    region
 }
 
 fn bounds_corners(bounds: Aabb) -> [Vec2D; 4] {
@@ -210,44 +283,6 @@ fn bounds_corners(bounds: Aabb) -> [Vec2D; 4] {
         Vec2D::new(bounds.max_x, bounds.max_y),
         Vec2D::new(bounds.min_x, bounds.max_y),
     ]
-}
-
-// Keep the polygon between intersections: reducing a rotated clip to its AABB
-// before intersecting the next clip can introduce area that was never visible.
-fn intersect_convex_clip(mut polygon: Vec<Vec2D>, clip: &[Vec2D; 4]) -> Vec<Vec2D> {
-    let cross =
-        |a: Vec2D, b: Vec2D, p: Vec2D| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
-    let area = cross(clip[0], clip[1], clip[2]);
-    if !area.is_finite() || area == 0.0 || clip.iter().any(|p| !p.x.is_finite() || !p.y.is_finite())
-    {
-        return Vec::new();
-    }
-    let orientation = area.signum();
-    for index in 0..4 {
-        let input = std::mem::take(&mut polygon);
-        let Some(mut previous) = input.last().copied() else {
-            break;
-        };
-        let a = clip[index];
-        let b = clip[(index + 1) % 4];
-        let mut previous_distance = cross(a, b, previous) * orientation;
-        for point in input {
-            let distance = cross(a, b, point) * orientation;
-            if (distance >= 0.0) != (previous_distance >= 0.0) {
-                let t = previous_distance / (previous_distance - distance);
-                polygon.push(Vec2D::new(
-                    previous.x + t * (point.x - previous.x),
-                    previous.y + t * (point.y - previous.y),
-                ));
-            }
-            if distance >= 0.0 {
-                polygon.push(point);
-            }
-            previous = point;
-            previous_distance = distance;
-        }
-    }
-    polygon
 }
 
 fn polygon_has_area(polygon: &[Vec2D]) -> bool {
@@ -268,11 +303,11 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
     if !geometry.is_empty() {
         let mut result = Bounds::for_expansion();
         for (owner, polygon) in geometry {
-            let visible = clip_to_ancestor_layouts(&owner, polygon.to_vec());
-            if polygon_has_area(&visible) {
-                for point in visible {
-                    result.expand((point.x, point.y));
-                }
+            let visible = clip_to_rendered_ancestors(&owner, polygon.to_vec());
+            if !visible.is_empty() {
+                let bounds = visible.bounds();
+                result.expand((bounds.min_x, bounds.min_y));
+                result.expand((bounds.max_x, bounds.max_y));
             }
         }
         return result;
@@ -319,7 +354,7 @@ fn node_root_polygon(component: &CoreHandle) -> Option<[Vec2D; 4]> {
     let mut polygon = bounds_corners(local_bounds).map(|point| transform * point);
     if let Some(artboard) = artboard {
         polygon = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
-            polygon.map(|point| artboard.root_transform(point))
+            polygon.map(|point| artboard.semantic_root_transform(point))
         })?;
     }
     polygon_has_area(&polygon).then_some(polygon)
@@ -357,55 +392,69 @@ fn collect_descendant_geometry(
     }
 }
 
-#[cfg(test)]
-mod clipping_tests {
-    use super::*;
-
-    #[test]
-    fn rotated_clip_rejects_its_empty_aabb_corners_in_either_winding() {
-        let mut clip = [
-            Vec2D::new(0.0, 1.0),
-            Vec2D::new(1.0, 0.0),
-            Vec2D::new(2.0, 1.0),
-            Vec2D::new(1.0, 2.0),
-        ];
-        let corner = vec![
-            Vec2D::new(0.0, 0.0),
-            Vec2D::new(0.25, 0.0),
-            Vec2D::new(0.25, 0.25),
-            Vec2D::new(0.0, 0.25),
-        ];
-        assert!(intersect_convex_clip(corner.clone(), &clip).is_empty());
-        clip.reverse();
-        assert!(intersect_convex_clip(corner, &clip).is_empty());
+/// Recalculate semantic bounds after a rendered clip changes without dirtying
+/// unrelated text/paint dependencies in the clipped subtree.
+pub(crate) fn invalidate_clipped_semantics(children: &[CoreHandle]) {
+    let mut pending = children.to_vec();
+    let mut visited = std::collections::HashSet::new();
+    while let Some(handle) = pending.pop() {
+        if !visited.insert(handle.clone()) {
+            continue;
+        }
+        handle.with_mut(|object| {
+            if object
+                .as_any()
+                .is::<crate::mechanical_port::source::semantic::semantic_data::SemanticData>()
+            {
+                object.component_add_dirt(
+                    crate::mechanical_port::source::component_dirt::ComponentDirt::PATH,
+                    false,
+                );
+            }
+            append_semantic_children(object, &mut pending);
+        });
     }
+}
 
-    #[test]
-    fn rotated_clip_preserves_only_the_visible_triangle() {
-        let clip = [
-            Vec2D::new(0.0, 1.0),
-            Vec2D::new(1.0, 0.0),
-            Vec2D::new(2.0, 1.0),
-            Vec2D::new(1.0, 2.0),
-        ];
-        let square = vec![
-            Vec2D::new(0.0, 0.0),
-            Vec2D::new(1.0, 0.0),
-            Vec2D::new(1.0, 1.0),
-            Vec2D::new(0.0, 1.0),
-        ];
-        let polygon = intersect_convex_clip(square, &clip);
-        let twice_area: f32 = polygon
-            .iter()
-            .zip(polygon.iter().cycle().skip(1))
-            .take(polygon.len())
-            .map(|(a, b)| a.x * b.y - a.y * b.x)
-            .sum();
-        assert!((twice_area.abs() - 1.0).abs() < 0.0001);
-        assert!(
-            polygon
-                .iter()
-                .all(|p| p.x + p.y >= 1.0 && p.x <= 1.0 && p.y <= 1.0)
-        );
+/// Reject incomplete geometry before exposing a semantic capture. Include
+/// excluded nodes: an over-budget clip must not masquerade as a hidden control.
+pub fn validate_semantic_geometry(root: &CoreHandle) -> Result<(), SemanticGeometryError> {
+    let mut pending = vec![root.clone()];
+    let mut visited = std::collections::HashSet::new();
+    while let Some(handle) = pending.pop() {
+        if !visited.insert(handle.clone()) {
+            continue;
+        }
+        let parent = handle
+            .with(|object| {
+                append_semantic_children(object, &mut pending);
+                object
+                    .as_semantic_data()
+                    .filter(|data| data.has_semantic_node())
+                    .and_then(|_| object.component_parent_handle())
+            })
+            .flatten();
+        if let Some(parent) = parent {
+            for (owner, polygon) in semantic_geometry(&parent) {
+                clip_to_rendered_ancestors(&owner, polygon.to_vec()).status()?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn append_semantic_children(
+    object: &dyn crate::mechanical_port::source::core::CoreObject,
+    pending: &mut Vec<CoreHandle>,
+) {
+    if let Some(container) = object.as_container_component() {
+        pending.extend_from_slice(container.children());
+    }
+    if let Some(host) = object.as_artboard_host() {
+        for index in 0..host.artboard_count() {
+            if let Some(instance) = host.artboard_instance(index as i32) {
+                pending.push(instance.core_handle());
+            }
+        }
     }
 }

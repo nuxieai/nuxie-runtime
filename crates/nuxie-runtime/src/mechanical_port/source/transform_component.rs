@@ -14,7 +14,7 @@ use crate::mechanical_port::source::{
 pub struct TransformComponent {
     pub base: TransformComponentBase,
     transform: Mat2D,
-    render_opacity: f32,
+    render_opacity: Option<f32>,
     parent_transform_component: Option<CoreHandle>,
     constraints: Vec<CoreHandle>,
 }
@@ -24,7 +24,7 @@ impl Default for TransformComponent {
         Self {
             base: TransformComponentBase::default(),
             transform: Mat2D::default(),
-            render_opacity: 0.0,
+            render_opacity: None,
             parent_transform_component: None,
             constraints: Vec::new(),
         }
@@ -194,18 +194,23 @@ impl TransformComponent {
     }
 
     pub fn update_render_opacity_state(&mut self, parent_child_opacity: Option<f32>) {
-        self.render_opacity = self.base.base.base.opacity();
+        let mut opacity = self.base.base.base.opacity();
         if let Some(parent_child_opacity) = parent_child_opacity {
-            self.render_opacity *= parent_child_opacity;
+            opacity *= parent_child_opacity;
         }
+        self.render_opacity = Some(opacity);
     }
 
     pub fn child_opacity(&self) -> f32 {
-        self.render_opacity
+        self.render_opacity()
     }
 
     pub fn render_opacity(&self) -> f32 {
-        self.render_opacity
+        self.render_opacity.unwrap_or(0.0)
+    }
+
+    pub(crate) fn has_computed_render_opacity(&self) -> bool {
+        self.render_opacity.is_some()
     }
 
     pub fn transform(&self) -> &Mat2D {

@@ -11,7 +11,7 @@ use crate::mechanical_port::source::{
         semantic_listener::SemanticListener,
         semantic_manager::RuntimeSemanticManagerHandle,
         semantic_node::{SemanticNode, SemanticNodeRef},
-        semantic_provider::semantic_bounds,
+        semantic_provider::{semantic_bounds, semantic_source_is_visible},
         semantic_state::SemanticState,
         semantic_trait::SemanticTrait,
     },
@@ -440,11 +440,18 @@ impl SemanticData {
         let Some(parent) = self.component().parent_handle() else {
             return true;
         };
+        if !semantic_source_is_visible(&parent) {
+            return true;
+        }
         parent
             .with(|parent| {
-                parent.component_is_collapsed()
-                    || (parent.as_drawable().is_some() && parent.drawable_is_hidden())
-                    || parent
+                // Before the first component update, the renderer's zero is
+                // uninitialized. Authored visibility above is authoritative.
+                let computed = parent
+                    .as_transform_component()
+                    .is_none_or(|transform| transform.has_computed_render_opacity());
+                computed
+                    && parent
                         .world_transform_child_opacity()
                         .is_some_and(|opacity| !opacity.is_finite() || opacity <= 0.0)
             })

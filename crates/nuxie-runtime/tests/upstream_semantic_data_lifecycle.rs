@@ -360,3 +360,77 @@ fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
         );
     }
 }
+
+#[test]
+fn invisible_controls_leave_semantics_and_return_when_visible() {
+    use nuxie_runtime::source::generated::{
+        core_registry::CoreRegistry, world_transform_component_base::WorldTransformComponentBase,
+    };
+    for (ancestor, queued) in [(false, false), (true, false), (false, true), (true, true)] {
+        let fixture = dropdown();
+        let data = fixture
+            .manager
+            .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
+            .unwrap()
+            .borrow()
+            .semantic_data
+            .clone()
+            .unwrap();
+        let parent = data
+            .with(|data| data.as_component().unwrap().parent_handle())
+            .flatten()
+            .unwrap();
+        let parent = if ancestor {
+            parent
+                .with(|parent| parent.component_parent_handle())
+                .flatten()
+                .unwrap()
+        } else {
+            parent
+        };
+        if queued {
+            fixture
+                .machine
+                .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+        }
+        let opacity_key = i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY);
+        let original_opacity = CoreRegistry::get_double_handle(&parent, opacity_key).unwrap();
+        assert!(original_opacity > 0.0);
+        assert!(CoreRegistry::set_double_handle(&parent, opacity_key, 0.0));
+        fixture.machine.advance_and_apply(0.0);
+        let hidden = fixture
+            .manager
+            .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+        assert!(
+            !hidden.iter().any(|node| node.id == fixture.button_id),
+            "zero-opacity control remains accessible"
+        );
+        fixture
+            .machine
+            .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+        fixture.machine.advance_and_apply(0.0);
+        assert!(
+            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap()
+        );
+        assert!(CoreRegistry::set_double_handle(
+            &parent,
+            opacity_key,
+            original_opacity
+        ));
+        fixture.machine.advance_and_apply(0.0);
+        let visible = fixture
+            .manager
+            .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+        assert!(visible.iter().any(|node| node.id == fixture.button_id));
+        fixture
+            .machine
+            .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+        fixture.machine.advance_and_apply(0.0);
+        assert!(
+            !data
+                .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap()
+        );
+    }
+}

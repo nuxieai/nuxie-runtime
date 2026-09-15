@@ -124,6 +124,39 @@ pub fn resolve_semantic_data(component: Option<&CoreHandle>) -> ResolvedSemantic
     inferred
 }
 
+/// Authored visibility is checked again at action dispatch, before a pending
+/// opacity update has necessarily propagated into the rendered component tree.
+pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
+    let mut current = Some(component.clone());
+    let mut visited = std::collections::HashSet::new();
+    while let Some(component) = current {
+        if !visited.insert(component.clone()) {
+            return false;
+        }
+        let Some((visible, parent)) = component.with(|component| {
+            let visible = !component.component_is_collapsed()
+                && !(component.as_drawable().is_some() && component.drawable_is_hidden())
+                && component
+                    .as_world_transform_component()
+                    .is_none_or(|transform| {
+                        let opacity = transform.opacity();
+                        opacity.is_finite() && opacity > 0.0
+                    });
+            let parent = component
+                .component_parent_handle()
+                .or_else(|| component.as_artboard().and_then(Artboard::host));
+            (visible, parent)
+        }) else {
+            return false;
+        };
+        if !visible {
+            return false;
+        }
+        current = parent;
+    }
+    true
+}
+
 fn node_world_bounds(component: &CoreHandle) -> Option<(Bounds, Option<CoreHandle>)> {
     if !component.is_type_of(NodeBase::TYPE_KEY) {
         return None;

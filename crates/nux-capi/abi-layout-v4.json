@@ -1065,6 +1065,100 @@
       ]
     },
     {
+      "name": "NuxSemanticNodeView",
+      "size": 104,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "id",
+          "offset": 4
+        },
+        {
+          "name": "parent_id",
+          "offset": 8
+        },
+        {
+          "name": "sibling_index",
+          "offset": 12
+        },
+        {
+          "name": "role",
+          "offset": 16
+        },
+        {
+          "name": "state_flags",
+          "offset": 20
+        },
+        {
+          "name": "trait_flags",
+          "offset": 24
+        },
+        {
+          "name": "heading_level",
+          "offset": 28
+        },
+        {
+          "name": "min_x",
+          "offset": 32
+        },
+        {
+          "name": "min_y",
+          "offset": 36
+        },
+        {
+          "name": "max_x",
+          "offset": 40
+        },
+        {
+          "name": "max_y",
+          "offset": 44
+        },
+        {
+          "name": "label",
+          "offset": 48
+        },
+        {
+          "name": "value",
+          "offset": 64
+        },
+        {
+          "name": "hint",
+          "offset": 80
+        },
+        {
+          "name": "actions",
+          "offset": 96
+        }
+      ]
+    },
+    {
+      "name": "NuxSemanticSnapshotInfo",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "render_revision",
+          "offset": 8
+        },
+        {
+          "name": "tree_version",
+          "offset": 16
+        },
+        {
+          "name": "node_count",
+          "offset": 24
+        }
+      ]
+    },
+    {
       "name": "NuxStringView",
       "size": 16,
       "alignment": 8,

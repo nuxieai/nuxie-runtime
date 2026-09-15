@@ -4,12 +4,33 @@ use super::*;
 use nuxie::runtime::semantic::{
     semantic_data::SemanticData,
     semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
+    semantic_node::SemanticNodeRef,
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
 };
 
 const MAX_NODES: usize = 16_384;
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
+
+fn eligible_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
+    let mut ancestor = Some(node.clone());
+    let mut remaining = MAX_NODES;
+    while let Some(current) = ancestor {
+        if remaining == 0 {
+            return Err(NuxStatus::LimitExceeded);
+        }
+        remaining -= 1;
+        let current = current.borrow();
+        if current.state_flags & (SemanticState::DISABLED.0 | SemanticState::HIDDEN.0) != 0 {
+            return Err(NuxStatus::NotFound);
+        }
+        ancestor = current.parent();
+    }
+    node.borrow()
+        .semantic_data
+        .clone()
+        .ok_or(NuxStatus::NotFound)
+}
 
 /// Immutable capture. Text views remain valid until this handle is freed.
 /// Like other runtime handles, all access is restricted to the creator thread.
@@ -18,6 +39,7 @@ pub struct NuxSemanticSnapshot {
     render_revision: u64,
     tree_version: u64,
     nodes: Vec<SemanticsDiffNode>,
+    actions: Vec<u32>,
 }
 
 #[repr(C)]
@@ -47,12 +69,14 @@ pub struct NuxSemanticNodeView {
     pub label: NuxStringView,
     pub value: NuxStringView,
     pub hint: NuxStringView,
+    /// Bit 0: tap; bit 1: increase; bit 2: decrease. Zero for ineligible nodes.
+    pub actions: u32,
 }
 
 pub const NUX_SEMANTIC_SNAPSHOT_INFO_MIN_SIZE: usize =
     std::mem::offset_of!(NuxSemanticSnapshotInfo, node_count) + std::mem::size_of::<usize>();
 pub const NUX_SEMANTIC_NODE_VIEW_MIN_SIZE: usize =
-    std::mem::offset_of!(NuxSemanticNodeView, hint) + std::mem::size_of::<NuxStringView>();
+    std::mem::offset_of!(NuxSemanticNodeView, actions) + std::mem::size_of::<u32>();
 
 fn copy_nodes(nodes: &[SemanticsDiffNode]) -> Result<Vec<SemanticsDiffNode>, NuxStatus> {
     if nodes.len() > MAX_NODES {
@@ -69,12 +93,25 @@ fn copy_nodes(nodes: &[SemanticsDiffNode]) -> Result<Vec<SemanticsDiffNode>, Nux
     }
     Ok(nodes
         .iter()
-        .map(|node| {
-            let mut owned = node.clone();
-            if node.state_flags & SemanticState::OBSCURED.0 != 0 {
-                owned.value.clear();
-            }
-            owned
+        .map(|node| SemanticsDiffNode {
+            id: node.id,
+            role: node.role,
+            parent_id: node.parent_id,
+            sibling_index: node.sibling_index,
+            state_flags: node.state_flags,
+            trait_flags: node.trait_flags,
+            heading_level: node.heading_level,
+            min_x: node.min_x,
+            min_y: node.min_y,
+            max_x: node.max_x,
+            max_y: node.max_y,
+            label: node.label.clone(),
+            hint: node.hint.clone(),
+            value: if node.state_flags & SemanticState::OBSCURED.0 != 0 {
+                String::new()
+            } else {
+                node.value.clone()
+            },
         })
         .collect())
 }
@@ -140,9 +177,28 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
         };
         let captured = manager.with_semantic_manager_mut(|manager| {
             let nodes = copy_nodes(manager.snapshot())?;
-            Ok::<_, NuxStatus>((nodes, manager.version()))
+            let actions = nodes
+                .iter()
+                .map(|node| {
+                    let Some(node) = manager.node_by_id(node.id) else {
+                        return Ok(0);
+                    };
+                    match eligible_data(&node) {
+                        Ok(data) => Ok(data
+                            .with_downcast::<SemanticData, _>(|data| {
+                                (0..3)
+                                    .filter(|action| data.supports_semantic_action(*action))
+                                    .fold(0u32, |mask, action| mask | (1 << action))
+                            })
+                            .unwrap_or(0)),
+                        Err(NuxStatus::NotFound) => Ok(0),
+                        Err(status) => Err(status),
+                    }
+                })
+                .collect::<Result<Vec<_>, NuxStatus>>()?;
+            Ok::<_, NuxStatus>((nodes, actions, manager.version()))
         });
-        let (nodes, tree_version) = match captured {
+        let (nodes, actions, tree_version) = match captured {
             Ok(captured) => captured,
             Err(status) => return status,
         };
@@ -151,6 +207,7 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
             render_revision: revision,
             tree_version,
             nodes,
+            actions,
         }));
         register_handle(snapshot, HandleKind::SemanticSnapshot, player.owner_thread);
         unsafe { *out_snapshot = snapshot };
@@ -258,21 +315,9 @@ pub unsafe extern "C" fn nux_player_queue_semantic_action(
             Ok(node) => node,
             Err(status) => return status,
         };
-        let mut ancestor = Some(node.clone());
-        let mut remaining = MAX_NODES;
-        while let Some(current) = ancestor {
-            if remaining == 0 {
-                return NuxStatus::LimitExceeded;
-            }
-            remaining -= 1;
-            let current = current.borrow();
-            if current.state_flags & (SemanticState::DISABLED.0 | SemanticState::HIDDEN.0) != 0 {
-                return NuxStatus::NotFound;
-            }
-            ancestor = current.parent();
-        }
-        let Some(data) = node.borrow().semantic_data.clone() else {
-            return NuxStatus::NotFound;
+        let data = match eligible_data(&node) {
+            Ok(data) => data,
+            Err(status) => return status,
         };
         data.with_downcast::<SemanticData, _>(|data| {
             if !data.supports_semantic_action(action as u8) {
@@ -344,6 +389,7 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
             label: string(&node.label),
             value: string(&node.value),
             hint: string(&node.hint),
+            actions: snapshot.actions[index],
         };
         unsafe { write_caller_struct(out_node, &value, NUX_SEMANTIC_NODE_VIEW_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -381,6 +427,7 @@ mod tests {
             occurrence: std::rc::Weak::new(),
             render_revision: 7,
             tree_version: 2,
+            actions: vec![0],
             nodes: vec![SemanticsDiffNode {
                 label: "Continue".into(),
                 ..Default::default()
@@ -397,7 +444,7 @@ mod tests {
         })
         .join()
         .unwrap();
-        assert_ne!(wrong_thread, NuxStatus::Ok);
+        assert_eq!(wrong_thread, NuxStatus::WrongThread);
         let mut view = NuxSemanticNodeView {
             struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
             ..Default::default()

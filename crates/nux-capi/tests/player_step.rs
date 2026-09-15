@@ -1168,6 +1168,7 @@ fn semantic_snapshot_captures_authored_dropdown_tree() {
     let instance = artboard(file, 0);
     let mut model = std::ptr::null_mut();
     let mut player = std::ptr::null_mut();
+    let mut static_player = std::ptr::null_mut();
     unsafe {
         assert_eq!(
             nux_view_model_instance_new_default(instance, &mut model),
@@ -1216,6 +1217,7 @@ fn semantic_snapshot_captures_authored_dropdown_tree() {
                 NuxStatus::Ok
             );
             if owned(node.label) == "Select a fandom" {
+                assert_eq!(node.actions, 1, "dropdown exposes authored tap only");
                 assert_ne!(
                     node.state_flags & 1,
                     0,
@@ -1226,6 +1228,15 @@ fn semantic_snapshot_captures_authored_dropdown_tree() {
             }
         }
         assert!(found, "authored dropdown label is exposed through C");
+        assert_eq!(
+            nux_player_new_static(instance, &mut static_player),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_enable_semantics(static_player), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_validate_semantic_snapshot(static_player, snapshot),
+            NuxStatus::Ok
+        );
         assert_eq!(
             nux_player_queue_semantic_action(player, snapshot, button_id, 99),
             NuxStatus::InvalidArgument
@@ -1239,7 +1250,7 @@ fn semantic_snapshot_captures_authored_dropdown_tree() {
             NuxStatus::NotFound
         );
         assert_eq!(
-            nux_player_queue_semantic_action(player, snapshot, button_id, 0),
+            nux_player_queue_semantic_action(static_player, snapshot, button_id, 0),
             NuxStatus::Ok
         );
         assert_eq!(
@@ -1287,6 +1298,7 @@ fn semantic_snapshot_captures_authored_dropdown_tree() {
         assert!(closed);
         assert_eq!(nux_semantic_snapshot_free(changed), NuxStatus::Ok);
         assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+        assert_eq!(nux_player_free(static_player), NuxStatus::Ok);
         assert_eq!(nux_player_free(player), NuxStatus::Ok);
         assert_eq!(nux_view_model_instance_free(model), NuxStatus::Ok);
         assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);

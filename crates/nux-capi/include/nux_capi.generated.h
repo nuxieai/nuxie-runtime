@@ -1128,6 +1128,10 @@ typedef struct NuxSemanticNodeView {
   struct NuxStringView label;
   struct NuxStringView value;
   struct NuxStringView hint;
+  /**
+   * Bit 0: tap; bit 1: increase; bit 2: decrease. Zero for ineligible nodes.
+   */
+  uint32_t actions;
 } NuxSemanticNodeView;
 
 typedef struct NuxViewModelAuthoredInstanceView {

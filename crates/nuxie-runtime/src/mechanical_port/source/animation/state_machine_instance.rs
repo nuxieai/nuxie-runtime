@@ -3525,7 +3525,8 @@ impl StateMachineInstance {
             // Queued semantic input executes inside this frame, unlike pointer
             // input reported between frames. Preserve its initial reports for
             // the host after native event delivery has consumed the queue.
-            self.events_applied_during_loop.splice(0..0, semantic_reports);
+            self.events_applied_during_loop
+                .splice(0..0, semantic_reports);
             self.needs_advance.set(false);
         }
         self.data_bind_container.update_data_binds(false);

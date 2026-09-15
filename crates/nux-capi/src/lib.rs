@@ -879,6 +879,7 @@ enum HandleKind {
     AndroidVulkanFrame,
     ViewModelCatalog,
     ViewModelSnapshot,
+    SemanticSnapshot,
     ViewModelMutationResult,
 }
 
@@ -1015,8 +1016,10 @@ macro_rules! enter_status_handle {
 }
 
 mod data_binding;
+mod semantic_snapshot;
 
 pub use data_binding::*;
+pub use semantic_snapshot::*;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

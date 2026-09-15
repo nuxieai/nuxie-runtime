@@ -72,11 +72,12 @@ Before release, replace the candidate sentinel in
 publisher fails closed while those values are unfrozen.
 
 The committed v0.4.0 baseline records its tag, exact source revision, original
-size-report SHA-256, and every measurement. Release maxima are frozen from the
-qualified v0.6.0 authored-data build, rounded up independently to the next 1 MiB
-boundary. This keeps a narrow allowance for provenance-only rebuild variation
-while still ratcheting archives, expanded bundles, every thin slice, and the
-larger of the baseline/product representative C and Swift linked binaries.
+size-report SHA-256, and every measurement. Release maxima use independent 1 MiB rounding. Most remain frozen from the
+qualified v0.6.0 authored-data build. The v0.9.9 semantic API cut updates only
+the iOS arm64 device/simulator slice ceilings and iOS-only expanded ceiling;
+compressed archives, other slices and representative linked ceilings remain
+unchanged. See [the v0.9.9 size review](evidence/apple-semantic-v099-size-review.md)
+for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 

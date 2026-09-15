@@ -31,6 +31,7 @@ taffy = "=0.12.1"
 unicode-properties = { version = "0.1.4", default-features = false, features = ["general-category"] }
 unicode-bidi = "0.3.18"
 unicode-script = "0.5.8"
+i_overlay = { version = "=8.1.1", default-features = false }
 
 [dev-dependencies]
 nuxie-scripting = { path = "../nuxie-scripting" }

@@ -271,3 +271,71 @@ fn swapped_in_nested_subtree_builds_semantics_outside_outer_host_borrow() {
             .any(|node| Rc::ptr_eq(node, &child_boundary))
     );
 }
+
+#[test]
+fn root_frame_origin_updates_hosted_semantic_bounds() {
+    use nuxie_runtime::source::{
+        generated::{
+            artboard_base::ArtboardBase, core_registry::CoreRegistry,
+            layout_component_base::LayoutComponentBase,
+        },
+        semantic::semantic_data::SemanticData,
+    };
+    let (file, artboard, machine) = fixture();
+    // Add authored semantics before the real data-bound clone is instantiated.
+    for name in ["Swappable1", "Swappable2"] {
+        let source = file
+            .with_file(|file| file.artboard_named_source(name))
+            .unwrap();
+        let data = file.with_file(|file| file.core_arena().insert(SemanticData::default()));
+        data.with_downcast_mut::<SemanticData, _>(|data| {
+            data.set_label("Hosted control".to_owned());
+            data.set_role(1);
+        });
+        source.with_downcast_mut::<nuxie_runtime::Artboard, _>(|source| {
+            source.add_object(Some(data))
+        });
+    }
+    let manager = enable(&machine);
+    let _vmi = bind(&file, &artboard, &machine);
+    machine.advance_and_apply(0.0);
+    let nested = instance(&slot_host(&artboard));
+    let ids = nested.with_artboard(|artboard| {
+        artboard
+            .objects_typed::<SemanticData>()
+            .iter()
+            .filter_map(|data| data.with_downcast::<SemanticData, _>(SemanticData::semantic_id))
+            .collect::<Vec<_>>()
+    });
+    assert!(!ids.is_empty());
+    let root = artboard.core_handle();
+    assert!(CoreRegistry::set_bool_handle(
+        &root,
+        LayoutComponentBase::CLIP_PROPERTY_KEY.into(),
+        false
+    ));
+    assert!(CoreRegistry::set_double_handle(
+        &root,
+        ArtboardBase::ORIGIN_X_PROPERTY_KEY.into(),
+        0.25
+    ));
+    let width = artboard.with_artboard(|artboard| artboard.layout_width());
+    let mut snapshots = Vec::new();
+    for frame_origin in [false, true] {
+        artboard.with_artboard_mut(|artboard| artboard.set_frame_origin(frame_origin));
+        artboard.advance_default(0.0);
+        snapshots.push(manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec()));
+    }
+    let before = snapshots[0]
+        .iter()
+        .find(|node| ids.contains(&node.id))
+        .expect("visible hosted control");
+    let after = snapshots[1]
+        .iter()
+        .find(|node| node.id == before.id)
+        .expect("same hosted control");
+    assert!(
+        (after.min_x - before.min_x - width * 0.25).abs() < 0.01,
+        "hosted bounds must follow the renderer's root translation: {before:?} -> {after:?}"
+    );
+}

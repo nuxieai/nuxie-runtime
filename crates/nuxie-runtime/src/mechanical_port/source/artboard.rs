@@ -1756,6 +1756,9 @@ impl Artboard {
         paths.local.add_rect(background, PathDirection::Clockwise);
         paths.world.rewind();
         paths.world.add_rect(clip, PathDirection::Clockwise);
+        crate::mechanical_port::source::semantic::semantic_provider::invalidate_clipped_semantics(
+            self.base.base.children(),
+        );
     }
 
     pub(crate) fn update_after_layout_super_handle(root: &CoreHandle, value: ComponentDirt) {
@@ -2247,6 +2250,52 @@ impl Artboard {
             );
         }
         point
+    }
+
+    /// Project semantic geometry through the transforms used by drawing.
+    /// The legacy root_transform contract omits frame origins and list scaling.
+    pub(crate) fn semantic_root_transform(&mut self, point: Vec2D) -> Vec2D {
+        let mut local = if self.has_self_transform() {
+            self.self_transform() * point
+        } else {
+            point
+        };
+        if self.frame_origin {
+            local += Vec2D::new(
+                self.layout_width() * self.origin_x(),
+                self.layout_height() * self.origin_y(),
+            );
+        }
+        if let Some(host) = self.host() {
+            let runtime = self.runtime_self.clone();
+            let mapped = host.with(|object| {
+                let host = object.as_artboard_host()?;
+                let transform = if let Some(list) = object.as_any().downcast_ref::<crate::mechanical_port::source::artboard_component_list::ArtboardComponentList>() {
+                    let instance = runtime.upgrade()?;
+                    list.draw_transform_for_index(list.index_of_artboard_instance(&instance))?
+                } else {
+                    host.world_transform_for_artboard(runtime)
+                };
+                Some((transform * local, host.parent_artboard()))
+            }).flatten();
+            if let Some((point, parent)) = mapped {
+                return parent
+                    .and_then(|parent| {
+                        parent.with_downcast_mut::<Artboard, _>(|parent| {
+                            parent.semantic_root_transform(point)
+                        })
+                    })
+                    .unwrap_or(point);
+            }
+        }
+        #[cfg(feature = "tools")]
+        if let Some(callback) = self.root_transform_callback {
+            return Vec2D::new(
+                callback(self.callback_user_data, local.x, local.y, true),
+                callback(self.callback_user_data, local.x, local.y, false),
+            );
+        }
+        local
     }
 
     pub fn hit_test_point(

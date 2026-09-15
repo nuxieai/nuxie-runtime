@@ -165,6 +165,15 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
         let Some(manager) = artboard.with_artboard(|artboard| artboard.semantic_manager()) else {
             return NuxStatus::NotFound;
         };
+        use nuxie::runtime::semantic::semantic_provider::{
+            SemanticGeometryError, validate_semantic_geometry,
+        };
+        if let Err(error) = validate_semantic_geometry(&artboard.core_handle()) {
+            return match error {
+                SemanticGeometryError::LimitExceeded => NuxStatus::LimitExceeded,
+                SemanticGeometryError::InvalidPath => NuxStatus::RuntimeError,
+            };
+        }
         let captured = manager.with_semantic_manager_mut(|manager| {
             let nodes = copy_nodes(manager.snapshot())?;
             Ok::<_, NuxStatus>((nodes, manager.version()))
@@ -389,6 +398,109 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn capture_rejects_over_budget_clip_and_recovers_without_partial_handle() {
+        use nuxie::runtime::{
+            generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+            math::path_types::PathDirection,
+        };
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(root).join("tests/unit_tests/assets/semantic/simpsons.riv"),
+        )
+        .unwrap();
+        let mut file = ptr::null_mut();
+        let mut instance = ptr::null_mut();
+        let mut player = ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+            let native = (&(*player).artboard).instance.borrow().native_handle();
+            assert!(CoreRegistry::set_bool_handle(
+                &native.core_handle(),
+                LayoutComponentBase::CLIP_PROPERTY_KEY.into(),
+                true
+            ));
+            let step = NuxPlayerStep {
+                struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                ..Default::default()
+            };
+            let mut result = ptr::null_mut();
+            assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+            let mut scheduling = NuxPlayerSchedulingInfo {
+                struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut scheduling),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_acknowledge_presented(player, scheduling.render_revision),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+            let mut snapshot = ptr::null_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            assert!(
+                !(*snapshot).nodes.is_empty(),
+                "fixture must expose semantic controls"
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            // Replace the already-built rendered clip with an equivalent, valid
+            // nonzero path that exceeds the semantic computation budget.
+            native.with_artboard_mut(|artboard| {
+                let bounds = artboard.bounds();
+                let path = artboard.local_path().unwrap();
+                path.rewind();
+                for _ in 0..5000 {
+                    path.add_rect(bounds, PathDirection::Clockwise);
+                }
+            });
+            snapshot = ptr::dangling_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::LimitExceeded
+            );
+            assert!(
+                snapshot.is_null(),
+                "failure must never publish a partial capture"
+            );
+            native.with_artboard_mut(|artboard| {
+                let bounds = artboard.bounds();
+                let path = artboard.local_path().unwrap();
+                path.rewind();
+                path.add_rect(bounds, PathDirection::Clockwise);
+            });
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            assert!(!(*snapshot).nodes.is_empty());
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        }
+    }
 
     #[test]
     fn bounded_copy_owns_text_and_omits_obscured_values() {

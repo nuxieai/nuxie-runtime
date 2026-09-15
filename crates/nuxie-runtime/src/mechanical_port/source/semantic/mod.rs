@@ -1,3 +1,4 @@
+mod semantic_clip;
 pub mod semantic_data;
 pub mod semantic_dirt;
 pub mod semantic_inference_registry;

@@ -325,6 +325,10 @@ impl DataConverter {
             .with_downcast_mut::<DataConverterFormula, _>(DataConverterFormula::unbind)
             .is_none()
         {
+            use crate::mechanical_port::source::scripted::scripted_data_converter::ScriptedDataConverter;
+            owner.with_downcast_mut::<ScriptedDataConverter, _>(
+                ScriptedDataConverter::clear_binding_context,
+            );
             crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerOwner::Authored(owner.clone()).unbind_data_binds();
         }
     }

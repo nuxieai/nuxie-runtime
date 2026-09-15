@@ -79,6 +79,7 @@ use crate::mechanical_port::source::{
     process_event_result::ProcessEventResult,
     scripted::scripted_object::{ScriptUpdateRequestHost, ScriptedObject},
     semantic::{
+        semantic_data::SemanticData,
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
         semantic_node::SemanticNodeRef,
     },
@@ -2042,6 +2043,9 @@ impl RuntimeStateMachineInstanceHandle {
             let Some(semantic_data) = semantic_data.as_semantic_data_mut() else {
                 return;
             };
+            if semantic_data.is_disabled() || semantic_data.is_hidden() {
+                return;
+            }
             match SemanticActionType::from_raw(action_type as u32) {
                 Some(SemanticActionType::Tap) => semantic_data.fire_semantic_tap(),
                 Some(SemanticActionType::Increase) => semantic_data.fire_semantic_increase(),
@@ -3432,6 +3436,14 @@ impl StateMachineInstance {
     fn process_semantic_events(&mut self) {
         let events = std::mem::take(&mut self.queued_semantic_events);
         for event in events {
+            let eligible = event
+                .group
+                .with_group(|group| group.semantic_data())
+                .with_downcast::<SemanticData, _>(|data| !data.is_disabled() && !data.is_hidden())
+                .unwrap_or(false);
+            if !eligible {
+                continue;
+            }
             let listener = event.group.with_group(|group| group.listener());
             let listener_index = self
                 .semantic_listener_groups

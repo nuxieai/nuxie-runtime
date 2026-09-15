@@ -1017,9 +1017,11 @@ macro_rules! enter_status_handle {
 
 mod data_binding;
 mod semantic_snapshot;
+mod semantic_types;
 
 pub use data_binding::*;
 pub use semantic_snapshot::*;
+pub use semantic_types::*;
 
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]

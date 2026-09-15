@@ -2,6 +2,8 @@
 
 use luaur_rt::{Buffer as LuaBuffer, Error, Lua, Result, Table, Value, Vector as LuaVector};
 
+const VECTOR_METHODS_KEY: &str = "nuxie.vector.methods";
+
 // Coarsely translated from nuxie-runtime/src/lua/math/lua_vec2d.cpp. The C++
 // API is a static-method table; __call retains the constructor shape exposed
 // by the initial Rust scripting seam.
@@ -148,11 +150,13 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
     // Rive replaces Luau's built-in vector metatable so instance syntax
     // (`value:length()`) reaches the same bindings as `Vector.length(value)`.
     // An __index callback also preserves axis and numeric component access.
-    let methods = vector.clone();
+    // Lua owns its method table; a Rust closure retaining a Table would keep
+    // the entire VM alive through its own vector metatable.
+    lua.set_named_registry_value(VECTOR_METHODS_KEY, &vector)?;
     let value_metatable = lua.create_table();
     value_metatable.set(
         "__index",
-        lua.create_function(move |_, (value, key): (LuaVector, Value)| {
+        lua.create_function(|lua, (value, key): (LuaVector, Value)| {
             if let Some(component) = vector_component(value, &key)? {
                 return Ok(Value::Number(component as f64));
             }
@@ -171,6 +175,7 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
                         | "writeToBuffer"
                         | "writeVec4"
                 ) {
+                    let methods: Table = lua.named_registry_value(VECTOR_METHODS_KEY)?;
                     let method: Value = methods.get(name.as_str())?;
                     if !matches!(method, Value::Nil) {
                         return Ok(method);

@@ -45,6 +45,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
     }
     fn unbind(&mut self) {
         self.base.base.unbind();
+        self.clear_binding_context();
     }
     fn update(&mut self) {
         self.base.base.update();
@@ -73,6 +74,13 @@ impl Drop for ScriptedDataConverter {
 }
 
 impl ScriptedDataConverter {
+    pub(crate) fn clear_binding_context(&mut self) {
+        // The projected script model owns a File lease. Once detached, this
+        // File-owned converter must not retain its former binding's lease.
+        self.data_context = None;
+        self.scripted.set_data_context(None);
+    }
+
     pub fn convert_handle(
         owner: &CoreHandle,
         input: &dyn DataValue,

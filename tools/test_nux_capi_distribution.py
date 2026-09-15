@@ -256,22 +256,22 @@ class DistributionToolTests(unittest.TestCase):
                 },
                 "sliceBytes": {
                     "aarch64-apple-darwin": 46 * mebibyte,
-                    "aarch64-apple-ios": 46 * mebibyte,
-                    "aarch64-apple-ios-sim": 46 * mebibyte,
+                    "aarch64-apple-ios": 47 * mebibyte,
+                    "aarch64-apple-ios-sim": 47 * mebibyte,
                     "x86_64-apple-darwin": 47 * mebibyte,
                     "x86_64-apple-ios": 46 * mebibyte,
                 },
             },
             "ios-only": {
                 "compressedBytes": 45 * mebibyte,
-                "expandedBytes": 138 * mebibyte,
+                "expandedBytes": 140 * mebibyte,
                 "representativeLinkedBytes": {
                     "c-ios-arm64": 29 * mebibyte,
                     "swift-ios-arm64": 29 * mebibyte,
                 },
                 "sliceBytes": {
-                    "aarch64-apple-ios": 46 * mebibyte,
-                    "aarch64-apple-ios-sim": 46 * mebibyte,
+                    "aarch64-apple-ios": 47 * mebibyte,
+                    "aarch64-apple-ios-sim": 47 * mebibyte,
                     "x86_64-apple-ios": 46 * mebibyte,
                 },
             },

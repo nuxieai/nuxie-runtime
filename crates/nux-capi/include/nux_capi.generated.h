@@ -1728,6 +1728,18 @@ NuxStatus nux_player_new_static_with_result(struct NuxArtboardInstance *instance
                                             struct NuxCapiResult **out_result);
 
 /**
+ * Queue an authored semantic listener action: 0 tap, 1 increase, 2 decrease.
+ * The host must subsequently step its occurrence's players and handle their
+ * normal output journals. This does not execute a host command directly.
+ * Stale captures return HANDLE_MISMATCH; absent or ineligible actions return
+ * NOT_FOUND. Successful enqueue invalidates the capture for further actions.
+ */
+NuxStatus nux_player_queue_semantic_action(struct NuxPlayer *player,
+                                           const struct NuxSemanticSnapshot *snapshot,
+                                           uint32_t node_id,
+                                           uint32_t action);
+
+/**
  * Capture only the current acknowledged presentation. Returns HANDLE_MISMATCH
  * for an unpresented revision and NOT_FOUND until semantics are enabled.
  * At most 16,384 nodes and 4 MiB of source UTF-8 text are accepted; larger

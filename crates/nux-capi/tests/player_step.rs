@@ -1161,3 +1161,135 @@ fn semantic_snapshot_requires_presented_occurrence_and_survives_player_release()
         assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
     }
 }
+
+#[test]
+fn semantic_snapshot_captures_authored_dropdown_tree() {
+    let file = import("semantic/data_binding_lists.riv");
+    let instance = artboard(file, 0);
+    let mut model = std::ptr::null_mut();
+    let mut player = std::ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            nux_view_model_instance_new_default(instance, &mut model),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(instance, model),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_default(instance, &mut player), NuxStatus::Ok);
+        assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+        let mut revision = 0;
+        for _ in 0..10 {
+            let (status, result) = step(player, &[], &[], 0.1);
+            assert_eq!(status, NuxStatus::Ok);
+            revision = scheduling(result).render_revision;
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+        }
+        assert_eq!(
+            nux_player_acknowledge_presented(player, revision),
+            NuxStatus::Ok
+        );
+        let mut snapshot = std::ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(player, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        assert!(info.node_count > 1);
+        let mut found = false;
+        let mut button_id = 0;
+        for index in 0..info.node_count {
+            let mut node = NuxSemanticNodeView {
+                struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_semantic_snapshot_node(snapshot, index, &mut node),
+                NuxStatus::Ok
+            );
+            if owned(node.label) == "Select a fandom" {
+                assert_ne!(
+                    node.state_flags & 1,
+                    0,
+                    "authored dropdown initially expanded"
+                );
+                found = true;
+                button_id = node.id;
+            }
+        }
+        assert!(found, "authored dropdown label is exposed through C");
+        assert_eq!(
+            nux_player_queue_semantic_action(player, snapshot, button_id, 99),
+            NuxStatus::InvalidArgument
+        );
+        assert_eq!(
+            nux_player_queue_semantic_action(player, snapshot, button_id, 1),
+            NuxStatus::NotFound
+        );
+        assert_eq!(
+            nux_player_queue_semantic_action(player, snapshot, u32::MAX, 0),
+            NuxStatus::NotFound
+        );
+        assert_eq!(
+            nux_player_queue_semantic_action(player, snapshot, button_id, 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_queue_semantic_action(player, snapshot, button_id, 0),
+            NuxStatus::HandleMismatch
+        );
+        for _ in 0..10 {
+            let (status, result) = step(player, &[], &[], 0.1);
+            assert_eq!(status, NuxStatus::Ok);
+            revision = scheduling(result).render_revision;
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+        }
+        assert_eq!(
+            nux_player_acknowledge_presented(player, revision),
+            NuxStatus::Ok
+        );
+        let mut changed = std::ptr::null_mut();
+        assert_eq!(
+            nux_player_semantic_snapshot(player, &mut changed),
+            NuxStatus::Ok
+        );
+        let mut changed_info = NuxSemanticSnapshotInfo {
+            struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+            ..Default::default()
+        };
+        assert_eq!(
+            nux_semantic_snapshot_info(changed, &mut changed_info),
+            NuxStatus::Ok
+        );
+        let mut closed = false;
+        for index in 0..changed_info.node_count {
+            let mut node = NuxSemanticNodeView {
+                struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_semantic_snapshot_node(changed, index, &mut node),
+                NuxStatus::Ok
+            );
+            if node.id == button_id {
+                assert_eq!(node.state_flags & 1, 0, "authored tap closes dropdown");
+                closed = true;
+            }
+        }
+        assert!(closed);
+        assert_eq!(nux_semantic_snapshot_free(changed), NuxStatus::Ok);
+        assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_view_model_instance_free(model), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
+}

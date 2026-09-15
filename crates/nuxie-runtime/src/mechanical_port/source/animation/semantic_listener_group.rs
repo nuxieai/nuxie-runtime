@@ -101,6 +101,22 @@ impl fmt::Debug for SemanticGroupListener {
 }
 
 impl SemanticListener for SemanticGroupListener {
+    fn supports_semantic_action(&self, action: u8) -> bool {
+        let Some(action) = SemanticActionType::from_raw(action as u32) else {
+            return false;
+        };
+        self.group.upgrade().is_some_and(|group| {
+            group.with_group(|group| {
+                group
+                    .state_machine_instance
+                    .with_instance(|machine| {
+                        machine.semantic_constraints_met(&group.listener, action)
+                    })
+                    .unwrap_or(false)
+            })
+        })
+    }
+
     fn on_semantic_tap(&self) {
         if let Some(group) = self.group.upgrade() {
             group.with_group_mut(SemanticListenerGroup::on_semantic_tap);

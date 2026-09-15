@@ -2,6 +2,7 @@
 
 use super::*;
 use nuxie::runtime::semantic::{
+    semantic_data::SemanticData,
     semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
@@ -208,6 +209,87 @@ pub unsafe extern "C" fn nux_player_validate_semantic_snapshot(
             return NuxStatus::HandleMismatch;
         }
         NuxStatus::Ok
+    })
+}
+
+/// Queue an authored semantic listener action: 0 tap, 1 increase, 2 decrease.
+/// The host must subsequently step its occurrence's players and handle their
+/// normal output journals. This does not execute a host command directly.
+/// Stale captures return HANDLE_MISMATCH; absent or ineligible actions return
+/// NOT_FOUND. Successful enqueue invalidates the capture for further actions.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_queue_semantic_action(
+    player: *mut NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    action: u32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if action > 2 {
+            return NuxStatus::InvalidArgument;
+        }
+        let validity = unsafe { nux_player_validate_semantic_snapshot(player, snapshot) };
+        if validity != NuxStatus::Ok {
+            return validity;
+        }
+        let _player = enter_status_handle!(player, HandleKind::Player);
+        let _snapshot = enter_status_handle!(snapshot, HandleKind::SemanticSnapshot);
+        let player = unsafe { &*player };
+        let snapshot = unsafe { &*snapshot };
+        let _occurrence = match enter_occurrence(&player.artboard) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
+        if !snapshot.nodes.iter().any(|node| node.id == node_id) {
+            return NuxStatus::NotFound;
+        }
+        let artboard = player.artboard.instance.borrow().native_handle();
+        let Some(manager) = artboard.with_artboard(|artboard| artboard.semantic_manager()) else {
+            return NuxStatus::NotFound;
+        };
+        let node = manager.with_semantic_manager_mut(|manager| {
+            manager.snapshot();
+            if manager.version() != snapshot.tree_version {
+                return Err(NuxStatus::HandleMismatch);
+            }
+            manager.node_by_id(node_id).ok_or(NuxStatus::NotFound)
+        });
+        let node = match node {
+            Ok(node) => node,
+            Err(status) => return status,
+        };
+        let mut ancestor = Some(node.clone());
+        let mut remaining = MAX_NODES;
+        while let Some(current) = ancestor {
+            if remaining == 0 {
+                return NuxStatus::LimitExceeded;
+            }
+            remaining -= 1;
+            let current = current.borrow();
+            if current.state_flags & (SemanticState::DISABLED.0 | SemanticState::HIDDEN.0) != 0 {
+                return NuxStatus::NotFound;
+            }
+            ancestor = current.parent();
+        }
+        let Some(data) = node.borrow().semantic_data.clone() else {
+            return NuxStatus::NotFound;
+        };
+        data.with_downcast::<SemanticData, _>(|data| {
+            if !data.supports_semantic_action(action as u8) {
+                return NuxStatus::NotFound;
+            }
+            if let Err(status) = player.artboard.invalidate_render() {
+                return status;
+            }
+            match action {
+                0 => data.fire_semantic_tap(),
+                1 => data.fire_semantic_increase(),
+                2 => data.fire_semantic_decrease(),
+                _ => unreachable!(),
+            }
+            NuxStatus::Ok
+        })
+        .unwrap_or(NuxStatus::NotFound)
     })
 }
 

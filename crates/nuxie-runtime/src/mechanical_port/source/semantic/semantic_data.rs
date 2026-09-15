@@ -390,9 +390,11 @@ impl SemanticData {
         if Component::has_dirt_in(value, ComponentDirt::WORLD_TRANSFORM) {
             self.apply_inferred_semantics_if_needed();
             self.update_world_bounds();
+            self.sync_semantic_tree_visibility();
         }
         if Component::has_dirt_in(value, ComponentDirt::PATH) {
             self.update_world_bounds();
+            self.sync_semantic_tree_visibility();
         }
     }
 

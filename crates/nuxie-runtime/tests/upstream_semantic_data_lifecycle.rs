@@ -486,3 +486,262 @@ fn fresh_semantic_registration_uses_authored_opacity_before_the_first_advance() 
         );
     }
 }
+
+#[test]
+fn artboard_clipping_retires_semantics_and_restores_them_on_return() {
+    assert_clipping_retires_semantics(false);
+}
+
+#[test]
+fn nested_layout_clipping_retires_semantics_and_restores_them_on_return() {
+    assert_clipping_retires_semantics(true);
+}
+
+fn assert_clipping_retires_semantics(nested_layout: bool) {
+    use nuxie_runtime::source::generated::core_registry::CoreRegistry;
+    let fixture = dropdown();
+    let data = fixture
+        .manager
+        .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
+        .unwrap()
+        .borrow()
+        .semantic_data
+        .clone()
+        .unwrap();
+    let owner = data
+        .with(|data| data.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let clip_key = i32::from(nuxie_runtime::source::generated::layout_component_base::LayoutComponentBase::CLIP_PROPERTY_KEY);
+    let clip_owner = if nested_layout {
+        assert!(CoreRegistry::set_bool_handle(
+            &fixture._artboard.core_handle(),
+            clip_key,
+            false
+        ));
+        owner
+            .with(|object| object.component_parent_handle())
+            .flatten()
+            .unwrap()
+    } else {
+        let parent = owner
+            .with(|object| object.component_parent_handle())
+            .flatten()
+            .unwrap();
+        assert!(CoreRegistry::set_bool_handle(&parent, clip_key, false));
+        fixture._artboard.core_handle()
+    };
+    assert!(CoreRegistry::set_bool_handle(&clip_owner, clip_key, true));
+    fixture._artboard.advance_default(0.0);
+    let position_owner = owner
+        .with(|object| object.as_layout_component().unwrap().style_handle())
+        .flatten()
+        .unwrap();
+    let x_key = i32::from(nuxie_runtime::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase::POSITION_LEFT_PROPERTY_KEY);
+    let original_x = CoreRegistry::get_double_handle(&position_owner, x_key).unwrap();
+    assert!(CoreRegistry::set_uint_handle(&position_owner, i32::from(nuxie_runtime::source::generated::layout::layout_component_style_base::LayoutComponentStyleBase::POSITION_LEFT_UNITS_VALUE_PROPERTY_KEY), 1));
+    let width = fixture
+        ._artboard
+        .with_artboard(|artboard| artboard.layout_width());
+    assert!(CoreRegistry::set_double_handle(
+        &position_owner,
+        x_key,
+        original_x + width * 4.0 + 1000.0
+    ));
+    fixture._artboard.advance_default(0.0);
+    // Verify the displacement independently of semantic-tree membership.
+    let (local, transform, owner_artboard) = owner
+        .with(|component| {
+            let node = component.as_node().expect("control owner is a node");
+            (
+                component
+                    .semantic_provider_local_bounds()
+                    .expect("control has geometry"),
+                *node.world_transform(),
+                node.artboard_handle().unwrap(),
+            )
+        })
+        .unwrap();
+    assert_eq!(owner_artboard, fixture._artboard.core_handle());
+    let moved_bounds = transform.map_bounding_box(local);
+    let clip_bounds = clip_owner
+        .with(|object| {
+            if let Some(artboard) = object.as_artboard() {
+                artboard.bounds()
+            } else {
+                let layout = object.as_layout_component().unwrap();
+                layout
+                    .shape_world_transform()
+                    .map_bounding_box(layout.local_bounds())
+            }
+        })
+        .unwrap();
+    assert!(
+        moved_bounds.min_x > clip_bounds.max_x,
+        "fixture did not move outside the clip: {moved_bounds:?} vs {clip_bounds:?}"
+    );
+    let hidden = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    assert!(
+        !hidden.iter().any(|node| node.id == fixture.button_id),
+        "clipped control remains accessible"
+    );
+
+    assert!(CoreRegistry::set_bool_handle(&clip_owner, clip_key, false));
+    fixture._artboard.advance_default(0.0);
+    let unclipped = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    assert!(
+        unclipped.iter().any(|node| node.id == fixture.button_id),
+        "disabling clipping did not restore semantics"
+    );
+    fixture
+        .machine
+        .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+    assert!(CoreRegistry::set_bool_handle(&clip_owner, clip_key, true));
+    fixture._artboard.advance_default(0.0);
+    let reclipped = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    assert!(
+        !reclipped.iter().any(|node| node.id == fixture.button_id),
+        "enabling clipping did not retire semantics"
+    );
+    fixture
+        .machine
+        .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+    fixture.machine.advance_and_apply(0.0);
+    assert!(
+        data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            .unwrap()
+    );
+    assert!(CoreRegistry::set_double_handle(
+        &position_owner,
+        x_key,
+        original_x
+    ));
+    fixture.machine.advance_and_apply(0.0);
+    let visible = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let restored = visible
+        .iter()
+        .find(|node| node.id == fixture.button_id)
+        .unwrap();
+    let half_width = (restored.bounds().max_x - restored.bounds().min_x) / 2.0;
+    assert!(CoreRegistry::set_double_handle(
+        &position_owner,
+        x_key,
+        original_x + clip_bounds.max_x - restored.bounds().min_x - half_width
+    ));
+    fixture._artboard.advance_default(0.0);
+    let partial = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let partial = partial
+        .iter()
+        .find(|node| node.id == fixture.button_id)
+        .expect("partially visible control remains accessible");
+    assert!((partial.bounds().max_x - clip_bounds.max_x).abs() < 0.01);
+    assert!((partial.bounds().min_x - (clip_bounds.max_x - half_width)).abs() < 0.01);
+    assert!(CoreRegistry::set_double_handle(
+        &position_owner,
+        x_key,
+        original_x
+    ));
+    fixture._artboard.advance_default(0.0);
+    fixture
+        .machine
+        .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+    fixture.machine.advance_and_apply(0.0);
+    assert!(
+        !data
+            .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+            .unwrap()
+    );
+}
+
+#[test]
+fn rotated_target_cannot_use_its_empty_bounding_box_corner_as_visible_geometry() {
+    use nuxie_runtime::source::{
+        generated::{core_registry::CoreRegistry, layout_component_base::LayoutComponentBase},
+        math::{mat2d::Mat2D, vec2d::Vec2D},
+        semantic::semantic_provider::{semantic_bounds, semantic_source_is_visible},
+    };
+    let fixture = dropdown();
+    let data = fixture
+        .manager
+        .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
+        .unwrap()
+        .borrow()
+        .semantic_data
+        .clone()
+        .unwrap();
+    let owner = data
+        .with(|data| data.component_parent_handle())
+        .flatten()
+        .unwrap();
+    let parent = owner
+        .with(|object| object.component_parent_handle())
+        .flatten()
+        .unwrap();
+    assert!(CoreRegistry::set_bool_handle(
+        &parent,
+        i32::from(LayoutComponentBase::CLIP_PROPERTY_KEY),
+        true
+    ));
+    fixture._artboard.advance_default(0.0);
+    let local = owner
+        .with(|object| object.semantic_provider_local_bounds().unwrap())
+        .unwrap();
+    let parent_local = parent
+        .with(|object| object.as_layout_component().unwrap().local_bounds())
+        .unwrap();
+    assert_eq!(local.min_x, 0.0);
+    assert_eq!(local.min_y, 0.0);
+    // Set the actual world transforms directly to isolate committed geometry
+    // from this older fixture's intentionally ignored authored layout rotation.
+    let diamond = Mat2D::new(
+        1.0 / local.max_x,
+        1.0 / local.max_x,
+        -1.0 / local.max_y,
+        1.0 / local.max_y,
+        1.0,
+        0.0,
+    );
+    owner.with_mut(|object| {
+        object
+            .as_world_transform_component_mut()
+            .unwrap()
+            .set_world_transform(diamond)
+    });
+    parent.with_mut(|object| {
+        object
+            .as_world_transform_component_mut()
+            .unwrap()
+            .set_world_transform(Mat2D::from_scale(
+                0.25 / parent_local.max_x,
+                0.25 / parent_local.max_y,
+            ))
+    });
+    let corners = [
+        Vec2D::new(0.0, 0.0),
+        Vec2D::new(local.max_x, 0.0),
+        Vec2D::new(local.max_x, local.max_y),
+        Vec2D::new(0.0, local.max_y),
+    ]
+    .map(|point| diamond * point);
+    assert_eq!(
+        corners,
+        [
+            Vec2D::new(1.0, 0.0),
+            Vec2D::new(2.0, 1.0),
+            Vec2D::new(1.0, 2.0),
+            Vec2D::new(0.0, 1.0)
+        ]
+    );
+    assert!(semantic_bounds(Some(&owner)).is_empty_or_nan());
+    assert!(!semantic_source_is_visible(&owner));
+}

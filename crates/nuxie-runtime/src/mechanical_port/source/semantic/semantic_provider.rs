@@ -2,7 +2,7 @@ use crate::mechanical_port::source::{
     artboard::Artboard,
     core::CoreHandle,
     generated::{container_component_base::ContainerComponentBase, node_base::NodeBase},
-    math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
+    math::{aabb::Aabb, vec2d::Vec2D},
     semantic::{
         semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics},
         semantic_snapshot::Bounds,
@@ -52,19 +52,6 @@ impl Bounds {
             self.max_y
         };
     }
-}
-
-fn bounds_from_aabb(bounds: Aabb) -> Bounds {
-    Bounds {
-        min_x: bounds.min_x,
-        min_y: bounds.min_y,
-        max_x: bounds.max_x,
-        max_y: bounds.max_y,
-    }
-}
-
-fn aabb_from_bounds(bounds: Bounds) -> Aabb {
-    Aabb::new(bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y)
 }
 
 pub fn root_transform_aabb(artboard: &CoreHandle, bounds: Bounds) -> Bounds {
@@ -154,18 +141,174 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
         }
         current = parent;
     }
-    true
+    !semantic_is_fully_clipped(component)
 }
 
-fn node_world_bounds(component: &CoreHandle) -> Option<(Bounds, Option<CoreHandle>)> {
+fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
+    let geometry = semantic_geometry(component);
+    !geometry.is_empty()
+        && geometry.into_iter().all(|(owner, polygon)| {
+            !polygon_has_area(&clip_to_ancestor_layouts(&owner, polygon.to_vec()))
+        })
+}
+
+fn clip_to_ancestor_layouts(component: &CoreHandle, mut polygon: Vec<Vec2D>) -> Vec<Vec2D> {
+    let mut current = Some(component.clone());
+    let mut visited = std::collections::HashSet::new();
+    while let Some(owner) = current {
+        if !visited.insert(owner.clone()) {
+            return Vec::new();
+        }
+        let Some((clip, parent)) = owner.with(|object| {
+            let artboard = object.as_artboard();
+            let clip = if let Some(artboard) = artboard {
+                artboard
+                    .clip()
+                    .then(|| (bounds_corners(artboard.bounds()), Some(owner.clone())))
+            } else {
+                object
+                    .as_layout_component()
+                    .filter(|layout| layout.base.clip())
+                    .map(|layout| {
+                        let transform = layout.shape_world_transform();
+                        (
+                            bounds_corners(layout.local_bounds()).map(|point| transform * point),
+                            layout.artboard_handle(),
+                        )
+                    })
+            };
+            let parent = object
+                .component_parent_handle()
+                .or_else(|| artboard.and_then(Artboard::host));
+            (clip, parent)
+        }) else {
+            return Vec::new();
+        };
+        if let Some((mut clip, artboard)) = clip {
+            if let Some(artboard) = artboard {
+                let Some(mapped) = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+                    clip.map(|point| artboard.root_transform(point))
+                }) else {
+                    return Vec::new();
+                };
+                clip = mapped;
+            }
+            polygon = intersect_convex_clip(polygon, &clip);
+            if polygon.is_empty() {
+                return Vec::new();
+            }
+        }
+        current = parent;
+    }
+    polygon
+}
+
+fn bounds_corners(bounds: Aabb) -> [Vec2D; 4] {
+    [
+        Vec2D::new(bounds.min_x, bounds.min_y),
+        Vec2D::new(bounds.max_x, bounds.min_y),
+        Vec2D::new(bounds.max_x, bounds.max_y),
+        Vec2D::new(bounds.min_x, bounds.max_y),
+    ]
+}
+
+// Keep the polygon between intersections: reducing a rotated clip to its AABB
+// before intersecting the next clip can introduce area that was never visible.
+fn intersect_convex_clip(mut polygon: Vec<Vec2D>, clip: &[Vec2D; 4]) -> Vec<Vec2D> {
+    let cross =
+        |a: Vec2D, b: Vec2D, p: Vec2D| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    let area = cross(clip[0], clip[1], clip[2]);
+    if !area.is_finite() || area == 0.0 || clip.iter().any(|p| !p.x.is_finite() || !p.y.is_finite())
+    {
+        return Vec::new();
+    }
+    let orientation = area.signum();
+    for index in 0..4 {
+        let input = std::mem::take(&mut polygon);
+        let Some(mut previous) = input.last().copied() else {
+            break;
+        };
+        let a = clip[index];
+        let b = clip[(index + 1) % 4];
+        let mut previous_distance = cross(a, b, previous) * orientation;
+        for point in input {
+            let distance = cross(a, b, point) * orientation;
+            if (distance >= 0.0) != (previous_distance >= 0.0) {
+                let t = previous_distance / (previous_distance - distance);
+                polygon.push(Vec2D::new(
+                    previous.x + t * (point.x - previous.x),
+                    previous.y + t * (point.y - previous.y),
+                ));
+            }
+            if distance >= 0.0 {
+                polygon.push(point);
+            }
+            previous = point;
+            previous_distance = distance;
+        }
+    }
+    polygon
+}
+
+fn polygon_has_area(polygon: &[Vec2D]) -> bool {
+    let twice_area: f32 = polygon
+        .iter()
+        .zip(polygon.iter().cycle().skip(1))
+        .take(polygon.len())
+        .map(|(a, b)| a.x * b.y - a.y * b.x)
+        .sum();
+    twice_area.is_finite() && twice_area != 0.0
+}
+
+pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
+    let Some(component) = component else {
+        return Bounds::default();
+    };
+    let geometry = semantic_geometry(component);
+    if !geometry.is_empty() {
+        let mut result = Bounds::for_expansion();
+        for (owner, polygon) in geometry {
+            let visible = clip_to_ancestor_layouts(&owner, polygon.to_vec());
+            if polygon_has_area(&visible) {
+                for point in visible {
+                    result.expand((point.x, point.y));
+                }
+            }
+        }
+        return result;
+    }
+    // Nodes without rectangular geometry retain the existing point fallback.
+    let Some((point, artboard)) = component
+        .with(|object| {
+            let node = object.as_node()?;
+            Some((
+                Vec2D::new(node.world_transform()[4], node.world_transform()[5]),
+                node.artboard_handle(),
+            ))
+        })
+        .flatten()
+    else {
+        return Bounds::default();
+    };
+    let point = Bounds {
+        min_x: point.x,
+        min_y: point.y,
+        max_x: point.x,
+        max_y: point.y,
+    };
+    artboard
+        .as_ref()
+        .map_or(point, |artboard| root_transform_aabb(artboard, point))
+}
+
+fn node_root_polygon(component: &CoreHandle) -> Option<[Vec2D; 4]> {
     if !component.is_type_of(NodeBase::TYPE_KEY) {
         return None;
     }
-    let (local_bounds, world_transform, artboard) = component.with(|component| {
-        let node = component.as_node()?;
-        let local_bounds = component.semantic_provider_local_bounds()?;
+    let (local_bounds, transform, artboard) = component.with(|object| {
+        let node = object.as_node()?;
         Some((
-            local_bounds,
+            object.semantic_provider_local_bounds()?,
             *node.world_transform(),
             node.artboard_handle(),
         ))
@@ -173,88 +316,96 @@ fn node_world_bounds(component: &CoreHandle) -> Option<(Bounds, Option<CoreHandl
     if local_bounds.is_empty_or_nan() {
         return None;
     }
-    let world_bounds = world_transform.map_bounding_box(local_bounds);
-    if world_bounds.is_empty_or_nan() {
-        return None;
+    let mut polygon = bounds_corners(local_bounds).map(|point| transform * point);
+    if let Some(artboard) = artboard {
+        polygon = artboard.with_downcast_mut::<Artboard, _>(|artboard| {
+            polygon.map(|point| artboard.root_transform(point))
+        })?;
     }
-    Some((bounds_from_aabb(world_bounds), artboard))
+    polygon_has_area(&polygon).then_some(polygon)
 }
 
-fn collect_descendant_bounds(component: &CoreHandle, merged: &mut Aabb, found: &mut bool) {
+fn semantic_geometry(component: &CoreHandle) -> Vec<(CoreHandle, [Vec2D; 4])> {
+    if let Some(polygon) = node_root_polygon(component) {
+        return vec![(component.clone(), polygon)];
+    }
+    let mut geometry = Vec::new();
+    collect_descendant_geometry(component, &mut geometry);
+    geometry
+}
+
+fn collect_descendant_geometry(
+    component: &CoreHandle,
+    geometry: &mut Vec<(CoreHandle, [Vec2D; 4])>,
+) {
     if !component.is_type_of(ContainerComponentBase::TYPE_KEY) {
         return;
     }
     let children = component
-        .with(|component| {
-            component
+        .with(|object| {
+            object
                 .as_container_component()
                 .map(|container| container.children().to_vec())
         })
         .flatten()
         .unwrap_or_default();
     for child in children {
-        if let Some((bounds, _)) = node_world_bounds(&child) {
-            let bounds = aabb_from_bounds(bounds);
-            if *found {
-                merged.expand(bounds);
-            } else {
-                *merged = bounds;
-                *found = true;
-            }
+        if let Some(polygon) = node_root_polygon(&child) {
+            geometry.push((child.clone(), polygon));
         }
-        collect_descendant_bounds(&child, merged, found);
+        collect_descendant_geometry(&child, geometry);
     }
 }
 
-pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
-    let Some(component) = component else {
-        return Bounds::default();
-    };
-    if !component.is_type_of(NodeBase::TYPE_KEY) {
-        return Bounds::default();
-    }
-    if let Some((world_bounds, artboard)) = node_world_bounds(component) {
-        return artboard.as_ref().map_or(world_bounds, |artboard| {
-            root_transform_aabb(artboard, world_bounds)
-        });
+#[cfg(test)]
+mod clipping_tests {
+    use super::*;
+
+    #[test]
+    fn rotated_clip_rejects_its_empty_aabb_corners_in_either_winding() {
+        let mut clip = [
+            Vec2D::new(0.0, 1.0),
+            Vec2D::new(1.0, 0.0),
+            Vec2D::new(2.0, 1.0),
+            Vec2D::new(1.0, 2.0),
+        ];
+        let corner = vec![
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(0.25, 0.0),
+            Vec2D::new(0.25, 0.25),
+            Vec2D::new(0.0, 0.25),
+        ];
+        assert!(intersect_convex_clip(corner.clone(), &clip).is_empty());
+        clip.reverse();
+        assert!(intersect_convex_clip(corner, &clip).is_empty());
     }
 
-    let (is_node, artboard, world_transform) = component
-        .with(|component| {
-            component.as_node().map(|node| {
-                (
-                    true,
-                    node.artboard_handle(),
-                    Mat2D::from(*node.world_transform()),
-                )
-            })
-        })
-        .flatten()
-        .unwrap_or((false, None, Mat2D::default()));
-    if !is_node {
-        return Bounds::default();
+    #[test]
+    fn rotated_clip_preserves_only_the_visible_triangle() {
+        let clip = [
+            Vec2D::new(0.0, 1.0),
+            Vec2D::new(1.0, 0.0),
+            Vec2D::new(2.0, 1.0),
+            Vec2D::new(1.0, 2.0),
+        ];
+        let square = vec![
+            Vec2D::new(0.0, 0.0),
+            Vec2D::new(1.0, 0.0),
+            Vec2D::new(1.0, 1.0),
+            Vec2D::new(0.0, 1.0),
+        ];
+        let polygon = intersect_convex_clip(square, &clip);
+        let twice_area: f32 = polygon
+            .iter()
+            .zip(polygon.iter().cycle().skip(1))
+            .take(polygon.len())
+            .map(|(a, b)| a.x * b.y - a.y * b.x)
+            .sum();
+        assert!((twice_area.abs() - 1.0).abs() < 0.0001);
+        assert!(
+            polygon
+                .iter()
+                .all(|p| p.x + p.y >= 1.0 && p.x <= 1.0 && p.y <= 1.0)
+        );
     }
-
-    let is_container = component.is_type_of(ContainerComponentBase::TYPE_KEY);
-    if is_container {
-        let mut merged = Aabb::default();
-        let mut found = false;
-        collect_descendant_bounds(component, &mut merged, &mut found);
-        if found {
-            let merged = bounds_from_aabb(merged);
-            return artboard
-                .as_ref()
-                .map_or(merged, |artboard| root_transform_aabb(artboard, merged));
-        }
-    }
-
-    let point = Bounds {
-        min_x: world_transform[4],
-        min_y: world_transform[5],
-        max_x: world_transform[4],
-        max_y: world_transform[5],
-    };
-    artboard
-        .as_ref()
-        .map_or(point, |artboard| root_transform_aabb(artboard, point))
 }

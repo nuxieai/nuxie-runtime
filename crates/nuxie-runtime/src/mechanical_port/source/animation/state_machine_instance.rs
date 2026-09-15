@@ -2500,11 +2500,50 @@ impl StateMachineInstance {
             })
     }
 
+    fn pointer_activation_allowed(&self, listener: &CoreHandle) -> bool {
+        let mut target = self.resolve_artboard_object(Self::listener_target_id(listener));
+        let mut visited = std::collections::HashSet::new();
+        while let Some(current) = target {
+            if !visited.insert(current.clone()) {
+                return false;
+            }
+            if let Some(data) = Self::semantic_data_child(&current) {
+                let allowed = data
+                    .with(|data| {
+                        let data = data.as_semantic_data().expect("semantic child");
+                        !data.is_disabled() && !data.is_hidden()
+                    })
+                    .unwrap_or(false);
+                if !allowed {
+                    return false;
+                }
+            }
+            target = current
+                .with(|current| {
+                    current
+                        .component_parent_handle()
+                        .or_else(|| current.as_artboard().and_then(|artboard| artboard.host()))
+                })
+                .flatten();
+        }
+        true
+    }
+
     pub fn perform_listener_changes(
         &mut self,
         listener: &CoreHandle,
         invocation: ListenerInvocation,
     ) {
+        // Check authored state at dispatch, including when no accessibility
+        // manager exists. Exit and move listeners still run for pointer cleanup.
+        if invocation.as_pointer().is_some_and(|pointer| {
+            [ListenerType::Down, ListenerType::Up, ListenerType::Click]
+                .iter()
+                .any(|kind| pointer.hit_event == *kind as u32)
+        }) && !self.pointer_activation_allowed(listener)
+        {
+            return;
+        }
         let actions = listener
             .with(|listener| listener.state_machine_listener_actions())
             .flatten()

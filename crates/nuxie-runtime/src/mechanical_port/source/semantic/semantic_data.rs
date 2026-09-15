@@ -381,7 +381,10 @@ impl SemanticData {
     }
 
     pub fn update(&mut self, value: ComponentDirt) {
-        if Component::has_dirt_in(value, ComponentDirt::COLLAPSED) {
+        if Component::has_dirt_in(
+            value,
+            ComponentDirt::COLLAPSED | ComponentDirt::RENDER_OPACITY,
+        ) {
             self.sync_semantic_tree_visibility();
         }
         if Component::has_dirt_in(value, ComponentDirt::WORLD_TRANSFORM) {
@@ -441,6 +444,9 @@ impl SemanticData {
             .with(|parent| {
                 parent.component_is_collapsed()
                     || (parent.as_drawable().is_some() && parent.drawable_is_hidden())
+                    || parent
+                        .world_transform_child_opacity()
+                        .is_some_and(|opacity| !opacity.is_finite() || opacity <= 0.0)
             })
             .unwrap_or(true)
     }

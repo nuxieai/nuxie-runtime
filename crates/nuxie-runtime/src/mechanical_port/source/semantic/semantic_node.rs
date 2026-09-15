@@ -2,6 +2,7 @@ use crate::mechanical_port::source::{
     core::CoreHandle,
     semantic::{
         semantic_manager::{RuntimeSemanticManagerHandle, RuntimeSemanticManagerWeakHandle},
+        semantic_provider::semantic_source_is_visible,
         semantic_snapshot::Bounds,
         semantic_state::SemanticState,
     },
@@ -36,6 +37,14 @@ impl SemanticNode {
     /// Recheck this at dispatch: visibility or membership can change after
     /// a listener has been queued without changing the target's own flags.
     pub fn is_action_eligible(node: &SemanticNodeRef) -> bool {
+        if node
+            .borrow()
+            .core_owner
+            .as_ref()
+            .is_some_and(|owner| !semantic_source_is_visible(owner))
+        {
+            return false;
+        }
         let Some(manager) = node.borrow().manager() else {
             return false;
         };

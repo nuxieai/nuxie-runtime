@@ -242,3 +242,121 @@ fn queued_semantic_action_rechecks_ancestor_eligibility() {
         );
     }
 }
+
+#[test]
+fn disabled_and_hidden_controls_reject_touch_then_resume_when_enabled() {
+    use nuxie_runtime::source::math::vec2d::Vec2D;
+    for (hidden, on_host) in [(false, false), (true, false), (false, true), (true, true)] {
+        let fixture = dropdown();
+        let snapshot = fixture
+            .manager
+            .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+        let button = snapshot
+            .iter()
+            .find(|node| node.id == fixture.button_id)
+            .unwrap();
+        let point = Vec2D::new(
+            (button.min_x + button.max_x) * 0.5,
+            (button.min_y + button.max_y) * 0.5,
+        );
+        let node = fixture
+            .manager
+            .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id))
+            .unwrap();
+        let data = node.borrow().semantic_data.clone().unwrap();
+        let outer = fixture
+            ._file
+            .with_file(|file| file.artboard_default())
+            .unwrap();
+        struct HostContext {
+            arena: nuxie_runtime::source::core::CoreArena,
+            root: nuxie_runtime::CoreHandle,
+        }
+        impl nuxie_runtime::source::core_context::CoreContext for HostContext {
+            fn core_arena(&self) -> &nuxie_runtime::source::core::CoreArena {
+                &self.arena
+            }
+            fn resolve_handle(&self, id: u32) -> Option<nuxie_runtime::CoreHandle> {
+                (id == 0).then(|| self.root.clone())
+            }
+        }
+        let state_owner = if on_host {
+            // Attach the imported occurrence to an actual nested-artboard host.
+            // Host semantics deliberately have no manager: touch admission must
+            // use authored state independently of accessibility registration.
+            let host = outer.with_artboard(|artboard| {
+                artboard
+                    .core_arena()
+                    .insert(nuxie_runtime::source::nested_artboard::NestedArtboard::new())
+            });
+            let host_data = fixture
+                ._file
+                .with_file(|file| file.core_arena().insert(SemanticData::default()));
+            host.with_mut(|host| {
+                host.as_container_component_mut()
+                    .unwrap()
+                    .add_child(host_data.clone())
+            });
+            let mut context = HostContext {
+                arena: outer.with_artboard(|artboard| artboard.core_arena().clone()),
+                root: outer.core_handle(),
+            };
+            host.with_mut(|host| {
+                assert_eq!(
+                    host.as_container_component_mut()
+                        .unwrap()
+                        .base
+                        .base
+                        .on_added_dirty(&mut context),
+                    nuxie_runtime::source::status_code::StatusCode::Ok
+                );
+            });
+            fixture
+                ._artboard
+                .with_artboard_mut(|artboard| artboard.set_host_handle(Some(host)));
+            host_data
+        } else {
+            data.clone()
+        };
+        let touch = || {
+            fixture.machine.with_instance_mut(|machine| {
+                machine.pointer_down(point, 51);
+                machine.pointer_up(point, 51);
+            });
+            for _ in 0..10 {
+                fixture.machine.advance_and_apply(0.1);
+            }
+        };
+        state_owner
+            .with_downcast_mut::<SemanticData, _>(|data| {
+                if hidden {
+                    data.set_is_hidden(true);
+                } else {
+                    data.set_is_disabled(true);
+                }
+            })
+            .unwrap();
+        touch();
+        assert!(
+            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            "ineligible touch must not close the dropdown"
+        );
+        state_owner
+            .with_downcast_mut::<SemanticData, _>(|data| {
+                if hidden {
+                    data.set_is_hidden(false);
+                } else {
+                    data.set_is_disabled(false);
+                }
+            })
+            .unwrap();
+        touch();
+        assert!(
+            !data
+                .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            "reenabled touch must close the dropdown (hidden={hidden}, on_host={on_host})"
+        );
+    }
+}

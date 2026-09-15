@@ -1381,3 +1381,108 @@ fn malformed_embedded_fonts_fail_closed_without_panicking() {
             .is_ok()
     );
 }
+
+fn semantic_event_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9658, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Node", "parentId", 0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Node", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 100.0);
+        push_f32(bytes, "ParametricPath", "height", 100.0);
+    });
+    push_object(&mut bytes, "SemanticData", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "SemanticData", "role", 5);
+        push_string(bytes, "SemanticData", "label", "Seats");
+    });
+    push_object(&mut bytes, "Event", |bytes| {
+        push_string(bytes, "Component", "name", "seat_increased");
+    });
+    push_object(&mut bytes, "StateMachine", |_| {});
+    push_object(&mut bytes, "StateMachineBool", |bytes| {
+        push_string(bytes, "StateMachineInput", "name", "handled");
+    });
+    push_object(&mut bytes, "StateMachineListenerSingle", |bytes| {
+        push_uint(bytes, "StateMachineListener", "targetId", 1);
+        push_uint(bytes, "StateMachineListenerSingle", "listenerTypeValue", 16);
+    });
+    push_object(&mut bytes, "ListenerInputTypeSemantic", |_| {});
+    push_object(&mut bytes, "SemanticInput", |bytes| {
+        push_uint(bytes, "SemanticInput", "actionType", 1);
+    });
+    push_object(&mut bytes, "ListenerFireEvent", |bytes| {
+        push_uint(bytes, "ListenerFireEvent", "eventId", 4);
+    });
+    push_object(&mut bytes, "StateMachineListener", |bytes| {
+        push_uint(bytes, "StateMachineListener", "targetId", 0);
+    });
+    push_object(&mut bytes, "ListenerInputTypeEvent", |bytes| {
+        push_uint(bytes, "ListenerInputType", "listenerTypeValue", 5);
+        push_uint(bytes, "ListenerInputTypeEvent", "eventId", 4);
+    });
+    push_object(&mut bytes, "ListenerBoolChange", |bytes| {
+        push_uint(bytes, "ListenerInputChange", "inputId", 0);
+        push_uint(bytes, "ListenerBoolChange", "value", 2);
+    });
+    push_object(&mut bytes, "StateMachineLayer", |_| {});
+    for kind in ["EntryState", "AnyState", "ExitState"] {
+        push_object(&mut bytes, kind, |_| {});
+    }
+    bytes
+}
+
+#[test]
+fn queued_semantic_events_reach_the_host_once_in_the_execution_frame() {
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&semantic_event_fixture(), retained, None, None, None).unwrap();
+    let mut artboard = ArtboardInstance::from_native(file, 0).unwrap();
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    let native = machine.native_handle();
+    native.with_instance_mut(|machine| machine.enable_semantics());
+    machine.advance_and_apply(0.0);
+    let manager = native
+        .with_instance(|machine| machine.semantic_manager())
+        .unwrap();
+    let id = manager.with_semantic_manager_mut(|manager| {
+        manager
+            .snapshot()
+            .iter()
+            .find(|node| node.label == "Seats")
+            .unwrap()
+            .id
+    });
+    let mut handled = false;
+    for count in [1, 0, 2, 0, 1] {
+        for _ in 0..count {
+            native.fire_semantic_action(id, 1);
+        }
+        machine.advance_and_apply(0.0);
+        if count % 2 != 0 {
+            handled = !handled;
+        }
+        assert_eq!(
+            machine.get_bool("handled").unwrap().bool_value(),
+            Some(handled),
+            "native event listeners must run once during the same frame"
+        );
+        let events = machine.take_reported_events();
+        assert_eq!(events.len(), count);
+        assert!(
+            events
+                .iter()
+                .all(|event| event.name() == Some("seat_increased"))
+        );
+        assert!(machine.take_reported_events().is_empty());
+    }
+}

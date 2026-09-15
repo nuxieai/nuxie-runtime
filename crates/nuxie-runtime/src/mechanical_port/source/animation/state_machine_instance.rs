@@ -3518,8 +3518,14 @@ impl StateMachineInstance {
         }
         if new_frame {
             self.process_focus_events();
+            let semantic_report_start = self.reported_events.len();
             self.process_semantic_events();
+            let semantic_reports = self.reported_events[semantic_report_start..].to_vec();
             self.apply_events();
+            // Queued semantic input executes inside this frame, unlike pointer
+            // input reported between frames. Preserve its initial reports for
+            // the host after native event delivery has consumed the queue.
+            self.events_applied_during_loop.splice(0..0, semantic_reports);
             self.needs_advance.set(false);
         }
         self.data_bind_container.update_data_binds(false);

@@ -268,6 +268,104 @@ pub unsafe extern "C" fn nux_player_validate_semantic_snapshot(
     })
 }
 
+/// Associate an exact-name root text run with its presented semantic text-field node.
+/// The lookup uses the same root scope as text mutation, never labels or geometry.
+/// Missing/non-field/hidden nodes return NOT_FOUND; ambiguous names or owners return
+/// INVALID_ARGUMENT. Stale captures return HANDLE_MISMATCH. No text value is read.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_semantic_node_for_text_run(
+    player: *const NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    name: NuxStringView,
+    out_node_id: *mut u32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_node_id.is_null() {
+            return NuxStatus::NullArgument;
+        }
+        unsafe { *out_node_id = 0 };
+        if name.len > 4096 {
+            return NuxStatus::LimitExceeded;
+        }
+        let name = match with_utf8_view(name, str::to_owned) {
+            Ok(name) if !name.is_empty() => name,
+            Ok(_) => return NuxStatus::InvalidArgument,
+            Err(status) => return status,
+        };
+        let validity = unsafe { nux_player_validate_semantic_snapshot(player, snapshot) };
+        if validity != NuxStatus::Ok {
+            return validity;
+        }
+        let _player = enter_status_handle!(player, HandleKind::Player);
+        let _snapshot = enter_status_handle!(snapshot, HandleKind::SemanticSnapshot);
+        let player = unsafe { &*player };
+        let snapshot = unsafe { &*snapshot };
+        let _occurrence = match enter_occurrence(&player.artboard) {
+            Ok(guard) => guard,
+            Err(status) => return status,
+        };
+        use nuxie::runtime::text::text_value_run::TextValueRun;
+        let artboard = player.artboard.instance.borrow().native_handle();
+        let runs = artboard.with_artboard(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .filter(|object| {
+                    object.is_type_of(TextValueRun::TYPE_KEY)
+                        && object
+                            .with(|candidate| {
+                                candidate
+                                    .as_component()
+                                    .is_some_and(|component| component.name() == name)
+                            })
+                            .unwrap_or(false)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        });
+        if runs.len() > 1 {
+            return NuxStatus::InvalidArgument;
+        }
+        let Some(owner) = runs.first().and_then(|run| {
+            run.with_downcast::<TextValueRun, _>(TextValueRun::text_component)
+                .flatten()
+        }) else {
+            return NuxStatus::NotFound;
+        };
+        let Some(manager) = artboard.with_artboard(|artboard| artboard.semantic_manager()) else {
+            return NuxStatus::NotFound;
+        };
+        let matches = manager.with_semantic_manager(|manager| {
+            if manager.version() != snapshot.tree_version {
+                return Err(NuxStatus::HandleMismatch);
+            }
+            Ok(snapshot
+                .nodes
+                .iter()
+                .filter_map(|captured| {
+                    if captured.role != 6 {
+                        return None;
+                    }
+                    let node = manager.node_by_id(captured.id)?;
+                    (node.borrow().core_owner.as_ref() == Some(&owner)).then_some(captured.id)
+                })
+                .collect::<Vec<_>>())
+        });
+        match matches {
+            Err(status) => status,
+            Ok(ids) if ids.len() > 1 => NuxStatus::InvalidArgument,
+            Ok(ids) => match ids.first() {
+                Some(id) => {
+                    unsafe { *out_node_id = *id };
+                    NuxStatus::Ok
+                }
+                None => NuxStatus::NotFound,
+            },
+        }
+    })
+}
+
 /// Queue an authored semantic listener action: 0 tap, 1 increase, 2 decrease.
 /// The host must subsequently step its occurrence's players and handle their
 /// normal output journals. This does not execute a host command directly.
@@ -398,6 +496,185 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_run_association_uses_the_presented_owner_and_rejects_ambiguity() {
+        use nuxie::runtime::{core::CoreType, text::text_value_run::TextValueRun};
+        mod fixture {
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/tests/support/semantic_text.rs"
+            ));
+        }
+        let bytes = fixture::semantic_text_artboard();
+        unsafe {
+            let mut file = ptr::null_mut();
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            let mut instance = ptr::null_mut();
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            let mut player = ptr::null_mut();
+            assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+            let capture = || {
+                let step = NuxPlayerStep {
+                    struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                    ..Default::default()
+                };
+                let mut result = ptr::null_mut();
+                assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                let mut info = NuxPlayerSchedulingInfo {
+                    struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_step_result_scheduling(result, &mut info),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    nux_player_acknowledge_presented(player, info.render_revision),
+                    NuxStatus::Ok
+                );
+                assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                let mut snapshot = ptr::null_mut();
+                assert_eq!(
+                    nux_player_semantic_snapshot(player, &mut snapshot),
+                    NuxStatus::Ok
+                );
+                snapshot
+            };
+            let first = capture();
+            let artboard = (&(*player).artboard).instance.borrow().native_handle();
+            let runs = artboard.with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .filter(|object| object.is_type_of(TextValueRun::TYPE_KEY))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            });
+            assert_eq!(
+                (&(*first).nodes).len(),
+                1,
+                "fixture has one authored semantic owner"
+            );
+            let id = (&(*first).nodes)[0].id;
+            let data = artboard
+                .with_artboard(|a| {
+                    a.objects()
+                        .iter()
+                        .flatten()
+                        .find(|object| object.is_type_of(SemanticData::TYPE_KEY))
+                        .cloned()
+                })
+                .unwrap();
+            let run = runs.first().unwrap();
+            let name = "field/name".to_owned();
+            let view = NuxStringView {
+                data: name.as_ptr().cast(),
+                len: name.len(),
+            };
+            let mut found = u32::MAX;
+            assert_eq!(
+                nux_player_semantic_node_for_text_run(player, first, view, &mut found),
+                NuxStatus::NotFound
+            );
+            assert_eq!(found, 0);
+            assert_eq!(nux_semantic_snapshot_free(first), NuxStatus::Ok);
+            data.with_downcast_mut::<SemanticData, _>(|data| data.set_role(6));
+            let snapshot = capture();
+            assert_eq!(
+                nux_player_semantic_node_for_text_run(player, snapshot, view, &mut found),
+                NuxStatus::Ok
+            );
+            assert_eq!(found, id);
+            let missing = "not an authored run";
+            assert_eq!(
+                nux_player_semantic_node_for_text_run(
+                    player,
+                    snapshot,
+                    NuxStringView {
+                        data: missing.as_ptr().cast(),
+                        len: missing.len()
+                    },
+                    &mut found
+                ),
+                NuxStatus::NotFound
+            );
+            assert_eq!(found, 0);
+            // A second occurrence cannot use this capture even when its file and names match.
+            let mut other_instance = ptr::null_mut();
+            let mut other = ptr::null_mut();
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut other_instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_new_static(other_instance, &mut other),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_semantic_node_for_text_run(other, snapshot, view, &mut found),
+                NuxStatus::HandleMismatch
+            );
+            nux_player_free(other);
+            nux_artboard_instance_free(other_instance);
+            // Ambiguous authored names fail instead of silently associating the first field.
+            let duplicate = runs
+                .iter()
+                .find(|candidate| *candidate != run)
+                .expect("fixture has multiple text runs");
+            assert!(
+                nuxie::runtime::generated::core_registry::CoreRegistry::set_string_handle(
+                    duplicate,
+                    nuxie::runtime::generated::component_base::ComponentBase::NAME_PROPERTY_KEY
+                        .into(),
+                    name.clone()
+                )
+            );
+            assert_eq!(
+                nux_player_semantic_node_for_text_run(player, snapshot, view, &mut found),
+                NuxStatus::InvalidArgument
+            );
+            assert_eq!(found, 0);
+            let changed_text = b"new private field value";
+            let mutation = NuxTextRunMutation {
+                name: view,
+                text: NuxByteView {
+                    data: changed_text.as_ptr(),
+                    len: changed_text.len(),
+                },
+            };
+            let batch = NuxTextRunMutationBatch {
+                mutations: &mutation,
+                mutation_count: 1,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_artboard_instance_set_text_runs(instance, &batch, ptr::null_mut()),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_semantic_node_for_text_run(player, snapshot, view, &mut found),
+                NuxStatus::HandleMismatch
+            );
+            assert_eq!(found, 0);
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            nux_player_free(player);
+            nux_artboard_instance_free(instance);
+            nux_file_free(file);
+        }
+    }
 
     #[test]
     fn capture_rejects_over_budget_clip_and_recovers_without_partial_handle() {

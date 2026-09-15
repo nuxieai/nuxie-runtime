@@ -1826,6 +1826,17 @@ NuxStatus nux_player_queue_semantic_action(struct NuxPlayer *player,
                                            uint32_t action);
 
 /**
+ * Associate an exact-name root text run with its presented semantic text-field node.
+ * The lookup uses the same root scope as text mutation, never labels or geometry.
+ * Missing/non-field/hidden nodes return NOT_FOUND; ambiguous names or owners return
+ * INVALID_ARGUMENT. Stale captures return HANDLE_MISMATCH. No text value is read.
+ */
+NuxStatus nux_player_semantic_node_for_text_run(const struct NuxPlayer *player,
+                                                const struct NuxSemanticSnapshot *snapshot,
+                                                struct NuxStringView name,
+                                                uint32_t *out_node_id);
+
+/**
  * Capture only the current acknowledged presentation. Returns HANDLE_MISMATCH
  * for an unpresented revision and NOT_FOUND until semantics are enabled.
  * At most 16,384 nodes and 4 MiB of source UTF-8 text are accepted; larger

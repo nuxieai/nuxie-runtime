@@ -786,6 +786,15 @@ impl SemanticData {
         }
     }
 
+    pub fn supports_semantic_action(&self, action: u8) -> bool {
+        !self.is_disabled()
+            && !self.is_hidden()
+            && self
+                .semantic_listeners
+                .iter()
+                .any(|listener| listener.supports_semantic_action(action))
+    }
+
     pub fn fire_semantic_increase(&self) {
         for listener in &self.semantic_listeners {
             listener.on_semantic_increase();

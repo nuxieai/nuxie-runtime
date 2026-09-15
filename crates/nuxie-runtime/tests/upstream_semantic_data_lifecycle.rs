@@ -155,3 +155,51 @@ fn disabled_and_hidden_semantic_nodes_do_not_execute_taps() {
         );
     }
 }
+
+#[test]
+fn full_snapshot_survives_diff_drain_and_tracks_authored_actions() {
+    let fixture = dropdown();
+    let snapshot = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let button = snapshot
+        .iter()
+        .find(|node| node.id == fixture.button_id)
+        .expect("dropdown in full tree after initial diff drain");
+    assert_eq!(button.label, DROPDOWN_LABEL);
+    assert!(has_semantic_state(
+        button.state_flags,
+        SemanticState::EXPANDED
+    ));
+    fixture
+        .machine
+        .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+    for _ in 0..10 {
+        fixture.machine.advance_and_apply(0.1);
+    }
+    let updated = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let button = updated
+        .iter()
+        .find(|node| node.id == fixture.button_id)
+        .expect("same dropdown occurrence");
+    assert!(!has_semantic_state(
+        button.state_flags,
+        SemanticState::EXPANDED
+    ));
+    let diff = fixture
+        .manager
+        .with_semantic_manager_mut(|manager| manager.drain_diff());
+    assert!(
+        diff.updated_semantic
+            .iter()
+            .any(|node| node.id == fixture.button_id)
+    );
+    assert_eq!(
+        fixture
+            .manager
+            .with_semantic_manager_mut(|manager| manager.snapshot().to_vec()),
+        updated
+    );
+}

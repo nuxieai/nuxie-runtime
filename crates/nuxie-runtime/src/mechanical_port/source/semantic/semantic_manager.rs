@@ -659,6 +659,14 @@ impl SemanticManager {
         request_data_focus(self.focus_data_for_node(node_id))
     }
 
+    /// Refresh and borrow the complete current tree without consuming the latest diff.
+    /// Hosts capture this after advancing their owned runtime occurrence; presentation
+    /// ownership and publication of that capture remain the host's responsibility.
+    pub fn snapshot(&mut self) -> &[SemanticsDiffNode] {
+        self.refresh();
+        &self.last_flat_snapshot
+    }
+
     pub fn drain_diff(&mut self) -> SemanticsDiff {
         self.refresh();
         std::mem::take(&mut self.last_diff)

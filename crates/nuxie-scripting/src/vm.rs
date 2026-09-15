@@ -779,7 +779,9 @@ mod lifecycle_tests {
     fn exercised_globals_release_their_lua_state() -> Result<()> {
         let vm = ScriptVm::new();
         vm.install_rive_globals()?;
-        vm.lua.load(r#"
+        vm.lua
+            .load(
+                r#"
             local ok, length = pcall(function() return Vector.xy(3, 4):length() end)
             assert(ok and length == 5)
             local ok, message = xpcall(function() error("expected") end,
@@ -788,30 +790,58 @@ mod lifecycle_tests {
             local thread = coroutine.create(function() return 7 end)
             local ok, value = coroutine.resume(thread)
             assert(ok and value == 7)
-        "#).exec()?;
+        "#,
+            )
+            .exec()?;
         let weak = vm.lua.weak();
         drop(vm);
-        assert!(weak.try_upgrade().is_none(), "exercised globals retained Lua");
+        assert!(
+            weak.try_upgrade().is_none(),
+            "exercised globals retained Lua"
+        );
         Ok(())
     }
 
     #[test]
     fn global_installers_release_their_lua_state() -> Result<()> {
         let installers: &[(&str, fn(&ScriptVm) -> Result<()>)] = &[
-            ("print", |vm| install_host_print(&vm.lua, vm.logging.clone())),
+            ("print", |vm| {
+                install_host_print(&vm.lua, vm.logging.clone())
+            }),
             ("math", |vm| install_math_globals(&vm.lua)),
-            ("pointer", |vm| listener_invocation::install_pointer_event_global(&vm.lua)),
-            ("data value", |vm| lua_data_value::install_data_value_global(&vm.lua)),
-            ("buffer", |vm| buffer_ext::install_buffer_extensions(&vm.lua)),
-            ("promise", |vm| lua_promise::install_promise_globals(&vm.lua)),
-            ("image", |vm| { lua_image_decode::install(&vm.lua); Ok(()) }),
+            ("pointer", |vm| {
+                listener_invocation::install_pointer_event_global(&vm.lua)
+            }),
+            ("data value", |vm| {
+                lua_data_value::install_data_value_global(&vm.lua)
+            }),
+            ("buffer", |vm| {
+                buffer_ext::install_buffer_extensions(&vm.lua)
+            }),
+            ("promise", |vm| {
+                lua_promise::install_promise_globals(&vm.lua)
+            }),
+            ("image", |vm| {
+                lua_image_decode::install(&vm.lua);
+                Ok(())
+            }),
             ("audio", |vm| lua_audio::install_audio_global(&vm.lua)),
-            ("property", |vm| view_model::install_property_binding_support(&vm.lua)),
-            ("require", |vm| vm.install_require_global(vm.ensure_module_cache()?)),
+            ("property", |vm| {
+                view_model::install_property_binding_support(&vm.lua)
+            }),
+            ("require", |vm| {
+                vm.install_require_global(vm.ensure_module_cache()?)
+            }),
             ("renderer", |vm| vm.renderer_bindings.install(&vm.lua)),
-            ("gpu", |vm| crate::gpu_canvas::install_gpu_canvas_globals(vm)),
-            ("data", |vm| view_model::install_data_global(&vm.lua, &vm.view_models)),
-            ("guards", |vm| resource_limits::install_protected_call_guards(&vm.lua, vm.resource_limits.clone())),
+            ("gpu", |vm| {
+                crate::gpu_canvas::install_gpu_canvas_globals(vm)
+            }),
+            ("data", |vm| {
+                view_model::install_data_global(&vm.lua, &vm.view_models)
+            }),
+            ("guards", |vm| {
+                resource_limits::install_protected_call_guards(&vm.lua, vm.resource_limits.clone())
+            }),
         ];
         let mut retained = Vec::new();
         for (name, install) in installers {
@@ -819,9 +849,14 @@ mod lifecycle_tests {
             install(&vm)?;
             let weak = vm.lua.weak();
             drop(vm);
-            if weak.try_upgrade().is_some() { retained.push(*name); }
+            if weak.try_upgrade().is_some() {
+                retained.push(*name);
+            }
         }
-        assert!(retained.is_empty(), "installers retaining Lua: {retained:?}");
+        assert!(
+            retained.is_empty(),
+            "installers retaining Lua: {retained:?}"
+        );
         Ok(())
     }
 }

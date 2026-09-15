@@ -80,6 +80,11 @@ larger of the baseline/product representative C and Swift linked binaries.
 
 ## Immutable release
 
+The v0.9.9 release prepares the presented semantic snapshot/action APIs and exact
+native text-run ownership lookup for UIKit consumers. Runtime publication does
+not enable the SDK scene-semantics capability or qualify VoiceOver behavior;
+the native adapter and cross-platform acceptance remain separate delivery gates.
+
 Tag the landed commit as `apple-runtime-v<crate-version>`, then run:
 
 ```sh

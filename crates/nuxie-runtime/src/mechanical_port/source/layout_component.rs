@@ -545,7 +545,7 @@ impl LayoutComponent {
         crate::mechanical_port::source::component::ComponentOccurrenceHandle::Authored(
             owner.clone(),
         )
-        .add_dirt(ComponentDirt::PATH, false);
+        .add_dirt(ComponentDirt::PATH, true);
         owner.with_mut(|object| {
             object
                 .core_mut()
@@ -3141,7 +3141,7 @@ impl LayoutComponent {
     }
     pub fn clip_changed(&mut self) {
         self.mark_layout_node_dirty(false);
-        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, false);
+        CoreCapabilities::component_add_dirt(self, ComponentDirt::PATH, true);
     }
     pub fn set_clip(&mut self, value: bool) {
         if self.base.set_clip_value(value) {

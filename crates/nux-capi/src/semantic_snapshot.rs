@@ -4,7 +4,7 @@ use super::*;
 use nuxie::runtime::semantic::{
     semantic_data::SemanticData,
     semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
-    semantic_node::SemanticNodeRef,
+    semantic_node::{SemanticNode, SemanticNodeRef},
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
 };
@@ -13,18 +13,8 @@ const MAX_NODES: usize = 16_384;
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
 
 fn eligible_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
-    let mut ancestor = Some(node.clone());
-    let mut remaining = MAX_NODES;
-    while let Some(current) = ancestor {
-        if remaining == 0 {
-            return Err(NuxStatus::LimitExceeded);
-        }
-        remaining -= 1;
-        let current = current.borrow();
-        if current.state_flags & (SemanticState::DISABLED.0 | SemanticState::HIDDEN.0) != 0 {
-            return Err(NuxStatus::NotFound);
-        }
-        ancestor = current.parent();
+    if !SemanticNode::is_action_eligible(node) {
+        return Err(NuxStatus::NotFound);
     }
     node.borrow()
         .semantic_data
@@ -177,31 +167,31 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
         };
         let captured = manager.with_semantic_manager_mut(|manager| {
             let nodes = copy_nodes(manager.snapshot())?;
-            let actions = nodes
-                .iter()
-                .map(|node| {
-                    let Some(node) = manager.node_by_id(node.id) else {
-                        return Ok(0);
-                    };
-                    match eligible_data(&node) {
-                        Ok(data) => Ok(data
-                            .with_downcast::<SemanticData, _>(|data| {
-                                (0..3)
-                                    .filter(|action| data.supports_semantic_action(*action))
-                                    .fold(0u32, |mask, action| mask | (1 << action))
-                            })
-                            .unwrap_or(0)),
-                        Err(NuxStatus::NotFound) => Ok(0),
-                        Err(status) => Err(status),
-                    }
-                })
-                .collect::<Result<Vec<_>, NuxStatus>>()?;
-            Ok::<_, NuxStatus>((nodes, actions, manager.version()))
+            Ok::<_, NuxStatus>((nodes, manager.version()))
         });
-        let (nodes, actions, tree_version) = match captured {
+        let (nodes, tree_version) = match captured {
             Ok(captured) => captured,
             Err(status) => return status,
         };
+        let actions = nodes
+            .iter()
+            .map(|node| {
+                let Some(node) =
+                    manager.with_semantic_manager(|manager| manager.node_by_id(node.id))
+                else {
+                    return 0;
+                };
+                let Ok(data) = eligible_data(&node) else {
+                    return 0;
+                };
+                data.with_downcast::<SemanticData, _>(|data| {
+                    (0..3)
+                        .filter(|action| data.supports_semantic_action(*action))
+                        .fold(0u32, |mask, action| mask | (1 << action))
+                })
+                .unwrap_or(0)
+            })
+            .collect();
         let snapshot = Box::into_raw(Box::new(NuxSemanticSnapshot {
             occurrence: Rc::downgrade(&player.artboard),
             render_revision: revision,

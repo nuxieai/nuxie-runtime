@@ -203,3 +203,42 @@ fn full_snapshot_survives_diff_drain_and_tracks_authored_actions() {
         updated
     );
 }
+
+#[test]
+fn queued_semantic_action_rechecks_ancestor_eligibility() {
+    use nuxie_runtime::source::semantic::semantic_node::SemanticNode;
+    for state in [0, 1, 2, 3, 4] {
+        let fixture = dropdown();
+        let node = fixture
+            .manager
+            .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id).unwrap());
+        let data = node.borrow().semantic_data.clone().unwrap();
+        let parent = SemanticNode::new(0);
+        fixture.manager.remove_child(&node);
+        fixture.manager.add_child(None, parent.clone());
+        fixture
+            .manager
+            .add_child(Some(parent.clone()), node.clone());
+        fixture
+            .machine
+            .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+        match state {
+            1 => parent.borrow_mut().state_flags |= SemanticState::DISABLED.0,
+            2 => parent.borrow_mut().state_flags |= SemanticState::HIDDEN.0,
+            3 | 4 => fixture.manager.remove_child(&parent),
+            _ => {}
+        }
+        if state == 4 {
+            drop(parent);
+        }
+        for _ in 0..10 {
+            fixture.machine.advance_and_apply(0.1);
+        }
+        assert_eq!(
+            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            state != 0,
+            "only an attached eligible ancestor permits queued activation (state={state})"
+        );
+    }
+}

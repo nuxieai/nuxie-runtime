@@ -3,6 +3,7 @@ use crate::mechanical_port::source::{
     semantic::{
         semantic_manager::{RuntimeSemanticManagerHandle, RuntimeSemanticManagerWeakHandle},
         semantic_snapshot::Bounds,
+        semantic_state::SemanticState,
     },
 };
 use std::{
@@ -31,6 +32,33 @@ pub struct SemanticNode {
     pub boundary_artboard: Option<CoreHandle>,
 }
 impl SemanticNode {
+    /// Actions require a live, attached path through one semantic occurrence.
+    /// Recheck this at dispatch: visibility or membership can change after
+    /// a listener has been queued without changing the target's own flags.
+    pub fn is_action_eligible(node: &SemanticNodeRef) -> bool {
+        let Some(manager) = node.borrow().manager() else {
+            return false;
+        };
+        let mut seen = std::collections::HashSet::new();
+        let mut ancestor = Some(node.clone());
+        while let Some(current) = ancestor {
+            if !seen.insert(Rc::as_ptr(&current)) {
+                return false;
+            }
+            let entry = current.borrow();
+            if !entry.manager().is_some_and(|owner| owner.ptr_eq(&manager))
+                || entry.state_flags & (SemanticState::DISABLED.0 | SemanticState::HIDDEN.0) != 0
+            {
+                return false;
+            }
+            ancestor = entry.parent();
+            if ancestor.is_none() {
+                return manager.with_semantic_manager(|manager| manager.contains_root(&current));
+            }
+        }
+        true
+    }
+
     pub fn new(id: u32) -> SemanticNodeRef {
         Rc::new(RefCell::new(Self {
             id,

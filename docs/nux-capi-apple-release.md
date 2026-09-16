@@ -81,8 +81,14 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.12 candidate adds optional capture of the submitted Apple frame into
-caller-owned shared Metal storage before drawable presentation. Capture uses
+The v0.9.13 candidate keeps unchanged Metal frames stable when asynchronous
+shader specialization replaces a precompiled shader. Both variants enable the
+same dither helpers and use explicit fused multiply-add for raster-order color
+blending. Native pixel tests cover opaque and translucent fills, fractional
+edges, forced shader variants and repeated frames without relaxing equality.
+
+Optional frame capture copies into caller-owned shared Metal storage before
+drawable presentation. Capture uses
 the renderer's presentation queue and waits for GPU completion. It requires a
 readable BGRA8Unorm drawable, a shared buffer on the same device, and a row
 stride covering the pixels and aligned to 256 bytes. Rejected and skipped

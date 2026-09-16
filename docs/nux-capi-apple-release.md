@@ -81,11 +81,13 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.10 candidate preserves host reports from semantic actions and resolves
-native editable fields through exact component ancestry, including metadata on
-the field's enclosing layout. Ambiguous field owners, stale captures and duplicate
-text-run names remain rejected. The ABI and existing release size ceilings are
-unchanged; candidate artifact qualification must pass before publication.
+The v0.9.11 candidate adds frame-qualified geometry reads for exact-name root
+text runs. It returns full text/content transforms, the nearest structural
+layout ancestor's box, and the first logical baseline. A live successful step
+result must match the current occurrence and render revision; stale mutations,
+foreign occurrences and ambiguous names fail closed. The additive API keeps
+ABI v4 and the existing release size ceilings. Candidate artifact qualification
+must pass before publication. See [the geometry contract](text-run-geometry.md).
 
 Runtime publication does not enable the SDK scene-semantics capability or qualify
 VoiceOver behavior. SDK adoption, publisher-generated signed fixtures and device

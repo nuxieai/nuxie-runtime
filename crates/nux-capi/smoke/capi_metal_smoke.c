@@ -194,10 +194,11 @@ static void send_void(ObjcObject receiver, const char* selector)
         receiver, sel_registerName(selector));
 }
 
+static _Thread_local bool call_is_active;
+
 typedef struct CompletionProbe
 {
     dispatch_semaphore_t semaphore;
-    atomic_bool call_is_active;
     atomic_bool called_inline;
     atomic_uint calls;
 } CompletionProbe;
@@ -205,7 +206,7 @@ typedef struct CompletionProbe
 static void render_completed(void* context)
 {
     CompletionProbe* probe = context;
-    if (atomic_load_explicit(&probe->call_is_active, memory_order_acquire))
+    if (call_is_active)
     {
         atomic_store_explicit(&probe->called_inline, true, memory_order_release);
     }
@@ -213,9 +214,40 @@ static void render_completed(void* context)
     dispatch_semaphore_signal(probe->semaphore);
 }
 
+/* The contract forbids invoking completion on the calling stack. A worker
+ * may finish before the submitting thread returns; force that overlap here. */
+static void check_completion_probe(void)
+{
+    CompletionProbe probe = {
+        .semaphore = dispatch_semaphore_create(0),
+        .called_inline = ATOMIC_VAR_INIT(false),
+        .calls = ATOMIC_VAR_INIT(0),
+    };
+    CHECK(probe.semaphore != NULL);
+    call_is_active = true;
+    render_completed(&probe);
+    CHECK(dispatch_semaphore_wait(probe.semaphore, DISPATCH_TIME_NOW) == 0);
+    CHECK(atomic_load_explicit(&probe.called_inline, memory_order_acquire));
+    CHECK(atomic_load_explicit(&probe.calls, memory_order_acquire) == 1);
+
+    atomic_store_explicit(&probe.called_inline, false, memory_order_release);
+    atomic_store_explicit(&probe.calls, 0, memory_order_release);
+    dispatch_async_f(
+        dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
+        &probe, render_completed);
+    CHECK(dispatch_semaphore_wait(
+              probe.semaphore,
+              dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC)) == 0);
+    CHECK(!atomic_load_explicit(&probe.called_inline, memory_order_acquire));
+    CHECK(atomic_load_explicit(&probe.calls, memory_order_acquire) == 1);
+    call_is_active = false;
+    dispatch_release(probe.semaphore);
+}
+
 int main(int argc, char** argv)
 {
     CHECK(argc == 2 || (argc == 3 && strcmp(argv[2], "--composed") == 0));
+    check_completion_probe();
     const bool composed = argc == 3;
     size_t len = 0;
     uint8_t* bytes = read_file(argv[1], &len);
@@ -361,7 +393,6 @@ int main(int argc, char** argv)
     CHECK(drawable != NULL);
     CompletionProbe completion = {
         .semaphore = dispatch_semaphore_create(0),
-        .call_is_active = ATOMIC_VAR_INIT(false),
         .called_inline = ATOMIC_VAR_INIT(false),
         .calls = ATOMIC_VAR_INIT(0),
     };
@@ -376,12 +407,10 @@ int main(int argc, char** argv)
     };
     NuxRendererOutcome outcome = {.struct_size = sizeof(NuxRendererOutcome)};
     result = (NuxCapiResult*)1;
-    atomic_store_explicit(
-        &completion.call_is_active, true, memory_order_release);
+    call_is_active = true;
     CHECK(nux_renderer_render_player(
               renderer, player, &operation, &outcome, &result) == NUX_STATUS_OK);
-    atomic_store_explicit(
-        &completion.call_is_active, false, memory_order_release);
+    call_is_active = false;
     send_void(drawable, "release");
     CHECK(result == NULL);
     CHECK(outcome.disposition == NUX_RENDERER_DISPOSITION_PRESENTED);

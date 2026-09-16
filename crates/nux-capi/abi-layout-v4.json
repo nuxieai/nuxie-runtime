@@ -1174,6 +1174,45 @@
       ]
     },
     {
+      "name": "NuxTextRunGeometry",
+      "size": 80,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "render_revision",
+          "offset": 8
+        },
+        {
+          "name": "world_transform",
+          "offset": 16
+        },
+        {
+          "name": "content_transform",
+          "offset": 40
+        },
+        {
+          "name": "min_x",
+          "offset": 64
+        },
+        {
+          "name": "min_y",
+          "offset": 68
+        },
+        {
+          "name": "max_x",
+          "offset": 72
+        },
+        {
+          "name": "max_y",
+          "offset": 76
+        }
+      ]
+    },
+    {
       "name": "NuxTextRunMutation",
       "size": 32,
       "alignment": 8,

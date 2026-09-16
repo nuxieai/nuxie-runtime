@@ -114,6 +114,7 @@ fn published_text_input_geometry_matches_authored_boxes_after_metric_changes() {
         NuxStatus::Ok
     );
     let mut mismatches = Vec::new();
+    let mut previous_result: *mut NuxPlayerStepResult = ptr::null_mut();
     for (font_size, line_height) in [(18.0, 24.0), (36.0, 48.0), (24.0, -1.0), (18.0, 24.0)] {
         for (path, value) in [
             ("requestedFontSize", font_size),
@@ -122,6 +123,34 @@ fn published_text_input_geometry_matches_authored_boxes_after_metric_changes() {
             let path = CString::new(path).unwrap();
             assert_eq!(
                 unsafe { nux_view_model_instance_set_number(view_model, path.as_ptr(), value) },
+                NuxStatus::Ok
+            );
+        }
+        if !previous_result.is_null() {
+            let mut stale = NuxTextRunGeometry {
+                struct_size: std::mem::size_of::<NuxTextRunGeometry>() as u32,
+                render_revision: u64::MAX,
+                ..Default::default()
+            };
+            assert_eq!(
+                unsafe {
+                    nux_player_text_run_geometry(
+                        player,
+                        previous_result,
+                        string_view("bound Run"),
+                        &mut stale,
+                    )
+                },
+                NuxStatus::HandleMismatch,
+                "shared ViewModel mutation must invalidate geometry before another step"
+            );
+            assert_eq!(
+                stale.render_revision,
+                u64::MAX,
+                "failed reads must preserve output"
+            );
+            assert_eq!(
+                unsafe { nux_player_step_result_free(previous_result) },
                 NuxStatus::Ok
             );
         }
@@ -176,11 +205,12 @@ fn published_text_input_geometry_matches_authored_boxes_after_metric_changes() {
                 }
             }
         }
-        assert_eq!(
-            unsafe { nux_player_step_result_free(result) },
-            NuxStatus::Ok
-        );
+        previous_result = result;
     }
+    assert_eq!(
+        unsafe { nux_player_step_result_free(previous_result) },
+        NuxStatus::Ok
+    );
     unsafe {
         nux_player_free(player);
         nux_view_model_instance_free(view_model);

@@ -12,6 +12,44 @@ use nuxie::{
 };
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Resolve an exact-name root run without reading its text. The caller must
+/// hold the occurrence guard; nested artboard instances are outside this scope.
+pub(super) fn root_text_owner(
+    occurrence: &ArtboardOccurrence,
+    name: &str,
+) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
+    use nuxie::runtime::text::text_value_run::TextValueRun;
+    let artboard = occurrence.instance.borrow().native_handle();
+    let runs = artboard.with_artboard(|artboard| {
+        artboard
+            .objects()
+            .iter()
+            .flatten()
+            .filter(|object| {
+                object.is_type_of(TextValueRun::TYPE_KEY)
+                    && object
+                        .with(|candidate| {
+                            candidate
+                                .as_component()
+                                .is_some_and(|component| component.name() == name)
+                        })
+                        .unwrap_or(false)
+            })
+            .take(2)
+            .cloned()
+            .collect::<Vec<_>>()
+    });
+    if runs.len() > 1 {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    runs.first()
+        .and_then(|run| {
+            run.with_downcast::<TextValueRun, _>(TextValueRun::text_component)
+                .flatten()
+        })
+        .ok_or(NuxStatus::NotFound)
+}
+
 const MAX_CATALOG_ITEMS: usize = 4_096;
 const MAX_SNAPSHOT_INSTANCES: usize = 1_024;
 const MAX_SNAPSHOT_VALUES: usize = 16_384;

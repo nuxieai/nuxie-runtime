@@ -305,35 +305,11 @@ pub unsafe extern "C" fn nux_player_semantic_node_for_text_run(
             Ok(guard) => guard,
             Err(status) => return status,
         };
-        use nuxie::runtime::text::text_value_run::TextValueRun;
-        let artboard = player.artboard.instance.borrow().native_handle();
-        let runs = artboard.with_artboard(|artboard| {
-            artboard
-                .objects()
-                .iter()
-                .flatten()
-                .filter(|object| {
-                    object.is_type_of(TextValueRun::TYPE_KEY)
-                        && object
-                            .with(|candidate| {
-                                candidate
-                                    .as_component()
-                                    .is_some_and(|component| component.name() == name)
-                            })
-                            .unwrap_or(false)
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-        });
-        if runs.len() > 1 {
-            return NuxStatus::InvalidArgument;
-        }
-        let Some(owner) = runs.first().and_then(|run| {
-            run.with_downcast::<TextValueRun, _>(TextValueRun::text_component)
-                .flatten()
-        }) else {
-            return NuxStatus::NotFound;
+        let owner = match data_binding::root_text_owner(&player.artboard, &name) {
+            Ok(owner) => owner,
+            Err(status) => return status,
         };
+        let artboard = player.artboard.instance.borrow().native_handle();
         let mut owners = std::collections::HashSet::new();
         let mut ancestor = Some(owner);
         while let Some(owner) = ancestor {

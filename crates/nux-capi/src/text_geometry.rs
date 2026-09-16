@@ -1,9 +1,7 @@
 //! Frame-qualified geometry for native editors over exact-name root text runs.
 
 use super::*;
-use nuxie::runtime::{
-    layout_component::LayoutComponent, text::text::Text, text::text_value_run::TextValueRun,
-};
+use nuxie::runtime::{layout_component::LayoutComponent, text::text::Text};
 
 /// Copied geometry; never contains text, glyphs, or pointers into the scene.
 /// Matrices use [a, b, c, d, tx, ty]: x' = a*x + c*y + tx.
@@ -92,34 +90,9 @@ pub unsafe extern "C" fn nux_player_text_run_geometry(
             Ok(_) => return NuxStatus::InvalidArgument,
             Err(status) => return status,
         };
-        let artboard = player.artboard.instance.borrow().native_handle();
-        let runs = artboard.with_artboard(|artboard| {
-            artboard
-                .objects()
-                .iter()
-                .flatten()
-                .filter(|object| {
-                    object.is_type_of(TextValueRun::TYPE_KEY)
-                        && object
-                            .with(|candidate| {
-                                candidate
-                                    .as_component()
-                                    .is_some_and(|component| component.name() == name)
-                            })
-                            .unwrap_or(false)
-                })
-                .take(2)
-                .cloned()
-                .collect::<Vec<_>>()
-        });
-        if runs.len() > 1 {
-            return NuxStatus::InvalidArgument;
-        }
-        let Some(owner) = runs.first().and_then(|run| {
-            run.with_downcast::<TextValueRun, _>(TextValueRun::text_component)
-                .flatten()
-        }) else {
-            return NuxStatus::NotFound;
+        let owner = match data_binding::root_text_owner(&player.artboard, &name) {
+            Ok(owner) => owner,
+            Err(status) => return status,
         };
         let Some(mut value) = owner.with_downcast::<Text, _>(|text| {
             let world = *text.base.world_transform();
@@ -160,7 +133,7 @@ pub unsafe extern "C" fn nux_player_text_run_geometry(
             if let Some((transform, bounds)) =
                 current.with_downcast::<LayoutComponent, _>(|layout| {
                     (
-                        *layout.base.base.base.base.world_transform().values(),
+                        *layout.shape_world_transform().values(),
                         layout.local_bounds(),
                     )
                 })
@@ -209,6 +182,7 @@ pub unsafe extern "C" fn nux_player_text_run_geometry(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nuxie::runtime::text::text_value_run::TextValueRun;
     #[allow(dead_code)]
     mod fixture {
         include!(concat!(

@@ -1650,6 +1650,14 @@ impl Text {
             height,
         )
     }
+    /// First logical line's baseline in shaped-content coordinates, before
+    /// `internal_transform`. Unlike visible ordered lines this remains stable
+    /// when overflow clips the first line. Empty/unshaped text has no baseline.
+    pub fn first_baseline(&self) -> Option<f32> {
+        let line = self.lines.first()?.first()?;
+        let info = self.compute_bounds_info();
+        Some(info.min_y - info.top_trim + line.baseline)
+    }
     pub fn hit_test<'a>(&'a self, _info: &HitInfo, _transform: &Mat2D) -> Option<&'a Core> {
         if self.base.render_opacity() == 0.0 {
             return None;

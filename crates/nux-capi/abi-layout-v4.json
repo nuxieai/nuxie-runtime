@@ -1175,7 +1175,7 @@
     },
     {
       "name": "NuxTextRunGeometry",
-      "size": 80,
+      "size": 136,
       "alignment": 8,
       "fields": [
         {
@@ -1209,6 +1209,38 @@
         {
           "name": "max_y",
           "offset": 76
+        },
+        {
+          "name": "has_layout_ancestor",
+          "offset": 80
+        },
+        {
+          "name": "layout_ancestor_transform",
+          "offset": 84
+        },
+        {
+          "name": "layout_ancestor_min_x",
+          "offset": 108
+        },
+        {
+          "name": "layout_ancestor_min_y",
+          "offset": 112
+        },
+        {
+          "name": "layout_ancestor_max_x",
+          "offset": 116
+        },
+        {
+          "name": "layout_ancestor_max_y",
+          "offset": 120
+        },
+        {
+          "name": "has_first_baseline",
+          "offset": 124
+        },
+        {
+          "name": "first_baseline",
+          "offset": 128
         }
       ]
     },

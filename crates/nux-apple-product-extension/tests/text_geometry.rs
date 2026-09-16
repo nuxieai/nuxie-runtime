@@ -145,11 +145,26 @@ fn published_text_input_geometry_matches_authored_boxes_after_metric_changes() {
                 },
                 NuxStatus::Ok
             );
+            // The committed font selects OS/2 typo metrics (ascent 2728,
+            // units/em 2896). At the runtime's 2048-unit shaping scale this
+            // is an independently calculated 1929-unit ascent.
+            assert_eq!(geometry.has_first_baseline, 1);
+            let effective_font_size = if run == "bound Run" { font_size } else { 18.0 };
+            let expected_baseline = 1929.0 / 2048.0 * effective_font_size;
+            assert!(
+                (geometry.first_baseline - expected_baseline).abs() < 0.001,
+                "{run}: baseline {}, expected {expected_baseline}",
+                geometry.first_baseline
+            );
+            assert_eq!(
+                geometry.has_layout_ancestor, 1,
+                "published field must retain its layout owner"
+            );
             let actual = [
-                geometry.world_transform[4] + geometry.min_x,
-                geometry.world_transform[5] + geometry.min_y,
-                geometry.max_x - geometry.min_x,
-                geometry.max_y - geometry.min_y,
+                geometry.layout_ancestor_transform[4] + geometry.layout_ancestor_min_x,
+                geometry.layout_ancestor_transform[5] + geometry.layout_ancestor_min_y,
+                geometry.layout_ancestor_max_x - geometry.layout_ancestor_min_x,
+                geometry.layout_ancestor_max_y - geometry.layout_ancestor_min_y,
             ];
             eprintln!(
                 "{run} metrics={font_size}/{line_height} box={actual:?} world={:?} content={:?}",

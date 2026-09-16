@@ -70,6 +70,14 @@ pub fn compound_semantic_text_artboard() -> Vec<u8> {
 }
 
 fn text_artboard(compound: bool) -> Vec<u8> {
+    text_artboard_with_transform(compound, None)
+}
+
+pub fn transformed_compound_text_artboard(transform: [f32; 7]) -> Vec<u8> {
+    text_artboard_with_transform(true, Some(transform))
+}
+
+fn text_artboard_with_transform(compound: bool, transform: Option<[f32; 7]>) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_641, 0] {
         push_var_uint(&mut bytes, value);
@@ -82,6 +90,17 @@ fn text_artboard(compound: bool) -> Vec<u8> {
     if compound {
         push_object(&mut bytes, "Shape", |bytes| {
             push_uint(bytes, "Component", "parentId", 0);
+            if let Some([x, y, rotation, scale_x, scale_y, _, _]) = transform {
+                for (property, value) in [
+                    ("x", x),
+                    ("y", y),
+                    ("rotation", rotation),
+                    ("scaleX", scale_x),
+                    ("scaleY", scale_y),
+                ] {
+                    push_f32(bytes, "Node", property, value);
+                }
+            }
         });
         push_object(&mut bytes, "Rectangle", |bytes| {
             push_uint(bytes, "Component", "parentId", 1);
@@ -93,6 +112,10 @@ fn text_artboard(compound: bool) -> Vec<u8> {
     let style_id = text_id + 1;
     push_object(&mut bytes, "Text", |bytes| {
         push_uint(bytes, "Component", "parentId", if compound { 1 } else { 0 });
+        if let Some([_, _, _, _, _, x, y]) = transform {
+            push_f32(bytes, "Node", "x", x);
+            push_f32(bytes, "Node", "y", y);
+        }
         push_f32(bytes, "Text", "width", 100.0);
         push_f32(bytes, "Text", "height", 40.0);
     });

@@ -81,11 +81,17 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.13 candidate keeps unchanged Metal frames stable when asynchronous
-shader specialization replaces a precompiled shader. Both variants enable the
-same dither helpers and use explicit fused multiply-add for raster-order color
-blending. Native pixel tests cover opaque and translucent fills, fractional
-edges, forced shader variants and repeated frames without relaxing equality.
+The v0.9.14 candidate additionally preserves float vertex coverage in every
+Metal shader variant. Precompiled feather-capable and specialized non-feather
+shaders no longer disagree because of half-precision rounding before
+interpolation. A published text scene with its exact external font is compared
+pixel-for-pixel across forced shader variants and repeated frames.
+
+The v0.9.13 dither and raster-order blend fixes remain: both variants enable
+the same dither helpers and use explicit fused multiply-add for color blending.
+Native pixel tests also cover opaque and translucent fills and fractional
+edges without relaxing equality. Other rendering backends retain their
+existing coverage precision.
 
 Optional frame capture copies into caller-owned shared Metal storage before
 drawable presentation. Capture uses

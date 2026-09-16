@@ -1016,6 +1016,9 @@ macro_rules! enter_status_handle {
 }
 
 mod data_binding;
+mod text_geometry;
+pub use text_geometry::*;
+
 mod semantic_snapshot;
 mod semantic_types;
 
@@ -1621,6 +1624,7 @@ struct OwnedHostCommand {
 
 /// Bounded library-owned result of one player step.
 pub struct NuxPlayerStepResult {
+    occurrence: std::rc::Weak<ArtboardOccurrence>,
     status: NuxStatus,
     code: Box<[u8]>,
     message: Box<[u8]>,
@@ -3279,6 +3283,7 @@ fn publish_player_step_result(
 
 fn player_step_failure(status: NuxStatus, message: impl AsRef<[u8]>) -> NuxPlayerStepResult {
     NuxPlayerStepResult {
+        occurrence: std::rc::Weak::new(),
         status,
         code: bounded_diagnostic_bytes(status_code(status)),
         message: bounded_diagnostic_bytes(message),
@@ -4267,6 +4272,7 @@ fn player_step_body(
     };
     let pending = PendingHandlePublication::new(
         NuxPlayerStepResult {
+            occurrence: Rc::downgrade(&player.artboard),
             status: NuxStatus::Ok,
             code: bounded_diagnostic_bytes(status_code(NuxStatus::Ok)),
             message: Box::default(),

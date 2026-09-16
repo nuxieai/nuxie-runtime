@@ -63,26 +63,26 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.3.12 release candidate
+## Immutable v0.3.13 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.3.12 candidate preserves host reports from semantic actions and resolves
-native editable fields through exact component ancestry, including metadata on
-the field's enclosing layout. Ambiguous field owners, stale captures and duplicate
-text-run names remain rejected. It keeps ABI v4 and the existing size ceilings.
-Publishing this native archive does not enable the SDK's signed scene-semantics
-capability or qualify TalkBack behavior; SDK adoption, publisher-generated signed
-fixtures and platform qualification remain separate gates.
+The v0.3.13 candidate adds the same frame-qualified text/layout geometry API as
+Apple v0.9.11, including the first logical baseline. Exact root-run ownership,
+creator-lane/lifetime rules and current occurrence/revision validation apply;
+no text contents are copied. It keeps ABI v4 and the existing size ceilings.
+See [the geometry contract](text-run-geometry.md). Public native artifacts do
+not establish native editor pixel/caret alignment or IME behavior; SDK adoption
+and platform device qualification remain separate gates.
 
 After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.3.12 <full-source-sha>
-git push origin android-runtime-v0.3.12
-tools/publish-nux-capi-android-release.sh android-runtime-v0.3.12
+git tag android-runtime-v0.3.13 <full-source-sha>
+git push origin android-runtime-v0.3.13
+tools/publish-nux-capi-android-release.sh android-runtime-v0.3.13
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

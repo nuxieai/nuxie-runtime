@@ -717,8 +717,10 @@ mod metal_backend {
     use objc2_foundation::NSString;
     use objc2_metal::{MTLDevice, MTLLibrary};
 
-    const SPECIALIZED_VERTEX_MAIN: &str = "HC";
-    const SPECIALIZED_FRAGMENT_MAIN: &str = "JB";
+    use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as shader_exports;
+
+    const SPECIALIZED_VERTEX_MAIN: &str = shader_exports::GLSL_drawVertexMain;
+    const SPECIALIZED_FRAGMENT_MAIN: &str = shader_exports::GLSL_drawFragmentMain;
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub(crate) enum MetalPipelineCacheError {

@@ -35,6 +35,8 @@ mod draw_shader;
 mod drawable;
 mod readback;
 #[cfg(test)]
+mod pixel_stability_tests;
+#[cfg(test)]
 #[allow(dead_code)]
 mod feather_atlas_pipeline;
 #[cfg(test)]

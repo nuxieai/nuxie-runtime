@@ -9,6 +9,14 @@ use std::{collections::BTreeMap, env, fs, path::PathBuf, process::Command};
 const PROVENANCE: &str = include_str!("fixtures/native_metal/resource_shader_provenance.txt");
 const BUILD_SCRIPT: &[u8] = include_bytes!("../build.rs");
 
+#[allow(dead_code)]
+mod shader_exports {
+    include!(concat!(
+        env!("OUT_DIR"),
+        "/mechanical_shader_generated/runtime_shader_exports.rs"
+    ));
+}
+
 #[cfg(target_os = "macos")]
 const ARTIFACT_VARIANT: &str = "macosx";
 #[cfg(all(target_os = "ios", target_abi = "sim"))]
@@ -265,12 +273,12 @@ fn captured_artifact_bytes_are_rechecked_only_for_the_captured_build_owner() {
 
 #[test]
 fn linked_resource_metallib_has_exact_entry_point_inventory() {
-    let expected = PROVENANCE
-        .lines()
-        .find_map(|line| line.strip_prefix("functions="))
-        .expect("resource function inventory fixture")
-        .split(',')
-        .collect::<Vec<_>>();
+    let expected = [
+        shader_exports::GLSL_colorRampVertexMain,
+        shader_exports::GLSL_colorRampFragmentMain,
+        shader_exports::GLSL_tessellateVertexMain,
+        shader_exports::GLSL_tessellateFragmentMain,
+    ];
     let metallib = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR"))
         .join("native_metal_resources.metallib");
     assert!(metallib.is_file(), "missing {}", metallib.display());

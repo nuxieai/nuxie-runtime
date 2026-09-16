@@ -384,44 +384,47 @@ mod tests {
 
     #[test]
     fn compiled_library_has_the_exact_function_inventory() {
+        use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
         let device = MTLCreateSystemDefaultDevice().expect("create system Metal device");
         let library = DrawShaderLibrary::load(&device).expect("load embedded draw metallib");
         let mut names = library.function_names();
         names.sort();
-        assert_eq!(
-            names,
-            [
-                // Current render_atlas.glsl.exports.h: atlasVertexMain,
-                // atlasFillFragmentMain, atlasStrokeFragmentMain.
-                "TF",
-                "WE",
-                "XE",
-                "c11111111100::JB",
-                "c11111111110::JB",
-                "m11100000000::HC",
-                "m11100011000::JB",
-                "p11100000111::HC",
-                "p11100011111::JB",
-                "p11110000100::HC",
-                "p11110000110::HC",
-                "p11111111100::JB",
-                "p11111111110::JB",
-            ]
-        );
+        let mut expected: Vec<String> = [
+            exports::GLSL_atlasVertexMain,
+            exports::GLSL_atlasFillFragmentMain,
+            exports::GLSL_atlasStrokeFragmentMain,
+        ].into_iter().map(str::to_owned).collect();
+        for namespace in [
+            "m11100000000", "p11100000111", "p11110000100", "p11110000110",
+        ] {
+            expected.push(format!("{namespace}::{}", exports::GLSL_drawVertexMain));
+        }
+        for namespace in [
+            "c11111111100", "c11111111110", "m11100011000",
+            "p11100011111", "p11111111100", "p11111111110",
+        ] {
+            expected.push(format!("{namespace}::{}", exports::GLSL_drawFragmentMain));
+        }
+        expected.sort();
+        assert_eq!(names, expected);
     }
 
     #[test]
     fn compiled_library_resolves_representative_functions() {
+        use crate::mechanical_port::source::renderer::src::metal::background_shader_compiler_mm::runtime_generated_shader_exports as exports;
         let device = MTLCreateSystemDefaultDevice().expect("create system Metal device");
         let library = DrawShaderLibrary::load(&device).expect("load embedded draw metallib");
-        for name in ["TF", "p11110000100::HC", "p11111111100::JB"] {
-            library
-                .function(name)
-                .unwrap_or_else(|error| panic!("{error}"));
+        for name in [
+            exports::GLSL_atlasVertexMain.to_owned(),
+            format!("p11110000100::{}", exports::GLSL_drawVertexMain),
+            format!("p11111111100::{}", exports::GLSL_drawFragmentMain),
+        ] {
+            library.function(&name).unwrap_or_else(|error| panic!("{error}"));
         }
         assert_eq!(
             library.function("not-a-draw-function").unwrap_err(),
             DrawShaderLibraryError::MissingFunction("not-a-draw-function".to_owned())
         );
     }
+
 }

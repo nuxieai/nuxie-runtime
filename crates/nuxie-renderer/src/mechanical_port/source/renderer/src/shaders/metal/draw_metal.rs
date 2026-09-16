@@ -31,7 +31,12 @@ pub const PINNED_DRAW_METAL_SOURCE: &str = r###"#include <metal_stdlib>
 #define DRAW_IMAGE
 
 #include "flush_uniforms.minified.glsl"
+// Every precompiled fragment combination supports dither. Its shared helpers
+// must be compiled with that feature before per-combination flags are defined.
+// Frames without dither supply zero scale and bias through the flush uniforms.
+#define ENABLE_DITHER 1
 #include "common.minified.glsl"
+#undef ENABLE_DITHER
 #undef DRAW_IMAGE
 #define DRAW_PATH
 #define DRAW_INTERIOR_TRIANGLES

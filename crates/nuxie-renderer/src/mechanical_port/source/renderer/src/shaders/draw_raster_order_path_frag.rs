@@ -238,7 +238,14 @@ PLS_MAIN(@drawFragmentMain)
 
         // Save paint alpha before destructively updating it with the dstColor.
         half paintAlpha = color.a;
+#ifdef METAL
+        // Pin the blend contraction: specialized shaders can premultiply in
+        // the vertex stage, while ubershaders do so here. An implicit add lets
+        // the compiler fuse a different product in each variant.
+        color = $metal::fma(dstColorPremul, make_half4(1. - paintAlpha), color);
+#else
         color += dstColorPremul * (1. - paintAlpha);
+#endif
         color.rgb = add_dither_if_alpha_nonzero(color.rgb,
                                                 paintAlpha,
                                                 _fragCoord.xy,

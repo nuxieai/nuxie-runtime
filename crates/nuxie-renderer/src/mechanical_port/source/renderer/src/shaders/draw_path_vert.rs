@@ -1,6 +1,6 @@
 /*
- * Exact pinned upstream source bytes and provenance for
- * renderer/src/shaders/draw_path.vert.
+ * Upstream-derived renderer/src/shaders/draw_path.vert with a local Metal
+ * coverage-precision adaptation. Constants below describe the upstream input.
  *
  * Upstream source revision: 4ad6fcf47526b033e5cbe16275e9219365551d76
  */
@@ -17,7 +17,7 @@ pub const PINNED_SOURCE_SHA256: &str =
 pub const PINNED_SOURCE_LINE_COUNT: usize = 549;
 pub const PINNED_SOURCE_BYTE_COUNT: usize = 18959;
 
-/// Exact pinned upstream source bytes.
+/// Shader source adapted to keep Metal coverage precision stable across variants.
 pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
  * Copyright 2022 Rive
  */
@@ -44,7 +44,9 @@ pub const PINNED_DRAW_PATH_VERT_SOURCE: &str = r###"/*
 // undef COVERAGE_TYPE first because this file gets included multiple times with
 // different defines in the Metal library.
 #undef COVERAGE_TYPE
-#ifdef @ENABLE_FEATHER
+// Metal precompiled shaders enable feather support. Preserve the same
+// vertex coverage precision in specialized shaders before interpolation.
+#if defined(@ENABLE_FEATHER) || defined(METAL)
 #define COVERAGE_TYPE float4
 #else
 #define COVERAGE_TYPE half2
@@ -199,7 +201,7 @@ VERTEX_MAIN(@drawVertexMain, Attrs, attrs, _vertexID, _instanceID)
 #endif
                                             VERTEX_CONTEXT_UNPACK);
 #ifndef @RENDER_MODE_MSAA
-#ifdef @ENABLE_FEATHER
+#if defined(@ENABLE_FEATHER) || defined(METAL)
     v_coverages = coverages;
 #else
     v_coverages.xy = cast_float2_to_half2(coverages.xy);

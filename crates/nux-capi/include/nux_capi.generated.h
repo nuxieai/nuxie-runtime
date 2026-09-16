@@ -1097,6 +1097,25 @@ typedef struct NuxViewModelChangeView {
   size_t list_item_count;
 } NuxViewModelChangeView;
 
+/**
+ * Copied geometry; never contains text, glyphs, or pointers into the scene.
+ * Matrices use [a, b, c, d, tx, ty]: x' = a*x + c*y + tx.
+ * `world_transform` maps the text's local layout box into artboard space.
+ * `content_transform` additionally includes runtime text fitting/alignment.
+ * Bounds are the local layout box, including authored origin/baseline offset;
+ * they are not the ink bounds and must use `world_transform`.
+ */
+typedef struct NuxTextRunGeometry {
+  uint32_t struct_size;
+  uint64_t render_revision;
+  float world_transform[6];
+  float content_transform[6];
+  float min_x;
+  float min_y;
+  float max_x;
+  float max_y;
+} NuxTextRunGeometry;
+
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 typedef uint32_t NuxAndroidVulkanRendererFit;
 #endif
@@ -1912,6 +1931,21 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t change_index,
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
+
+/**
+ * Read a root text run's settled geometry from the state named by `step`.
+ * The successful step must belong to this player's artboard occurrence and
+ * still name its current render revision. A mutation requires another step;
+ * stale/foreign results return HANDLE_MISMATCH. No presentation acknowledgement
+ * is required: hosts can capture this beside pixels before publishing a frame.
+ * Hosts must publish/discard both using the returned render revision.
+ * Exact duplicate names return INVALID_ARGUMENT; absent names return NOT_FOUND.
+ * Output is written only on success. This call does not advance or mutate text.
+ */
+NuxStatus nux_player_text_run_geometry(const struct NuxPlayer *player,
+                                       const struct NuxPlayerStepResult *step,
+                                       struct NuxStringView name,
+                                       struct NuxTextRunGeometry *out_geometry);
 
 /**
  * Check that this capture still names this player's current presented

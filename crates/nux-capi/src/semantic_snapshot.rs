@@ -524,7 +524,6 @@ mod tests {
 
     #[test]
     fn editable_text_world_transform_includes_compound_parent_pose() {
-        use nuxie::runtime::{core::CoreType, text::text_value_run::TextValueRun};
         // Expected matrices are independent affine arithmetic, not runtime
         // decomposition. Nonuniform scale followed by rotation must retain
         // the entire basis; local Node.x/y alone cannot locate the editor.
@@ -567,30 +566,24 @@ mod tests {
                 };
                 let mut result = ptr::null_mut();
                 assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
-                let artboard = (&(*player).artboard).instance.borrow().native_handle();
-                let run = artboard
-                    .with_artboard(|artboard| {
-                        artboard
-                            .objects()
-                            .iter()
-                            .flatten()
-                            .find(|object| object.is_type_of(TextValueRun::TYPE_KEY))
-                            .cloned()
-                    })
-                    .expect("authored text run");
-                let owner = run
-                    .with_downcast::<TextValueRun, _>(TextValueRun::text_component)
-                    .flatten()
-                    .expect("text owner");
-                let actual = owner
-                    .with(|owner| {
-                        *owner
-                            .as_world_transform_component()
-                            .expect("text world transform")
-                            .world_transform()
-                            .values()
-                    })
-                    .unwrap();
+                let name = "field/name";
+                let mut geometry = NuxTextRunGeometry {
+                    struct_size: std::mem::size_of::<NuxTextRunGeometry>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_text_run_geometry(
+                        player,
+                        result,
+                        NuxStringView {
+                            data: name.as_ptr().cast(),
+                            len: name.len()
+                        },
+                        &mut geometry
+                    ),
+                    NuxStatus::Ok
+                );
+                let actual = geometry.world_transform;
                 for (actual, expected) in actual.into_iter().zip(expected) {
                     assert!(
                         (actual - expected).abs() < 0.0001,

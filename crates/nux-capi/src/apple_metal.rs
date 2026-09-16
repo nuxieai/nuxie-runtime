@@ -28,12 +28,12 @@ use nuxie_renderer::deferred::cmd::{
     render_replay::RendererOwner,
 };
 use nuxie_renderer::{
-    NativeMetalDrawableFrame, NativeMetalExecutionInventory, NativeMetalFactory, RenderMode,
-    RendererError,
+    NativeMetalDrawableFrame, NativeMetalExecutionInventory, NativeMetalFactory,
+    NativeMetalReadback, RenderMode, RendererError,
 };
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
-use objc2_metal::MTLDevice;
+use objc2_metal::{MTLBuffer, MTLDevice};
 use objc2_quartz_core::CAMetalDrawable;
 use std::cell::RefCell;
 use std::ffi::c_void;
@@ -247,6 +247,15 @@ pub struct NuxMetalRenderOperation {
     pub completion_callback: Option<unsafe extern "C" fn(context: *mut c_void)>,
     /// Optional viewport-fit policy. Older struct prefixes default to NONE.
     pub fit: NuxRendererFit,
+    /// Optional borrowed id<MTLBuffer> in shared storage on the drawable's device.
+    /// Captures BGRA8 pixels before presentation; older prefixes disable capture.
+    /// Requires a BGRA8Unorm drawable with framebufferOnly disabled.
+    /// The caller must not access/reuse the buffer until completion (or return
+    /// when no completion callback is provided). Skipped frames leave it intact.
+    pub readback_buffer: *mut c_void,
+    /// Destination row stride, a multiple of 256 and at least drawable.width * 4.
+    /// The buffer must hold this stride times drawable.height bytes.
+    pub readback_bytes_per_row: usize,
 }
 
 pub const NUX_METAL_RENDER_OPERATION_V3_MIN_SIZE: usize =
@@ -263,6 +272,8 @@ impl Default for NuxMetalRenderOperation {
             completion_context: ptr::null_mut(),
             completion_callback: None,
             fit: NUX_RENDERER_FIT_NONE,
+            readback_buffer: ptr::null_mut(),
+            readback_bytes_per_row: 0,
         }
     }
 }
@@ -669,6 +680,7 @@ impl Renderer for ReplayFrameRenderer {
 struct AppleMetalFrameSink<'a> {
     native: PersistentFactory<NativeMetalFactory>,
     drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
+    readback: Option<NativeMetalReadback>,
     clear_color: ColorInt,
     screen: Rc<RefCell<Option<ReplayFrame>>>,
     canvas: Rc<RefCell<Option<ReplayFrame>>>,
@@ -681,10 +693,12 @@ impl<'a> AppleMetalFrameSink<'a> {
         native: PersistentFactory<NativeMetalFactory>,
         drawable: &'a ProtocolObject<dyn CAMetalDrawable>,
         clear_color: ColorInt,
+        readback: Option<NativeMetalReadback>,
     ) -> Self {
         Self {
             native,
             drawable,
+            readback,
             clear_color,
             screen: Rc::new(RefCell::new(None)),
             canvas: Rc::new(RefCell::new(None)),
@@ -706,7 +720,9 @@ impl<'a> AppleMetalFrameSink<'a> {
         let Some(ReplayFrame::Screen(frame)) = frame else {
             unreachable!("successful replay opened the presentation frame")
         };
-        frame.finish().map_err(renderer_failure)
+        frame
+            .finish_with_readback(self.readback.as_ref())
+            .map_err(renderer_failure)
     }
 }
 
@@ -982,6 +998,14 @@ unsafe fn read_operation(
         return Err(ApiFailure::new(
             NuxStatus::InvalidStructSize,
             "render operation struct_size is too small",
+        ));
+    }
+    let capture_offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
+    let full_size = std::mem::size_of::<NuxMetalRenderOperation>();
+    if caller_size as usize > capture_offset && (caller_size as usize) < full_size {
+        return Err(ApiFailure::new(
+            NuxStatus::InvalidStructSize,
+            "render operation contains an incomplete readback extension",
         ));
     }
     let mut value = NuxMetalRenderOperation::default();
@@ -1433,6 +1457,14 @@ pub unsafe extern "C" fn nux_renderer_render_player(
         if unsafe { reject_aliased_outputs(out_outcome, out_result) } {
             return NuxStatus::InvalidArgument;
         }
+        if operation.readback_buffer.is_null() != (operation.readback_bytes_per_row == 0) {
+            return with_optional_failure_result(out_result, || {
+                Err(ApiFailure::new(
+                    NuxStatus::InvalidArgument,
+                    "readback buffer and row stride must be provided together",
+                ))
+            });
+        }
         let drawable_available =
             match validate_drawable(operation.drawable_state, operation.drawable) {
                 Ok(available) => available,
@@ -1508,6 +1540,25 @@ pub unsafe extern "C" fn nux_renderer_render_player(
                     .cast::<ProtocolObject<dyn CAMetalDrawable>>()
                     .as_ref()
             };
+            let readback = if operation.readback_buffer.is_null() {
+                None
+            } else {
+                // The optional Objective-C buffer is borrowed under the same
+                // synchronous call contract as the supplied drawable.
+                let buffer = unsafe {
+                    &*operation
+                        .readback_buffer
+                        .cast::<ProtocolObject<dyn MTLBuffer>>()
+                };
+                Some(
+                    NativeMetalReadback::new(
+                        &drawable.texture(),
+                        buffer,
+                        operation.readback_bytes_per_row,
+                    )
+                    .map_err(renderer_failure)?,
+                )
+            };
             // Snapshot the retained routing owners, then release the import
             // factory borrow before script callbacks allocate into it.
             let (mut session, replayer, native) = {
@@ -1543,7 +1594,8 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             // resetting the producer. The consumer's resident tables persist
             // across presentations in this exact renderer generation.
             let frame = take_frame(&mut session);
-            let mut sink = AppleMetalFrameSink::new(native, drawable, operation.clear_color);
+            let mut sink =
+                AppleMetalFrameSink::new(native, drawable, operation.clear_color, readback);
             replayer.borrow_mut().replay_frame(&frame, &mut sink);
             let inventory = sink.finish()?;
             player
@@ -1752,12 +1804,60 @@ mod tests {
             unsafe { read_operation((&raw const legacy).cast::<NuxMetalRenderOperation>()) }
                 .expect("legacy operation prefix remains accepted");
         assert_eq!(operation.fit, NUX_RENDERER_FIT_NONE);
+        assert!(operation.readback_buffer.is_null());
+        assert_eq!(operation.readback_bytes_per_row, 0);
 
         let invalid = NuxMetalRenderOperation {
             fit: u32::MAX,
             ..NuxMetalRenderOperation::default()
         };
         assert!(unsafe { read_operation(&raw const invalid) }.is_err());
+    }
+
+    #[test]
+    fn readback_extension_requires_its_complete_prefix() {
+        let offset = std::mem::offset_of!(NuxMetalRenderOperation, readback_buffer);
+        let size = std::mem::size_of::<NuxMetalRenderOperation>();
+        let mut operation = NuxMetalRenderOperation {
+            fit: NUX_RENDERER_FIT_CONTAIN_CENTER,
+            readback_buffer: ptr::dangling_mut(),
+            readback_bytes_per_row: 256,
+            ..NuxMetalRenderOperation::default()
+        };
+        operation.struct_size = u32::try_from(offset).unwrap();
+        let legacy = unsafe { read_operation(&operation) }.expect("old fit prefix");
+        assert_eq!(legacy.fit, NUX_RENDERER_FIT_CONTAIN_CENTER);
+        assert!(legacy.readback_buffer.is_null());
+        assert_eq!(legacy.readback_bytes_per_row, 0);
+        for partial in (offset + 1)..size {
+            operation.struct_size = u32::try_from(partial).unwrap();
+            let error = unsafe { read_operation(&operation) }.expect_err("partial capture prefix");
+            assert_eq!(error.status, NuxStatus::InvalidStructSize);
+        }
+        operation.struct_size = u32::try_from(size).unwrap();
+        let complete = unsafe { read_operation(&operation) }.expect("full capture prefix");
+        assert_eq!(complete.readback_buffer, operation.readback_buffer);
+        assert_eq!(complete.readback_bytes_per_row, 256);
+    }
+
+    #[test]
+    fn malformed_readback_still_releases_accepted_completion_once() {
+        for (buffer, stride) in [(ptr::null_mut(), 256), (ptr::dangling_mut(), 0)] {
+            let probe = Box::into_raw(Box::new(CompletionProbe {
+                calls: AtomicUsize::new(0),
+                inline: AtomicBool::new(false),
+            }));
+            let mut operation = operation_with_probe(probe);
+            operation.readback_buffer = buffer;
+            operation.readback_bytes_per_row = stride;
+            let mut outcome = NuxRendererOutcome::default();
+            assert_eq!(
+                call_with_probe(operation, &raw mut outcome, ptr::null_mut()),
+                NuxStatus::InvalidArgument
+            );
+            wait_for_completion(unsafe { &*probe });
+            unsafe { drop(Box::from_raw(probe)) };
+        }
     }
 
     #[test]

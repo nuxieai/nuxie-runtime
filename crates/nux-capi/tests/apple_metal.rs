@@ -9,8 +9,8 @@ use nux_capi::*;
 use objc2::rc::{Retained, autoreleasepool};
 use objc2::runtime::ProtocolObject;
 use objc2_core_foundation::CGSize;
-use objc2_metal::{MTLDevice, MTLPixelFormat, MTLRegion, MTLTexture};
-use objc2_quartz_core::{CAMetalDrawable, CAMetalLayer};
+use objc2_metal::{MTLBuffer, MTLDevice, MTLPixelFormat, MTLResourceOptions};
+use objc2_quartz_core::CAMetalLayer;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::ptr;
@@ -260,32 +260,6 @@ fn readable_layer(renderer: *mut NuxRenderer, width: u32, height: u32) -> Retain
     layer
 }
 
-fn read_drawable_bgra(
-    drawable: &ProtocolObject<dyn CAMetalDrawable>,
-    width: u32,
-    height: u32,
-) -> Vec<u8> {
-    let texture = drawable.texture();
-    let mut pixels = vec![0; width as usize * height as usize * 4];
-    let region = MTLRegion {
-        origin: objc2_metal::MTLOrigin { x: 0, y: 0, z: 0 },
-        size: objc2_metal::MTLSize {
-            width: width as usize,
-            height: height as usize,
-            depth: 1,
-        },
-    };
-    unsafe {
-        texture.getBytes_bytesPerRow_fromRegion_mipmapLevel(
-            std::ptr::NonNull::new(pixels.as_mut_ptr().cast()).expect("pixel buffer"),
-            width as usize * 4,
-            region,
-            0,
-        );
-    }
-    pixels
-}
-
 fn operation(state: NuxMetalDrawableState, drawable: *mut c_void) -> NuxMetalRenderOperation {
     NuxMetalRenderOperation {
         drawable_state: state,
@@ -345,6 +319,117 @@ fn scheduling(player: *mut NuxPlayer, elapsed_seconds: f32) -> NuxPlayerScheduli
         NuxStatus::Ok
     );
     scheduling
+}
+
+#[test]
+fn presented_frame_readback_survives_drawable_and_renderer_retirement() {
+    autoreleasepool(|_| {
+        let renderer = renderer(ARTBOARD_SIZE, ARTBOARD_SIZE);
+        let bytes = solid_fill_artboard();
+        let mut file = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        assert_eq!(
+            unsafe {
+                nux_file_import_metal(
+                    renderer,
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxFileImportConfig::default(),
+                    &raw mut file,
+                    &raw mut result,
+                )
+            },
+            NuxStatus::Ok
+        );
+        unsafe { assert_result(result, NuxStatus::Ok) };
+        let mut artboard = ptr::null_mut();
+        let mut player = ptr::null_mut();
+        assert_eq!(
+            unsafe { nux_artboard_instance_new(file, 0, &raw mut artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            unsafe { nux_player_new_static(artboard, &raw mut player) },
+            NuxStatus::Ok
+        );
+        assert!(scheduling(player, 0.0).render_required);
+        let surface = readable_layer(renderer, ARTBOARD_SIZE, ARTBOARD_SIZE);
+        let drawable = surface
+            .nextDrawable()
+            .expect("live Metal drawable for readback");
+        let device = surface.device().expect("Metal device");
+        let stride = 512; // Includes padding beyond the 64 BGRA pixels.
+        let length = stride * ARTBOARD_SIZE as usize;
+        let buffer = device
+            .newBufferWithLength_options(length, MTLResourceOptions::StorageModeShared)
+            .expect("shared readback buffer");
+        unsafe { ptr::write_bytes(buffer.contents().as_ptr().cast::<u8>(), 0xa5, length) };
+        let mut request = operation(
+            NUX_METAL_DRAWABLE_STATE_AVAILABLE,
+            Retained::as_ptr(&drawable).cast_mut().cast(),
+        );
+        request.readback_buffer = Retained::as_ptr(&buffer).cast_mut().cast();
+        request.readback_bytes_per_row = stride;
+        for invalid_stride in [0, 255, 1024, usize::MAX - 255] {
+            let mut invalid = request;
+            invalid.readback_bytes_per_row = invalid_stride;
+            unsafe { render(renderer, player, invalid, NuxStatus::InvalidArgument) };
+        }
+        let private = device
+            .newBufferWithLength_options(length, MTLResourceOptions::StorageModePrivate)
+            .expect("private buffer for validation");
+        let mut invalid = request;
+        invalid.readback_buffer = Retained::as_ptr(&private).cast_mut().cast();
+        unsafe { render(renderer, player, invalid, NuxStatus::InvalidArgument) };
+        let opaque_surface = layer(renderer, ARTBOARD_SIZE, ARTBOARD_SIZE);
+        let opaque = opaque_surface
+            .nextDrawable()
+            .expect("framebuffer-only drawable");
+        invalid = request;
+        invalid.drawable = Retained::as_ptr(&opaque).cast_mut().cast();
+        unsafe { render(renderer, player, invalid, NuxStatus::InvalidArgument) };
+        drop(opaque);
+        drop(opaque_surface);
+        let mut skipped = request;
+        skipped.drawable_state = NUX_METAL_DRAWABLE_STATE_TIMEOUT;
+        skipped.drawable = ptr::null_mut();
+        let outcome = unsafe { render(renderer, player, skipped, NuxStatus::Ok) };
+        assert_eq!(
+            outcome.disposition,
+            NUX_RENDERER_DISPOSITION_SKIPPED_TIMEOUT
+        );
+        let unchanged =
+            unsafe { std::slice::from_raw_parts(buffer.contents().as_ptr().cast::<u8>(), length) };
+        assert!(
+            unchanged.iter().all(|byte| *byte == 0xa5),
+            "Rejected/skipped capture must not touch caller storage"
+        );
+        let outcome = unsafe { render(renderer, player, request, NuxStatus::Ok) };
+        assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
+        assert!(outcome.draw_calls > 0);
+        drop(drawable);
+        drop(surface);
+        assert_eq!(unsafe { nux_player_free(player) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { nux_artboard_instance_free(artboard) },
+            NuxStatus::Ok
+        );
+        assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
+        assert_eq!(unsafe { nux_renderer_free(renderer) }, NuxStatus::Ok);
+        let pixels =
+            unsafe { std::slice::from_raw_parts(buffer.contents().as_ptr().cast::<u8>(), length) };
+        let center = ARTBOARD_SIZE as usize / 2 * stride + ARTBOARD_SIZE as usize / 2 * 4;
+        let [red, green, blue, alpha] = FILL_RGBA;
+        assert_eq!(&pixels[center..center + 4], &[blue, green, red, alpha]);
+        for row in 0..ARTBOARD_SIZE as usize {
+            assert!(
+                pixels[row * stride + ARTBOARD_SIZE as usize * 4..(row + 1) * stride]
+                    .iter()
+                    .all(|byte| *byte == 0xa5),
+                "row padding must remain untouched"
+            );
+        }
+    });
 }
 
 #[test]
@@ -413,23 +498,26 @@ fn solid_fill_renders_authored_pixels_on_metal() {
             assert_eq!(unsafe { nux_file_free(file) }, NuxStatus::Ok);
             return;
         };
-        let outcome = unsafe {
-            render(
-                renderer,
-                player,
-                operation(
-                    NUX_METAL_DRAWABLE_STATE_AVAILABLE,
-                    Retained::as_ptr(&drawable).cast_mut().cast(),
-                ),
-                NuxStatus::Ok,
-            )
-        };
+        let stride = (ARTBOARD_SIZE as usize * 4).next_multiple_of(256);
+        let length = stride * ARTBOARD_SIZE as usize;
+        let buffer = surface
+            .device()
+            .expect("Metal device")
+            .newBufferWithLength_options(length, MTLResourceOptions::StorageModeShared)
+            .expect("shared readback buffer");
+        let mut request = operation(
+            NUX_METAL_DRAWABLE_STATE_AVAILABLE,
+            Retained::as_ptr(&drawable).cast_mut().cast(),
+        );
+        request.readback_buffer = Retained::as_ptr(&buffer).cast_mut().cast();
+        request.readback_bytes_per_row = stride;
+        let outcome = unsafe { render(renderer, player, request, NuxStatus::Ok) };
         assert_eq!(outcome.disposition, NUX_RENDERER_DISPOSITION_PRESENTED);
         assert!(outcome.draw_calls > 0, "solid fill must submit draw work");
 
-        let pixels = read_drawable_bgra(&drawable, ARTBOARD_SIZE, ARTBOARD_SIZE);
-        let center =
-            (ARTBOARD_SIZE as usize / 2 * ARTBOARD_SIZE as usize + ARTBOARD_SIZE as usize / 2) * 4;
+        let pixels =
+            unsafe { std::slice::from_raw_parts(buffer.contents().as_ptr().cast::<u8>(), length) };
+        let center = ARTBOARD_SIZE as usize / 2 * stride + ARTBOARD_SIZE as usize / 2 * 4;
         let [blue, green, red, alpha] = pixels
             .get(center..)
             .and_then(|tail| tail.first_chunk::<4>())

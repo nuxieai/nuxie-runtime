@@ -144,3 +144,56 @@ fn text_artboard_with_transform(compound: bool, transform: Option<[f32; 7]>) -> 
     }
     bytes
 }
+
+pub fn nested_layout_text_artboard() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9_641, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 500.0);
+        push_f32(bytes, "Artboard", "height", 500.0);
+    });
+    push_object(&mut bytes, "LayoutComponent", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+        push_f32(bytes, "LayoutComponent", "width", 300.0);
+        push_f32(bytes, "LayoutComponent", "height", 200.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 2);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+    push_object(&mut bytes, "Node", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        for (property, value) in [
+            ("x", 24.0),
+            ("y", 24.0),
+            ("rotation", std::f32::consts::FRAC_PI_2),
+            ("scaleX", 2.0),
+            ("scaleY", 3.0),
+        ] {
+            push_f32(bytes, "Node", property, value);
+        }
+    });
+    push_object(&mut bytes, "LayoutComponent", |bytes| {
+        push_uint(bytes, "Component", "parentId", 3);
+        push_f32(bytes, "LayoutComponent", "width", 100.0);
+        push_f32(bytes, "LayoutComponent", "height", 40.0);
+        push_uint(bytes, "LayoutComponent", "styleId", 5);
+    });
+    push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+    push_object(&mut bytes, "Text", |bytes| {
+        push_uint(bytes, "Component", "parentId", 4);
+        push_f32(bytes, "Node", "x", 7.0);
+        push_f32(bytes, "Node", "y", 11.0);
+    });
+    push_object(&mut bytes, "TextStyle", |bytes| {
+        push_uint(bytes, "Component", "parentId", 6);
+    });
+    push_object(&mut bytes, "TextValueRun", |bytes| {
+        push_uint(bytes, "Component", "parentId", 6);
+        push_uint(bytes, "TextValueRun", "styleId", 7);
+        push_string(bytes, "Component", "name", "field/name");
+        push_string(bytes, "TextValueRun", "text", "private value");
+    });
+    bytes
+}

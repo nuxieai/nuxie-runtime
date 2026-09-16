@@ -1114,6 +1114,29 @@ typedef struct NuxTextRunGeometry {
   float min_y;
   float max_x;
   float max_y;
+  /**
+   * Canonical 0/1. Zero means there is no LayoutComponent ancestor.
+   */
+  uint32_t has_layout_ancestor;
+  /**
+   * Nearest LayoutComponent ancestor, excluding the text itself. All fields
+   * below are zero when absent. This is a structural relationship, not a
+   * semantic field association or an axis-aligned world bounding box.
+   */
+  float layout_ancestor_transform[6];
+  float layout_ancestor_min_x;
+  float layout_ancestor_min_y;
+  float layout_ancestor_max_x;
+  float layout_ancestor_max_y;
+  /**
+   * Canonical 0/1. Empty or unshaped text has no first baseline.
+   */
+  uint32_t has_first_baseline;
+  /**
+   * First logical line's baseline y in shaped-content coordinates. Map
+   * through content_transform; zero when has_first_baseline is zero.
+   */
+  float first_baseline;
 } NuxTextRunGeometry;
 
 #if defined(NUX_CAPI_ANDROID_VULKAN)

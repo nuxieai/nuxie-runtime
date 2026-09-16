@@ -70,7 +70,7 @@ use mechanical_port::source::renderer::src::metal::render_context_metal_impl_mm 
     )
 ))]
 pub use native_metal::{
-    NativeMetalContextOptions, NativeMetalDrawableFrame, NativeMetalExecutionInventory,
+    NativeMetalContextOptions, NativeMetalDrawableFrame, NativeMetalExecutionInventory, NativeMetalReadback,
     NativeMetalFactory, NativeMetalFrame, NativeMetalFrameOutput,
     NativeMetalSynthesizedFailureType, ShaderCompilationMode,
 };

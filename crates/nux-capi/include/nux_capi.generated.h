@@ -1226,6 +1226,19 @@ typedef struct NuxMetalRenderOperation {
    * Optional viewport-fit policy. Older struct prefixes default to NONE.
    */
   NuxRendererFit fit;
+  /**
+   * Optional borrowed id<MTLBuffer> in shared storage on the drawable's device.
+   * Captures BGRA8 pixels before presentation; older prefixes disable capture.
+   * Requires a BGRA8Unorm drawable with framebufferOnly disabled.
+   * The caller must not access/reuse the buffer until completion (or return
+   * when no completion callback is provided). Skipped frames leave it intact.
+   */
+  void *readback_buffer;
+  /**
+   * Destination row stride, a multiple of 256 and at least drawable.width * 4.
+   * The buffer must hold this stride times drawable.height bytes.
+   */
+  size_t readback_bytes_per_row;
 } NuxMetalRenderOperation;
 #endif
 

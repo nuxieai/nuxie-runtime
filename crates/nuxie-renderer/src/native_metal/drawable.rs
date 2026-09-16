@@ -8,7 +8,7 @@
 //! retains ownership of acquisition, actor scheduling, and layer policy.
 
 use super::{
-    NativeMetalExecutionInventory, NativeMetalFrame,
+    NativeMetalExecutionInventory, NativeMetalFrame, NativeMetalReadback,
     mechanical_render_context::MechanicalRenderContext,
 };
 use crate::RendererError;
@@ -84,8 +84,15 @@ impl NativeMetalDrawableFrame {
 
     /// Commits renderer work, then presents the retained drawable on the next
     /// command buffer from the same queue, matching the pinned product oracle.
-    pub fn finish(mut self) -> Result<NativeMetalExecutionInventory, RendererError> {
-        let inventory = self.frame.finish_present(&self.drawable)?;
+    pub fn finish(self) -> Result<NativeMetalExecutionInventory, RendererError> {
+        self.finish_with_readback(None)
+    }
+
+    /// Copies pixels on the presentation queue before handing the drawable to
+    /// Core Animation. Both GPU submissions complete before storage is released.
+    pub fn finish_with_readback(mut self, readback: Option<&NativeMetalReadback>)
+        -> Result<NativeMetalExecutionInventory, RendererError> {
+        let inventory = self.frame.finish_present(&self.drawable, readback)?;
         self.mechanical.borrow_mut().replace_target(
             self.restore_texture.clone(),
             self.restore_width,

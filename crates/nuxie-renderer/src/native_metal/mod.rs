@@ -33,6 +33,7 @@ mod draw_pipeline;
 #[allow(dead_code)]
 mod draw_shader;
 mod drawable;
+mod readback;
 #[cfg(test)]
 #[allow(dead_code)]
 mod feather_atlas_pipeline;
@@ -126,6 +127,7 @@ pub use context_options::{
     NativeMetalContextOptions, NativeMetalSynthesizedFailureType, ShaderCompilationMode,
 };
 pub use drawable::NativeMetalDrawableFrame;
+pub use readback::NativeMetalReadback;
 #[cfg(test)]
 const INLINE_VERTEX_BYTE_LIMIT: usize = 4_096;
 
@@ -1931,12 +1933,14 @@ impl NativeMetalFrame {
     pub(super) fn finish_present(
         &mut self,
         drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
+        readback: Option<&NativeMetalReadback>,
     ) -> Result<NativeMetalExecutionInventory, RendererError> {
         let source_mode = self.mechanical.borrow().mode();
         let completion = self.mechanical.borrow_mut().finish_present(
             self.frame_number,
             self.frame_number,
             drawable,
+            readback,
         )?;
         completion.wait()?;
         let source_metrics = self.mechanical.borrow().execution_inventory();

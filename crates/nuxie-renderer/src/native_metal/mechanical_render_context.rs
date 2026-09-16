@@ -1438,6 +1438,7 @@ impl MechanicalRenderContext {
         current_frame_number: u64,
         safe_frame_number: u64,
         drawable: &ProtocolObject<dyn objc2_metal::MTLDrawable>,
+        readback: Option<&super::NativeMetalReadback>,
     ) -> Result<MechanicalCompletionToken, RendererError> {
         let queue = self.frame_queue.clone().ok_or_else(|| {
             RendererError::NativeMetal("mechanical frame lost its queue snapshot".into())
@@ -1446,9 +1447,15 @@ impl MechanicalRenderContext {
         let mut committed_guard = CommittedFrameWaitGuard::new(completion.clone());
         let presentation_result = match make_command_buffer_on_queue(&queue) {
             Ok(command_buffer) => {
-                command_buffer.presentDrawable(drawable);
-                let presentation = NativeMetalSubmissionCompletion::commit(&command_buffer);
-                presentation.wait()
+                let encoded = match readback {
+                    Some(readback) => readback.encode(&command_buffer),
+                    None => Ok(()),
+                };
+                encoded.and_then(|()| {
+                    command_buffer.presentDrawable(drawable);
+                    let presentation = NativeMetalSubmissionCompletion::commit(&command_buffer);
+                    presentation.wait()
+                })
             }
             Err(error) => Err(error),
         };

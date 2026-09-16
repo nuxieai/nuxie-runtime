@@ -515,6 +515,95 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
 #[cfg(test)]
 mod tests {
     use super::*;
+    mod fixture {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/semantic_text.rs"
+        ));
+    }
+
+    #[test]
+    fn editable_text_world_transform_includes_compound_parent_pose() {
+        use nuxie::runtime::{core::CoreType, text::text_value_run::TextValueRun};
+        // Expected matrices are independent affine arithmetic, not runtime
+        // decomposition. Nonuniform scale followed by rotation must retain
+        // the entire basis; local Node.x/y alone cannot locate the editor.
+        for (authored, expected) in [
+            (
+                [24.0, 24.0, 0.0, 1.0, 1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0, 1.0, 24.0, 24.0],
+            ),
+            (
+                [24.0, 24.0, std::f32::consts::FRAC_PI_2, 2.0, 3.0, 7.0, 11.0],
+                [0.0, 2.0, -3.0, 0.0, -9.0, 38.0],
+            ),
+            (
+                [24.0, 264.0, 0.0, -2.0, 0.5, 7.0, 11.0],
+                [-2.0, 0.0, 0.0, 0.5, 10.0, 269.5],
+            ),
+        ] {
+            let bytes = fixture::transformed_compound_text_artboard(authored);
+            unsafe {
+                let mut file = ptr::null_mut();
+                assert_eq!(
+                    nux_file_import(
+                        bytes.as_ptr(),
+                        bytes.len(),
+                        &NuxRenderCallbacks::default(),
+                        &mut file
+                    ),
+                    NuxStatus::Ok
+                );
+                let mut instance = ptr::null_mut();
+                assert_eq!(
+                    nux_artboard_instance_new(file, 0, &mut instance),
+                    NuxStatus::Ok
+                );
+                let mut player = ptr::null_mut();
+                assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+                let step = NuxPlayerStep {
+                    struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                    ..Default::default()
+                };
+                let mut result = ptr::null_mut();
+                assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                let artboard = (&(*player).artboard).instance.borrow().native_handle();
+                let run = artboard
+                    .with_artboard(|artboard| {
+                        artboard
+                            .objects()
+                            .iter()
+                            .flatten()
+                            .find(|object| object.is_type_of(TextValueRun::TYPE_KEY))
+                            .cloned()
+                    })
+                    .expect("authored text run");
+                let owner = run
+                    .with_downcast::<TextValueRun, _>(TextValueRun::text_component)
+                    .flatten()
+                    .expect("text owner");
+                let actual = owner
+                    .with(|owner| {
+                        *owner
+                            .as_world_transform_component()
+                            .expect("text world transform")
+                            .world_transform()
+                            .values()
+                    })
+                    .unwrap();
+                for (actual, expected) in actual.into_iter().zip(expected) {
+                    assert!(
+                        (actual - expected).abs() < 0.0001,
+                        "actual {actual}, expected {expected}; authored {authored:?}"
+                    );
+                }
+                assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                assert_eq!(nux_player_free(player), NuxStatus::Ok);
+                assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+                assert_eq!(nux_file_free(file), NuxStatus::Ok);
+            }
+        }
+    }
 
     #[test]
     fn text_run_association_uses_the_presented_owner_and_rejects_ambiguity() {
@@ -524,12 +613,6 @@ mod tests {
 
     fn check_text_run_association(compound: bool) {
         use nuxie::runtime::{core::CoreType, text::text_value_run::TextValueRun};
-        mod fixture {
-            include!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/support/semantic_text.rs"
-            ));
-        }
         let bytes = if compound {
             fixture::compound_semantic_text_artboard()
         } else {

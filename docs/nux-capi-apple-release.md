@@ -81,13 +81,20 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.11 candidate adds frame-qualified geometry reads for exact-name root
-text runs. It returns full text/content transforms, the nearest structural
-layout ancestor's box, and the first logical baseline. A live successful step
-result must match the current occurrence and render revision; stale mutations,
-foreign occurrences and ambiguous names fail closed. The additive API keeps
+The v0.9.12 candidate adds optional capture of the submitted Apple frame into
+caller-owned shared Metal storage before drawable presentation. Capture uses
+the renderer's presentation queue and waits for GPU completion. It requires a
+readable BGRA8Unorm drawable, a shared buffer on the same device, and a row
+stride covering the pixels and aligned to 256 bytes. Rejected and skipped
+frames leave the buffer untouched. Older operation prefixes disable capture;
+all existing field offsets remain unchanged. The additive extension keeps
 ABI v4 and the existing release size ceilings. Candidate artifact qualification
-must pass before publication. See [the geometry contract](text-run-geometry.md).
+must pass before publication.
+
+Frame-qualified geometry reads continue to require a live successful step
+result matching the current occurrence and render revision; stale mutations,
+foreign occurrences and ambiguous names fail closed. See
+[the geometry contract](text-run-geometry.md).
 
 Runtime publication does not enable the SDK scene-semantics capability or qualify
 VoiceOver behavior. SDK adoption, publisher-generated signed fixtures and device

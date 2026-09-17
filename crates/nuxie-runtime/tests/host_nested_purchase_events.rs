@@ -8,6 +8,7 @@ fn purchase_events(
     artboard_name: &str,
     machine_name: Option<&str>,
     taps: &[(f32, f32)],
+    host_write: bool,
 ) -> Vec<StateMachineReportedEvent> {
     let bytes = include_bytes!("fixtures/purchase-scopes/screen.riv");
     let mut factory = PersistentFactory::new(RecordingFactory::default());
@@ -28,6 +29,15 @@ fn purchase_events(
         .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
         .expect("default view model");
     artboard.bind_owned_view_model_handle(view_model.clone());
+    if host_write {
+        let mut transaction = nuxie_runtime::RuntimeOwnedViewModelTransaction::begin().unwrap();
+        assert!(
+            transaction
+                .try_set_number(&view_model, "fontScale", 2.0)
+                .is_some()
+        );
+        transaction.commit();
+    }
     let mut machine = match machine_name {
         Some(name) => artboard.state_machine_instance_named(name),
         None => artboard.state_machine_instance(0),
@@ -37,6 +47,12 @@ fn purchase_events(
     artboard
         .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.0, true)
         .expect("initial frame");
+    for _ in 0..20 {
+        machine.bind_owned_view_model_handle(view_model.clone());
+        artboard
+            .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+            .unwrap();
+    }
     let mut all_events = Vec::new();
     for &(x, y) in taps {
         assert!(machine.pointer_down(x, y, 1).is_hit());
@@ -84,8 +100,13 @@ fn purchase_events(
                 .linked_view_model_by_property_name_path(property)
                 .expect("published component reference")
                 .instance_identity();
-            assert_eq!(events[0].context().and_then(|context| context.view_model_instance_id()), Some(expected),
-                "event identity must match the live view-model graph, not just differ between buttons");
+            assert_eq!(
+                events[0]
+                    .context()
+                    .and_then(|context| context.view_model_instance_id()),
+                Some(expected),
+                "event identity must match the live view-model graph, not just differ between buttons"
+            );
         }
         all_events.extend(events);
     }
@@ -98,6 +119,7 @@ fn direct_purchase_component_reports_the_authored_event() {
         "Plan card",
         Some("Generated Nuxie Interaction"),
         &[(70.0, 40.0)],
+        false,
     );
     assert_eq!(events.len(), 1);
 }
@@ -108,6 +130,7 @@ fn nested_purchase_component_reports_the_authored_event() {
         "Purchase",
         None,
         &[(80.0, 50.0), (240.0, 50.0), (80.0, 50.0)],
+        false,
     );
     let sources: Vec<_> = events
         .iter()
@@ -132,6 +155,7 @@ fn nested_purchase_events_retain_distinct_view_model_identity() {
         "Purchase",
         None,
         &[(80.0, 50.0), (240.0, 50.0), (80.0, 50.0)],
+        false,
     );
     let ids: Vec<_> = events
         .iter()
@@ -145,4 +169,9 @@ fn nested_purchase_events_retain_distinct_view_model_identity() {
         .collect();
     assert_ne!(ids[0], ids[1]);
     assert_eq!(ids[0], ids[2]);
+}
+
+#[test]
+fn host_scalar_write_preserves_nested_purchase_identity() {
+    purchase_events("Purchase", None, &[(80.0, 50.0), (240.0, 50.0)], true);
 }

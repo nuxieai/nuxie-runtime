@@ -458,3 +458,74 @@ fn append_semantic_children(
         }
     }
 }
+
+/// Lexicographic draw position through nested artboard occurrences. Reading order
+/// is intentionally absent: draw rules and repeated-item ordering can differ.
+pub fn semantic_paint_order(component: &CoreHandle) -> Option<Vec<usize>> {
+    use crate::mechanical_port::source::drawable::Drawable;
+    let mut owner = component.clone();
+    let mut path = Vec::new();
+    let mut visited = std::collections::HashSet::new();
+    loop {
+        if !visited.insert(owner.clone()) {
+            return None;
+        }
+        let artboard = owner.with(|object| object.as_component()?.artboard_handle())??;
+        let mut drawable = artboard.with_downcast::<Artboard, _>(Artboard::first_drawable)?;
+        let mut rank = None;
+        let mut index = 0usize;
+        let mut empty_clips = 0;
+        while let Some(current) = drawable {
+            drawable = current.with(Drawable::prev_drawable).flatten();
+            if current.advance_clip_visibility(&mut empty_clips)
+                && !current.is_clip_start()
+                && !current.is_clip_end()
+            {
+                let mut ancestor = current
+                    .authored_handle()
+                    .or_else(|| current.with_proxy(|proxy| proxy.proxy_drawing().owner_handle()));
+                let mut ancestors = std::collections::HashSet::new();
+                while let Some(candidate) = ancestor {
+                    if !ancestors.insert(candidate.clone()) {
+                        return None;
+                    }
+                    if candidate == owner {
+                        rank = Some(index);
+                        break;
+                    }
+                    ancestor = candidate
+                        .with(|object| object.component_parent_handle())
+                        .flatten();
+                }
+            }
+            index = index.checked_add(1)?;
+            if index > 1_000_000 {
+                return None;
+            }
+        }
+        path.push(rank?);
+        let Some(host) = artboard.with_downcast::<Artboard, _>(Artboard::host)? else {
+            path.reverse();
+            return Some(path);
+        };
+        let occurrence = host.with_mut(|object| {
+            if let Some(list) = object.as_artboard_component_list_mut() {
+                let indices = list.ordered_list_indices().to_vec();
+                indices.iter().position(|index| {
+                    list.artboard_instance(*index)
+                        .is_some_and(|instance| instance.core_handle() == artboard)
+                })
+            } else {
+                let host = object.as_artboard_host()?;
+                (0..host.artboard_count()).find(|index| {
+                    i32::try_from(*index)
+                        .ok()
+                        .and_then(|index| host.artboard_instance(index))
+                        .is_some_and(|instance| instance.core_handle() == artboard)
+                })
+            }
+        })??;
+        path.push(occurrence);
+        owner = host;
+    }
+}

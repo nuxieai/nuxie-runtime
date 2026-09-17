@@ -1486,3 +1486,257 @@ fn queued_semantic_events_reach_the_host_once_in_the_execution_frame() {
         assert!(machine.take_reported_events().is_empty());
     }
 }
+
+#[test]
+fn modal_paint_order_matches_drawn_colors_instead_of_semantic_order() {
+    use nuxie_runtime::source::semantic::{
+        semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
+        semantic_provider::semantic_paint_order,
+    };
+    let bytes = modal_order_fixture(false);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let artboard = file.with_file(|file| file.artboard_default()).unwrap();
+    Artboard::update_components_handle(&artboard.core_handle());
+    let manager = RuntimeSemanticManagerHandle::new(SemanticManager::new());
+    artboard.build_semantic_tree(Some(manager.clone()), None);
+    let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    assert_eq!(
+        nodes
+            .iter()
+            .map(|node| node.label.as_str())
+            .collect::<Vec<_>>(),
+        ["Red dialog", "Blue dialog"]
+    );
+    let positions = nodes
+        .iter()
+        .map(|node| {
+            let owner = manager
+                .with_semantic_manager(|manager| manager.node_by_id(node.id))
+                .unwrap()
+                .borrow()
+                .core_owner
+                .clone()
+                .unwrap();
+            semantic_paint_order(&owner).unwrap()
+        })
+        .collect::<Vec<_>>();
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    let recording = factory.borrow().canonical_recording();
+    let blue = recording
+        .stream()
+        .rfind("0xff0000ff")
+        .expect("blue rendered");
+    let red = recording
+        .stream()
+        .rfind("0xffff0000")
+        .expect("red rendered");
+    assert!(
+        blue < red,
+        "red paints over blue despite earlier reading order"
+    );
+    assert!(positions[0] > positions[1]);
+    use nuxie_runtime::source::semantic::semantic_node::SemanticNode;
+    let eligible = nodes
+        .iter()
+        .filter(|node| {
+            let node = manager
+                .with_semantic_manager(|manager| manager.node_by_id(node.id))
+                .unwrap();
+            SemanticNode::is_action_eligible(&node)
+        })
+        .map(|node| node.label.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        eligible,
+        ["Red dialog"],
+        "only the frontmost dialog admits input"
+    );
+}
+
+fn modal_order_fixture(nested: bool) -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9660, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    let mut shapes = vec![
+        (1, 0, "Red dialog", 0xffff0000),
+        (6, 0, "Blue dialog", 0xff0000ff),
+    ];
+    if nested {
+        shapes.push((11, 1, "Nested dialog", 0xff00ff00));
+    }
+    for (shape, parent, label, color) in shapes {
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", parent);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Node", "parentId", shape);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Node", "parentId", shape + 1);
+            push_color(bytes, "SolidColor", "colorValue", color);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", shape);
+            push_f32(bytes, "ParametricPath", "width", 100.0);
+            push_f32(bytes, "ParametricPath", "height", 100.0);
+        });
+        push_object(&mut bytes, "SemanticData", |bytes| {
+            push_uint(bytes, "Component", "parentId", shape);
+            push_uint(bytes, "SemanticData", "role", 14);
+            push_uint(bytes, "SemanticData", "stateFlags", 1 << 11);
+            push_string(bytes, "SemanticData", "label", label);
+        });
+    }
+    bytes
+}
+
+#[test]
+fn nested_modal_precedence_is_resolved_before_competing_paint_scopes() {
+    use nuxie_runtime::source::semantic::{
+        semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
+        semantic_node::SemanticNode,
+    };
+    for registration in [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+    ] {
+        let mut factory = PersistentFactory::new(RecordingFactory::default());
+        let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+        let file = File::import(&modal_order_fixture(true), retained, None, None, None).unwrap();
+        let artboard = file.with_file(|file| file.artboard_default()).unwrap();
+        Artboard::update_components_handle(&artboard.core_handle());
+        let manager = RuntimeSemanticManagerHandle::new(SemanticManager::new());
+        artboard.build_semantic_tree(Some(manager.clone()), None);
+        let nodes = manager.with_semantic_manager_mut(|manager| {
+            let ids: Vec<_> = manager.snapshot().iter().map(|node| node.id).collect();
+            ids.into_iter()
+                .map(|id| manager.node_by_id(id).unwrap())
+                .collect::<Vec<_>>()
+        });
+        assert_eq!(
+            nodes
+                .iter()
+                .map(|node| node.borrow().label.clone())
+                .collect::<Vec<_>>(),
+            ["Red dialog", "Nested dialog", "Blue dialog"]
+        );
+        let parents: Vec<_> = nodes.iter().map(|node| node.borrow().parent()).collect();
+        for node in &nodes {
+            manager.remove_child(node);
+        }
+        for index in registration {
+            manager.add_child(parents[index].clone(), nodes[index].clone());
+        }
+        let mut renderer = factory.borrow().make_renderer();
+        artboard.draw(&mut renderer);
+        let recording = factory.borrow().canonical_recording();
+        let green = recording.stream().rfind("0xff00ff00").unwrap();
+        let blue = recording.stream().rfind("0xff0000ff").unwrap();
+        let red = recording.stream().rfind("0xffff0000").unwrap();
+        assert!(green < blue && blue < red);
+        let eligible = nodes
+            .iter()
+            .filter(|node| SemanticNode::is_action_eligible(node))
+            .map(|node| node.borrow().label.clone())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            eligible,
+            ["Blue dialog"],
+            "registration order {registration:?}"
+        );
+    }
+}
+
+#[test]
+fn empty_clipped_decoration_cannot_promote_a_background_modal() {
+    use nuxie_runtime::source::semantic::{
+        semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
+        semantic_node::SemanticNode,
+    };
+    fn shape(bytes: &mut Vec<u8>, id: u64, parent: u64, color: u32) {
+        push_object(bytes, "Shape", |b| push_uint(b, "Node", "parentId", parent));
+        push_object(bytes, "Fill", |b| push_uint(b, "Node", "parentId", id));
+        push_object(bytes, "SolidColor", |b| {
+            push_uint(b, "Node", "parentId", id + 1);
+            push_color(b, "SolidColor", "colorValue", color);
+        });
+        push_object(bytes, "Rectangle", |b| {
+            push_uint(b, "Node", "parentId", id);
+            push_f32(b, "ParametricPath", "width", 100.0);
+            push_f32(b, "ParametricPath", "height", 100.0);
+        });
+    }
+    fn modal(bytes: &mut Vec<u8>, parent: u64, label: &str) {
+        push_object(bytes, "SemanticData", |b| {
+            push_uint(b, "Component", "parentId", parent);
+            push_uint(b, "SemanticData", "role", 14);
+            push_uint(b, "SemanticData", "stateFlags", 1 << 11);
+            push_string(b, "SemanticData", "label", label);
+        });
+    }
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9661, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |b| {
+        push_f32(b, "Artboard", "width", 100.0);
+        push_f32(b, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Node", |b| push_uint(b, "Node", "parentId", 0)); // 1
+    modal(&mut bytes, 1, "Background dialog"); // 2
+    shape(&mut bytes, 3, 1, 0xffff0000); // 3..6: later decoration, empty-clipped
+    push_object(&mut bytes, "ClippingShape", |b| {
+        // 7
+        push_uint(b, "Component", "parentId", 3);
+        push_uint(b, "ClippingShape", "sourceId", 8);
+    });
+    push_object(&mut bytes, "Shape", |b| push_uint(b, "Node", "parentId", 0)); // 8: empty clip source
+    shape(&mut bytes, 9, 0, 0xff0000ff); // 9..12
+    modal(&mut bytes, 9, "Foreground dialog"); // 13
+    shape(&mut bytes, 14, 1, 0xff00ff00); // 14..17: early visible background content
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let artboard = file.with_file(|file| file.artboard_default()).unwrap();
+    Artboard::update_components_handle(&artboard.core_handle());
+    let manager = RuntimeSemanticManagerHandle::new(SemanticManager::new());
+    artboard.build_semantic_tree(Some(manager.clone()), None);
+    let nodes = manager.with_semantic_manager_mut(|manager| manager.snapshot().to_vec());
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    let recording = factory.borrow().canonical_recording();
+    assert!(
+        !recording.stream().contains("0xffff0000"),
+        "red decoration must not draw: {}",
+        recording.stream()
+    );
+    assert!(
+        recording.stream().rfind("0xff00ff00").unwrap()
+            < recording.stream().rfind("0xff0000ff").unwrap()
+    );
+    let eligible = nodes
+        .iter()
+        .filter(|node| {
+            let node = manager
+                .with_semantic_manager(|manager| manager.node_by_id(node.id))
+                .unwrap();
+            SemanticNode::is_action_eligible(&node)
+        })
+        .map(|node| node.label.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(eligible, ["Foreground dialog"]);
+}

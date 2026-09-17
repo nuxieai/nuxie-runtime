@@ -2427,9 +2427,7 @@ impl Artboard {
         let mut drawable = first_drawable;
         while let Some(current) = drawable {
             drawable = current.with(Drawable::prev_drawable).flatten();
-            let previous_clips = empty_clips;
-            empty_clips += current.empty_clip_count();
-            if !current.will_draw() || empty_clips != previous_clips || empty_clips > 0 {
+            if !current.advance_clip_visibility(&mut empty_clips) {
                 continue;
             }
             if current.is_clip_start() {

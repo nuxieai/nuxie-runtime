@@ -334,6 +334,14 @@ pub enum RuntimeDrawableWeakOccurrence {
 }
 
 impl RuntimeDrawableOccurrence {
+    /// Shared draw-sequence eligibility, including empty clipping regions whose
+    /// markers change visibility for later drawables.
+    pub(crate) fn advance_clip_visibility(&self, empty_clips: &mut i32) -> bool {
+        let previous = *empty_clips;
+        *empty_clips += self.empty_clip_count();
+        self.will_draw() && *empty_clips == previous && *empty_clips <= 0
+    }
+
     pub fn with_component<R>(
         &self,
         use_component: impl FnOnce(&crate::mechanical_port::source::component::Component) -> R,

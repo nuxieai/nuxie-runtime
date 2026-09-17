@@ -1,7 +1,7 @@
 use crate::mechanical_port::source::semantic::{
     semantic_dirt::SemanticDirt,
     semantic_node::{SemanticNode, SemanticNodeRef},
-    semantic_provider::semantic_source_is_visible,
+    semantic_provider::{semantic_paint_order, semantic_source_is_visible},
     semantic_role::{SemanticRole, is_interactive_role_value},
     semantic_snapshot::{
         SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode,
@@ -75,6 +75,12 @@ impl RuntimeSemanticManagerWeakHandle {
     }
 }
 
+pub enum SemanticModalScope {
+    None,
+    Active(SemanticNodeRef),
+    Unresolved,
+}
+
 pub struct SemanticManager {
     dirt: SemanticDirt,
     last_diff: SemanticsDiff,
@@ -145,38 +151,94 @@ impl SemanticManager {
         }
     }
 
-    /// Recheck live modal boundaries at action dispatch, including actions queued
-    /// before a modal opened. Detached and hidden modal paths do not own input.
-    pub(crate) fn modals_allow_path(&self, path: &HashSet<*const RefCell<SemanticNode>>) -> bool {
-        self.modal_ids.iter().all(|id| {
-            let Some(modal) = self.nodes_by_id.get(id) else {
-                return true;
-            };
-            if path.contains(&Rc::as_ptr(modal)) {
-                return true;
+    fn modal_is_attached_and_visible(&self, modal: &SemanticNodeRef) -> bool {
+        let mut current = Some(modal.clone());
+        let mut visited = HashSet::new();
+        while let Some(node) = current {
+            if !visited.insert(Rc::as_ptr(&node)) {
+                return false;
             }
-            let mut current = Some(modal.clone());
+            let entry = node.borrow();
+            if entry.state_flags & SemanticState::HIDDEN.0 != 0
+                || entry
+                    .core_owner
+                    .as_ref()
+                    .is_some_and(|owner| !semantic_source_is_visible(owner))
+            {
+                return false;
+            }
+            current = entry.parent();
+            if current.is_none() {
+                return self.contains_root(&node);
+            }
+        }
+        false
+    }
+
+    /// Resolve modality from the same occurrence draw order used by rendering.
+    /// An unresolved scope never grants background input.
+    pub fn modal_scope(&self) -> SemanticModalScope {
+        fn contains(ancestor: &SemanticNodeRef, descendant: &SemanticNodeRef) -> bool {
+            let mut current = Some(descendant.clone());
             let mut visited = HashSet::new();
             while let Some(node) = current {
                 if !visited.insert(Rc::as_ptr(&node)) {
+                    return false;
+                }
+                if Rc::ptr_eq(ancestor, &node) {
                     return true;
                 }
-                let entry = node.borrow();
-                if entry.state_flags & SemanticState::HIDDEN.0 != 0
-                    || entry
-                        .core_owner
-                        .as_ref()
-                        .is_some_and(|owner| !semantic_source_is_visible(owner))
-                {
-                    return true;
-                }
-                current = entry.parent();
-                if current.is_none() {
-                    return !self.contains_root(&node);
-                }
+                current = node.borrow().parent();
             }
-            true
-        })
+            false
+        }
+        let visible: Vec<_> = self
+            .modal_ids
+            .iter()
+            .filter_map(|id| self.nodes_by_id.get(id))
+            .filter(|modal| self.modal_is_attached_and_visible(modal))
+            .collect();
+        // Resolve nested modality before comparing unrelated paint scopes. Mixing
+        // containment and paint order in a pairwise fold is nontransitive.
+        let leaves = visible.iter().copied().filter(|modal| {
+            !visible
+                .iter()
+                .any(|other| !Rc::ptr_eq(modal, other) && contains(modal, other))
+        });
+        let mut active: Option<SemanticNodeRef> = None;
+        for modal in leaves {
+            let Some(previous) = active.as_ref() else {
+                active = Some(modal.clone());
+                continue;
+            };
+            let previous_order = previous
+                .borrow()
+                .core_owner
+                .as_ref()
+                .and_then(semantic_paint_order);
+            let order = modal
+                .borrow()
+                .core_owner
+                .as_ref()
+                .and_then(semantic_paint_order);
+            match (previous_order, order) {
+                (Some(previous_order), Some(order)) if order > previous_order => {
+                    active = Some(modal.clone())
+                }
+                (Some(previous_order), Some(order)) if order < previous_order => {}
+                _ => return SemanticModalScope::Unresolved,
+            }
+        }
+        active.map_or(SemanticModalScope::None, SemanticModalScope::Active)
+    }
+
+    /// Recheck at dispatch even when the request preceded a modal state change.
+    pub(crate) fn modals_allow_path(&self, path: &HashSet<*const RefCell<SemanticNode>>) -> bool {
+        match self.modal_scope() {
+            SemanticModalScope::None => true,
+            SemanticModalScope::Active(modal) => path.contains(&Rc::as_ptr(&modal)),
+            SemanticModalScope::Unresolved => false,
+        }
     }
 
     #[cfg(any(test, feature = "tools"))]

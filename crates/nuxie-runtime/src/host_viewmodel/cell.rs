@@ -12,7 +12,7 @@ pub use blob_asset_owner::RuntimeBlobAsset;
 type RuntimeDeferredNotification = Box<dyn FnOnce()>;
 
 thread_local! {
-    static HOST_TRANSACTION_PUBLICATION: Cell<bool> = const { Cell::new(false) };
+    static HOST_TRANSACTION_PUBLICATION: Cell<Option<RuntimeTransactionKind>> = const { Cell::new(None) };
     static HOST_MUTATION_NOTIFICATIONS: RefCell<Option<Vec<RuntimeDeferredNotification>>> =
         const { RefCell::new(None) };
     static HOST_MUTATION_CALLBACK_FIREWALL_DEPTH: Cell<u32> = const { Cell::new(0) };
@@ -20,21 +20,43 @@ thread_local! {
         const { RefCell::new(None) };
 }
 
-/// Host atomic batches, unlike ordinary runtime mutations, publish only on
-/// commit. The flag never changes the source runtime's normal frame behavior.
+/// Host writes publish internal dependencies atomically; player checkpoints
+/// propagate them during frame settling. Both defer external observers.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RuntimeTransactionKind {
+    HostMutation,
+    PlayerFrame,
+}
+
 pub(crate) struct RuntimeHostTransactionPublication;
 impl RuntimeHostTransactionPublication {
-    pub(crate) fn begin() -> Option<Self> {
-        HOST_TRANSACTION_PUBLICATION.with(|active| (!active.replace(true)).then_some(Self))
+    pub(crate) fn begin(kind: RuntimeTransactionKind) -> Option<Self> {
+        HOST_TRANSACTION_PUBLICATION.with(|active| {
+            if active.get().is_some() {
+                return None;
+            }
+            active.set(Some(kind));
+            Some(Self)
+        })
     }
 }
 impl Drop for RuntimeHostTransactionPublication {
     fn drop(&mut self) {
-        HOST_TRANSACTION_PUBLICATION.with(|active| active.set(false));
+        HOST_TRANSACTION_PUBLICATION.with(|active| active.set(None));
     }
 }
 pub(crate) fn defer_transaction_notification(notification: impl FnOnce() + 'static) -> bool {
-    HOST_TRANSACTION_PUBLICATION.with(Cell::get) && defer_host_mutation_notification(notification)
+    HOST_TRANSACTION_PUBLICATION.with(|active| active.get().is_some())
+        && defer_host_mutation_notification(notification)
+}
+
+/// Runtime dependency feedback must settle before a player frame commits.
+pub(crate) fn defer_transaction_dependency_notification(
+    notification: impl FnOnce() + 'static,
+) -> bool {
+    HOST_TRANSACTION_PUBLICATION
+        .with(|active| active.get() == Some(RuntimeTransactionKind::HostMutation))
+        && defer_host_mutation_notification(notification)
 }
 
 /// Tools observers follow the explicit host transaction's publication boundary.
@@ -48,7 +70,7 @@ pub(crate) fn defer_transaction_tools_callback<
     value: &T,
     callback: impl FnOnce(&mut T) + 'static,
 ) -> bool {
-    if !HOST_TRANSACTION_PUBLICATION.with(Cell::get) {
+    if !HOST_TRANSACTION_PUBLICATION.with(|active| active.get().is_some()) {
         return false;
     }
     let Some(owner) = value.core().handle() else {

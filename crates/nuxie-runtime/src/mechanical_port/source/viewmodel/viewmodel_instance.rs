@@ -33,7 +33,7 @@ impl DataBindContainerDependent {
 
     pub(crate) fn relink_data_context(&self) {
         let dependent = self.clone();
-        if crate::view_model_cell::defer_transaction_notification(move || {
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
             dependent.relink_data_context()
         }) {
             return;

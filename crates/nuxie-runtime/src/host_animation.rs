@@ -198,6 +198,7 @@ impl LinearAnimationInstance {
                         event: Some(event.clone()),
                         seconds_delay: elapsed_seconds,
                         host_sequence: 0,
+                        host_view_model_instance_id: None,
                     },
                     &self.artboard,
                     None,

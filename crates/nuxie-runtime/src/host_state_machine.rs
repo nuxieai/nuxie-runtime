@@ -453,7 +453,6 @@ pub struct StateMachineInstance {
     file: RuntimeFileHandle,
     index: usize,
     host_reported_events: RefCell<HostReportedEventObservations>,
-    last_nested_event_sequence: u64,
 }
 
 impl std::fmt::Debug for StateMachineInstance {
@@ -478,7 +477,6 @@ impl StateMachineInstance {
             file,
             index,
             host_reported_events: RefCell::new(HostReportedEventObservations::default()),
-            last_nested_event_sequence: 0,
         }
     }
 
@@ -806,9 +804,13 @@ impl StateMachineInstance {
                 )
             })
             .collect();
-        let nested = nested_events::collect(&self.artboard, self.last_nested_event_sequence);
+        let after = self
+            .artboard
+            .with_artboard(|artboard| artboard.host_nested_event_sequence);
+        let nested = nested_events::collect(&self.artboard, after);
         if let Some(sequence) = nested.iter().map(|event| event.host_sequence).max() {
-            self.last_nested_event_sequence = sequence;
+            self.artboard
+                .with_artboard_mut(|artboard| artboard.host_nested_event_sequence = sequence);
         }
         events.extend(nested);
         events.sort_by_key(|event| event.host_sequence);

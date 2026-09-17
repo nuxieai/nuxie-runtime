@@ -114,6 +114,8 @@ pub struct EventReport {
     pub seconds_delay: f32,
     /// Host observation identity, preserved while native queues move reports.
     pub host_sequence: u64,
+    /// Native model identity at emission time; later rebinding cannot rewrite it.
+    pub host_view_model_instance_id: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -3975,6 +3977,14 @@ impl StateMachineInstance {
             event: Some(event),
             seconds_delay,
             host_sequence: NEXT_HOST_EVENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            host_view_model_instance_id: self
+                .data_context()
+                .as_ref()
+                .and_then(|context| {
+                    context.with_context(|context| context.main_view_model_instance())
+                })
+                .as_ref()
+                .map(crate::host_viewmodel::view_model_identity),
         });
     }
 

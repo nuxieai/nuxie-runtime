@@ -30,11 +30,6 @@ pub(super) fn collect(
         if !visited.insert(artboard.core_handle().identity_key()) {
             continue;
         }
-        let view_model_instance_id = artboard
-            .with_artboard(|artboard| artboard.base.data_context())
-            .and_then(|context| context.with_context(|context| context.main_view_model_instance()))
-            .as_ref()
-            .map(crate::host_viewmodel::view_model_identity);
         for machine in machines {
             let reports = machine.with_instance(|machine| {
                 (0..machine.reported_event_count())
@@ -45,6 +40,7 @@ pub(super) fn collect(
                 if report.host_sequence <= after {
                     continue;
                 }
+                let view_model_instance_id = report.host_view_model_instance_id;
                 if let Some(event) = StateMachineReportedEvent::from_native(
                     report,
                     &artboard,

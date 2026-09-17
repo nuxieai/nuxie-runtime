@@ -947,7 +947,10 @@ fn portable_player_step_does_not_implicitly_execute_product_data_programs() {
         // The trusted product-import suites cover the same programs through
         // their explicit upper-leaf adapter entrypoints.
         assert_eq!(step_info.view_model_change_count, 0);
-        assert!(scheduling.dirty);
+        // A hit without a supported effect does not change this settled scene.
+        // Previously an implicit rebind falsely dirtied it on every advance.
+        assert!(!scheduling.dirty);
+        // The initial render is still owed: this test never acknowledges it.
         assert!(scheduling.render_required);
         unsafe {
             nux_player_step_result_free(result);

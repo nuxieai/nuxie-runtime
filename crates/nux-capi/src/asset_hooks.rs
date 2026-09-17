@@ -1014,9 +1014,11 @@ where
                 return NuxStatus::ImportError;
             }
         };
-        if let Err(error) = validate_required_text_fonts(&imported.file) {
-            publish_result(out_result, NuxStatus::ImportError, error);
-            return NuxStatus::ImportError;
+        if prepared_assets.is_some() || validates_expected_assets {
+            if let Err(error) = validate_required_text_fonts(&imported.file) {
+                publish_result(out_result, NuxStatus::ImportError, error);
+                return NuxStatus::ImportError;
+            }
         }
         let metadata = match super::FileMetadataCatalog::from_file(&imported.file, bytes) {
             Ok(metadata) => metadata,
@@ -1054,8 +1056,9 @@ where
     })
 }
 
-// The generic importer permits deferred asset loading. Configured product import
-// must not publish a file whose authored text font failed to load or decode.
+// Imports without asset bindings permit deferred loading and catalog inspection.
+// Asset-bound imports must not publish a file whose authored text font failed
+// to load or decode.
 // Unbound styles (the sentinel asset id) remain available for data binding, and
 // unused font assets do not make otherwise usable scenes fail admission.
 fn validate_required_text_fonts(file: &nuxie::RuntimeFileHandle) -> Result<(), String> {
@@ -2162,6 +2165,32 @@ mod tests {
             });
         }
         bytes
+    }
+
+    #[test]
+    fn deferred_font_catalog_import_does_not_require_asset_bindings() {
+        // Apple catalog inspection uses this same factory import with an empty
+        // config before authenticating and supplying external font bytes.
+        let scene = required_font_file("TextStyle", 0, None);
+        let config = NuxFileImportConfig::default();
+        let mut file = ptr::null_mut();
+        let mut result = ptr::null_mut();
+        let status = unsafe {
+            nux_file_import_configured(scene.as_ptr(), scene.len(), &config, &mut file, &mut result)
+        };
+        assert_eq!(status, NuxStatus::Ok);
+        assert!(!file.is_null());
+        let mut asset_count = 0;
+        assert_eq!(
+            unsafe { super::super::nux_file_asset_count(file, &mut asset_count) },
+            NuxStatus::Ok
+        );
+        assert_eq!(asset_count, 1);
+        assert_eq!(unsafe { super::super::nux_file_free(file) }, NuxStatus::Ok);
+        assert_eq!(
+            unsafe { super::super::nux_capi_result_free(result) },
+            NuxStatus::Ok
+        );
     }
 
     #[test]

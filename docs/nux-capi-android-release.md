@@ -63,13 +63,16 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.2 release candidate
+## Immutable v0.4.3 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.2 patch rejects missing or invalid fonts referenced by concrete authored
-text styles during configured import. It applies to embedded and external font
+The v0.4.3 patch preserves deferred font loading during catalog inspection with
+an empty import configuration. Required-font validation applies when asset hooks
+or an expected asset catalog are supplied, correcting the overly broad v0.4.2
+check. Asset-bound imports reject missing or invalid fonts referenced by concrete
+authored text styles. It applies to embedded and external font
 bytes, preserves unused assets and unbound styles, and uses the existing import
 error. There are no public ABI or scene-format additions. System font sourcing
 remains SDK-owned, and release publication does not activate SDK capability.
@@ -101,9 +104,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.2 <full-source-sha>
-git push origin android-runtime-v0.4.2
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.2
+git tag android-runtime-v0.4.3 <full-source-sha>
+git push origin android-runtime-v0.4.3
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.3
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

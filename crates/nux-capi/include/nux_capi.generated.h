@@ -1251,6 +1251,20 @@ typedef struct NuxVideoInfo {
   struct NuxStringView source_key;
   struct NuxStringView content_type;
   struct NuxByteView embedded_bytes;
+  /**
+   * Authored component name in this player's artboard. Names may be empty or
+   * repeated; hosts must reject ambiguous named targets rather than selecting
+   * the first match. The view is borrowed for the duration of the callback.
+   */
+  struct NuxStringView component_name;
+  /**
+   * Higher priorities win when a host cannot admit every visible decoder.
+   */
+  uint32_t priority;
+  /**
+   * Show immediately with poster=0, wait for first frame=1.
+   */
+  uint32_t readiness;
 } NuxVideoInfo;
 
 typedef void (*NuxVideoInfoCallback)(void*, const struct NuxVideoInfo*);

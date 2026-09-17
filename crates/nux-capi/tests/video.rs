@@ -84,6 +84,161 @@ fn scene() -> Vec<u8> {
     )
     .unwrap()
 }
+
+#[test]
+fn occurrence_metadata_distinguishes_players_sharing_one_asset() {
+    let mut records = vec![
+        R {
+            type_key: 23,
+            properties: vec![],
+        },
+        R {
+            type_key: 60000,
+            properties: vec![P {
+                key: 60000,
+                value: V::String("assets/shared.mp4".into()),
+            }],
+        },
+        R {
+            type_key: 1,
+            properties: vec![],
+        },
+    ];
+    for (name, priority, readiness) in [("Greeting 👋", 10, 1), ("Background", 0, 0)] {
+        records.push(R {
+            type_key: 60001,
+            properties: vec![
+                P {
+                    key: 4,
+                    value: V::String(name.into()),
+                },
+                P {
+                    key: 5,
+                    value: V::Uint(0),
+                },
+                P {
+                    key: 206,
+                    value: V::Uint(0),
+                },
+                P {
+                    key: 60003,
+                    value: V::Uint(1),
+                },
+                P {
+                    key: 60008,
+                    value: V::Uint(priority),
+                },
+                P {
+                    key: 60011,
+                    value: V::Uint(readiness),
+                },
+            ],
+        });
+    }
+    let bytes = nuxie_binary::encode_runtime_file(
+        &nuxie_binary::RuntimeFile::from_fixture_records(records).unwrap(),
+    )
+    .unwrap();
+    #[derive(Debug, PartialEq)]
+    struct Snapshot {
+        component: usize,
+        asset: u32,
+        name: String,
+        priority: u32,
+        readiness: u32,
+        wants_play: u32,
+    }
+    unsafe extern "C" fn collect(data: *mut c_void, info: *const NuxVideoInfo) {
+        let output = unsafe { &mut *data.cast::<Vec<Snapshot>>() };
+        let info = unsafe { &*info };
+        assert_eq!(info.struct_size as usize, size_of::<NuxVideoInfo>());
+        let name = unsafe {
+            std::slice::from_raw_parts(
+                info.component_name.data.cast::<u8>(),
+                info.component_name.len,
+            )
+        };
+        output.push(Snapshot {
+            component: info.component_id,
+            asset: info.asset_id,
+            name: String::from_utf8(name.to_vec()).unwrap(),
+            priority: info.priority,
+            readiness: info.readiness,
+            wants_play: info.wants_play,
+        });
+    }
+    unsafe extern "C" fn discard(_: *mut c_void, _: *const NuxVideoAction) {}
+    let (mut file, mut artboard, mut player) = (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+    let mut snapshots: Vec<Snapshot> = Vec::new();
+    unsafe {
+        assert_eq!(
+            import_video(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        assert_eq!(
+            nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut snapshots).cast()),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            snapshots,
+            vec![
+                Snapshot {
+                    component: 1,
+                    asset: 0,
+                    name: "Greeting 👋".into(),
+                    priority: 10,
+                    readiness: 1,
+                    wants_play: 1
+                },
+                Snapshot {
+                    component: 2,
+                    asset: 0,
+                    name: "Background".into(),
+                    priority: 0,
+                    readiness: 0,
+                    wants_play: 1
+                },
+            ]
+        );
+        let greeting = snapshots
+            .iter()
+            .find(|s| s.name == "Greeting 👋")
+            .unwrap()
+            .component;
+        assert_eq!(
+            nux_player_video_command(player, greeting, 1, 0.0, 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_video_step(player, greeting, 0, 0, 0.0, Some(discard), ptr::null_mut()),
+            NuxStatus::Ok
+        );
+        snapshots.clear();
+        assert_eq!(
+            nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut snapshots).cast()),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            snapshots.iter().map(|s| s.wants_play).collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
+    // Host copies remain valid after all scene and player owners have closed.
+    assert_eq!(snapshots[0].name, "Greeting 👋");
+}
 #[derive(Default)]
 struct Probe {
     player: *const NuxPlayer,

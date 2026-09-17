@@ -914,7 +914,6 @@ struct SnapshotBuilder<'a> {
     instances: Vec<OwnedSnapshotInstance>,
     values: Vec<OwnedSnapshotValue>,
     list_items: Vec<u64>,
-    next_id: u64,
     content_bytes: usize,
 }
 
@@ -926,7 +925,6 @@ impl<'a> SnapshotBuilder<'a> {
             instances: Vec::new(),
             values: Vec::new(),
             list_items: Vec::new(),
-            next_id: 1,
             content_bytes: 0,
         }
     }
@@ -942,23 +940,9 @@ impl<'a> SnapshotBuilder<'a> {
         if self.handles.len() >= MAX_SNAPSHOT_INSTANCES {
             return Err(NuxStatus::LimitExceeded);
         }
-        let id = match preferred {
-            Some(id) => id,
-            None => {
-                while self.handles.iter().any(|(_, known)| *known == self.next_id) {
-                    self.next_id = self
-                        .next_id
-                        .checked_add(1)
-                        .ok_or(NuxStatus::LimitExceeded)?;
-                }
-                let id = self.next_id;
-                self.next_id = self
-                    .next_id
-                    .checked_add(1)
-                    .ok_or(NuxStatus::LimitExceeded)?;
-                id
-            }
-        };
+        // References must share the identity domain used by runtime changes and
+        // event sources. Traversal ordinals alias unrelated nodes across snapshots.
+        let id = preferred.unwrap_or_else(|| handle.instance_identity());
         if id == 0 || self.handles.iter().any(|(_, known)| *known == id) {
             return Err(NuxStatus::LimitExceeded);
         }

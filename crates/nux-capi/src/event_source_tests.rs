@@ -94,3 +94,146 @@ fn unscoped_events_do_not_invent_a_source_or_overwrite_output() {
         assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
     }
 }
+
+#[test]
+fn scalar_mutation_before_player_keeps_nested_event_on_bound_graph() {
+    for host_write in [false, true] {
+        unsafe {
+            let bytes =
+                include_bytes!("../../nuxie-runtime/tests/fixtures/purchase-scopes/screen.riv");
+            let mut file = ptr::null_mut();
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            let index = (*file)
+                .file
+                .with_file(|file| {
+                    (0..file.artboard_count()).find(|&i| file.artboard_name_at(i) == "Purchase")
+                })
+                .unwrap();
+            let mut artboard = ptr::null_mut();
+            assert_eq!(
+                nux_artboard_instance_new(file, index, &mut artboard),
+                NuxStatus::Ok
+            );
+            let mut model = ptr::null_mut();
+            assert_eq!(
+                nux_view_model_instance_new_default(artboard, &mut model),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_bind_view_model(artboard, model),
+                NuxStatus::Ok
+            );
+            let expected = [
+                snapshot_reference(model, "first"),
+                snapshot_reference(model, "second"),
+            ];
+            assert_ne!(expected[0], expected[1]);
+            if host_write {
+                let path = b"fontScale";
+                let mutation = NuxViewModelMutation {
+                    kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+                    instance: model,
+                    path: NuxStringView {
+                        data: path.as_ptr().cast(),
+                        len: path.len(),
+                    },
+                    number_value: 1.0,
+                    ..NuxViewModelMutation::default()
+                };
+                let batch = NuxViewModelMutationBatch {
+                    mutations: &mutation,
+                    mutation_count: 1,
+                    ..NuxViewModelMutationBatch::default()
+                };
+                let mut result = ptr::null_mut();
+                assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+                assert_eq!(nux_view_model_mutation_result_free(result), NuxStatus::Ok);
+            }
+            let mut player = ptr::null_mut();
+            assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
+            let mut result = ptr::null_mut();
+            assert_eq!(
+                nux_player_step(player, &NuxPlayerStep::default(), &mut result),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+            let mut sources = Vec::new();
+            for x in [80.0, 240.0] {
+                for kind in [NUX_PLAYER_POINTER_KIND_DOWN, NUX_PLAYER_POINTER_KIND_UP] {
+                    let pointer = NuxPlayerPointerEvent {
+                        kind,
+                        x,
+                        y: 50.0,
+                        pointer_id: 1,
+                        timestamp_seconds: 0.0,
+                    };
+                    let step = NuxPlayerStep {
+                        pointers: &pointer,
+                        pointer_count: 1,
+                        ..NuxPlayerStep::default()
+                    };
+                    assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                    for index in 0..(*result).events.len() {
+                        let mut identity = 0;
+                        assert_eq!(
+                            nux_player_step_result_event_view_model_instance(
+                                result,
+                                index,
+                                &mut identity
+                            ),
+                            NuxStatus::Ok
+                        );
+                        sources.push(identity);
+                    }
+                    assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                }
+            }
+            assert_eq!(sources, expected, "host_write={host_write}");
+            assert_eq!(snapshot_reference(model, "first"), expected[0]);
+            assert_eq!(snapshot_reference(model, "second"), expected[1]);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_view_model_instance_free(model), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+}
+
+unsafe fn snapshot_reference(model: *mut NuxViewModelInstance, name: &str) -> u64 {
+    unsafe {
+        let mut snapshot = ptr::null_mut();
+        assert_eq!(
+            nux_view_model_instance_snapshot(model, &mut snapshot),
+            NuxStatus::Ok
+        );
+        let mut info = NuxViewModelSnapshotInfo::default();
+        assert_eq!(
+            nux_view_model_snapshot_info(snapshot, &mut info),
+            NuxStatus::Ok
+        );
+        let mut found = None;
+        for index in 0..info.value_count {
+            let mut value = NuxViewModelSnapshotValueView::default();
+            assert_eq!(
+                nux_view_model_snapshot_value(snapshot, index, &mut value),
+                NuxStatus::Ok
+            );
+            if value.owner_instance_id == info.root_instance_id
+                && slice::from_raw_parts(value.name.data.cast::<u8>(), value.name.len)
+                    == name.as_bytes()
+            {
+                found = Some(value.referenced_instance_id);
+            }
+        }
+        assert_eq!(nux_view_model_snapshot_free(snapshot), NuxStatus::Ok);
+        found.expect("authored reference in C snapshot")
+    }
+}

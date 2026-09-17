@@ -1,10 +1,12 @@
 use crate::mechanical_port::source::semantic::{
     semantic_dirt::SemanticDirt,
     semantic_node::{SemanticNode, SemanticNodeRef},
-    semantic_role::is_interactive_role_value,
+    semantic_provider::semantic_source_is_visible,
+    semantic_role::{SemanticRole, is_interactive_role_value},
     semantic_snapshot::{
         SemanticsBoundsUpdate, SemanticsChildrenUpdate, SemanticsDiff, SemanticsDiffNode,
     },
+    semantic_state::SemanticState,
 };
 use std::{
     cell::RefCell,
@@ -81,6 +83,7 @@ pub struct SemanticManager {
     next_local_id: u32,
     nodes_by_id: HashMap<u32, SemanticNodeRef>,
     roots: Vec<SemanticNodeRef>,
+    modal_ids: HashSet<u32>,
     dirty_content_nodes: HashSet<u32>,
     dirty_bounds_nodes: HashSet<u32>,
     dirty_boundary_ids: HashSet<u32>,
@@ -97,6 +100,7 @@ impl Default for SemanticManager {
             next_local_id: 1,
             nodes_by_id: HashMap::new(),
             roots: Vec::new(),
+            modal_ids: HashSet::new(),
             dirty_content_nodes: HashSet::new(),
             dirty_bounds_nodes: HashSet::new(),
             dirty_boundary_ids: HashSet::new(),
@@ -127,6 +131,54 @@ impl SemanticManager {
         self.roots.iter().any(|root| Rc::ptr_eq(root, node))
     }
 
+    fn refresh_modal_membership(&mut self, id: u32) {
+        let modal = self.nodes_by_id.get(&id).is_some_and(|node| {
+            let node = node.borrow();
+            node.state_flags & SemanticState::MODAL.0 != 0
+                && (node.role == SemanticRole::Dialog as u32
+                    || node.role == SemanticRole::AlertDialog as u32)
+        });
+        if modal {
+            self.modal_ids.insert(id);
+        } else {
+            self.modal_ids.remove(&id);
+        }
+    }
+
+    /// Recheck live modal boundaries at action dispatch, including actions queued
+    /// before a modal opened. Detached and hidden modal paths do not own input.
+    pub(crate) fn modals_allow_path(&self, path: &HashSet<*const RefCell<SemanticNode>>) -> bool {
+        self.modal_ids.iter().all(|id| {
+            let Some(modal) = self.nodes_by_id.get(id) else {
+                return true;
+            };
+            if path.contains(&Rc::as_ptr(modal)) {
+                return true;
+            }
+            let mut current = Some(modal.clone());
+            let mut visited = HashSet::new();
+            while let Some(node) = current {
+                if !visited.insert(Rc::as_ptr(&node)) {
+                    return true;
+                }
+                let entry = node.borrow();
+                if entry.state_flags & SemanticState::HIDDEN.0 != 0
+                    || entry
+                        .core_owner
+                        .as_ref()
+                        .is_some_and(|owner| !semantic_source_is_visible(owner))
+                {
+                    return true;
+                }
+                current = entry.parent();
+                if current.is_none() {
+                    return !self.contains_root(&node);
+                }
+            }
+            true
+        })
+    }
+
     #[cfg(any(test, feature = "tools"))]
     pub fn node_count(&self) -> usize {
         self.nodes_by_id.len()
@@ -138,6 +190,7 @@ impl SemanticManager {
         }
         if dirt.contains(SemanticDirt::CONTENT) {
             self.dirty_content_nodes.insert(id);
+            self.refresh_modal_membership(id);
         }
         if dirt.contains(SemanticDirt::BOUNDS) {
             self.dirty_bounds_nodes.insert(id);
@@ -215,6 +268,7 @@ impl SemanticManager {
         self.ensure_node_id(&mut child.borrow_mut());
         let id = child.borrow().id;
         self.nodes_by_id.entry(id).or_insert_with(|| child.clone());
+        self.refresh_modal_membership(id);
         if let Some(parent) = parent {
             self.nodes_by_id
                 .entry(parent.borrow().id)
@@ -238,6 +292,7 @@ impl SemanticManager {
         }
         node.borrow_mut().parent = std::rc::Weak::new();
         self.nodes_by_id.remove(&node.borrow().id);
+        self.modal_ids.remove(&node.borrow().id);
         self.mark_dirty(SemanticDirt::STRUCTURE);
     }
     fn normalize_label(input: &str) -> String {

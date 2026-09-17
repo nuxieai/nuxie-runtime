@@ -1,0 +1,31 @@
+{
+  "name": "VideoAsset",
+  "key": {
+    "int": 60000,
+    "string": "videoasset"
+  },
+  "extends": "assets/drawable_asset.json",
+  "properties": {
+    "sourceKey": {
+      "type": "String",
+      "key": {
+        "int": 60000
+      },
+      "initialValue": "''"
+    },
+    "contentType": {
+      "type": "String",
+      "key": {
+        "int": 60001
+      },
+      "initialValue": "'video/mp4'"
+    },
+    "duration": {
+      "type": "double",
+      "key": {
+        "int": 60002
+      },
+      "initialValue": "0"
+    }
+  }
+}

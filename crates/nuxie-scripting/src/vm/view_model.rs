@@ -1985,6 +1985,50 @@ impl UserData for ScriptedContext {
             this.mark_needs_update_requested.set(true);
             Ok(())
         });
+        methods.add_method("videoGroup", |lua, this, names: Table| {
+            this.require_live("videoGroup")?;
+            let count = names.raw_len();
+            if !(2..=64).contains(&count) {
+                return Err(luaur_rt::Error::RuntimeError(
+                    "videoGroup requires 2 to 64 video names".into(),
+                ));
+            }
+            let source = this.source.borrow();
+            let mut members = Vec::with_capacity(count);
+            for index in 1..=count {
+                let name: String = names.raw_get(index)?;
+                let handle = source
+                    .as_ref()
+                    .and_then(|source| source.video_named(&name))
+                    .ok_or_else(|| {
+                        luaur_rt::Error::RuntimeError(format!("video not found: {name}"))
+                    })?;
+                members.push(handle);
+            }
+            lua.create_userdata(super::lua_video::ScriptVideoGroup::new(
+                members,
+                this.alive.clone(),
+                this.mark_needs_update_requested.clone(),
+            )?)
+        });
+        methods.add_method("video", |lua, this, name: String| {
+            this.require_live("video")?;
+            let handle = this
+                .source
+                .borrow()
+                .as_ref()
+                .and_then(|source| source.video_named(&name));
+            match handle {
+                Some(handle) => lua
+                    .create_userdata(super::lua_video::ScriptVideo::new(
+                        handle,
+                        this.alive.clone(),
+                        this.mark_needs_update_requested.clone(),
+                    ))
+                    .map(Value::UserData),
+                None => Ok(Value::Nil),
+            }
+        });
         methods.add_method("image", |lua, this, name: String| {
             this.require_live("image")?;
             let image = super::lua_image::script_image_asset_named(lua, &name).or_else(|| {

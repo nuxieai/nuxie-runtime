@@ -7,6 +7,8 @@
 #[doc(hidden)]
 pub mod mechanical_port;
 
+pub mod video;
+
 mod host_animation;
 mod host_artboard;
 mod host_assets;

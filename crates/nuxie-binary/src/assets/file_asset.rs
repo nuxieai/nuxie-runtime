@@ -28,7 +28,11 @@ impl RuntimeObject {
     }
 
     pub fn file_asset_extension(&self) -> Option<&'static str> {
-        cpp_file_asset_extension(self.type_name)
+        if self.type_name == "VideoAsset" {
+            Some("mp4")
+        } else {
+            cpp_file_asset_extension(self.type_name)
+        }
     }
 
     pub fn file_asset_unique_name(&self) -> Option<String> {

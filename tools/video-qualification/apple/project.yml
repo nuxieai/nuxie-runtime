@@ -1,0 +1,30 @@
+name: NuxieVideoProof
+options:
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    PRODUCT_BUNDLE_IDENTIFIER: com.nuxie.video-proof
+    CODE_SIGN_STYLE: Automatic
+    CLANG_ENABLE_MODULES: YES
+    ENABLE_BITCODE: NO
+    NUX_VIDEO_PROOF_PROFILE: debug
+    LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../../../target/video-qualification/aarch64-apple-ios/$(NUX_VIDEO_PROOF_PROFILE)"
+    OTHER_LDFLAGS: ["$(SRCROOT)/../../../target/video-qualification/aarch64-apple-ios/$(NUX_VIDEO_PROOF_PROFILE)/libvideo_qualification.a", "-lc++", "-lz", "-liconv", "-framework", "Metal", "-framework", "MetalKit", "-framework", "CoreText", "-framework", "CoreGraphics", "-framework", "CoreVideo", "-framework", "CoreMedia", "-framework", "AVFoundation", "-framework", "QuartzCore", "-framework", "Security", "-framework", "AudioToolbox", "-framework", "CoreAudio"]
+targets:
+  NuxieVideoProof:
+    type: application
+    platform: iOS
+    sources:
+      - main.m
+      - path: ../../../crates/nuxie-video-host/tests/fixtures/red-blue-audio.mp4
+        buildPhase: resources
+      - path: ../../../crates/nuxie-video-host/tests/fixtures/red-blue-720p.mp4
+        buildPhase: resources
+    info:
+      path: generated/Info.plist
+      properties:
+        CFBundleDisplayName: Nuxie Video Proof
+        UILaunchScreen: {}
+        UIFileSharingEnabled: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]

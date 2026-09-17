@@ -1,4 +1,5 @@
 nux_file_import_metal
+nux_player_video_present_metal
 nux_renderer_copy_metal_device
 nux_renderer_detach
 nux_renderer_free

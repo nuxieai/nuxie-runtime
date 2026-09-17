@@ -1,5 +1,7 @@
 [workspace]
 members = [
+    "tools/video-qualification",
+    "crates/nuxie-video-host",
     "crates/nuxie-audio",
     "crates/nuxie-binary",
     "crates/nuxie-image-codec",

@@ -1,0 +1,103 @@
+{
+  "name": "Video",
+  "key": {
+    "int": 60001,
+    "string": "video"
+  },
+  "extends": "shapes/image.json",
+  "properties": {
+    "autoplay": {
+      "type": "uint",
+      "key": {
+        "int": 60003
+      },
+      "initialValue": "0"
+    },
+    "loop": {
+      "type": "uint",
+      "key": {
+        "int": 60004
+      },
+      "initialValue": "0"
+    },
+    "muted": {
+      "type": "uint",
+      "key": {
+        "int": 60005
+      },
+      "initialValue": "0"
+    },
+    "volume": {
+      "type": "double",
+      "key": {
+        "int": 60006
+      },
+      "initialValue": "1"
+    },
+    "playbackRate": {
+      "type": "double",
+      "key": {
+        "int": 60007
+      },
+      "initialValue": "1"
+    },
+    "priority": {
+      "type": "uint",
+      "key": {
+        "int": 60008
+      },
+      "initialValue": "0"
+    },
+    "posterAssetId": {
+      "type": "uint",
+      "key": {
+        "int": 60009
+      },
+      "initialValue": "4294967295"
+    },
+    "audioPolicy": {
+      "type": "uint",
+      "key": {
+        "int": 60010
+      },
+      "initialValue": "0"
+    },
+    "readiness": {
+      "type": "uint",
+      "key": {
+        "int": 60011
+      },
+      "initialValue": "0"
+    },
+    "reentry": {
+      "type": "uint",
+      "key": {
+        "int": 60012
+      },
+      "initialValue": "0"
+    },
+    "captions": {
+      "type": "String",
+      "key": {
+        "int": 60013
+      },
+      "initialValue": "''",
+      "description": "Versioned normalized plain-text caption track JSON. Empty means no captions."
+    },
+    "loopStart": {
+      "type": "double",
+      "key": {
+        "int": 60014
+      },
+      "initialValue": "0"
+    },
+    "loopEnd": {
+      "type": "double",
+      "key": {
+        "int": 60015
+      },
+      "initialValue": "0",
+      "description": "Exclusive loop end in seconds; zero selects source duration."
+    }
+  }
+}

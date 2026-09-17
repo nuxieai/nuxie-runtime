@@ -42,6 +42,7 @@ mod lua_paint;
 mod lua_path;
 mod lua_renderer;
 mod lua_renderer_library;
+mod lua_video;
 mod resource_limits;
 mod view_model;
 

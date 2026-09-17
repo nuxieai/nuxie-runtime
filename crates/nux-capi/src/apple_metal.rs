@@ -2021,3 +2021,40 @@ mod tests {
         assert_eq!(unsafe { nux_capi_result_free(result) }, NuxStatus::Ok);
     }
 }
+
+/// Upload a video frame through the exact renderer domain used to import the
+/// player. Old decoder generations are ignored; wrong renderer domains fail.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_present_metal(
+    renderer: *const NuxRenderer,
+    player: *const NuxPlayer,
+    component_id: usize,
+    frame: *const super::NuxVideoFrame,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        super::video::status((|| {
+            let _renderer = enter_handle(renderer, HandleKind::Renderer)?;
+            let renderer = unsafe { &*renderer };
+            super::video::with_video(player, component_id, |video, occurrence| {
+                match &occurrence.renderer_domain {
+                    RendererDomainBinding::Metal { domain, generation }
+                        if Arc::ptr_eq(domain, &renderer.domain)
+                            && *generation
+                                == renderer.domain.generation.load(Ordering::Relaxed) => {}
+                    _ => return Err(NuxStatus::HandleMismatch),
+                }
+                let mut state = renderer
+                    .state
+                    .try_borrow_mut()
+                    .map_err(|_| NuxStatus::ReentrantCall)?;
+                unsafe {
+                    super::video::present_frame(video, occurrence, frame, |w, h, row, pixels| {
+                        state
+                            .upload_rgba8_premul_srgb(w, h, row, pixels)
+                            .map_err(|_| NuxStatus::RuntimeError)
+                    })
+                }
+            })
+        })())
+    })
+}

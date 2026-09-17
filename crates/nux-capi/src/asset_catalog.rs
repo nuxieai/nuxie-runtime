@@ -3,6 +3,7 @@
 use super::*;
 
 pub const NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES: u32 = 1 << 0;
+pub const NUX_FILE_ASSET_PROVIDER_VIDEO_PLAYBACK: u32 = 1 << 2;
 pub const NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE: u32 = 1 << 1;
 pub const NUX_FILE_ASSET_CATALOG_HARD_MAX: usize = 4_096;
 const EXPECTED_ASSET_TEXT_BYTES_HARD_MAX: usize = 4 * 1024 * 1024;
@@ -16,6 +17,7 @@ pub enum NuxFileAssetKind {
     Blob = 3,
     Script = 4,
     Shader = 5,
+    Video = 6,
 }
 
 pub const NUX_FILE_ASSET_KIND_IMAGE: u32 = NuxFileAssetKind::Image as u32;
@@ -23,6 +25,7 @@ pub const NUX_FILE_ASSET_KIND_FONT: u32 = NuxFileAssetKind::Font as u32;
 pub const NUX_FILE_ASSET_KIND_AUDIO: u32 = NuxFileAssetKind::Audio as u32;
 pub const NUX_FILE_ASSET_KIND_BLOB: u32 = NuxFileAssetKind::Blob as u32;
 pub const NUX_FILE_ASSET_KIND_SCRIPT: u32 = NuxFileAssetKind::Script as u32;
+pub const NUX_FILE_ASSET_KIND_VIDEO: u32 = NuxFileAssetKind::Video as u32;
 pub const NUX_FILE_ASSET_KIND_SHADER: u32 = NuxFileAssetKind::Shader as u32;
 
 #[repr(C)]
@@ -165,12 +168,14 @@ pub(crate) unsafe fn copy_expected_descriptors(
             ));
         }
         if descriptor.ordinal != copied.len()
-            || descriptor.kind > NUX_FILE_ASSET_KIND_SHADER
+            || descriptor.kind > NUX_FILE_ASSET_KIND_VIDEO
             || descriptor.has_authored_id > 1
             || descriptor.is_embedded > 1
             || descriptor.has_contents_record > 1
             || descriptor.required_provider_flags
-                & !(NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES | NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE)
+                & !(NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES
+                    | NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE
+                    | NUX_FILE_ASSET_PROVIDER_VIDEO_PLAYBACK)
                 != 0
         {
             return Err((

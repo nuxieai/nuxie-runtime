@@ -1,0 +1,29 @@
+[package]
+name = "video-qualification"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["rlib", "staticlib", "cdylib"]
+
+[dependencies]
+nuxie-video-host = { path = "../../crates/nuxie-video-host" }
+nuxie-runtime = { path = "../../crates/nuxie-runtime" }
+nuxie-render-api = { path = "../../crates/nuxie-render-api" }
+nuxie-binary = { path = "../../crates/nuxie-binary", features = ["test-support"] }
+
+[target.'cfg(any(target_os = "macos", target_os = "ios"))'.dependencies]
+nuxie-renderer = { path = "../../crates/nuxie-renderer", features = ["renderer-metal"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+nuxie-renderer = { path = "../../crates/nuxie-renderer", features = ["renderer-webgl2"] }
+wasm-bindgen = "0.2"
+web-sys = { version = "0.3", features = ["HtmlCanvasElement", "Window", "Performance"] }
+
+[features]
+webgpu = ["nuxie-renderer/renderer-webgpu"]
+
+[target.'cfg(target_os = "android")'.dependencies]
+nuxie-renderer = { path = "../../crates/nuxie-renderer", features = ["renderer-vulkan"] }
+jni = "0.21.1"

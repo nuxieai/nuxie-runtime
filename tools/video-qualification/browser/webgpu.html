@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>Nuxie WebGPU video proof</title>
+<canvas id="canvas" width="64" height="32"></canvas><div id="captions" lang="en" role="status" aria-live="polite" aria-atomic="true"></div><pre id="result">loading</pre>
+<script type="module">
+import init,{BrowserVideoProof} from './video_qualification.js';
+import {prepareWebGpu,captureWebGpuPixels,waitForWebGpu,releaseWebGpu} from './webgpu-host.js';
+const result=document.querySelector('#result');
+try {
+  await init();
+  const canvas=document.querySelector('#canvas');
+  const session=await prepareWebGpu(canvas);
+  const proof=new BrowserVideoProof(canvas,(new URL(location.href).searchParams.has('embedded')?'embedded':new URL('./red-blue-audio.mp4',location.href).href));
+  const start=performance.now();
+  const tick=async()=>{try {
+    const before=proof.frames();
+    const ended=proof.tick();
+    document.querySelector("#captions").textContent=proof.caption();
+    if(proof.frames()>before){
+      const pending=captureWebGpuPixels(session);
+      await waitForWebGpu(session);
+      const capture=await pending;
+      proof.verify_composition(capture.pixels);
+      const offset=(16*64+32)*4;
+      proof.verify_pixel(capture.pixels[offset],capture.pixels[offset+2]);
+    }
+    if(ended){result.textContent=JSON.stringify({status:'passed',rangeLoops:2,frames:proof.frames(),backend:'webgpu'});proof.free();releaseWebGpu(session);return;}
+    if(performance.now()-start>15000)throw new Error('playback timed out');
+    requestAnimationFrame(tick);
+  }catch(error){result.textContent='FAILED: '+error;proof.free();releaseWebGpu(session);}};
+  requestAnimationFrame(tick);
+}catch(error){result.textContent='FAILED: '+error;}
+</script>

@@ -220,6 +220,18 @@ impl ImportStackObject for BackboardImporter {
         }
 
         for referencer in &self.file_asset_referencers {
+            if let Some(valid) = referencer.with_downcast_mut::<crate::video::Video, _>(|video| {
+                self.file_assets
+                    .get(video.asset_id() as usize)
+                    .is_some_and(|asset| asset.is_type_of(crate::video::VideoAsset::TYPE_KEY))
+                    && video.playback.settings().valid()
+                    && video.captions_valid()
+                    && video.resolve_poster(&self.file_assets)
+            }) {
+                if !valid {
+                    return StatusCode::InvalidObject;
+                }
+            }
             let index = referencer
                 .with(|referencer| referencer.file_asset_referencer_asset_id())
                 .expect("BackboardImporter retains live FileAssetReferencers")

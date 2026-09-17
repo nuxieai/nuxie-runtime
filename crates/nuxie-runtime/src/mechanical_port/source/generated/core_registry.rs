@@ -2121,6 +2121,8 @@ pub fn component_update_handle(
                 .downcast_mut::<crate::mechanical_port::source::shapes::image::Image>(
             ) {
                 image.update_transform_after_super();
+            } else if let Some(video) = object.as_any_mut().downcast_mut::<crate::video::Video>() {
+                video.update_transform_after_super();
             }
         });
     }
@@ -2148,6 +2150,8 @@ pub fn component_update_handle(
                 shape.try_compose_world_transform_override()
             } else if let Some(image) = object.as_any_mut().downcast_mut::<crate::mechanical_port::source::shapes::image::Image>() {
                 image.try_compose_world_transform_override()
+            } else if let Some(video)=object.as_any_mut().downcast_mut::<crate::video::Video>() {
+                video.try_compose_world_transform_override()
             } else {
                 false
             };

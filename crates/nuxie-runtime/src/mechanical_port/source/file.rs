@@ -181,7 +181,8 @@ fn read_runtime_object(
     header: &RuntimeHeader,
 ) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
     let core_object_key = reader.read_var_uint_as::<i32>();
-    let mut object = CoreRegistry::make_core_box(core_object_key);
+    // Nuxie-owned types share the Rive record grammar and ordinary arena lifecycle.
+    let mut object = crate::video::make_core(core_object_key);
     loop {
         let property_key = reader.read_var_uint_as::<u16>();
         if property_key == 0 {
@@ -487,7 +488,8 @@ impl File {
                         });
                         self.artboards.push(object.clone());
                     }
-                    crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
+                    crate::video::VideoAsset::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::blob_asset_base::BlobAssetBase::TYPE_KEY
@@ -585,7 +587,8 @@ impl File {
                     stack_object = Some(Box::new(StateMachineListenerImporter::new(object.clone())));
                     stack_type = crate::mechanical_port::source::generated::animation::state_machine_listener_base::StateMachineListenerBase::TYPE_KEY;
                 }
-                crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
+                crate::video::VideoAsset::TYPE_KEY
+                | crate::mechanical_port::source::generated::assets::image_asset_base::ImageAssetBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::assets::font_asset_base::FontAssetBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY
                 | crate::mechanical_port::source::generated::assets::blob_asset_base::BlobAssetBase::TYPE_KEY => {

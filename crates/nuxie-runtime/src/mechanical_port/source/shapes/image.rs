@@ -66,6 +66,8 @@ pub struct Image {
     pub base: ImageBase,
     pub file_asset_referencer: FileAssetReferencer,
     mesh: Option<CoreHandle>,
+    runtime_frame: Option<crate::source::renderer::RenderImageRef>,
+    runtime_size: Option<(f32, f32)>,
     layout_width: f32,
     layout_height: f32,
     layout_offset_x: f32,
@@ -81,6 +83,8 @@ impl Default for Image {
             base: ImageBase::default(),
             file_asset_referencer: FileAssetReferencer::default(),
             mesh: None,
+            runtime_frame: None,
+            runtime_size: None,
             layout_width: f32::NAN,
             layout_height: f32::NAN,
             layout_offset_x: 0.0,
@@ -307,6 +311,7 @@ impl Image {
         base.copy(&self.base, &mut twin);
         twin.base = base;
         twin.layout_scale_separate = self.layout_scale_separate;
+        twin.runtime_size = self.runtime_size;
         if let Some(asset) = self.file_asset_referencer.asset() {
             twin.file_asset_referencer.set_asset_unattached(Some(asset));
             twin.update_image_scale();
@@ -323,6 +328,9 @@ impl Image {
     }
 
     pub fn width(&self) -> f32 {
+        if let Some((width, _)) = self.runtime_size {
+            return width;
+        }
         self.image_asset()
             .and_then(|asset| {
                 asset.with_downcast::<ImageAsset, _>(|asset| {
@@ -336,6 +344,9 @@ impl Image {
     }
 
     pub fn height(&self) -> f32 {
+        if let Some((_, height)) = self.runtime_size {
+            return height;
+        }
         self.image_asset()
             .and_then(|asset| {
                 asset.with_downcast::<ImageAsset, _>(|asset| {
@@ -454,7 +465,7 @@ impl Image {
     }
 
     fn update_image_scale(&mut self) {
-        if self.image_asset().is_none() {
+        if self.image_asset().is_none() && self.runtime_size.is_none() {
             if self.layout_offset_x != 0.0 || self.layout_offset_y != 0.0 {
                 self.layout_offset_x = 0.0;
                 self.layout_offset_y = 0.0;
@@ -601,7 +612,34 @@ impl Image {
         sampler
     }
 
+    /// Nuxie video occurrences supply a retained frame while reusing Image's
+    /// upstream fit, layout, hit-testing, mesh and sampling behavior. Ordinary
+    /// images never install this override. Instances never clone its frames.
+    pub(crate) fn set_runtime_frame(
+        &mut self,
+        frame: Option<crate::source::renderer::RenderImageRef>,
+    ) {
+        let size = frame
+            .as_ref()
+            .map(|f| (f.width() as f32, f.height() as f32));
+        let changed = size.is_some() && (size != self.runtime_size || self.runtime_frame.is_none());
+        self.runtime_frame = frame;
+        if let Some(size) = size {
+            self.runtime_size = Some(size);
+        }
+        if changed {
+            self.update_image_scale();
+            self.base.mark_world_transform_dirty();
+        }
+    }
+    pub(crate) fn set_runtime_size(&mut self, width: f32, height: f32) {
+        self.runtime_size = Some((width, height));
+    }
+
     pub fn render_image(&self) -> Option<crate::mechanical_port::source::renderer::RenderImageRef> {
+        if let Some(frame) = &self.runtime_frame {
+            return Some(frame.clone());
+        }
         self.image_asset()?
             .with_downcast::<ImageAsset, _>(|asset| asset.render_image().cloned())
             .flatten()

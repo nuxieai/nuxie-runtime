@@ -826,6 +826,7 @@ pub struct NuxFileImportConfig {
     pub asset_hooks: *const NuxAssetHooks,
     pub expected_assets: *const super::NuxExpectedFileAssetDescriptor,
     pub expected_asset_count: usize,
+    pub video_playback: *const super::NuxVideoPlaybackCapabilities,
 }
 
 impl Default for NuxFileImportConfig {
@@ -836,6 +837,7 @@ impl Default for NuxFileImportConfig {
             asset_hooks: ptr::null(),
             expected_assets: ptr::null(),
             expected_asset_count: 0,
+            video_playback: ptr::null(),
         }
     }
 }
@@ -854,9 +856,13 @@ unsafe fn read_file_import_config(
         return Err(NuxStatus::InvalidStructSize);
     }
     let mut value = NuxFileImportConfig::default();
-    let read_len = usize::try_from(caller_size)
-        .unwrap_or(usize::MAX)
-        .min(std::mem::size_of::<NuxFileImportConfig>());
+    // An older/partial prefix must not copy half of the appended pointer.
+    let caller_size = usize::try_from(caller_size).unwrap_or(usize::MAX);
+    let read_len = if caller_size < std::mem::size_of::<NuxFileImportConfig>() {
+        NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE
+    } else {
+        std::mem::size_of::<NuxFileImportConfig>()
+    };
     unsafe {
         ptr::copy_nonoverlapping(
             config.cast::<u8>(),
@@ -903,6 +909,13 @@ where
                 return status;
             }
         };
+        let limits = match unsafe { super::video::import_limits(config.video_playback) } {
+            Ok(limits) => limits,
+            Err(status) => {
+                publish_result(out_result, status, "invalid video capabilities");
+                return status;
+            }
+        };
         let host_commands =
             match unsafe { super::prepare_optional_host_command_import(config.host_commands) } {
                 Ok(config) => config,
@@ -945,6 +958,10 @@ where
         } else {
             unsafe { std::slice::from_raw_parts(bytes, len) }
         };
+        if let Err(error) = limits.preflight(bytes) {
+            publish_result(out_result, NuxStatus::ImportError, error.to_string());
+            return NuxStatus::ImportError;
+        }
         if validates_expected_assets {
             let metadata = match super::FileMetadataCatalog::assets_only_from_bytes(bytes) {
                 Ok(metadata) => metadata,
@@ -989,6 +1006,7 @@ where
             host_commands,
             native_shader_authority,
             program_adapter,
+            limits,
         ) {
             Ok(file) => file,
             Err(error) => {
@@ -2179,5 +2197,33 @@ mod tests {
             assert_eq!(probe.ownership.retains.load(Ordering::Relaxed), 4);
             assert_eq!(probe.ownership.releases.load(Ordering::Relaxed), 4);
         }
+    }
+}
+
+#[cfg(test)]
+mod video_prefix_tests {
+    use super::*;
+    #[test]
+    fn legacy_and_partial_prefixes_never_enable_a_partial_video_pointer() {
+        for size in NUX_FILE_IMPORT_CONFIG_V3_MIN_SIZE..std::mem::size_of::<NuxFileImportConfig>() {
+            let config = NuxFileImportConfig {
+                struct_size: size as u32,
+                video_playback: std::ptr::without_provenance(usize::MAX),
+                ..Default::default()
+            };
+            let copied = unsafe { read_file_import_config(&config) }.unwrap();
+            assert!(copied.video_playback.is_null());
+        }
+        let capability = super::super::NuxVideoPlaybackCapabilities::default();
+        let config = NuxFileImportConfig {
+            video_playback: &capability,
+            ..Default::default()
+        };
+        assert_eq!(
+            unsafe { read_file_import_config(&config) }
+                .unwrap()
+                .video_playback,
+            &capability
+        );
     }
 }

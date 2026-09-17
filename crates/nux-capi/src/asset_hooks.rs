@@ -1014,6 +1014,10 @@ where
                 return NuxStatus::ImportError;
             }
         };
+        if let Err(error) = validate_required_text_fonts(&imported.file) {
+            publish_result(out_result, NuxStatus::ImportError, error);
+            return NuxStatus::ImportError;
+        }
         let metadata = match super::FileMetadataCatalog::from_file(&imported.file, bytes) {
             Ok(metadata) => metadata,
             Err(error) => {
@@ -1048,6 +1052,34 @@ where
         publish_result(out_result, NuxStatus::Ok, "");
         NuxStatus::Ok
     })
+}
+
+// The generic importer permits deferred asset loading. Configured product import
+// must not publish a file whose authored text font failed to load or decode.
+// Unbound styles (the sentinel asset id) remain available for data binding, and
+// unused font assets do not make otherwise usable scenes fail admission.
+fn validate_required_text_fonts(file: &nuxie::RuntimeFileHandle) -> Result<(), String> {
+    for (artboard_index, artboard) in file.with_file(|file| file.artboards()).iter().enumerate() {
+        let objects = artboard
+            .with_downcast::<nuxie::Artboard, _>(|artboard| artboard.objects().to_vec())
+            .unwrap_or_default();
+        for (object_index, object) in objects.iter().enumerate() {
+            let Some(object) = object else { continue };
+            let missing_asset = object
+                .with_mut(|object| {
+                    let style = object.as_text_style_mut()?;
+                    let asset_id = style.asset_id();
+                    (asset_id != u32::MAX && style.font().is_none()).then_some(asset_id)
+                })
+                .flatten();
+            if let Some(asset_id) = missing_asset {
+                return Err(format!(
+                    "required text font is missing or invalid: artboard {artboard_index}, object {object_index}, font asset {asset_id}"
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -2071,24 +2103,21 @@ mod tests {
             .int
     }
 
+    fn push_object(bytes: &mut Vec<u8>, type_name: &str, properties: impl FnOnce(&mut Vec<u8>)) {
+        push_var_uint(
+            bytes,
+            u64::from(
+                nuxie_schema::definition_by_name(type_name)
+                    .expect("fixture type")
+                    .type_key
+                    .int,
+            ),
+        );
+        properties(bytes);
+        push_var_uint(bytes, 0);
+    }
+
     fn external_asset_file(type_name: &str, asset_id: u32) -> Vec<u8> {
-        fn push_object(
-            bytes: &mut Vec<u8>,
-            type_name: &str,
-            properties: impl FnOnce(&mut Vec<u8>),
-        ) {
-            push_var_uint(
-                bytes,
-                u64::from(
-                    nuxie_schema::definition_by_name(type_name)
-                        .expect("fixture type")
-                        .type_key
-                        .int,
-                ),
-            );
-            properties(bytes);
-            push_var_uint(bytes, 0);
-        }
         let mut bytes = b"RIVE".to_vec();
         push_var_uint(&mut bytes, 7);
         push_var_uint(&mut bytes, 0);
@@ -2100,6 +2129,146 @@ mod tests {
             push_var_uint(bytes, u64::from(asset_id));
         });
         bytes
+    }
+
+    fn required_font_file(style_kind: &str, font_id: u32, embedded: Option<&[u8]>) -> Vec<u8> {
+        let mut bytes = external_asset_file("FontAsset", 7);
+        if let Some(font) = embedded {
+            push_object(&mut bytes, "FileAssetContents", |bytes| {
+                push_var_uint(bytes, u64::from(property_key("FileAssetContents", "bytes")));
+                push_var_uint(bytes, font.len() as u64);
+                bytes.extend_from_slice(font);
+            });
+        }
+        for (kind, properties) in [
+            ("Artboard", vec![]),
+            ("Text", vec![("parentId", 0)]),
+            (
+                style_kind,
+                vec![("parentId", 1), ("fontAssetId", u64::from(font_id))],
+            ),
+            ("TextValueRun", vec![("parentId", 1), ("styleId", 2)]),
+        ] {
+            push_object(&mut bytes, kind, |bytes| {
+                for (property, value) in properties {
+                    push_var_uint(bytes, u64::from(property_key(kind, property)));
+                    push_var_uint(bytes, value);
+                }
+                if kind == "TextValueRun" {
+                    push_var_uint(bytes, u64::from(property_key(kind, "text")));
+                    push_var_uint(bytes, 1);
+                    bytes.push(b'a');
+                }
+            });
+        }
+        bytes
+    }
+
+    #[test]
+    fn configured_import_requires_usable_authored_text_fonts() {
+        let valid = include_bytes!("../../../fixtures/fonts/roboto-a.ttf").to_vec();
+        for (label, scene, payload, expected) in [
+            (
+                "valid required font",
+                required_font_file("TextStyle", 0, None),
+                Some(valid.clone()),
+                NuxStatus::Ok,
+            ),
+            (
+                "invalid required font",
+                required_font_file("TextStyle", 0, None),
+                Some(b"invalid font".to_vec()),
+                NuxStatus::ImportError,
+            ),
+            (
+                "missing required font",
+                required_font_file("TextStyle", 0, None),
+                None,
+                NuxStatus::ImportError,
+            ),
+            (
+                "unused missing font",
+                external_asset_file("FontAsset", 7),
+                None,
+                NuxStatus::Ok,
+            ),
+            (
+                "valid embedded font",
+                required_font_file("TextStyle", 0, Some(&valid)),
+                None,
+                NuxStatus::Ok,
+            ),
+            (
+                "invalid embedded font",
+                required_font_file("TextStyle", 0, Some(b"invalid")),
+                None,
+                NuxStatus::ImportError,
+            ),
+            (
+                "derived style missing font",
+                required_font_file("TextStylePaint", 0, None),
+                None,
+                NuxStatus::ImportError,
+            ),
+            (
+                "unbound style",
+                required_font_file("TextStyle", u32::MAX, None),
+                None,
+                NuxStatus::Ok,
+            ),
+        ] {
+            let has_payload = payload.is_some();
+            let mut probe = LookupProbe {
+                ownership: OwnershipProbe::default(),
+                bytes: payload.unwrap_or_default(),
+                expected_kind: NUX_ASSET_KIND_FONT,
+                calls: 0,
+                nested_status: NuxStatus::Ok,
+            };
+            let hooks = NuxAssetHooks {
+                context: std::ptr::from_mut(&mut probe).cast(),
+                lookup_external_asset: has_payload.then_some(lookup_fixture_asset),
+                ..NuxAssetHooks::default()
+            };
+            let mut file = ptr::null_mut();
+            let mut result = ptr::null_mut();
+            let status = unsafe {
+                nux_file_import_with_assets(
+                    scene.as_ptr(),
+                    scene.len(),
+                    &hooks,
+                    &mut file,
+                    &mut result,
+                )
+            };
+            assert_eq!(status, expected, "{label}");
+            assert_eq!(file.is_null(), expected != NuxStatus::Ok, "{label}");
+            if !file.is_null() {
+                assert_eq!(unsafe { super::super::nux_file_free(file) }, NuxStatus::Ok);
+            }
+            assert!(!result.is_null(), "{label}");
+            if expected == NuxStatus::ImportError {
+                let message = unsafe { &(*result).message };
+                assert!(
+                    String::from_utf8_lossy(message).contains("required text font"),
+                    "{label}"
+                );
+            }
+            assert_eq!(
+                unsafe { super::super::nux_capi_result_free(result) },
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                probe.ownership.retains.load(Ordering::Relaxed),
+                usize::from(has_payload),
+                "{label}"
+            );
+            assert_eq!(
+                probe.ownership.releases.load(Ordering::Relaxed),
+                usize::from(has_payload),
+                "{label}"
+            );
+        }
     }
 
     #[test]

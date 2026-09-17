@@ -158,9 +158,10 @@ pub fn from_component(component: &CoreHandle) -> Option<CoreHandle> {
         LayoutComponentBase::TYPE_KEY
         | NestedArtboardLayoutBase::TYPE_KEY
         | ArtboardComponentListBase::TYPE_KEY => Some(component.clone()),
-        TextBase::TYPE_KEY | ImageBase::TYPE_KEY | ShapeBase::TYPE_KEY => {
-            component.with(|component| component.layout_provider_handle())?
-        }
+        TextBase::TYPE_KEY
+        | ImageBase::TYPE_KEY
+        | crate::video::Video::TYPE_KEY
+        | ShapeBase::TYPE_KEY => component.with(|component| component.layout_provider_handle())?,
         _ => None,
     }
 }

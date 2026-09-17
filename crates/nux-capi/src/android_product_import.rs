@@ -357,6 +357,7 @@ end
             prepared,
             authority,
             None,
+            nuxie::FileImportLimits::default(),
         ) {
             Ok(imported) => imported,
             Err(error) => return (Err(error), shader_count.get()),

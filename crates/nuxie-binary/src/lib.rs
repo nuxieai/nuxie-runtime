@@ -7837,7 +7837,7 @@ fn validate_fixture_artboard_local_objects(file: &RuntimeFile) -> Result<()> {
 fn file_asset_creates_importer(type_name: &str, script_assets_create_importers: bool) -> bool {
     matches!(
         type_name,
-        "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
+        "VideoAsset" | "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
     ) || (script_assets_create_importers && matches!(type_name, "ScriptAsset" | "ShaderAsset"))
 }
 

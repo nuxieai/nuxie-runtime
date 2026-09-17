@@ -7,6 +7,7 @@ use super::{
     enter_occurrence, ffi_guard, ffi_guard_with_handle_result, ffi_guard_with_result,
     publish_result, register_handle, remove_handle,
 };
+use crate::asset_hooks::AssetUploadFactory;
 use nuxie::PersistentFactory;
 use nuxie::render_api::Mat2D;
 #[cfg(test)]
@@ -1297,4 +1298,43 @@ mod tests {
         assert_eq!(pixels.len(), 2 * 2 * 4);
         assert_eq!(&pixels[..4], &[32, 16, 8, 128]);
     }
+}
+
+/// Upload a video frame through the exact renderer domain used to import the
+/// player. Old decoder generations are ignored; wrong renderer domains fail.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_present_android_vulkan(
+    renderer: *const NuxAndroidVulkanRenderer,
+    player: *const NuxPlayer,
+    component_id: usize,
+    frame: *const super::NuxVideoFrame,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        super::video::status((|| {
+            let _renderer = enter_handle(renderer, HandleKind::AndroidVulkanRenderer)?;
+            let renderer = unsafe { &*renderer };
+            super::video::with_video(player, component_id, |video, occurrence| {
+                match &occurrence.renderer_domain {
+                    RendererDomainBinding::AndroidVulkan { domain, generation }
+                        if Arc::ptr_eq(domain, &renderer.domain)
+                            && *generation
+                                == renderer.domain.generation.load(Ordering::Relaxed) => {}
+                    _ => return Err(NuxStatus::HandleMismatch),
+                }
+                let mut state = renderer
+                    .state
+                    .try_borrow_mut()
+                    .map_err(|_| NuxStatus::ReentrantCall)?;
+                unsafe {
+                    super::video::present_frame(video, occurrence, frame, |w, h, row, pixels| {
+                        state
+                            .factory
+                            .borrow_mut()
+                            .upload_rgba8_premul_srgb(w, h, row, pixels)
+                            .map_err(|_| NuxStatus::RuntimeError)
+                    })
+                }
+            })
+        })())
+    })
 }

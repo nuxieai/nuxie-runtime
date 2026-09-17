@@ -18,6 +18,8 @@ js-host-seed = ["dep:js-sys", "dep:wasm-bindgen"]
 default = ["js-host-seed"]
 
 [dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 anyhow = "1"
 harfrust = "0.12"
 nuxie-script-signature = { path = "../nuxie-script-signature" }
@@ -38,8 +40,6 @@ nuxie-scripting = { path = "../nuxie-scripting" }
 nuxie-binary = { path = "../nuxie-binary", features = ["test-support"] }
 nuxie-sriv = { path = "../nuxie-sriv" }
 png = "0.18"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
 sha2 = "0.10"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]

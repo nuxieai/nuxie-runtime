@@ -79,8 +79,8 @@ grep -Eo 'nux_[A-Za-z0-9_]+[[:space:]]*\(' \
 # cbindgen retains every feature-gated declaration in the generated header.
 # Compare only the selected extension while keeping each family exact enough
 # that a new symbol fails its own feature inventory closed.
-apple_extension='^(nux_file_import_metal|nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|resize))$'
-android_extension='^(nux_file_import_android_vulkan|nux_android_vulkan_frame_|nux_renderer_(android_vulkan_|new_android_vulkan$))'
+apple_extension='^(nux_player_video_present_metal|nux_file_import_metal|nux_renderer_(copy_metal_device|detach|free|info|new_metal|reattach|render_player|resize))$'
+android_extension='^(nux_player_video_present_android_vulkan$|nux_file_import_android_vulkan|nux_android_vulkan_frame_|nux_renderer_(android_vulkan_|new_android_vulkan$))'
 android_authored_wgsl_extension='^nux_file_import_android_vulkan_with_trusted_wgsl$'
 case "$features" in
     apple-metal|apple-metal,scripting)

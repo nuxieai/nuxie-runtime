@@ -241,7 +241,7 @@
     },
     {
       "name": "NuxFileImportConfig",
-      "size": 40,
+      "size": 48,
       "alignment": 8,
       "fields": [
         {
@@ -263,6 +263,10 @@
         {
           "name": "expected_asset_count",
           "offset": 32
+        },
+        {
+          "name": "video_playback",
+          "offset": 40
         }
       ]
     },
@@ -1283,6 +1287,241 @@
         {
           "name": "mutation_count",
           "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoAction",
+      "size": 24,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0
+        },
+        {
+          "name": "value",
+          "offset": 8
+        },
+        {
+          "name": "generation",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoCaptionCue",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "start_seconds",
+          "offset": 0
+        },
+        {
+          "name": "end_seconds",
+          "offset": 8
+        },
+        {
+          "name": "text",
+          "offset": 16
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoClockSample",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "generation",
+          "offset": 0
+        },
+        {
+          "name": "seconds",
+          "offset": 8
+        },
+        {
+          "name": "rate",
+          "offset": 16
+        },
+        {
+          "name": "playing",
+          "offset": 24
+        },
+        {
+          "name": "available",
+          "offset": 28
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoEvent",
+      "size": 8,
+      "alignment": 4,
+      "fields": [
+        {
+          "name": "kind",
+          "offset": 0
+        },
+        {
+          "name": "state",
+          "offset": 4
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoFrame",
+      "size": 56,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "generation",
+          "offset": 8
+        },
+        {
+          "name": "presentation_seconds",
+          "offset": 16
+        },
+        {
+          "name": "width",
+          "offset": 24
+        },
+        {
+          "name": "height",
+          "offset": 28
+        },
+        {
+          "name": "row_bytes",
+          "offset": 32
+        },
+        {
+          "name": "pixels",
+          "offset": 40
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoInfo",
+      "size": 120,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "component_id",
+          "offset": 8
+        },
+        {
+          "name": "asset_id",
+          "offset": 16
+        },
+        {
+          "name": "generation",
+          "offset": 24
+        },
+        {
+          "name": "state",
+          "offset": 32
+        },
+        {
+          "name": "position_seconds",
+          "offset": 40
+        },
+        {
+          "name": "volume",
+          "offset": 48
+        },
+        {
+          "name": "rate",
+          "offset": 52
+        },
+        {
+          "name": "muted",
+          "offset": 56
+        },
+        {
+          "name": "wants_play",
+          "offset": 60
+        },
+        {
+          "name": "audio_policy",
+          "offset": 64
+        },
+        {
+          "name": "source_key",
+          "offset": 72
+        },
+        {
+          "name": "content_type",
+          "offset": 88
+        },
+        {
+          "name": "embedded_bytes",
+          "offset": 104
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoPlaybackCapabilities",
+      "size": 16,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "playback_available",
+          "offset": 4
+        },
+        {
+          "name": "max_embedded_bytes",
+          "offset": 8
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoSyncMeasurement",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "member_index",
+          "offset": 0
+        },
+        {
+          "name": "drift_seconds",
+          "offset": 8
+        },
+        {
+          "name": "seek_prediction_seconds",
+          "offset": 16
+        },
+        {
+          "name": "corrected",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoSyncMember",
+      "size": 16,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "player",
+          "offset": 0
+        },
+        {
+          "name": "component_id",
+          "offset": 8
         }
       ]
     },

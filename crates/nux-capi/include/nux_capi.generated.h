@@ -32,9 +32,13 @@
 
 
 
+
+
 #define NUX_FILE_ASSET_PROVIDER_EXTERNAL_BYTES (1 << 0)
 
 #define NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE (1 << 1)
+
+#define NUX_FILE_ASSET_PROVIDER_VIDEO_PLAYBACK (1 << 2)
 
 #define NUX_HOST_COMMANDS_PER_STEP_HARD_MAX 4096
 
@@ -400,6 +404,7 @@ enum NuxFileAssetKind
   NUX_FILE_ASSET_KIND_BLOB = 3,
   NUX_FILE_ASSET_KIND_SCRIPT = 4,
   NUX_FILE_ASSET_KIND_SHADER = 5,
+  NUX_FILE_ASSET_KIND_VIDEO = 6,
 };
 #ifndef __cplusplus
 typedef uint32_t NuxFileAssetKind;
@@ -527,6 +532,12 @@ typedef struct NuxSemanticSnapshot NuxSemanticSnapshot;
  * [`NuxArtboardInstance`] it was created from.
  */
 typedef struct NuxStateMachineInstance NuxStateMachineInstance;
+
+/**
+ * Retains scene occurrences, not decoder handles. Freeing the group stops
+ * correction and releases those references; it does not dispose its videos.
+ */
+typedef struct NuxVideoSyncGroup NuxVideoSyncGroup;
 
 /**
  * Immutable owned projection of every data-binding schema in one file.
@@ -851,6 +862,20 @@ typedef struct NuxExpectedFileAssetDescriptor {
   uint32_t required_provider_flags;
 } NuxExpectedFileAssetDescriptor;
 
+/**
+ * Explicit assertion that the host has initialized a compatible decoder and
+ * renderer. A null capabilities pointer means video is unavailable. This does
+ * not perform asset authentication or select/initialize a platform decoder.
+ */
+typedef struct NuxVideoPlaybackCapabilities {
+  uint32_t struct_size;
+  uint32_t playback_available;
+  /**
+   * Per embedded video asset; zero permits only external/empty video assets.
+   */
+  size_t max_embedded_bytes;
+} NuxVideoPlaybackCapabilities;
+
 #if ((defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__))) || defined(NUX_CAPI_ANDROID_VULKAN))
 /**
  * One deep import surface. Each optional child is copied and validated in
@@ -863,6 +888,7 @@ typedef struct NuxFileImportConfig {
   const struct NuxAssetHooks *asset_hooks;
   const struct NuxExpectedFileAssetDescriptor *expected_assets;
   size_t expected_asset_count;
+  const struct NuxVideoPlaybackCapabilities *video_playback;
 } NuxFileImportConfig;
 #endif
 
@@ -1139,6 +1165,96 @@ typedef struct NuxTextRunGeometry {
   float first_baseline;
 } NuxTextRunGeometry;
 
+typedef void (*NuxVideoCaptionCallback)(void*, struct NuxStringView, struct NuxStringView);
+
+/**
+ * One event consumed from the occurrence's shared event queue. State=0
+ * (`state` uses NuxVideoInfo's values), first-frame=1, looped=2,
+ * play-blocked=3, error=4, resource-limited=5 (`state` is 1 when limited, 0
+ * when restored). Luau nextEvent and this API consume the same queue;
+ * hosts should select one event owner and fan out notifications themselves.
+ */
+typedef struct NuxVideoEvent {
+  uint32_t kind;
+  uint32_t state;
+} NuxVideoEvent;
+
+/**
+ * Top-row-first opaque SDR RGBA8, or premultiplied RGBA8 sRGB. Caller storage
+ * is borrowed for this call only; the renderer owns the uploaded frame.
+ */
+typedef struct NuxVideoFrame {
+  uint32_t struct_size;
+  uint64_t generation;
+  double presentation_seconds;
+  uint32_t width;
+  uint32_t height;
+  uint32_t row_bytes;
+  struct NuxByteView pixels;
+} NuxVideoFrame;
+
+/**
+ * Current native media clock, in the same order as group creation. Mark an
+ * unavailable/seeking clock available=0. Boolean fields must be 0 or 1.
+ * A stale generation is ignored; never supply a decoded frame PTS here.
+ */
+typedef struct NuxVideoClockSample {
+  uint64_t generation;
+  double seconds;
+  double rate;
+  uint32_t playing;
+  uint32_t available;
+} NuxVideoClockSample;
+
+/**
+ * Plain text cue; [start,end) is in the video's media timeline. Text is copied
+ * during installation. Markup interpretation belongs to the caption importer.
+ */
+typedef struct NuxVideoCaptionCue {
+  double start_seconds;
+  double end_seconds;
+  struct NuxStringView text;
+} NuxVideoCaptionCue;
+
+/**
+ * One decoder action. Play=0, pause=1, seek=2, rate=3, volume=4,
+ * dispose=5. `value` is seconds/rate/volume; seek carries the new generation.
+ */
+typedef struct NuxVideoAction {
+  uint32_t kind;
+  double value;
+  uint64_t generation;
+} NuxVideoAction;
+
+typedef void (*NuxVideoActionCallback)(void*, const struct NuxVideoAction*);
+
+/**
+ * All views passed to this callback are valid only during the callback.
+ * Copy source strings/embedded bytes before returning if retaining them.
+ */
+typedef struct NuxVideoInfo {
+  uint32_t struct_size;
+  size_t component_id;
+  uint32_t asset_id;
+  uint64_t generation;
+  /**
+   * Opening=0, ready=1, playing=2, paused=3, seeking=4, buffering=5,
+   * ended=6, failed=7, disposed=8.
+   */
+  uint32_t state;
+  double position_seconds;
+  float volume;
+  float rate;
+  uint32_t muted;
+  uint32_t wants_play;
+  uint32_t audio_policy;
+  struct NuxStringView source_key;
+  struct NuxStringView content_type;
+  struct NuxByteView embedded_bytes;
+} NuxVideoInfo;
+
+typedef void (*NuxVideoInfoCallback)(void*, const struct NuxVideoInfo*);
+
 #if defined(NUX_CAPI_ANDROID_VULKAN)
 typedef uint32_t NuxAndroidVulkanRendererFit;
 #endif
@@ -1270,6 +1386,27 @@ typedef struct NuxSemanticNodeView {
    */
   uint32_t actions;
 } NuxSemanticNodeView;
+
+/**
+ * One member of a synchronization group. The first member is its leader.
+ * Component IDs are local to the supplied live player occurrence.
+ */
+typedef struct NuxVideoSyncMember {
+  const struct NuxPlayer *player;
+  size_t component_id;
+} NuxVideoSyncMember;
+
+/**
+ * Drift of one follower relative to the leader, valid during this callback.
+ */
+typedef struct NuxVideoSyncMeasurement {
+  size_t member_index;
+  double drift_seconds;
+  double seek_prediction_seconds;
+  uint32_t corrected;
+} NuxVideoSyncMeasurement;
+
+typedef void (*NuxVideoSyncCallback)(void*, const struct NuxVideoSyncMeasurement*);
 
 typedef struct NuxViewModelAuthoredInstanceView {
   uint32_t struct_size;
@@ -1783,6 +1920,18 @@ NuxStatus nux_file_import_with_result(const uint8_t *bytes,
                                       struct NuxFile **out_file,
                                       struct NuxCapiResult **out_result);
 
+/**
+ * Callback-renderer import with explicit video admission. Older import entry
+ * points do not enable video. Capabilities are copied before parsing; missing
+ * playback capability rejects video before loader or script execution.
+ */
+NuxStatus nux_file_import_with_video_capabilities(const uint8_t *bytes,
+                                                  size_t len,
+                                                  const struct NuxRenderCallbacks *callbacks,
+                                                  const struct NuxVideoPlaybackCapabilities *capabilities,
+                                                  struct NuxFile **out_file,
+                                                  struct NuxCapiResult **out_result);
+
 NuxStatus nux_file_view_model_catalog(const struct NuxFile *file,
                                       struct NuxViewModelCatalog **out_catalog);
 
@@ -1990,6 +2139,110 @@ NuxStatus nux_player_text_run_geometry(const struct NuxPlayer *player,
  */
 NuxStatus nux_player_validate_semantic_snapshot(const struct NuxPlayer *player,
                                                 const struct NuxSemanticSnapshot *snapshot);
+
+/**
+ * Synchronously visit the current caption language and text. Views live only
+ * during the callback; copy them before returning. This never consumes cues.
+ * Seek, pause and independent occurrences use the same playback clock as Luau.
+ */
+NuxStatus nux_player_video_caption(const struct NuxPlayer *player,
+                                   size_t component_id,
+                                   NuxVideoCaptionCallback callback,
+                                   void *user_data);
+
+/**
+ * Queue one authored command: play=0, pause=1, seek=2, rate=3, volume=4,
+ * mute=5, suspend-reason=6, reenter=7, dispose=8, looping=9. Boolean values must be 0/1.
+ * Suspension reasons are hidden=1, background=2, interruption=4, resources=8.
+ */
+NuxStatus nux_player_video_command(const struct NuxPlayer *player,
+                                   size_t component_id,
+                                   uint32_t kind,
+                                   double value,
+                                   uint32_t reason);
+
+/**
+ * Return NotFound when no event is pending. Output is written only on Ok.
+ */
+NuxStatus nux_player_video_next_event(const struct NuxPlayer *player,
+                                      size_t component_id,
+                                      struct NuxVideoEvent *out_event);
+
+#if defined(NUX_CAPI_ANDROID_VULKAN)
+/**
+ * Upload a video frame through the exact renderer domain used to import the
+ * player. Old decoder generations are ignored; wrong renderer domains fail.
+ */
+NuxStatus nux_player_video_present_android_vulkan(const struct NuxAndroidVulkanRenderer *renderer,
+                                                  const struct NuxPlayer *player,
+                                                  size_t component_id,
+                                                  const struct NuxVideoFrame *frame);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Upload a video frame through the exact renderer domain used to import the
+ * player. Old decoder generations are ignored; wrong renderer domains fail.
+ */
+NuxStatus nux_player_video_present_metal(const struct NuxRenderer *renderer,
+                                         const struct NuxPlayer *player,
+                                         size_t component_id,
+                                         const struct NuxVideoFrame *frame);
+#endif
+
+/**
+ * Feed the current native clock to groups authored by Luau in this occurrence.
+ * Use one monotonic seconds domain for all players; a null sample clears clock
+ * availability. Call after commands/observations, even when no frame is uploaded.
+ */
+NuxStatus nux_player_video_report_clock(const struct NuxPlayer *player,
+                                        size_t component_id,
+                                        double monotonic_seconds,
+                                        const struct NuxVideoClockSample *sample);
+
+/**
+ * Atomically replace captions with bounded owned cues. Empty input clears the
+ * track. Validation failure preserves the old track. Supply a language tag;
+ * callers render the projected plain text and expose it through accessibility.
+ */
+NuxStatus nux_player_video_set_captions(const struct NuxPlayer *player,
+                                        size_t component_id,
+                                        struct NuxStringView language,
+                                        const struct NuxVideoCaptionCue *cues,
+                                        size_t count);
+
+/**
+ * Set the loop interval in seconds. Start is inclusive, end exclusive; zero
+ * end means source duration. Enable looping separately with command kind 9.
+ */
+NuxStatus nux_player_video_set_loop_range(const struct NuxPlayer *player,
+                                          size_t component_id,
+                                          double start_seconds,
+                                          double end_seconds);
+
+/**
+ * Drain queued commands and apply one decoder observation. Observation kinds:
+ * none=0, ready=1 (`value`=duration), playing=2, ended=3, buffering=4,
+ * play-blocked=5, failed=6. Stale generations are ignored. Deliver every action
+ * synchronously in order; decode callbacks marshal back to the creator thread.
+ * A callback is required even when this step happens to emit no actions.
+ */
+NuxStatus nux_player_video_step(const struct NuxPlayer *player,
+                                size_t component_id,
+                                uint32_t observation,
+                                uint64_t generation,
+                                double value,
+                                NuxVideoActionCallback callback,
+                                void *user_data);
+
+/**
+ * Enumerate video occurrences in this player's artboard. Component IDs are
+ * occurrence-local and remain valid until the player/occurrence is replaced.
+ * Calls are creator-thread affine; callbacks cannot reenter any C API.
+ */
+NuxStatus nux_player_visit_videos(const struct NuxPlayer *player,
+                                  NuxVideoInfoCallback callback,
+                                  void *user_data);
 
 #if (defined(NUX_CAPI_ANDROID_VULKAN) && defined(__ANDROID__))
 /**
@@ -2251,6 +2504,47 @@ NuxStatus nux_state_machine_instance_set_bool(struct NuxStateMachineInstance *st
 NuxStatus nux_state_machine_instance_set_number(struct NuxStateMachineInstance *state_machine,
                                                 const char *name,
                                                 float value);
+
+/**
+ * Queue the same authored command on every member atomically. Command numbers
+ * and arguments match nux_player_video_command. Lifecycle vetoes still apply.
+ */
+NuxStatus nux_video_sync_group_command(const struct NuxVideoSyncGroup *group,
+                                       uint32_t kind,
+                                       double value,
+                                       uint32_t reason);
+
+NuxStatus nux_video_sync_group_free(struct NuxVideoSyncGroup *group);
+
+/**
+ * Create a group of 2..64 distinct videos. The first is the leader. Tolerance
+ * and correction cooldown are finite positive seconds. All members must be
+ * on the calling thread. The group retains occurrences after player handles
+ * close. All later group calls remain creator-thread affine.
+ */
+NuxStatus nux_video_sync_group_new(const struct NuxVideoSyncMember *members,
+                                   size_t count,
+                                   double tolerance_seconds,
+                                   double cooldown_seconds,
+                                   struct NuxVideoSyncGroup **out_group);
+
+NuxStatus nux_video_sync_group_set_loop_range(const struct NuxVideoSyncGroup *group,
+                                              double start_seconds,
+                                              double end_seconds);
+
+/**
+ * Call after processing member commands/observations, with current native
+ * clocks and monotonic host seconds. Samples are borrowed only for this call;
+ * count must equal the group member count. Corrections enqueue ordinary seeks
+ * for the host to drain. Rate-mismatched, stale, suspended or unavailable
+ * members are skipped. Optional callbacks cannot reenter any C API.
+ */
+NuxStatus nux_video_sync_group_update(const struct NuxVideoSyncGroup *group,
+                                      double monotonic_seconds,
+                                      const struct NuxVideoClockSample *samples,
+                                      size_t count,
+                                      NuxVideoSyncCallback callback,
+                                      void *user_data);
 
 NuxStatus nux_view_model_catalog_authored_instance(const struct NuxViewModelCatalog *catalog,
                                                    size_t index,

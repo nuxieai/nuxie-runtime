@@ -81,7 +81,17 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.15 candidate settles internal view-model binding feedback within the
+The v0.10.0 candidate adds the `.nux` RIV-superset video scene extension,
+capability-gated import, occurrence playback and caption APIs, synchronized
+playback groups, and Metal/Vulkan frame submission. ABI v4 is retained: the
+import configuration uses a size-gated appended capability pointer and older
+prefixes continue to reject video while accepting ordinary RIV scenes. The
+host integration contract is in [video-runtime-host-contract.md](video-runtime-host-contract.md).
+Native decoder adapters and device fixtures are source integrations; SDK
+packaging and published media delivery remain separate adoption work.
+Candidate packaging and device evidence must pass before this version ships.
+
+It also preserves the v0.9.15 binding-feedback fix, which settles internal view-model binding feedback within the
 same player frame. Layout measurements can update dependent paint geometry
 before publication; external observers remain commit-gated and host mutation
 batches retain atomic publication. SDK pixel/device qualification remains a

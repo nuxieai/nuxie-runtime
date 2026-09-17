@@ -1,0 +1,59 @@
+<!doctype html><meta charset="utf-8"><title>Nuxie 720p video benchmark</title>
+<canvas id="canvas" width="1280" height="720" style="width:640px;height:360px"></canvas>
+<pre id="result">Running 32-second 720p qualification…</pre>
+<script type="module">
+import init, {BrowserVideoBenchmark} from './video_qualification.js';
+const result = document.querySelector('#result');
+const gpu = location.pathname.includes('/webgpu/');
+let proof, host, session, ended = false;
+let interrupted = document.hidden;
+document.addEventListener('visibilitychange', () => { interrupted ||= document.hidden; });
+const costs = [];
+let first, last, maxGap = 0, red = 0, blue = 0;
+const cleanup = () => {
+  proof?.free(); proof = undefined;
+  if (session) { host.releaseWebGpu(session); session = undefined; }
+};
+try {
+  await init();
+  const canvas = document.querySelector('#canvas');
+  if (gpu) { host = await import('./webgpu-host.js'); session = await host.prepareWebGpu(canvas); }
+  proof = new BrowserVideoBenchmark(canvas, new URL('./red-blue-720p.mp4', location.href).href);
+  const start = performance.now();
+  const tick = async () => {
+    if (ended) return;
+    try {
+      if (interrupted) throw new Error('benchmark requires an uninterrupted foreground tab');
+      if (performance.now() - start >= 32000) {
+        proof.close();
+        const fps = (costs.length - 1) * 1000 / (last - first);
+        costs.sort((a,b) => a-b);
+        const metrics = {backend:gpu?'webgpu':'webgl2',frames:costs.length,red,blue,fps,
+          firstFrameMs:first-start,frameWorkP50Ms:costs[Math.floor(costs.length*.5)],
+          frameWorkP95Ms:costs[Math.floor(costs.length*.95)],maxGapMs:maxGap,ownedDecoders:0,
+          acceleration:'unknown'};
+        result.textContent = JSON.stringify({status: red>300 && blue>300 && fps>=24 ? 'passed':'failed',...metrics});
+        ended = true; cleanup(); return;
+      }
+      const tickStart = performance.now();
+      if (proof.tick()) {
+        if (gpu) {
+          const capture = await host.captureWebGpuPixels(session);
+          proof.verify_pixels(capture.pixels);
+        }
+        const pixel = proof.decoded_pixel();
+        if (pixel[0]>200 && pixel[2]<30) red++;
+        else if (pixel[2]>200 && pixel[0]<30) blue++;
+        else throw new Error('unexpected benchmark color: '+pixel);
+        const now = performance.now();
+        first ??= now;
+        if (last !== undefined) maxGap = Math.max(maxGap,now-last);
+        last = now;
+        costs.push(now-tickStart);
+      }
+      requestAnimationFrame(tick);
+    } catch (error) { result.textContent='FAILED: '+error; ended=true; cleanup(); }
+  };
+  requestAnimationFrame(tick);
+} catch (error) { result.textContent='FAILED: '+error; ended=true; cleanup(); }
+</script>

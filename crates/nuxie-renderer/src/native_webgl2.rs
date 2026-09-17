@@ -38,6 +38,18 @@ impl WebGl2Factory {
         self.core.resize(width, height)
     }
 
+    /// Upload a decoded SDR frame into this factory's resource domain.
+    pub fn upload_canonical_rgba8_premul_srgb(
+        &self,
+        width: u32,
+        height: u32,
+        row_bytes: u32,
+        pixels: &[u8],
+    ) -> Result<Box<dyn RenderImage>, RendererError> {
+        self.core
+            .upload_rgba8_premul_srgb(width, height, row_bytes, pixels)
+    }
+
     pub fn begin_frame(
         &self,
         clear_color: u32,

@@ -8,6 +8,10 @@
 )]
 
 mod asset_catalog;
+mod video;
+mod video_sync;
+pub use video::*;
+pub use video_sync::*;
 mod player_view_models;
 mod render_callbacks;
 
@@ -259,6 +263,7 @@ impl FileMetadataCatalog {
                     "BlobAsset" => NUX_FILE_ASSET_KIND_BLOB,
                     "ScriptAsset" => NUX_FILE_ASSET_KIND_SCRIPT,
                     "ShaderAsset" => NUX_FILE_ASSET_KIND_SHADER,
+                    "VideoAsset" => NUX_FILE_ASSET_KIND_VIDEO,
                     _ => return Err("native catalog contains an unknown FileAsset kind"),
                 };
                 let authored_id = entry
@@ -268,6 +273,7 @@ impl FileMetadataCatalog {
                     .and_then(|value| u32::try_from(value).ok());
                 let external = entry.contents.is_none();
                 let required_provider_flags = match kind {
+                    NUX_FILE_ASSET_KIND_VIDEO => NUX_FILE_ASSET_PROVIDER_VIDEO_PLAYBACK,
                     NUX_FILE_ASSET_KIND_IMAGE => {
                         NUX_FILE_ASSET_PROVIDER_IMAGE_DECODE
                             | if external {
@@ -871,6 +877,7 @@ enum HandleKind {
     ViewModel,
     Result,
     PlayerStepResult,
+    VideoSyncGroup,
     #[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
     Renderer,
     #[cfg(feature = "android-vulkan")]
@@ -1899,10 +1906,14 @@ pub unsafe extern "C" fn nux_capi_runtime_info(out_info: *mut NuxRuntimeInfo) ->
 /// Pointer id reported to the runtime for the single-pointer C surface.
 const DEFAULT_POINTER_ID: i32 = 0;
 
-fn import_callback_file(bytes: &[u8], callbacks: NuxRenderCallbacks) -> Result<NuxFile, String> {
+fn import_callback_file(
+    bytes: &[u8],
+    callbacks: NuxRenderCallbacks,
+    limits: FileImportLimits,
+) -> Result<NuxFile, String> {
     let table = Arc::new(callbacks);
     let mut factory = PersistentFactory::new(CallbackFactory::new(callbacks));
-    let file = nuxie::import_native(bytes, &mut factory, None, FileImportLimits::default())
+    let file = nuxie::import_native(bytes, &mut factory, None, limits)
         .map_err(|error| error.to_string())?;
     let metadata = FileMetadataCatalog::from_file(&file, bytes)?;
     let view_model_catalog = Arc::new(
@@ -1953,7 +1964,7 @@ pub unsafe extern "C" fn nux_file_import(
             Ok(callbacks) => callbacks,
             Err(status) => return status,
         };
-        match import_callback_file(bytes, callbacks) {
+        match import_callback_file(bytes, callbacks, FileImportLimits::default()) {
             Ok(file) => {
                 let handle = Box::new(file);
                 unsafe {
@@ -1976,6 +1987,32 @@ pub unsafe extern "C" fn nux_file_import_with_result(
     bytes: *const u8,
     len: usize,
     callbacks: *const NuxRenderCallbacks,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe { import_callback_result(bytes, len, callbacks, ptr::null(), out_file, out_result) }
+}
+
+/// Callback-renderer import with explicit video admission. Older import entry
+/// points do not enable video. Capabilities are copied before parsing; missing
+/// playback capability rejects video before loader or script execution.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_file_import_with_video_capabilities(
+    bytes: *const u8,
+    len: usize,
+    callbacks: *const NuxRenderCallbacks,
+    capabilities: *const NuxVideoPlaybackCapabilities,
+    out_file: *mut *mut NuxFile,
+    out_result: *mut *mut NuxCapiResult,
+) -> NuxStatus {
+    unsafe { import_callback_result(bytes, len, callbacks, capabilities, out_file, out_result) }
+}
+
+unsafe fn import_callback_result(
+    bytes: *const u8,
+    len: usize,
+    callbacks: *const NuxRenderCallbacks,
+    capabilities: *const NuxVideoPlaybackCapabilities,
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
@@ -2012,7 +2049,14 @@ pub unsafe extern "C" fn nux_file_import_with_result(
                 return status;
             }
         };
-        match import_callback_file(bytes, callbacks) {
+        let limits = match unsafe { video::import_limits(capabilities) } {
+            Ok(limits) => limits,
+            Err(status) => {
+                publish_result(out_result, status, "invalid video capabilities");
+                return status;
+            }
+        };
+        match import_callback_file(bytes, callbacks, limits) {
             Ok(file) => {
                 let handle = Box::into_raw(Box::new(file));
                 register_handle(handle, HandleKind::File, thread::current().id());
@@ -2178,10 +2222,11 @@ pub(crate) fn import_file_with_prepared_host_commands(
     prepared: Option<PreparedHostCommandImport>,
     native_shader_authority: NativeShaderImportAuthority,
     program_adapter: Option<Arc<dyn nuxie::ScriptProgramAdapter>>,
+    limits: FileImportLimits,
 ) -> Result<ImportedRuntimeFile, String> {
     record_file_import_call();
     if prepared.is_none() && program_adapter.is_none() {
-        let file = nuxie::import_native(bytes, factory, loader, FileImportLimits::default())
+        let file = nuxie::import_native(bytes, factory, loader, limits)
             .map_err(|error| error.to_string())?;
         return Ok(ImportedRuntimeFile {
             file,
@@ -2245,7 +2290,7 @@ pub(crate) fn import_file_with_prepared_host_commands(
             bytes,
             factory,
             loader,
-            FileImportLimits::default(),
+            limits,
             capability,
             execution_limits,
             None,
@@ -2328,6 +2373,7 @@ pub unsafe extern "C" fn nux_file_import_trusted_with_host_commands(
             Some(prepared),
             NativeShaderImportAuthority::Denied,
             None,
+            FileImportLimits::default(),
         );
         match imported {
             Ok(imported) => {

@@ -1773,6 +1773,22 @@ impl ScriptedContextSource {
         ScriptedContextDataProjection::Current(ScriptedDataContextSource::new(context))
     }
 
+    /// Resolve a video in this script's live artboard occurrence. Snapshot
+    /// contexts have no scene occurrence and cannot control a source template.
+    pub fn video_named(&self, name: &str) -> Option<crate::source::core::CoreHandle> {
+        let ScriptedContextProjection::Occurrence(owner) = &self.projection else {
+            return None;
+        };
+        let artboard = owner
+            .with(|object| object.component_artboard_handle())
+            .flatten()?;
+        artboard
+            .with_downcast::<crate::source::artboard::Artboard, _>(|a| {
+                a.find_handle::<crate::video::Video>(name)
+            })
+            .flatten()
+    }
+
     pub fn global_view_model(&self, name: &[u8]) -> Option<ScriptViewModel> {
         let data_context = self.current_data_context()?;
         let file = self.current_file()?.upgrade()?;

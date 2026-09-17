@@ -1,0 +1,56 @@
+<!doctype html><meta charset="utf-8"><title>Nuxie synchronized video proof</title>
+<canvas id="leader" width="64" height="32"></canvas>
+<canvas id="follower" width="64" height="32"></canvas>
+<div id="captions" lang="en" role="status" aria-live="polite" aria-atomic="true"></div>
+<pre id="result">loading</pre>
+<script type="module">
+import init, {BrowserVideoProof, BrowserSyncProof} from './video_qualification.js';
+const result = document.querySelector('#result');
+const gpu = location.pathname.includes('/webgpu/');
+const sessions = [];
+let host, proof;
+const cleanup = () => {
+  proof?.free();
+  proof = undefined;
+  for (const session of sessions) host.releaseWebGpu(session);
+};
+try {
+  await init();
+  if (gpu) host = await import('./webgpu-host.js');
+  const embedded = new URL(location.href).searchParams.has('embedded');
+  const source = embedded ? 'embedded-sync' : new URL('./red-blue-sync.mp4', location.href).href;
+  const players = [];
+  for (const id of ['leader', 'follower']) {
+    const canvas = document.querySelector('#' + id);
+    if (gpu) sessions.push(await host.prepareWebGpu(canvas));
+    players.push(new BrowserVideoProof(canvas, source));
+  }
+  proof = new BrowserSyncProof(players[0], players[1]);
+  const start = performance.now();
+  const tick = async () => {
+    try {
+      const before = [proof.frames(false), proof.frames(true)];
+      const ended = proof.tick();
+      document.querySelector('#captions').textContent = proof.caption();
+      if (gpu && !ended) {
+        // Submit every copy before yielding: browser swapchain textures may
+        // expire while awaiting the first readback.
+        const captures = sessions.map((session, i) =>
+          proof.frames(i === 1) === before[i] ? null : host.captureWebGpuPixels(session));
+        const pixels = await Promise.all(captures);
+        for (let i = 0; i < pixels.length; i++) {
+          if (pixels[i]) proof.verify_frame(i === 1, pixels[i].pixels);
+        }
+      }
+      if (ended) {
+        result.textContent = JSON.stringify({status:'passed', backend:gpu?'webgpu':'webgl2', embedded, metrics:proof.metrics()});
+        cleanup();
+        return;
+      }
+      if (performance.now() - start > 20000) throw new Error('synchronization timed out: ' + proof.metrics());
+      requestAnimationFrame(tick);
+    } catch (error) { result.textContent = 'FAILED: ' + error; cleanup(); }
+  };
+  requestAnimationFrame(tick);
+} catch (error) { result.textContent = 'FAILED: ' + error; cleanup(); }
+</script>

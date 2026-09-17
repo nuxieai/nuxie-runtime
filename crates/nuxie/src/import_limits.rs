@@ -8,9 +8,12 @@ use std::cell::{Cell, RefCell};
 /// [`Self::new`] and [`Default::default`] are deliberately bounded. Hosts that
 /// accept larger trusted artifacts can raise individual ceilings explicitly;
 /// [`Self::unbounded`] is reserved for already-authenticated, host-controlled
-/// inputs.
+/// inputs. Allocation limits do not grant video capability; even unbounded
+/// mode requires explicit video opt-in and an independently bounded video asset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct FileImportLimits {
+    video_playback_available: bool,
+    max_embedded_video_bytes: usize,
     max_input_bytes: Option<usize>,
     max_runtime_objects: Option<usize>,
     max_runtime_properties: Option<usize>,
@@ -31,6 +34,8 @@ impl FileImportLimits {
 
     pub const fn new() -> Self {
         Self {
+            video_playback_available: false,
+            max_embedded_video_bytes: 64 * 1024 * 1024,
             max_input_bytes: Some(Self::DEFAULT_MAX_INPUT_BYTES),
             max_runtime_objects: Some(Self::DEFAULT_MAX_RUNTIME_OBJECTS),
             max_runtime_properties: Some(Self::DEFAULT_MAX_RUNTIME_PROPERTIES),
@@ -45,6 +50,8 @@ impl FileImportLimits {
 
     pub const fn unbounded() -> Self {
         Self {
+            video_playback_available: false,
+            max_embedded_video_bytes: 64 * 1024 * 1024,
             max_input_bytes: None,
             max_runtime_objects: None,
             max_runtime_properties: None,
@@ -53,6 +60,21 @@ impl FileImportLimits {
             max_total_file_asset_content_bytes: None,
             max_retained_decoded_image_bytes: None,
         }
+    }
+
+    /// Explicit host assertion: its decoder and renderer can present video.
+    /// Default and unbounded allocation policies both leave video unavailable.
+    pub const fn with_video_playback(mut self, available: bool) -> Self {
+        self.video_playback_available = available;
+        self
+    }
+    pub const fn with_max_embedded_video_bytes(mut self, maximum: usize) -> Self {
+        self.max_embedded_video_bytes = maximum;
+        self
+    }
+    /// Structural allocation/capability check with no loaders, scripts or decoders.
+    pub fn preflight(self, bytes: &[u8]) -> Result<()> {
+        NativeImportAdmission::preflight(bytes, self).map(|_| ())
     }
 
     pub const fn with_max_input_bytes(mut self, maximum: usize) -> Self {
@@ -171,15 +193,25 @@ impl NativeImportAdmission {
         limits.validate_input(bytes)?;
         let properties = if limits.max_runtime_objects().is_some()
             || limits.max_runtime_properties().is_some()
+            || !limits.video_playback_available
         {
             // Structural decoding enforces allocation budgets only. Do not
             // construct descriptors, run legacy lifecycle, or re-encode bytes.
-            nuxie_binary::read_runtime_metadata(
+            let metadata = nuxie_binary::read_runtime_metadata(
                 bytes,
                 limits.max_runtime_objects(),
                 limits.max_runtime_properties(),
-            )?
-            .decoded_property_count()
+            )?;
+            ensure!(
+                limits.video_playback_available
+                    || !metadata.objects.iter().flatten().any(|object| matches!(
+                        object.type_key,
+                        nuxie_runtime::video::Video::TYPE_KEY
+                            | nuxie_runtime::video::VideoAsset::TYPE_KEY
+                    )),
+                "video playback capability is unavailable for this host"
+            );
+            metadata.decoded_property_count()
         } else {
             0
         };
@@ -259,6 +291,13 @@ impl ImportAdmission for NativeImportAdmission {
 
     fn admit_asset_bytes(&self, asset: &CoreHandle, bytes: &[u8]) -> bool {
         self.check(|| {
+            if asset.core_type() == Some(nuxie_runtime::video::VideoAsset::TYPE_KEY) {
+                ensure!(
+                    bytes.len() <= self.limits.max_embedded_video_bytes,
+                    "embedded video exceeds host byte limit {}",
+                    self.limits.max_embedded_video_bytes
+                );
+            }
             if asset.core_type() == Some(ManifestAssetBase::TYPE_KEY) {
                 let mut consumed = self.properties.get();
                 nuxie_binary::validate_manifest_payload_budget(

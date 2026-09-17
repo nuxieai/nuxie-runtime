@@ -380,3 +380,21 @@ recovery also passed. Metal/macOS, Bat Phone audible/external and muted/embedded
 and Chrome WebGL2/WebGPU passed. These checks establish rate propagation and
 continued composed playback, not sample-accurate audible-output timing.
 Evidence: `target/video-rate-*`.
+
+Video image snapshots: `video:image()` uses the same renderer image as the
+scene drawable, including authored poster fallback. Lua identity/lifetime tests
+verify no pixel copy or second player, stale-generation rejection, retained
+snapshots across replacement/reclaim, and final resource release. The existing
+GPU image-view integration accepts these snapshots. These tests qualify the
+script/resource boundary; they do not independently measure a custom shader
+on every GPU. Evidence: `target/video-image-*.log`.
+
+The decoded-frame GPU image-view path also passed the live pixel oracle on
+macOS Metal, Bat Phone Metal (audible external and muted embedded), Android
+emulator Vulkan, and Chrome WebGL2/WebGPU. Browser runs each completed two
+range loops with 45 frames; iOS runs each produced 47 frames and zero native
+clock drift during actual OS background/resume. These validate renderer image
+views and composition, not custom shader execution on every backend.
+Evidence: `target/video-image-view-*-live.log`,
+`target/video-image-view-ios-*.log`, and
+`target/video-image-view-android-embedded.log`.

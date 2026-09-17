@@ -99,6 +99,13 @@ impl Factory for WebGl2Factory {
         self.core.make_gpu_canvas_shader_occurrence(prepared)
     }
 
+    fn make_gpu_canvas_image_view(
+        &mut self,
+        image: std::rc::Rc<dyn RenderImage>,
+    ) -> Result<std::rc::Rc<dyn RenderImage>, GpuCanvasError> {
+        self.core.make_gpu_canvas_image_view(image)
+    }
+
     fn make_gpu_canvas_image_with_pipelines(
         &mut self,
         pipelines: &[GpuCanvasPipelineShaders],

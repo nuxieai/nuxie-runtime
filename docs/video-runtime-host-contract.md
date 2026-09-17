@@ -57,6 +57,17 @@ must queue the suspension reason, immediately drain its actions, and execute
 pause before suspending their render loop. Resuming one reason does not clear
 other reasons. Requested play intent survives temporary suspension.
 
+## Reusing a visible video image
+
+Luau `context:video(name):image()` returns an ordinary Image snapshot of the
+currently visible decoded frame or poster, or nil when none is available.
+The snapshot shares the renderer resource; `image.view` uses the existing
+GPU sampling interface and `renderer:drawImage` uses ordinary scene drawing.
+It does not create another decoder or copy pixels. Request a new snapshot to
+observe a later frame. Retained snapshots remain valid across source replacement
+and decoder disposal; releasing the last owner releases that frame resource.
+A disposed script context cannot acquire another snapshot.
+
 ## Explicit synchronization
 
 Use `nux_video_sync_group_new` with 2–64 distinct video occurrences. Member zero

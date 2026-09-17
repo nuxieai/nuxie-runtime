@@ -131,6 +131,22 @@ impl Video {
         self.playback
             .update_suspension(super::playback::SuspensionReason::Resources, denied)
     }
+    /// Retain the currently visible frame (or poster) for ordinary image and
+    /// shader composition. This snapshot shares the renderer resource; it does
+    /// not copy pixels or create another decoder. Later frames do not mutate it.
+    pub fn render_image(&self) -> Option<Rc<dyn RenderImage>> {
+        if matches!(
+            self.playback.state(),
+            super::playback::PlaybackState::Failed | super::playback::PlaybackState::Disposed
+        ) {
+            return None;
+        }
+        if self.showing_poster {
+            self.poster_image()
+        } else {
+            self.image.render_image()
+        }
+    }
     pub fn has_video_frame(&self) -> bool {
         !self.showing_poster
     }
@@ -158,13 +174,14 @@ impl Video {
         self.refresh_poster();
         true
     }
-    fn refresh_poster(&mut self) {
-        let image = self
-            .poster
+    fn poster_image(&self) -> Option<Rc<dyn RenderImage>> {
+        self.poster
             .as_ref()
             .and_then(|p| p.with_downcast::<ImageAsset, _>(|a| a.render_image().cloned()))
-            .flatten();
-        self.image.set_runtime_frame(image);
+            .flatten()
+    }
+    fn refresh_poster(&mut self) {
+        self.image.set_runtime_frame(self.poster_image());
     }
     pub(crate) fn update_transform_after_super(&mut self) {
         self.image.update_transform_after_super();

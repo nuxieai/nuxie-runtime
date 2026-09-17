@@ -268,6 +268,57 @@ mod tests {
     }
 
     #[test]
+    fn video_snapshot_uses_the_existing_gpu_image_view() {
+        use nuxie_runtime::video::Video;
+        let vm = ScriptVm::new();
+        let mut recorder =
+            nuxie_renderer::deferred::ore::ore_deferred_context::DeferredOreContext::fromReal(None);
+        recorder.setCanvasRegistry(Some(Rc::new(RefCell::new(
+            nuxie_renderer::deferred::cmd::foreign_image_registry::ForeignImageRegistry::default(),
+        ))));
+        let mut factory = PersistentFactory::new(RoutedTestFactory {
+            inner: ImageViewFactory(RecordingFactory::new()),
+            ore: Some(Rc::new(RefCell::new(recorder))),
+            canvas_host: None,
+        });
+        vm.install_render_factory(&mut factory).unwrap();
+        vm.install_rive_globals().unwrap();
+        let arena = nuxie_runtime::source::core::CoreArena::default();
+        let video = arena.insert(Video::default());
+        let frame: Rc<dyn RenderImage> = Rc::new(TestImage::default());
+        video
+            .with_downcast_mut::<Video, _>(|video| {
+                video.playback.opened(0, 1.0);
+                assert!(video.present(0, frame.clone(), 0.0));
+            })
+            .unwrap();
+        let lua = vm.lua();
+        lua.globals()
+            .set(
+                "video",
+                lua.create_userdata(super::super::lua_video::ScriptVideo::new(
+                    video,
+                    Rc::new(std::cell::Cell::new(true)),
+                    Rc::new(std::cell::Cell::new(false)),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        let format: String = lua
+            .load("image = video:image(); return image.view.format")
+            .eval()
+            .unwrap();
+        assert_eq!(format, "rgba8unorm");
+        let image = lua.globals().get::<AnyUserData>("image").unwrap();
+        let image = image.borrow::<ScriptedImage>().unwrap();
+        assert!(Rc::ptr_eq(&frame, &image.render_image().unwrap()));
+        let cached = image.cached_gpu_view.borrow().as_ref().unwrap().clone();
+        let view = cached.textureViewBase().unwrap();
+        assert_eq!(view.texture().width(), Some(7));
+        assert_eq!(view.texture().height(), Some(11));
+    }
+
+    #[test]
     fn image_members_include_a_cached_renderer_backed_gpu_view() {
         let vm = ScriptVm::new();
         let mut recorder =

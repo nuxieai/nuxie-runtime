@@ -81,7 +81,18 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.10.4 candidate appends the authored component name, decoder priority,
+The v0.10.5 candidate contains the modal accessibility update below.
+
+The modal accessibility update resolves the active dialog from rendered draw
+order, including nested and repeated artboard occurrences, and rejects queued
+background actions when a modal opens. Presented semantic captures include an
+owned modal scope (none, active, or unresolved) and active node identity so SDKs
+can apply the same boundary to traversal and native editors. The two fields are
+appended to the size-gated snapshot-info structure; ABI v4 and earlier field
+offsets remain unchanged. An unresolved scope cannot admit background input.
+SDK adoption and screen-reader modal focus qualification remain separate gates.
+
+The inherited v0.10.4 behavior appends the authored component name, decoder priority,
 and readiness policy to `NuxVideoInfo`. Hosts copy borrowed names during the
 visitor callback and check `struct_size` before accessing the new tail. Existing
 field offsets and ABI v4 are preserved. Names are scoped to a player artboard

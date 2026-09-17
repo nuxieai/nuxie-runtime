@@ -63,12 +63,23 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.4 release candidate
+## Immutable v0.4.5 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.4 candidate appends the authored component name, decoder priority,
+The v0.4.5 candidate contains the modal accessibility update below.
+
+The modal accessibility update resolves the active dialog from rendered draw
+order, including nested and repeated artboard occurrences, and rejects queued
+background actions when a modal opens. Presented semantic captures include an
+owned modal scope (none, active, or unresolved) and active node identity so SDKs
+can apply the same boundary to traversal and native editors. The two fields are
+appended to the size-gated snapshot-info structure; ABI v4 and earlier field
+offsets remain unchanged. An unresolved scope cannot admit background input.
+SDK adoption and screen-reader modal focus qualification remain separate gates.
+
+The inherited v0.4.4 behavior appends the authored component name, decoder priority,
 and readiness policy to `NuxVideoInfo`. Hosts copy borrowed names during the
 visitor callback and check `struct_size` before accessing the new tail. Existing
 field offsets and ABI v4 are preserved. Names are scoped to a player artboard
@@ -111,9 +122,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.4 <full-source-sha>
-git push origin android-runtime-v0.4.4
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.4
+git tag android-runtime-v0.4.5 <full-source-sha>
+git push origin android-runtime-v0.4.5
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.5
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

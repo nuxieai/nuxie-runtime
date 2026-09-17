@@ -1990,7 +1990,9 @@ pub unsafe extern "C" fn nux_file_import_with_result(
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
-    unsafe { import_callback_result(bytes, len, callbacks, ptr::null(), out_file, out_result) }
+    ffi_guard_with_handle_result(out_file, out_result, HandleKind::File, || unsafe {
+        import_callback_result(bytes, len, callbacks, ptr::null(), out_file, out_result)
+    })
 }
 
 /// Callback-renderer import with explicit video admission. Older import entry
@@ -2005,7 +2007,9 @@ pub unsafe extern "C" fn nux_file_import_with_video_capabilities(
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
-    unsafe { import_callback_result(bytes, len, callbacks, capabilities, out_file, out_result) }
+    ffi_guard_with_handle_result(out_file, out_result, HandleKind::File, || unsafe {
+        import_callback_result(bytes, len, callbacks, capabilities, out_file, out_result)
+    })
 }
 
 unsafe fn import_callback_result(
@@ -2016,60 +2020,58 @@ unsafe fn import_callback_result(
     out_file: *mut *mut NuxFile,
     out_result: *mut *mut NuxCapiResult,
 ) -> NuxStatus {
-    ffi_guard_with_handle_result(out_file, out_result, HandleKind::File, || {
-        if !out_file.is_null() {
-            unsafe { *out_file = ptr::null_mut() };
-        }
+    if !out_file.is_null() {
+        unsafe { *out_file = ptr::null_mut() };
+    }
+    if !out_result.is_null() {
+        unsafe { *out_result = ptr::null_mut() };
+    }
+    if out_file.is_null() || out_result.is_null() {
         if !out_result.is_null() {
-            unsafe { *out_result = ptr::null_mut() };
+            publish_result(
+                out_result,
+                NuxStatus::NullArgument,
+                "an output pointer is null",
+            );
         }
-        if out_file.is_null() || out_result.is_null() {
-            if !out_result.is_null() {
-                publish_result(
-                    out_result,
-                    NuxStatus::NullArgument,
-                    "an output pointer is null",
-                );
-            }
-            return NuxStatus::NullArgument;
+        return NuxStatus::NullArgument;
+    }
+    if bytes.is_null() && len != 0 {
+        publish_result(out_result, NuxStatus::NullArgument, "bytes is null");
+        return NuxStatus::NullArgument;
+    }
+    let bytes = if len == 0 {
+        &[]
+    } else {
+        unsafe { slice::from_raw_parts(bytes, len) }
+    };
+    let callbacks = match unsafe { read_render_callbacks(callbacks) } {
+        Ok(callbacks) => callbacks,
+        Err(status) => {
+            publish_result(out_result, status, "render callback prefix is invalid");
+            return status;
         }
-        if bytes.is_null() && len != 0 {
-            publish_result(out_result, NuxStatus::NullArgument, "bytes is null");
-            return NuxStatus::NullArgument;
+    };
+    let limits = match unsafe { video::import_limits(capabilities) } {
+        Ok(limits) => limits,
+        Err(status) => {
+            publish_result(out_result, status, "invalid video capabilities");
+            return status;
         }
-        let bytes = if len == 0 {
-            &[]
-        } else {
-            unsafe { slice::from_raw_parts(bytes, len) }
-        };
-        let callbacks = match unsafe { read_render_callbacks(callbacks) } {
-            Ok(callbacks) => callbacks,
-            Err(status) => {
-                publish_result(out_result, status, "render callback prefix is invalid");
-                return status;
-            }
-        };
-        let limits = match unsafe { video::import_limits(capabilities) } {
-            Ok(limits) => limits,
-            Err(status) => {
-                publish_result(out_result, status, "invalid video capabilities");
-                return status;
-            }
-        };
-        match import_callback_file(bytes, callbacks, limits) {
-            Ok(file) => {
-                let handle = Box::into_raw(Box::new(file));
-                register_handle(handle, HandleKind::File, thread::current().id());
-                unsafe { *out_file = handle };
-                publish_result(out_result, NuxStatus::Ok, "");
-                NuxStatus::Ok
-            }
-            Err(error) => {
-                publish_result(out_result, NuxStatus::ImportError, error.to_string());
-                NuxStatus::ImportError
-            }
+    };
+    match import_callback_file(bytes, callbacks, limits) {
+        Ok(file) => {
+            let handle = Box::into_raw(Box::new(file));
+            register_handle(handle, HandleKind::File, thread::current().id());
+            unsafe { *out_file = handle };
+            publish_result(out_result, NuxStatus::Ok, "");
+            NuxStatus::Ok
         }
-    })
+        Err(error) => {
+            publish_result(out_result, NuxStatus::ImportError, error.to_string());
+            NuxStatus::ImportError
+        }
+    }
 }
 
 unsafe fn read_host_command_import_config(

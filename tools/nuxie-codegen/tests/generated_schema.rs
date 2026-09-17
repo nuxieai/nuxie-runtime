@@ -176,8 +176,10 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         }
     }
 
+    // Pinned upstream 5892bb05 includes sampler metadata and narrower
+    // integer declarations; the registry still uses the uint wire family.
     assert_eq!(runtime_definition_count, 351);
-    assert_eq!(runtime_property_count, 609);
+    assert_eq!(runtime_property_count, 616);
     assert_eq!(
         declared_types,
         [
@@ -214,10 +216,10 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         (("List<Id>", Some("Bytes")), 8),
         (("String", None), 23),
         (("String", Some("String")), 1),
-        (("uint", None), 125),
+        (("uint", None), 115),
         (("uint", Some("uint")), 4),
-        (("uint16", None), 2),
-        (("uint8", None), 42),
+        (("uint16", None), 3),
+        (("uint8", None), 58),
     ]
     .into_iter()
     .map(|((declared, runtime), count)| ((declared.to_owned(), runtime.map(str::to_owned)), count))
@@ -317,7 +319,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
     );
 
     let properties = runtime_json_properties(&runtime_dir.join("dev/defs"));
-    assert_eq!(properties.len(), 609);
+    assert_eq!(properties.len(), 616);
 
     let encoded = properties
         .iter()
@@ -749,7 +751,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "bindable", false))
             .count(),
-        276,
+        279,
         "dev/defs bindable property count changed; audit generated bindable metadata"
     );
 
@@ -758,7 +760,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| json_bool_or_default(&entry.property, "animates", false))
             .count(),
-        229,
+        232,
         "dev/defs animates property count changed; audit generated animates metadata and animation-keyed property support"
     );
     let animates_runtime_types = properties
@@ -790,7 +792,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
         ("String", 6),
         ("uint", 18),
         ("uint16", 2),
-        ("uint8", 12),
+        ("uint8", 15),
     ]
     .into_iter()
     .map(|(value, count)| (value.to_owned(), count))
@@ -845,7 +847,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("description").is_some())
             .count(),
-        458,
+        465,
         "dev/defs description coverage changed; audit generated description metadata"
     );
     assert_eq!(
@@ -887,7 +889,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        565,
+        572,
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 
@@ -903,7 +905,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             *counts.entry(value.to_owned()).or_default() += 1;
             counts
         });
-    let expected_runtime_initial_values = [("-1", 74usize), ("0", 9), ("false", 3), ("true", 1)]
+    let expected_runtime_initial_values = [("-1", 74usize), ("0", 10), ("false", 3), ("true", 1)]
         .into_iter()
         .map(|(value, count)| (value.to_owned(), count))
         .collect::<BTreeMap<_, _>>();
@@ -1442,7 +1444,14 @@ fn write_codegen_defs_fixture_files(name: &str, files: &[(&str, &str)]) -> PathB
 }
 
 fn run_codegen(defs_dir: &Path, out_path: &Path) -> Output {
+    // Synthetic upstream schemas intentionally omit Image/DrawableAsset.
+    // Exercise only their supplied definitions; the full-schema test above
+    // retains the default Nuxie extensions and checks reproducibility.
+    let extensions = defs_dir.join("empty-extensions");
+    std::fs::create_dir_all(&extensions).unwrap();
     Command::new(env!("CARGO_BIN_EXE_nuxie-codegen"))
+        .arg("--extensions")
+        .arg(extensions)
         .arg("--defs")
         .arg(defs_dir)
         .arg("--out")

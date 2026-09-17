@@ -2073,6 +2073,15 @@ NuxStatus nux_player_step_result_event_property(const struct NuxPlayerStepResult
                                                 size_t property_index,
                                                 struct NuxPlayerEventPropertyView *out_property);
 
+/**
+ * Returns the native view-model identity of a concrete event source.
+ * This identity matches view-model snapshots from the same live occurrence.
+ * Root or unscoped events return NotFound without writing the output.
+ */
+NuxStatus nux_player_step_result_event_view_model_instance(const struct NuxPlayerStepResult *result,
+                                                           size_t event_index,
+                                                           uint64_t *out_instance_id);
+
 NuxStatus nux_player_step_result_free(struct NuxPlayerStepResult *result);
 
 NuxStatus nux_player_step_result_host_command(const struct NuxPlayerStepResult *result,

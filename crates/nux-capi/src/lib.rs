@@ -1599,6 +1599,7 @@ struct OwnedPlayerEvent {
     target: Option<Box<[u8]>>,
     seconds_delay: f32,
     properties: Vec<OwnedPlayerEventProperty>,
+    view_model_instance_id: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -3707,6 +3708,7 @@ fn own_reported_events(
             properties.push(OwnedPlayerEventProperty { name, value });
         }
         events.push(OwnedPlayerEvent {
+            view_model_instance_id: event.context().and_then(|context| context.view_model_instance_id()),
             event_local_index: event.event_local_index().unwrap_or(usize::MAX),
             event_core_type: event.event_core_type(),
             name,
@@ -4651,6 +4653,27 @@ pub unsafe extern "C" fn nux_player_step_result_event(
     })
 }
 
+/// Returns the native view-model identity of a concrete event source.
+/// This identity matches view-model snapshots from the same live occurrence.
+/// Root or unscoped events return NotFound without writing the output.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_step_result_event_view_model_instance(
+    result: *const NuxPlayerStepResult,
+    event_index: usize,
+    out_instance_id: *mut u64,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_instance_id.is_null() { return NuxStatus::NullArgument; }
+        let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
+        let Some(result) = (unsafe { result.as_ref() }) else { return NuxStatus::NullArgument; };
+        let Some(identity) = result.events.get(event_index).and_then(|event| event.view_model_instance_id) else {
+            return NuxStatus::NotFound;
+        };
+        unsafe { *out_instance_id = identity };
+        NuxStatus::Ok
+    })
+}
+
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_step_result_event_property(
     result: *const NuxPlayerStepResult,
@@ -5530,6 +5553,9 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         instance.occurrence.commit_runtime_change_or_poison(true)
     })
 }
+
+#[cfg(test)]
+mod event_source_tests;
 
 #[cfg(test)]
 mod firewall_tests {

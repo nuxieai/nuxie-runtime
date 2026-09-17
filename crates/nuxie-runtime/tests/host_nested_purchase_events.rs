@@ -1,7 +1,14 @@
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
-use nuxie_runtime::{ArtboardInstance, File, RuntimeFactoryHandle, RuntimeOwnedViewModelHandle};
+use nuxie_runtime::{
+    ArtboardInstance, File, RuntimeFactoryHandle, RuntimeOwnedViewModelHandle,
+    StateMachineReportedEvent,
+};
 
-fn purchase_events(artboard_name: &str, machine_name: Option<&str>, x: f32, y: f32) -> Vec<String> {
+fn purchase_events(
+    artboard_name: &str,
+    machine_name: Option<&str>,
+    taps: &[(f32, f32)],
+) -> Vec<StateMachineReportedEvent> {
     let bytes = include_bytes!("fixtures/purchase-scopes/screen.riv");
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("factory");
@@ -26,14 +33,16 @@ fn purchase_events(artboard_name: &str, machine_name: Option<&str>, x: f32, y: f
         None => artboard.state_machine_instance(0),
     }
     .expect("interaction machine");
-    machine.bind_owned_view_model_handle(view_model);
+    machine.bind_owned_view_model_handle(view_model.clone());
     artboard
         .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.0, true)
         .expect("initial frame");
-    assert!(machine.pointer_down(x, y, 1).is_hit());
-    machine.pointer_up(x, y, 1);
-    let mut nested_reports = 0;
-    artboard.native_handle().with_artboard(|root| {
+    let mut all_events = Vec::new();
+    for &(x, y) in taps {
+        assert!(machine.pointer_down(x, y, 1).is_hit());
+        machine.pointer_up(x, y, 1);
+        let mut nested_reports = 0;
+        artboard.native_handle().with_artboard(|root| {
         for handle in root.base.objects().iter().flatten() {
             handle.with(|object| {
                 if let Some(nested) = object.as_nested_artboard() {
@@ -48,35 +57,92 @@ fn purchase_events(artboard_name: &str, machine_name: Option<&str>, x: f32, y: f
             });
         }
     });
-    if artboard_name == "Purchase" {
-        assert_eq!(
-            nested_reports, 1,
-            "the tapped child must queue exactly one event before host draining"
+        if artboard_name == "Purchase" {
+            assert_eq!(
+                nested_reports, 1,
+                "the tapped child must queue exactly one event before host draining"
+            );
+        }
+        let mut events = machine.take_reported_events();
+        assert!(
+            machine.take_reported_events().is_empty(),
+            "repeat drain must not replay pointer events"
         );
+        artboard
+            .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+            .expect("pointer frame");
+        events.extend(machine.take_reported_events());
+        assert!(
+            machine.take_reported_events().is_empty(),
+            "repeat drain after advancing must stay empty"
+        );
+        assert_eq!(events.len(), 1, "one authored purchase event per tap");
+        assert_eq!(events[0].name(), Some("Nuxie Interaction"));
+        if artboard_name == "Purchase" {
+            let property = if x < 160.0 { "first" } else { "second" };
+            let expected = view_model
+                .linked_view_model_by_property_name_path(property)
+                .expect("published component reference")
+                .instance_identity();
+            assert_eq!(events[0].context().and_then(|context| context.view_model_instance_id()), Some(expected),
+                "event identity must match the live view-model graph, not just differ between buttons");
+        }
+        all_events.extend(events);
     }
-    let mut events = machine.take_reported_events();
-    artboard
-        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
-        .expect("pointer frame");
-    events.extend(machine.take_reported_events());
-    events
-        .iter()
-        .map(|event| event.name().unwrap_or_default().to_owned())
-        .collect()
+    all_events
 }
 
 #[test]
 fn direct_purchase_component_reports_the_authored_event() {
-    assert_eq!(
-        purchase_events("Plan card", Some("Generated Nuxie Interaction"), 70.0, 40.0),
-        ["Nuxie Interaction"]
+    let events = purchase_events(
+        "Plan card",
+        Some("Generated Nuxie Interaction"),
+        &[(70.0, 40.0)],
     );
+    assert_eq!(events.len(), 1);
 }
 
 #[test]
 fn nested_purchase_component_reports_the_authored_event() {
-    assert_eq!(
-        purchase_events("Purchase", None, 80.0, 50.0),
-        ["Nuxie Interaction"]
+    let events = purchase_events(
+        "Purchase",
+        None,
+        &[(80.0, 50.0), (240.0, 50.0), (80.0, 50.0)],
     );
+    let sources: Vec<_> = events
+        .iter()
+        .map(|event| event.context().expect("nested source"))
+        .collect();
+    assert!(!sources[0].path().is_empty());
+    assert_ne!(
+        sources[0].path(),
+        sources[1].path(),
+        "repeated definitions retain distinct occurrence paths"
+    );
+    assert_eq!(
+        sources[0].path(),
+        sources[2].path(),
+        "the same occurrence keeps its identity"
+    );
+}
+
+#[test]
+fn nested_purchase_events_retain_distinct_view_model_identity() {
+    let events = purchase_events(
+        "Purchase",
+        None,
+        &[(80.0, 50.0), (240.0, 50.0), (80.0, 50.0)],
+    );
+    let ids: Vec<_> = events
+        .iter()
+        .map(|event| {
+            event
+                .context()
+                .expect("nested source")
+                .view_model_instance_id()
+                .expect("live component view model")
+        })
+        .collect();
+    assert_ne!(ids[0], ids[1]);
+    assert_eq!(ids[0], ids[2]);
 }

@@ -112,6 +112,8 @@ pub enum RuntimeComparisonValue {
 pub struct EventReport {
     pub event: Option<CoreHandle>,
     pub seconds_delay: f32,
+    /// Host observation identity, preserved while native queues move reports.
+    pub host_sequence: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -3968,9 +3970,11 @@ impl StateMachineInstance {
     }
 
     pub fn report_event(&mut self, event: CoreHandle, seconds_delay: f32) {
+        static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
         self.reported_events.push(EventReport {
             event: Some(event),
             seconds_delay,
+            host_sequence: NEXT_HOST_EVENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         });
     }
 

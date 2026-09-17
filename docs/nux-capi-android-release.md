@@ -63,18 +63,25 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.4.3 release candidate
+## Immutable v0.4.4 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.4.3 patch preserves deferred font loading during catalog inspection with
+The v0.4.4 candidate appends the authored component name, decoder priority,
+and readiness policy to `NuxVideoInfo`. Hosts copy borrowed names during the
+visitor callback and check `struct_size` before accessing the new tail. Existing
+field offsets and ABI v4 are preserved. Names are scoped to a player artboard
+and may repeat; a named control must reject ambiguous matches. Separate videos
+sharing an asset keep independent playback intent.
+
+The inherited v0.4.3 behavior preserves deferred font loading during catalog inspection with
 an empty import configuration. Required-font validation applies when asset hooks
 or an expected asset catalog are supplied, correcting the overly broad v0.4.2
 check. Asset-bound imports reject missing or invalid fonts referenced by concrete
 authored text styles. It applies to embedded and external font
 bytes, preserves unused assets and unbound styles, and uses the existing import
-error. There are no public ABI or scene-format additions. System font sourcing
+error. System font sourcing
 remains SDK-owned, and release publication does not activate SDK capability.
 
 The inherited v0.4.1 behavior clears inferred accessibility labels when bound Text becomes
@@ -104,9 +111,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.4.3 <full-source-sha>
-git push origin android-runtime-v0.4.3
-tools/publish-nux-capi-android-release.sh android-runtime-v0.4.3
+git tag android-runtime-v0.4.4 <full-source-sha>
+git push origin android-runtime-v0.4.4
+tools/publish-nux-capi-android-release.sh android-runtime-v0.4.4
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

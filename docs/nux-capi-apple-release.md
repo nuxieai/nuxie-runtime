@@ -81,8 +81,14 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.10.2 patch rejects missing or invalid fonts referenced by concrete authored
-text styles during configured import. Embedded and external bytes use the same
+The v0.10.3 patch preserves deferred font loading during script-inert catalog
+inspection with an empty import configuration. Required-font validation applies
+when asset hooks or an expected asset catalog are supplied. This corrects
+v0.10.2, which rejected external-font catalog inspection before SDKs could bind
+authenticated bytes.
+
+Asset-bound imports reject missing or invalid fonts referenced by concrete authored
+text styles. Embedded and external bytes use the same
 validation. Unused font assets and unbound styles remain admissible. This uses
 the existing import error without public ABI or scene-format additions; System
 font sourcing and capability activation remain SDK responsibilities.

@@ -81,7 +81,13 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.9.14 candidate additionally preserves float vertex coverage in every
+The v0.9.15 candidate settles internal view-model binding feedback within the
+same player frame. Layout measurements can update dependent paint geometry
+before publication; external observers remain commit-gated and host mutation
+batches retain atomic publication. SDK pixel/device qualification remains a
+separate adoption gate.
+
+The v0.9.14 release additionally preserves float vertex coverage in every
 Metal shader variant. Precompiled feather-capable and specialized non-feather
 shaders no longer disagree because of half-precision rounding before
 interpolation. A published text scene with its exact external font is compared

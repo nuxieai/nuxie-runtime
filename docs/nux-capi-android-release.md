@@ -63,12 +63,17 @@ failed qualification check. The budget in
 `tools/android-runtime-size-budget-v4.json` is a release ceiling, not a target;
 lower measurements do not require padding or other byte changes.
 
-## Immutable v0.3.13 release candidate
+## Immutable v0.3.14 release candidate
 
 The artifact version in `tools/android_runtime_contract.py` is authoritative for
 the builder and publisher. This candidate is not published by building it.
 
-The v0.3.13 candidate adds the same frame-qualified text/layout geometry API as
+The v0.3.14 candidate settles internal view-model binding feedback within the
+same player frame, while retaining commit-only external observer publication
+and host batch atomicity. This fixes delayed dependent paint geometry after
+layout measurements change.
+
+The release retains the same frame-qualified text/layout geometry API as
 Apple v0.9.11, including the first logical baseline. Exact root-run ownership,
 creator-lane/lifetime rules and current occurrence/revision validation apply;
 no text contents are copied. It keeps ABI v4 and the existing size ceilings.
@@ -80,9 +85,9 @@ After the qualified commit has landed as `origin/main`, create and push the tag
 at that exact commit:
 
 ```sh
-git tag android-runtime-v0.3.13 <full-source-sha>
-git push origin android-runtime-v0.3.13
-tools/publish-nux-capi-android-release.sh android-runtime-v0.3.13
+git tag android-runtime-v0.3.14 <full-source-sha>
+git push origin android-runtime-v0.3.14
+tools/publish-nux-capi-android-release.sh android-runtime-v0.3.14
 ```
 
 The publisher requires a clean checkout whose `HEAD`, `origin/main`, local

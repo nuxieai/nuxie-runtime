@@ -1086,7 +1086,7 @@ impl File {
                         Some(list.list_items().to_vec())
                     })
                     .flatten();
-                for item in items.into_iter().flatten() {
+                for (index, item) in items.into_iter().flatten().enumerate() {
                     let ids = item
                         .with(|item| {
                             let item = item.as_view_model_instance_list_item()?;
@@ -1121,10 +1121,11 @@ impl File {
                         copied
                     };
                     if let Some(copied) = copied {
-                        item.with_mut(|item| {
-                            if let Some(item) = item.as_view_model_instance_list_item_mut() {
-                                item.set_view_model_instance(Some(copied));
-                            }
+                        value.with_mut(|value| {
+                            value
+                                .as_view_model_instance_list_mut()
+                                .expect("list VMI value")
+                                .set_item_instance(index, copied);
                         });
                     }
                 }
@@ -1436,9 +1437,12 @@ impl File {
                         artboard.base.view_model_id() == view_model_id
                     })
                     .unwrap_or(false)
-            })?
-            .clone();
-        Some(self.view_model_instance_list_item_for_artboard(instance, artboard))
+            })
+            .cloned();
+        // Data-only list rows need no presentation artboard. Preserve an
+        // implicit artboard when one exists, but do not require one merely
+        // to insert a view-model instance into a list.
+        Some(self.create_view_model_instance_list_item(instance, artboard))
     }
 
     pub fn view_model_instance_list_item_for_artboard(
@@ -1446,13 +1450,21 @@ impl File {
         instance: CoreHandle,
         artboard: CoreHandle,
     ) -> CoreHandle {
+        self.create_view_model_instance_list_item(instance, Some(artboard))
+    }
+
+    fn create_view_model_instance_list_item(
+        &mut self,
+        instance: CoreHandle,
+        artboard: Option<CoreHandle>,
+    ) -> CoreHandle {
         let item = self.core_arena.insert(
             crate::mechanical_port::source::viewmodel::viewmodel_instance_list_item::ViewModelInstanceListItem::default(),
         );
         item.with_mut(|item| {
             if let Some(item) = item.as_view_model_instance_list_item_mut() {
                 item.set_view_model_instance(Some(instance));
-                item.set_artboard(Some(artboard));
+                item.set_artboard(artboard);
             }
         });
         item

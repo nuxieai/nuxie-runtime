@@ -689,6 +689,12 @@ pub(crate) struct GLExecutionDomain(Rc<GLExecutionDomainInner>);
 #[derive(Clone)]
 pub(crate) struct GLContextLifecycleIngress(Weak<GLExecutionDomainInner>);
 
+// Browser closures may survive a caught panic. Every ingress operation invalidates
+// its domain before unwinding, so they can never reuse partially changed GL
+// state. This assertion applies to the guarded weak ingress, not the renderer.
+impl std::panic::UnwindSafe for GLContextLifecycleIngress {}
+impl std::panic::RefUnwindSafe for GLContextLifecycleIngress {}
+
 /// Weak owner-thread endpoint retained by the host adapter. A thread-safe
 /// wake posts to the host loop; the posted task invokes this endpoint later,
 /// outside provider and renderer call stacks.
@@ -722,35 +728,46 @@ pub(crate) enum GLContextRecovery {
 }
 
 impl GLContextLifecycleIngress {
+    fn withDomain<R>(&self, operation: impl FnOnce(GLExecutionDomain) -> R) -> Option<R> {
+        let inner = self.0.upgrade()?;
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            operation(GLExecutionDomain(inner.clone()))
+        })) {
+            Ok(value) => Some(value),
+            Err(panic) => {
+                // Invalidation is infallible and does not re-enter the provider
+                // whose operation may have failed. Stamped final releases then
+                // quarantine old GL names instead of using a damaged context.
+                inner.live.set(false);
+                // The owning renderer still has to destroy its fields and
+                // retire exactly once. Context loss and owner retirement are
+                // distinct: restoration can only request a fresh renderer.
+                std::panic::resume_unwind(panic)
+            }
+        }
+    }
+
     pub(crate) fn contextLost(&self) -> bool {
-        let Some(inner) = self.0.upgrade() else {
-            return false;
-        };
-        GLExecutionDomain(inner).markContextLost();
-        true
+        self.withDomain(|domain| domain.markContextLost()).is_some()
     }
 
     pub(crate) fn contextRestored(&self) -> Option<GLContextRecovery> {
-        let Some(inner) = self.0.upgrade() else {
-            return None;
-        };
-        let domain = GLExecutionDomain(inner);
-        domain.assertProviderNotActive();
-        assert!(
-            domain.isOwnerThread(),
-            "GL context restoration is observed on its owner thread"
-        );
-        if domain.isRendererRetired() {
-            // The browser may deliver a queued restoration event after the
-            // old renderer root was explicitly discarded. Its listener is
-            // stale and must not request a second replacement renderer.
-            return None;
-        }
-        assert!(
-            !domain.isLive(),
-            "a live GL renderer does not require context restoration"
-        );
-        Some(GLContextRecovery::RecreateRenderer)
+        self.withDomain(|domain| {
+            domain.assertProviderNotActive();
+            assert!(
+                domain.isOwnerThread(),
+                "GL context restoration is observed on its owner thread"
+            );
+            if domain.isRendererRetired() {
+                return None;
+            }
+            assert!(
+                !domain.isLive(),
+                "a live GL renderer does not require context restoration"
+            );
+            Some(GLContextRecovery::RecreateRenderer)
+        })
+        .flatten()
     }
 }
 
@@ -2278,6 +2295,54 @@ mod tests {
             *events.borrow(),
             vec![ProviderEvent::FinalRelease, ProviderEvent::ProviderDrop]
         );
+    }
+
+    #[test]
+    fn lifecycle_callback_panic_invalidates_then_safely_drops_the_renderer() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let provider = RecordingProvider::new(Rc::clone(&events), 1..=512);
+        let lifecycle = Rc::clone(&provider.lifecycleIngress);
+        let domain = GLExecutionDomain::new(Box::new(provider));
+        let ingress = lifecycle.borrow().clone().unwrap();
+        let renderer = domain.withCurrent(|| {
+            super::super::render_context_gl_impl::newComponent097TestContextOwner(
+                GLCapabilities::default(),
+                domain.clone(),
+            )
+        });
+        // Fail inside the provider after context loss began. The closure uses
+        // the same UnwindSafe contract required by wasm-bindgen in browsers.
+        let busy_events = events.borrow_mut();
+        let failed = std::panic::catch_unwind(|| ingress.contextLost());
+        drop(busy_events);
+        assert!(failed.is_err());
+        assert!(!domain.isLive());
+        assert!(!domain.isRendererRetired());
+        assert_eq!(
+            ingress.contextRestored(),
+            Some(GLContextRecovery::RecreateRenderer)
+        );
+        drop(renderer);
+        assert!(domain.isRendererRetired());
+        assert_eq!(ingress.contextRestored(), None);
+    }
+
+    #[test]
+    fn invalid_restore_callback_also_quarantines_its_live_domain() {
+        let events = Rc::new(RefCell::new(Vec::new()));
+        let provider = RecordingProvider::new(events, []);
+        let lifecycle = Rc::clone(&provider.lifecycleIngress);
+        let domain = GLExecutionDomain::new(Box::new(provider));
+        let ingress = lifecycle.borrow().clone().unwrap();
+        assert!(std::panic::catch_unwind(|| ingress.contextRestored()).is_err());
+        assert!(!domain.isLive());
+        assert!(!domain.isRendererRetired());
+        assert_eq!(
+            ingress.contextRestored(),
+            Some(GLContextRecovery::RecreateRenderer)
+        );
+        domain.retireRenderer();
+        assert_eq!(ingress.contextRestored(), None);
     }
 
     #[test]

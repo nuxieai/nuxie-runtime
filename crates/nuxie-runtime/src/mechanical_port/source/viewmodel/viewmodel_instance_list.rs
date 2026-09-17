@@ -14,6 +14,15 @@ pub struct ViewModelInstanceList {
 
 impl ViewModelInstanceList {
     pub(crate) fn set_host_item_instance(&mut self, index: usize, instance: CoreHandle) -> bool {
+        if !self.set_item_instance(index, instance) {
+            return false;
+        }
+        self.property_value_changed();
+        true
+    }
+
+    /// Attach imported and live items through the same parent accounting.
+    pub(crate) fn set_item_instance(&mut self, index: usize, instance: CoreHandle) -> bool {
         let Some(item) = self.list_items.get(index).cloned() else {
             return false;
         };
@@ -24,7 +33,6 @@ impl ViewModelInstanceList {
                 .set_view_model_instance(Some(instance))
         });
         self.add_parent_to_item(&item);
-        self.property_value_changed();
         true
     }
     pub(crate) fn restore_host_items(&mut self, items: Vec<CoreHandle>) {
@@ -133,7 +141,9 @@ impl ViewModelInstanceList {
     }
 
     pub fn remove_item(&mut self, item: &CoreHandle) {
-        self.remove_parent_from_item(item);
+        for candidate in self.list_items.iter().filter(|candidate| *candidate == item) {
+            self.remove_parent_from_item(candidate);
+        }
         self.list_items.retain(|candidate| candidate != item);
         self.property_value_changed();
     }
@@ -156,6 +166,7 @@ impl ViewModelInstanceList {
 
     pub fn pop(&mut self) -> Option<CoreHandle> {
         let item = self.list_items.pop()?;
+        self.remove_parent_from_item(&item);
         self.property_value_changed();
         Some(item)
     }
@@ -271,7 +282,16 @@ impl ViewModelInstanceList {
     }
 
     pub fn set_parent_view_model_instance(&mut self, parent: Option<CoreHandle>) {
+        if self.parent_view_model_instance == parent {
+            return;
+        }
+        for item in &self.list_items {
+            self.remove_parent_from_item(item);
+        }
         self.parent_view_model_instance = parent;
+        for item in &self.list_items {
+            self.add_parent_to_item(item);
+        }
     }
 
     pub fn parent_view_model_instance(&self) -> Option<CoreHandle> {

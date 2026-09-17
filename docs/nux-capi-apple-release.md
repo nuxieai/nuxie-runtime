@@ -81,6 +81,12 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.1 patch separates explicit ViewModel binding from ordinary player
+advancement, matching the upstream host lifecycle. New players inherit the
+artboard context; later bindings and replacement models are applied once.
+This prevents duplicate pending-trigger execution without changing translated
+trigger semantics or the public ABI.
+
 The v0.10.0 candidate adds the `.nux` RIV-superset video scene extension,
 capability-gated import, occurrence playback and caption APIs, synchronized
 playback groups, and Metal/Vulkan frame submission. ABI v4 is retained: the

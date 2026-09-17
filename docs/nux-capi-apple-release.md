@@ -81,7 +81,14 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.10.3 patch preserves deferred font loading during script-inert catalog
+The v0.10.4 candidate appends the authored component name, decoder priority,
+and readiness policy to `NuxVideoInfo`. Hosts copy borrowed names during the
+visitor callback and check `struct_size` before accessing the new tail. Existing
+field offsets and ABI v4 are preserved. Names are scoped to a player artboard
+and may repeat; a named control must reject ambiguous matches. Separate videos
+sharing an asset keep independent playback intent.
+
+The inherited v0.10.3 behavior preserves deferred font loading during script-inert catalog
 inspection with an empty import configuration. Required-font validation applies
 when asset hooks or an expected asset catalog are supplied. This corrects
 v0.10.2, which rejected external-font catalog inspection before SDKs could bind

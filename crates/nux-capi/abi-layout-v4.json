@@ -1407,7 +1407,7 @@
     },
     {
       "name": "NuxVideoInfo",
-      "size": 120,
+      "size": 144,
       "alignment": 8,
       "fields": [
         {
@@ -1465,6 +1465,18 @@
         {
           "name": "embedded_bytes",
           "offset": 104
+        },
+        {
+          "name": "component_name",
+          "offset": 120
+        },
+        {
+          "name": "priority",
+          "offset": 136
+        },
+        {
+          "name": "readiness",
+          "offset": 140
         }
       ]
     },

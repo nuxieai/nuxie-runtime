@@ -19,7 +19,9 @@ use crate::mechanical_port::source::{
         viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
     },
 };
-use crate::view_model_cell::{RuntimeHostMutationNotifications, RuntimeHostTransactionPublication};
+use crate::view_model_cell::{
+    RuntimeHostMutationNotifications, RuntimeHostTransactionPublication, RuntimeTransactionKind,
+};
 #[derive(Debug, Clone, PartialEq)]
 pub struct RuntimeViewModelChange {
     pub owner_instance_identity: u64,
@@ -240,10 +242,10 @@ struct Transaction {
     files: Vec<RuntimeFileHandle>,
 }
 impl Transaction {
-    fn begin() -> Result<Self, RuntimeViewModelGraphTransactionError> {
+    fn begin(kind: RuntimeTransactionKind) -> Result<Self, RuntimeViewModelGraphTransactionError> {
         let notifications = RuntimeHostMutationNotifications::begin()
             .ok_or(RuntimeViewModelGraphTransactionError::Reentrant)?;
-        let publication = RuntimeHostTransactionPublication::begin()
+        let publication = RuntimeHostTransactionPublication::begin(kind)
             .ok_or(RuntimeViewModelGraphTransactionError::Reentrant)?;
         Ok(Self {
             snapshots: Vec::new(),
@@ -314,7 +316,9 @@ impl std::fmt::Debug for RuntimeOwnedViewModelGraphTransaction {
 }
 impl RuntimeOwnedViewModelTransaction {
     pub fn begin() -> Option<Self> {
-        Transaction::begin().ok().map(Self)
+        Transaction::begin(RuntimeTransactionKind::HostMutation)
+            .ok()
+            .map(Self)
     }
     pub fn commit(mut self) {
         self.0.commit();
@@ -545,7 +549,10 @@ impl RuntimeOwnedViewModelGraphTransaction {
         roots: &[RuntimeOwnedViewModelHandle],
         maximum_entries: usize,
     ) -> Result<Self, RuntimeViewModelGraphTransactionError> {
-        let mut transaction = Transaction::begin()?;
+        // This is a rollback checkpoint around a runtime frame, not a host
+        // mutation batch. Internal bindings must see intermediate measurements
+        // while the frame settles. External observers remain commit-gated.
+        let mut transaction = Transaction::begin(RuntimeTransactionKind::PlayerFrame)?;
         let mut visited = BTreeSet::new();
         for root in roots {
             let owners = root

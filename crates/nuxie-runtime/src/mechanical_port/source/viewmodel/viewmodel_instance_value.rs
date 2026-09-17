@@ -102,7 +102,9 @@ impl ValueDependentHandle {
 
     pub(crate) fn relink(&self) {
         let dependent = self.clone();
-        if crate::view_model_cell::defer_transaction_notification(move || dependent.relink()) {
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
+            dependent.relink()
+        }) {
             return;
         }
         match self {
@@ -295,7 +297,7 @@ impl ViewModelInstanceValue {
     pub fn add_dirt(&mut self, value: ComponentDirt) {
         self.dependents.retain(ValueDependentHandle::is_alive);
         let dependents = self.dependents.clone();
-        if crate::view_model_cell::defer_transaction_notification(move || {
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
             for dependent in dependents {
                 dependent.add_dirt(value);
             }
@@ -316,7 +318,7 @@ impl ViewModelInstanceValue {
             .handle()
             .expect("a dependent-backed number has its native Core owner");
         let dependents = self.dependents.clone();
-        if crate::view_model_cell::defer_transaction_notification(move || {
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
             for dependent in dependents {
                 // The existing host transaction has released its source borrow
                 // when draining. Preserve its ordinary live-value observation.
@@ -340,7 +342,7 @@ impl ViewModelInstanceValue {
             .expect("a dependent-backed trigger has its native Core owner");
         let deferred_source = source.clone();
         let dependents = self.dependents.clone();
-        if crate::view_model_cell::defer_transaction_notification(move || {
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
             for dependent in dependents {
                 dependent.add_dirt_from_trigger(value, &deferred_source, trigger_value);
             }
@@ -355,7 +357,7 @@ impl ViewModelInstanceValue {
     pub fn relink_dependents(&mut self) {
         self.dependents.retain(ValueDependentHandle::is_alive);
         let dependents = self.dependents.clone();
-        if crate::view_model_cell::defer_transaction_notification(move || {
+        if crate::view_model_cell::defer_transaction_dependency_notification(move || {
             for dependent in dependents {
                 dependent.relink();
             }

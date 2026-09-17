@@ -2103,3 +2103,248 @@ fn root_text_run_batch_prevalidates_before_any_write() {
         nux_file_free(file);
     }
 }
+
+// A reverse measurement feeds another target and a second observation. This
+// models layout-dependent paint without fonts, a GPU, or an SDK wrapper.
+fn same_frame_feedback_fixture() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 0x554e_4956, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    object(&mut bytes, "Backboard", |_| {});
+    object(&mut bytes, "ViewModel", |bytes| {
+        string(bytes, "ViewModel", "name", "Feedback")
+    });
+    for name in ["requested", "measured", "observed"] {
+        object(&mut bytes, "ViewModelPropertyNumber", |bytes| {
+            string(bytes, "ViewModelPropertyNumber", "name", name)
+        });
+    }
+    object(&mut bytes, "ViewModelInstance", |bytes| {
+        uint(bytes, "ViewModelInstance", "viewModelId", 0);
+        string(bytes, "ViewModelInstance", "name", "defaults");
+    });
+    for (index, value) in [10.0, 0.0, 0.0].into_iter().enumerate() {
+        object(&mut bytes, "ViewModelInstanceNumber", |bytes| {
+            uint(
+                bytes,
+                "ViewModelInstanceNumber",
+                "viewModelPropertyId",
+                index as u64,
+            );
+            f32_value(bytes, "ViewModelInstanceNumber", "propertyValue", value);
+        });
+    }
+    object(&mut bytes, "Artboard", |bytes| {
+        uint(bytes, "Artboard", "viewModelId", 0);
+        f32_value(bytes, "Artboard", "width", 200.0);
+        f32_value(bytes, "Artboard", "height", 200.0);
+    });
+    let binding = |bytes: &mut Vec<u8>, target: u16, source: u8, reverse: bool| {
+        object(bytes, "DataBindContext", |bytes| {
+            uint(bytes, "DataBindContext", "propertyKey", u64::from(target));
+            uint(bytes, "DataBindContext", "flags", u64::from(reverse));
+            push_var_uint(
+                bytes,
+                u64::from(property_key("DataBindContext", "sourcePathIds")),
+            );
+            push_var_uint(bytes, 2);
+            bytes.extend_from_slice(&[0, source]);
+        });
+    };
+    object(&mut bytes, "Shape", |bytes| {
+        uint(bytes, "Node", "parentId", 0)
+    });
+    object(&mut bytes, "Rectangle", |bytes| {
+        uint(bytes, "Node", "parentId", 1);
+        f32_value(bytes, "ParametricPath", "width", 10.0);
+        f32_value(bytes, "ParametricPath", "height", 10.0);
+    });
+    binding(
+        &mut bytes,
+        property_key("ParametricPath", "width"),
+        0,
+        false,
+    );
+    binding(&mut bytes, property_key("ParametricPath", "width"), 1, true);
+    object(&mut bytes, "Node", |bytes| {
+        uint(bytes, "Node", "parentId", 0)
+    });
+    binding(&mut bytes, property_key("Node", "x"), 1, false);
+    binding(&mut bytes, property_key("Node", "x"), 2, true);
+    object(&mut bytes, "StateMachine", |bytes| {
+        string(bytes, "StateMachine", "name", "Feedback")
+    });
+    bytes
+}
+
+#[test]
+fn player_step_settles_reverse_binding_feedback_before_publication() {
+    let file = import_bytes(&same_frame_feedback_fixture());
+    let mut artboard = std::ptr::null_mut();
+    let mut model = std::ptr::null_mut();
+    let mut player = std::ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_default(artboard, &mut model),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(artboard, model),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_default(artboard, &mut player), NuxStatus::Ok);
+    }
+    for requested in [10.0, 80.0, 25.0, 10.0] {
+        let mutation = NuxViewModelMutation {
+            kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_NUMBER,
+            instance: model,
+            path: NuxStringView {
+                data: b"requested".as_ptr().cast(),
+                len: 9,
+            },
+            number_value: requested,
+            ..NuxViewModelMutation::default()
+        };
+        let batch = NuxViewModelMutationBatch {
+            mutations: &mutation,
+            mutation_count: 1,
+            ..NuxViewModelMutationBatch::default()
+        };
+        let mut mutation_result = std::ptr::null_mut();
+        let mut step_result = std::ptr::null_mut();
+        unsafe {
+            assert_eq!(
+                nux_view_model_mutate(&batch, &mut mutation_result),
+                NuxStatus::Ok
+            );
+            nux_view_model_mutation_result_free(mutation_result);
+            assert_eq!(
+                nux_player_step(player, &NuxPlayerStep::default(), &mut step_result),
+                NuxStatus::Ok
+            );
+            nux_player_step_result_free(step_result);
+        }
+        let values = snapshot(model);
+        assert_eq!(number(values, "measured"), requested);
+        assert_eq!(
+            number(values, "observed"),
+            requested,
+            "reverse feedback must settle in the same step"
+        );
+        unsafe {
+            nux_view_model_snapshot_free(values);
+        }
+    }
+    unsafe {
+        nux_player_free(player);
+        nux_view_model_instance_free(model);
+        nux_artboard_instance_free(artboard);
+        nux_file_free(file);
+    }
+}
+
+#[test]
+fn frame_checkpoints_preserve_external_observer_commit_and_rollback() {
+    use nuxie::runtime::viewmodel::viewmodel_instance_value::{
+        ViewModelInstanceValueDelegate, ViewModelInstanceValueDelegateHandle,
+    };
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
+
+    struct Observer(Rc<Cell<usize>>);
+    impl ViewModelInstanceValueDelegate for Observer {
+        fn value_changed(&mut self) {
+            self.0.set(self.0.get() + 1);
+        }
+    }
+    let mut factory = nuxie::PersistentFactory::new(nuxie::render_api::RecordingFactory::new());
+    let file = nuxie::import_native(
+        &same_frame_feedback_fixture(),
+        &mut factory,
+        None,
+        nuxie::FileImportLimits::default(),
+    )
+    .unwrap();
+    let source = file.with_file(|file| file.artboard_at_source(0)).unwrap();
+    let native = file
+        .with_file(|file| file.create_default_view_model_instance_for_artboard(source))
+        .unwrap();
+    let model = nuxie::RuntimeOwnedViewModelHandle::from_native(file, native).unwrap();
+    let value = model
+        .native_handle()
+        .with(|owner| owner.as_view_model_instance().unwrap().property_values()[0].clone())
+        .unwrap();
+    let notifications = Rc::new(Cell::new(0));
+    let observer: ViewModelInstanceValueDelegateHandle =
+        Rc::new(RefCell::new(Observer(notifications.clone())));
+    value.with_mut(|value| {
+        value
+            .as_view_model_instance_value_mut()
+            .unwrap()
+            .add_delegate(&observer)
+    });
+
+    let checkpoint =
+        nuxie::RuntimeOwnedViewModelGraphTransaction::begin(&[model.clone()], 32).unwrap();
+    model
+        .borrow_mut()
+        .set_number_by_property_name("requested", 90.0);
+    assert_eq!(
+        notifications.get(),
+        0,
+        "a frame may not publish before commit"
+    );
+    drop(checkpoint);
+    assert_eq!(
+        model.borrow().number_value_by_property_name("requested"),
+        Some(10.0)
+    );
+    assert_eq!(
+        notifications.get(),
+        0,
+        "rolled-back frame observations stay private"
+    );
+
+    let checkpoint =
+        nuxie::RuntimeOwnedViewModelGraphTransaction::begin(&[model.clone()], 32).unwrap();
+    model
+        .borrow_mut()
+        .set_number_by_property_name("requested", 80.0);
+    assert_eq!(notifications.get(), 0);
+    checkpoint.commit();
+    assert_eq!(notifications.get(), 1);
+    assert_eq!(
+        model.borrow().number_value_by_property_name("requested"),
+        Some(80.0)
+    );
+
+    let mut batch = nuxie::RuntimeOwnedViewModelTransaction::begin().unwrap();
+    assert!(batch.set_number(&model, "requested", 25.0));
+    assert_eq!(
+        notifications.get(),
+        1,
+        "host batches retain atomic publication"
+    );
+    drop(batch);
+    assert_eq!(
+        model.borrow().number_value_by_property_name("requested"),
+        Some(80.0)
+    );
+    assert_eq!(notifications.get(), 1);
+
+    let mut batch = nuxie::RuntimeOwnedViewModelTransaction::begin().unwrap();
+    assert!(batch.set_number(&model, "requested", 25.0));
+    batch.commit();
+    assert_eq!(notifications.get(), 2);
+    assert_eq!(
+        model.borrow().number_value_by_property_name("requested"),
+        Some(25.0)
+    );
+}

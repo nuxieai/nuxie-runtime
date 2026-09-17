@@ -19,7 +19,7 @@
     },
     "ios-only": {
       "compressedBytes": 47185920,
-      "expandedBytes": 146800640,
+      "expandedBytes": 147849216,
       "representativeLinkedBytes": {
         "c-ios-arm64": 30408704,
         "swift-ios-arm64": 30408704

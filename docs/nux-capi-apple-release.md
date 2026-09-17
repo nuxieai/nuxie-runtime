@@ -90,6 +90,8 @@ host integration contract is in [video-runtime-host-contract.md](video-runtime-h
 Native decoder adapters and device fixtures are source integrations; SDK
 packaging and published media delivery remain separate adoption work.
 Candidate packaging and device evidence must pass before this version ships.
+The [video size review](evidence/apple-video-v010-size-review.md) raises only
+the iOS-only expanded ceiling by one MiB after measuring the added runtime.
 
 It also preserves the v0.9.15 binding-feedback fix, which settles internal view-model binding feedback within the
 same player frame. Layout measurements can update dependent paint geometry

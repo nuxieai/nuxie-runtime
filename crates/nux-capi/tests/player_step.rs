@@ -104,6 +104,104 @@ fn info(result: *mut NuxPlayerStepResult) -> NuxPlayerStepInfo {
     info
 }
 
+#[test]
+fn view_model_trigger_is_reported_once_per_player_advance() {
+    // Mirrors upstream state_machine_event_test.cpp's
+    // "event fired by a view model listener is visible to the host".
+    for bind_before_player in [true, false] {
+        unsafe {
+            let file = import("vm_listener_fire_event.riv");
+            let instance = artboard(file, 0);
+            let mut model = std::ptr::null_mut();
+            assert_eq!(
+                nux_view_model_instance_new_default(instance, &mut model),
+                NuxStatus::Ok
+            );
+            if bind_before_player {
+                assert_eq!(
+                    nux_artboard_instance_bind_view_model(instance, model),
+                    NuxStatus::Ok
+                );
+            }
+            let mut player = std::ptr::null_mut();
+            assert_eq!(nux_player_new_default(instance, &mut player), NuxStatus::Ok);
+            if !bind_before_player {
+                assert_eq!(
+                    nux_artboard_instance_bind_view_model(instance, model),
+                    NuxStatus::Ok
+                );
+            }
+            let (status, result) = step(player, &[], &[], 0.0);
+            assert_eq!(status, NuxStatus::Ok);
+            assert_eq!(info(result).event_count, 0);
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+
+            for replacement in [false, true] {
+                if replacement {
+                    let old = model;
+                    assert_eq!(
+                        nux_view_model_instance_new_default(instance, &mut model),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(
+                        nux_artboard_instance_bind_view_model(instance, model),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(nux_view_model_instance_free(old), NuxStatus::Ok);
+                }
+                for _ in 0..2 {
+                    let mutation = NuxViewModelMutation {
+                        kind: NUX_VIEW_MODEL_MUTATION_KIND_FIRE_TRIGGER,
+                        instance: model,
+                        path: view("go"),
+                        ..NuxViewModelMutation::default()
+                    };
+                    let batch = NuxViewModelMutationBatch {
+                        mutations: &mutation,
+                        mutation_count: 1,
+                        ..NuxViewModelMutationBatch::default()
+                    };
+                    let mut mutation_result = std::ptr::null_mut();
+                    assert_eq!(
+                        nux_view_model_mutate(&batch, &mut mutation_result),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(
+                        nux_view_model_mutation_result_free(mutation_result),
+                        NuxStatus::Ok
+                    );
+                    let (status, result) = step(player, &[], &[], 0.016);
+                    assert_eq!(status, NuxStatus::Ok);
+                    assert_eq!(
+                        info(result).event_count,
+                        1,
+                        "bind_before_player={bind_before_player}, replacement={replacement}"
+                    );
+                    let mut event = NuxPlayerEventView::default();
+                    assert_eq!(
+                        nux_player_step_result_event(result, 0, &mut event),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(owned(event.name), "ding");
+                    assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                    let (status, result) = step(player, &[], &[], 0.016);
+                    assert_eq!(status, NuxStatus::Ok);
+                    assert_eq!(
+                        info(result).event_count,
+                        0,
+                        "settlement must not replay the trigger"
+                    );
+                    assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                }
+            }
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_view_model_instance_free(model), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+}
+
 fn scheduling(result: *mut NuxPlayerStepResult) -> NuxPlayerSchedulingInfo {
     let mut scheduling = NuxPlayerSchedulingInfo::default();
     assert_eq!(

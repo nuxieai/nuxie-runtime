@@ -360,6 +360,8 @@ struct ArtboardOccurrence {
     #[cfg(feature = "scripting")]
     scripted: Option<Rc<nuxie::ScriptedFile>>,
     bound_view_model: RefCell<Option<RuntimeOwnedViewModelHandle>>,
+    /// Explicit host binding operations, not mutations of the bound model.
+    view_model_binding_revision: Cell<u64>,
     observed_bound_view_model_generation: Cell<u64>,
     has_script_assets: bool,
     #[cfg(any(
@@ -766,6 +768,7 @@ impl Drop for ScriptEffectTransaction {
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
     instance: RefCell<PlayerInstance>,
+    observed_view_model_binding_revision: Cell<u64>,
     artboard: Rc<ArtboardOccurrence>,
     owner_thread: ThreadId,
     provenance: Arc<()>,
@@ -2714,6 +2717,7 @@ pub unsafe extern "C" fn nux_artboard_instance_new(
                         #[cfg(feature = "scripting")]
                         scripted: file.scripted.clone(),
                         bound_view_model: RefCell::new(None),
+                        view_model_binding_revision: Cell::new(0),
                         observed_bound_view_model_generation: Cell::new(0),
                         has_script_assets: file_has_script_assets(&file.file),
                         #[cfg(any(
@@ -3031,6 +3035,10 @@ fn publish_player(
     unsafe {
         let handle = Box::into_raw(Box::new(NuxPlayer {
             instance: RefCell::new(player),
+            // State-machine construction inherits the artboard's current context.
+            observed_view_model_binding_revision: Cell::new(
+                artboard.occurrence.view_model_binding_revision.get(),
+            ),
             artboard: Rc::clone(&artboard.occurrence),
             owner_thread: artboard.owner_thread,
             provenance: Arc::clone(&artboard.provenance),
@@ -4068,8 +4076,17 @@ fn player_step_body(
         .map(ScriptEffectTransaction::begin);
     let (keep_going, mut runtime_dirty, runtime_settled) = match &mut *player_instance {
         PlayerInstance::StateMachine(machine) => {
-            if let Some(view_model) = bound_view_model.as_ref() {
-                machine.bind_owned_view_model_handle(view_model.clone());
+            // Upstream command_server.cpp separates bindViewModelInstance from
+            // advanceStateMachine. Binding reports pending triggers, so it must
+            // not be repeated merely because the player advances another frame.
+            let binding_revision = player.artboard.view_model_binding_revision.get();
+            if player.observed_view_model_binding_revision.get() != binding_revision {
+                if let Some(view_model) = bound_view_model.as_ref() {
+                    machine.bind_owned_view_model_handle(view_model.clone());
+                }
+                player
+                    .observed_view_model_binding_revision
+                    .set(binding_revision);
             }
             let mut input_dirty = false;
             for input in prepared.inputs {
@@ -5554,8 +5571,20 @@ pub unsafe extern "C" fn nux_artboard_instance_bind_view_model(
         if view_model.instance.try_borrow().is_err() {
             return NuxStatus::ReentrantCall;
         }
+        let Some(binding_revision) = instance
+            .occurrence
+            .view_model_binding_revision
+            .get()
+            .checked_add(1)
+        else {
+            return NuxStatus::LimitExceeded;
+        };
         artboard.bind_owned_view_model_handle(view_model.instance.clone());
         *bound_view_model = Some(view_model.instance.clone());
+        instance
+            .occurrence
+            .view_model_binding_revision
+            .set(binding_revision);
         instance
             .occurrence
             .observed_bound_view_model_generation

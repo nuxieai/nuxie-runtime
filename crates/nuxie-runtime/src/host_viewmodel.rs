@@ -17,6 +17,7 @@ use std::{
 };
 mod context;
 mod instance;
+pub(crate) use instance::identity as view_model_identity;
 mod runtime;
 mod source_handles;
 mod transactions;

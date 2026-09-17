@@ -1,6 +1,7 @@
 //! Host projections over the translated state-machine occurrence.
 
 mod listener_invocation;
+mod nested_events;
 pub use listener_invocation::{
     ListenerInvocationKind, ScriptGamepadInputChange, ScriptGamepadMappingKind,
     ScriptGamepadSnapshot, ScriptListenerInvocation, ScriptPointerEventKind,
@@ -157,6 +158,7 @@ impl StateMachineCurrentAnimation {
 pub struct StateMachineEventContext {
     path: Vec<RuntimeGeometryHitPathSegment>,
     occurrence: Vec<RuntimeGeometryHitOccurrence>,
+    view_model_instance_id: Option<u64>,
 }
 
 impl StateMachineEventContext {
@@ -164,7 +166,15 @@ impl StateMachineEventContext {
         path: Vec<RuntimeGeometryHitPathSegment>,
         occurrence: Vec<RuntimeGeometryHitOccurrence>,
     ) -> Self {
-        Self { path, occurrence }
+        Self {
+            path,
+            occurrence,
+            view_model_instance_id: None,
+        }
+    }
+
+    pub fn view_model_instance_id(&self) -> Option<u64> {
+        self.view_model_instance_id
     }
 
     pub fn path(&self) -> &[RuntimeGeometryHitPathSegment] {
@@ -194,6 +204,7 @@ pub struct StateMachineReportedEvent {
     properties: Vec<RuntimeEventProperty>,
     string_properties: Vec<StateMachineEventStringProperty>,
     context: Option<StateMachineEventContext>,
+    host_sequence: u64,
 }
 
 impl StateMachineReportedEvent {
@@ -244,6 +255,7 @@ impl StateMachineReportedEvent {
             properties,
             string_properties,
             context,
+            host_sequence: report.host_sequence,
         })
     }
     pub fn native_handle(&self) -> CoreHandle {
@@ -441,6 +453,7 @@ pub struct StateMachineInstance {
     file: RuntimeFileHandle,
     index: usize,
     host_reported_events: RefCell<HostReportedEventObservations>,
+    last_nested_event_sequence: u64,
 }
 
 impl std::fmt::Debug for StateMachineInstance {
@@ -465,6 +478,7 @@ impl StateMachineInstance {
             file,
             index,
             host_reported_events: RefCell::new(HostReportedEventObservations::default()),
+            last_nested_event_sequence: 0,
         }
     }
 
@@ -764,12 +778,14 @@ impl StateMachineInstance {
             .filter_map(|index| self.reported_event(index))
             .collect()
     }
-    /// Drain host-visible reports without consuming the translated queue.
+    /// Drain root and live nested reports without consuming translated queues.
     ///
     /// Pinned C++ keeps listener-fired reports available until the next
     /// `advance(..., true)` applies them. The host cursor is therefore kept on
     /// this adapter: repeated drains are empty, while native event delivery
-    /// still observes the original queue on the following frame.
+    /// still observes the original queue on the following frame. Nested reports
+    /// retain a monotonic observation identity across native queue moves; the
+    /// host cursor neither retains retired occurrences nor replays old reports.
     pub fn take_reported_events(&mut self) -> Vec<StateMachineReportedEvent> {
         let reports = self.synchronize_host_reported_events();
         let (start, contexts) = {
@@ -778,7 +794,7 @@ impl StateMachineInstance {
             observations.drained = reports.len();
             (start, observations.contexts.clone())
         };
-        reports
+        let mut events: Vec<_> = reports
             .into_iter()
             .enumerate()
             .skip(start)
@@ -789,7 +805,14 @@ impl StateMachineInstance {
                     contexts.get(index).cloned().flatten(),
                 )
             })
-            .collect()
+            .collect();
+        let nested = nested_events::collect(&self.artboard, self.last_nested_event_sequence);
+        if let Some(sequence) = nested.iter().map(|event| event.host_sequence).max() {
+            self.last_nested_event_sequence = sequence;
+        }
+        events.extend(nested);
+        events.sort_by_key(|event| event.host_sequence);
+        events
     }
     pub fn has_pending_listener_view_model_reports(&self) -> bool {
         self.native

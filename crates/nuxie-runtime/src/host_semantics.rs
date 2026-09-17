@@ -345,7 +345,7 @@ fn semantic_bounds(bounds: NativeAabb, transform: NativeMat2D) -> Option<Aabb> {
     Some(native_to_render_bounds(world_bounds))
 }
 
-fn source_artboard_global_id(artboard: &RuntimeArtboardInstanceHandle) -> Option<u32> {
+pub(crate) fn source_artboard_global_id(artboard: &RuntimeArtboardInstanceHandle) -> Option<u32> {
     let source = artboard.with_artboard(|artboard| artboard.base.artboard_source_handle())?;
     source.source_global_id()
 }
@@ -369,7 +369,7 @@ fn local_id_for_handle(
     artboard.with_artboard(|artboard| usize::try_from(artboard.object_index(handle)).ok())
 }
 
-fn retained_occurrence_identity(handle: &CoreHandle) -> u64 {
+pub(crate) fn retained_occurrence_identity(handle: &CoreHandle) -> u64 {
     let (arena, slot, generation) = handle.identity_key();
     let mut value = 0xcbf2_9ce4_8422_2325u64;
     for part in [arena as u64, slot as u64, generation] {

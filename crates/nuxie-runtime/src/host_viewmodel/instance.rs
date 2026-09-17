@@ -354,7 +354,7 @@ thread_local! {
     static HOST_IDENTITIES: RefCell<BTreeMap<(usize,usize,u64),u64>> = RefCell::new(BTreeMap::new());
     static HOST_GENERATIONS: RefCell<BTreeMap<(usize,usize,u64),u64>> = RefCell::new(BTreeMap::new());
 }
-pub(super) fn identity(owner: &CoreHandle) -> u64 {
+pub(crate) fn identity(owner: &CoreHandle) -> u64 {
     HOST_IDENTITIES.with(|identities| {
         let mut identities = identities.borrow_mut();
         let next = identities.len() as u64 + 1;

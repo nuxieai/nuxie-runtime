@@ -54,6 +54,7 @@ impl NestedEventNotifier {
             .map(|event| EventReport {
                 event: Some(event),
                 seconds_delay: 0.0,
+                host_sequence: 0,
             })
             .collect();
         let nested_artboard = self.nested_artboard.clone();

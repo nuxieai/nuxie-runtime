@@ -7,7 +7,7 @@ use crate::mechanical_port::source::{
     generated::{focus_data_base::FocusDataBase, semantic::semantic_data_base::SemanticDataBase},
     semantic::{
         semantic_dirt::SemanticDirt,
-        semantic_inference_registry::resolve_inferred_semantics,
+        semantic_inference_registry::{resolve_inferred_semantics, supports_inferred_semantics},
         semantic_listener::SemanticListener,
         semantic_manager::RuntimeSemanticManagerHandle,
         semantic_node::{SemanticNode, SemanticNodeRef},
@@ -404,9 +404,15 @@ impl SemanticData {
         }
         let parent = self.component().parent_handle();
         let mut inferred = Default::default();
-        if !resolve_inferred_semantics(parent.as_ref(), &mut inferred) {
+        if !resolve_inferred_semantics(parent.as_ref(), &mut inferred)
+            && !supports_inferred_semantics(parent.as_ref())
+        {
             return;
         }
+        // A supported provider with no current content (for example empty Text)
+        // withdraws its previous inference. Keep authored role/label overrides
+        // above, and leave unavailable providers alone.
+
         let Some(node) = &self.semantic_node else {
             return;
         };
@@ -831,6 +837,79 @@ impl Drop for SemanticData {
         let manager = { node.borrow().manager() };
         if let Some(manager) = manager {
             manager.remove_child(node);
+        }
+    }
+}
+
+#[cfg(test)]
+mod inference_tests {
+    use super::*;
+    use crate::mechanical_port::source::{
+        core::CoreArena,
+        core_context::CoreContext,
+        text::{text::Text, text_value_run::TextValueRun},
+    };
+
+    struct Context {
+        arena: CoreArena,
+        text: CoreHandle,
+    }
+    impl CoreContext for Context {
+        fn core_arena(&self) -> &CoreArena {
+            &self.arena
+        }
+        fn resolve_handle(&self, id: u32) -> Option<CoreHandle> {
+            (id == 1).then(|| self.text.clone())
+        }
+    }
+
+    #[test]
+    fn inferred_label_tracks_text_becoming_empty_and_reappearing() {
+        let arena = CoreArena::default();
+        let run = arena.insert(TextValueRun::default());
+        let text = arena.insert(Text::default());
+        text.with_downcast_mut::<Text, _>(|text| text.add_run(run.clone()))
+            .unwrap();
+        let data = arena.insert(SemanticData::default());
+        let mut context = Context { arena, text };
+        data.with_downcast_mut::<SemanticData, _>(|data| {
+            data.component_mut().base.set_parent_id_value(1);
+            data.component_mut().on_added_dirty(&mut context);
+        })
+        .unwrap();
+        let manager = RuntimeSemanticManagerHandle::new(
+            crate::mechanical_port::source::semantic::semantic_manager::SemanticManager::new(),
+        );
+        let mut registered = false;
+        for value in ["Current offer", "", "Updated offer"] {
+            run.with_downcast_mut::<TextValueRun, _>(|run| {
+                run.base.set_text_value(value.to_owned());
+            })
+            .unwrap();
+            let node = data
+                .with_downcast_mut::<SemanticData, _>(|data| {
+                    data.semantic_node();
+                    data.update(ComponentDirt::WORLD_TRANSFORM);
+                    data.existing_semantic_node().unwrap()
+                })
+                .unwrap();
+            assert_eq!(
+                node.borrow().label,
+                value,
+                "inferred label must follow visible text"
+            );
+            if !registered {
+                manager.add_child(None, node.clone());
+                registered = true;
+                manager.with_semantic_manager_mut(|manager| manager.drain_diff());
+            } else {
+                let diff = manager.with_semantic_manager_mut(|manager| manager.drain_diff());
+                assert!(
+                    diff.updated_semantic
+                        .iter()
+                        .any(|item| item.id == node.borrow().id && item.label == value)
+                );
+            }
         }
     }
 }

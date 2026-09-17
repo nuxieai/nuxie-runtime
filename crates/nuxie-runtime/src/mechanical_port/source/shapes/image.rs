@@ -100,7 +100,13 @@ impl Image {
     pub fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
         let Some((image, mesh, sampler, save, world, origin_x, origin_y, blend_mode, opacity)) =
             owner
-                .with_downcast::<Self, _>(|owner| {
+                .with(|owner| {
+                    let owner = owner.as_any().downcast_ref::<Self>().or_else(|| {
+                        owner
+                            .as_any()
+                            .downcast_ref::<crate::video::Video>()
+                            .map(|video| video.image())
+                    })?;
                     Some((
                         owner.render_image()?,
                         owner.mesh.clone(),
@@ -623,9 +629,17 @@ impl Image {
             .as_ref()
             .map(|f| (f.width() as f32, f.height() as f32));
         let changed = size.is_some() && (size != self.runtime_size || self.runtime_frame.is_none());
+        let mesh_changed = changed
+            || frame.as_ref().map(|frame| frame.uv_transform())
+                != self.runtime_frame.as_ref().map(|frame| frame.uv_transform());
         self.runtime_frame = frame;
         if let Some(size) = size {
             self.runtime_size = Some(size);
+        }
+        if mesh_changed {
+            if let (Some(mesh), Some(frame)) = (&self.mesh, &self.runtime_frame) {
+                mesh.with_mut(|mesh| mesh.mesh_drawable_on_asset_loaded(frame.as_ref()));
+            }
         }
         if changed {
             self.update_image_scale();

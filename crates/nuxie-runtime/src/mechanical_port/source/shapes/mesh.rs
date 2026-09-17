@@ -113,8 +113,13 @@ impl Mesh {
             return StatusCode::MissingObject;
         };
         let installed = image
-            .with_downcast_mut::<Image, _>(|image| image.set_mesh(Some(this)))
-            .is_some();
+            .with_downcast_mut::<Image, _>(|image| image.set_mesh(Some(this.clone())))
+            .is_some()
+            || image
+                .with_downcast_mut::<crate::video::Video, _>(|video| {
+                    video.set_mesh(Some(this));
+                })
+                .is_some();
         if !installed {
             return StatusCode::MissingObject;
         }

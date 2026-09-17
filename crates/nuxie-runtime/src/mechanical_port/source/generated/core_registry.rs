@@ -1952,6 +1952,10 @@ pub fn drawable_draw_handle(
     handle: &CoreHandle,
     renderer: &mut crate::mechanical_port::source::renderer::Renderer,
 ) -> bool {
+    if handle.core_type() == Some(crate::video::Video::TYPE_KEY) {
+        crate::video::Video::draw_occurrence(handle, renderer);
+        return true;
+    }
     if handle.core_type()
         == Some(crate::mechanical_port::source::generated::shapes::image_base::ImageBase::TYPE_KEY)
     {

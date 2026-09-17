@@ -81,6 +81,21 @@ impl Default for Video {
 }
 impl Video {
     pub const TYPE_KEY: u16 = 60001;
+    pub(crate) fn image(&self) -> &Image {
+        &self.image
+    }
+    pub(crate) fn draw_occurrence(owner: &CoreHandle, renderer: &mut Renderer) {
+        owner.with_downcast_mut::<Self, _>(|video| {
+            if video.showing_poster {
+                video.refresh_poster();
+            }
+        });
+        // Release the Video borrow before its mesh reads the parent's transform.
+        Image::draw_occurrence(owner, renderer);
+    }
+    pub(crate) fn set_mesh(&mut self, mesh: Option<CoreHandle>) {
+        self.image.set_mesh(mesh);
+    }
     fn subtype(key: u16) -> bool {
         key == Self::TYPE_KEY || ImageBase::is_type_of(key)
     }

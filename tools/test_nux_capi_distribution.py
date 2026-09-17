@@ -264,7 +264,7 @@ class DistributionToolTests(unittest.TestCase):
             },
             "ios-only": {
                 "compressedBytes": 45 * mebibyte,
-                "expandedBytes": 140 * mebibyte,
+                "expandedBytes": 141 * mebibyte,
                 "representativeLinkedBytes": {
                     "c-ios-arm64": 29 * mebibyte,
                     "swift-ios-arm64": 29 * mebibyte,

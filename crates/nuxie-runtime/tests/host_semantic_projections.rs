@@ -1740,3 +1740,243 @@ fn empty_clipped_decoration_cannot_promote_a_background_modal() {
         .collect::<Vec<_>>();
     assert_eq!(eligible, ["Foreground dialog"]);
 }
+
+#[test]
+fn nested_artboard_modals_follow_host_draw_order() {
+    use nuxie_runtime::source::semantic::{
+        semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager, SemanticModalScope},
+        semantic_node::SemanticNode,
+    };
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9661, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    for (label, color) in [("Red dialog", 0xffff0000), ("Blue dialog", 0xff0000ff)] {
+        push_object(&mut bytes, "Artboard", |bytes| {
+            push_string(bytes, "Artboard", "name", label);
+            push_f32(bytes, "Artboard", "width", 100.0);
+            push_f32(bytes, "Artboard", "height", 100.0);
+        });
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+        });
+        push_object(&mut bytes, "Fill", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+        });
+        push_object(&mut bytes, "SolidColor", |bytes| {
+            push_uint(bytes, "Node", "parentId", 2);
+            push_color(bytes, "SolidColor", "colorValue", color);
+        });
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Node", "parentId", 1);
+            push_f32(bytes, "ParametricPath", "width", 100.0);
+            push_f32(bytes, "ParametricPath", "height", 100.0);
+        });
+        push_object(&mut bytes, "SemanticData", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_uint(bytes, "SemanticData", "role", 14);
+            push_uint(bytes, "SemanticData", "stateFlags", 1 << 11);
+            push_string(bytes, "SemanticData", "label", label);
+        });
+    }
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_string(bytes, "Artboard", "name", "Root");
+        push_f32(bytes, "Artboard", "width", 100.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    for child in [0, 1] {
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", child);
+        });
+    }
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let mut instance = ArtboardInstance::from_native(file, 2).unwrap();
+    instance.advance(0.0).unwrap();
+    let artboard = instance.native_handle();
+    let manager = RuntimeSemanticManagerHandle::new(SemanticManager::new());
+    artboard.build_semantic_tree(Some(manager.clone()), None);
+    let nodes = manager.with_semantic_manager_mut(|manager| {
+        let ids = manager
+            .snapshot()
+            .iter()
+            .filter(|node| node.role == 14)
+            .map(|node| node.id)
+            .collect::<Vec<_>>();
+        ids.into_iter()
+            .map(|id| manager.node_by_id(id).unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(nodes.len(), 2);
+    let mut renderer = factory.borrow().make_renderer();
+    artboard.draw(&mut renderer);
+    let recording = factory.borrow().canonical_recording();
+    let red = recording
+        .stream()
+        .rfind("0xffff0000")
+        .expect("red rendered");
+    let blue = recording
+        .stream()
+        .rfind("0xff0000ff")
+        .expect("blue rendered");
+    assert!(blue < red, "the first nested host paints last");
+    let selected = manager.with_semantic_manager(|manager| match manager.modal_scope() {
+        SemanticModalScope::Active(node) => node.borrow().label.clone(),
+        _ => panic!("expected a resolved modal"),
+    });
+    assert_eq!(selected, "Red dialog");
+    assert_eq!(
+        nodes
+            .iter()
+            .filter(|node| SemanticNode::is_action_eligible(node))
+            .map(|node| node.borrow().label.clone())
+            .collect::<Vec<_>>(),
+        ["Red dialog"]
+    );
+}
+
+#[test]
+fn repeated_artboard_modal_order_tracks_list_reordering() {
+    use nuxie_runtime::source::{
+        semantic::{
+            semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager, SemanticModalScope},
+            semantic_node::SemanticNode,
+        },
+        shapes::paint::solid_color::SolidColor,
+    };
+    let mut winners = Vec::new();
+    for reverse in [false, true] {
+        let (factory, mut artboard) = import_host_artboard("component_list_1.riv");
+        let model = artboard
+            .native_file()
+            .with_file_mut(|file| {
+                file.create_default_view_model_instance_for_artboard(
+                    artboard.native_handle().core_handle(),
+                )
+            })
+            .unwrap();
+        artboard.bind_native_view_model(Some(model));
+        let mut machine = artboard.default_state_machine_instance().unwrap();
+        machine.advance_and_apply(0.0);
+        artboard.advance(0.0).unwrap();
+        let root = artboard.native_handle();
+        let list = root
+            .with_artboard(|artboard| {
+                artboard
+                    .base
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .find(|object| {
+                        object.with_downcast::<ArtboardComponentList, _>(|list| {
+                            list.artboard_count() >= 2
+                        }) == Some(true)
+                    })
+                    .cloned()
+            })
+            .expect("fixture includes a repeated list");
+        // Keep both compared occurrences inside the fixture's viewport. The
+        // recording retains draw commands for fully clipped offscreen items.
+        let items = list
+            .with_downcast::<ArtboardComponentList, _>(|list| {
+                (0..2)
+                    .map(|index| list.list_item(index).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap();
+        ArtboardComponentList::update_list_occurrence(&list, &items);
+        Artboard::update_components_handle(&root.core_handle());
+        let children = list
+            .with_downcast::<ArtboardComponentList, _>(|list| {
+                (0..list.artboard_count())
+                    .map(|index| list.artboard_instance(index as i32).unwrap())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap();
+        let manager = RuntimeSemanticManagerHandle::new(SemanticManager::new());
+        let mut nodes = Vec::new();
+        for (index, child) in children.iter().enumerate() {
+            let color = 0xff102000u32 + index as u32;
+            let owner = child.with_artboard(|child| {
+                let paint = child
+                    .base
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .find(|object| object.is_type_of(SolidColorBase::TYPE_KEY))
+                    .unwrap();
+                paint.with_downcast_mut::<SolidColor, _>(|paint| {
+                    paint.set_color_value(color as i32)
+                });
+                let fill = paint
+                    .with(|paint| paint.component_parent_handle())
+                    .flatten()
+                    .unwrap();
+                fill.with(|fill| fill.component_parent_handle())
+                    .flatten()
+                    .unwrap()
+            });
+            Artboard::update_components_handle(&child.core_handle());
+            let node = SemanticNode::new(0);
+            {
+                let mut node = node.borrow_mut();
+                node.role = 14;
+                node.state_flags = 1 << 11;
+                node.core_owner = Some(owner);
+                node.label = format!("Item {index}");
+            }
+            manager.add_child(None, node.clone());
+            nodes.push((node, color));
+        }
+        if reverse {
+            let items = list
+                .with_downcast::<ArtboardComponentList, _>(|list| {
+                    (0..list.artboard_count())
+                        .rev()
+                        .map(|index| list.list_item(index as i32).unwrap())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap();
+            ArtboardComponentList::update_list_occurrence(&list, &items);
+            Artboard::update_components_handle(&root.core_handle());
+        }
+        let mut renderer = factory.borrow().make_renderer();
+        root.draw(&mut renderer);
+        let recording = factory.borrow().canonical_recording();
+        let front = nodes
+            .iter()
+            .map(|(node, color)| {
+                let offset = recording
+                    .stream()
+                    .rfind(&format!("0x{color:08x}"))
+                    .expect("each compared repeated item must be drawn");
+                (offset, node)
+            })
+            .max_by_key(|(offset, _)| *offset)
+            .expect("repeated item rendered")
+            .1;
+        let selected = manager.with_semantic_manager(|manager| match manager.modal_scope() {
+            SemanticModalScope::Active(node) => node,
+            _ => panic!("expected a resolved repeated modal"),
+        });
+        assert!(
+            std::rc::Rc::ptr_eq(&selected, front),
+            "selection follows actual repeated item painting"
+        );
+        assert_eq!(
+            nodes
+                .iter()
+                .filter(|(node, _)| SemanticNode::is_action_eligible(node))
+                .count(),
+            1
+        );
+        winners.push(selected.borrow().label.clone());
+    }
+    assert_ne!(
+        winners[0], winners[1],
+        "reordering changes the frontmost occurrence"
+    );
+}

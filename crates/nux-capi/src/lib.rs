@@ -3708,7 +3708,9 @@ fn own_reported_events(
             properties.push(OwnedPlayerEventProperty { name, value });
         }
         events.push(OwnedPlayerEvent {
-            view_model_instance_id: event.context().and_then(|context| context.view_model_instance_id()),
+            view_model_instance_id: event
+                .context()
+                .and_then(|context| context.view_model_instance_id()),
             event_local_index: event.event_local_index().unwrap_or(usize::MAX),
             event_core_type: event.event_core_type(),
             name,
@@ -4663,10 +4665,18 @@ pub unsafe extern "C" fn nux_player_step_result_event_view_model_instance(
     out_instance_id: *mut u64,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        if out_instance_id.is_null() { return NuxStatus::NullArgument; }
+        if out_instance_id.is_null() {
+            return NuxStatus::NullArgument;
+        }
         let _result_call = enter_status_handle!(result, HandleKind::PlayerStepResult);
-        let Some(result) = (unsafe { result.as_ref() }) else { return NuxStatus::NullArgument; };
-        let Some(identity) = result.events.get(event_index).and_then(|event| event.view_model_instance_id) else {
+        let Some(result) = (unsafe { result.as_ref() }) else {
+            return NuxStatus::NullArgument;
+        };
+        let Some(identity) = result
+            .events
+            .get(event_index)
+            .and_then(|event| event.view_model_instance_id)
+        else {
             return NuxStatus::NotFound;
         };
         unsafe { *out_instance_id = identity };

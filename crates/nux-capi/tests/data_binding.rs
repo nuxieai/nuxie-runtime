@@ -1406,6 +1406,14 @@ fn structural_mutations_preserve_identity_and_failed_batches_preserve_topology()
     let success_ids = nested_and_list_ids(after_success);
     assert_eq!(success_ids.1.len(), 1);
     assert_eq!(success_ids.0, success_ids.1[0]);
+    assert_eq!(
+        success_ids.0, replacement_id,
+        "snapshot references retain native identity after replacement and list edits"
+    );
+    assert!(
+        !success_ids.1.contains(&third_id),
+        "removed list entries cannot survive in the current snapshot"
+    );
 
     let invalid = [
         NuxViewModelMutation {

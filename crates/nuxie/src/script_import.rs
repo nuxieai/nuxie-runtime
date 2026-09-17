@@ -246,13 +246,13 @@ impl ScriptingVm for InstalledScripts {
         let mut results = (0..scripts.len())
             .map(|_| ScriptAssetRegistrationResult::default())
             .collect::<Vec<_>>();
-        let mut delegated_indices = Vec::new();
+        let mut delegated_slots = Vec::new();
         let mut delegated = Vec::new();
-        for (index, registration) in scripts.iter().enumerate() {
+        for (slot, registration) in results.iter_mut().zip(scripts) {
             if let Some(result) = adapter.register_script_asset(registration) {
-                results[index] = result;
+                *slot = result;
             } else {
-                delegated_indices.push(index);
+                delegated_slots.push(slot);
                 delegated.push(ScriptAssetRegistration {
                     name: registration.name,
                     bytecode: registration.bytecode,
@@ -261,11 +261,11 @@ impl ScriptingVm for InstalledScripts {
                 });
             }
         }
-        for (index, result) in delegated_indices
+        for (slot, result) in delegated_slots
             .into_iter()
             .zip(ScriptingVm::register_script_assets(&*self.vm, &delegated))
         {
-            results[index] = result;
+            *slot = result;
         }
         results
     }
@@ -720,4 +720,111 @@ fn mint_shader_provenance(
     _payload: Option<&[u8]>,
 ) -> Option<nuxie_render_api::GpuCanvasShaderProvenance> {
     None
+}
+
+#[cfg(test)]
+mod registration_tests {
+    use super::*;
+
+    #[derive(Debug)]
+    struct Adapter {
+        handled: Vec<String>,
+    }
+
+    impl nuxie_runtime::ScriptProgramAdapter for Adapter {
+        fn register_script_asset(
+            &self,
+            registration: &ScriptAssetRegistration<'_>,
+        ) -> Option<ScriptAssetRegistrationResult> {
+            self.handled
+                .iter()
+                .any(|name| name == registration.name)
+                .then(|| ScriptAssetRegistrationResult {
+                    completed: true,
+                    missing_dependencies: vec![format!("adapter:{}", registration.name)],
+                    ..Default::default()
+                })
+        }
+
+        fn instantiate_program(
+            &self,
+            _program: &RuntimeScriptProgram,
+            _context_present: bool,
+            _context_source: Option<ScriptedContextSource>,
+            _view_model: Option<ScriptViewModel>,
+            _parent_view_models: Vec<Option<ScriptViewModel>>,
+            _host: &mut dyn ScriptHost,
+        ) -> Option<std::result::Result<Box<dyn ScriptInstance>, ScriptError>> {
+            None
+        }
+    }
+
+    fn summary(result: ScriptAssetRegistrationResult) -> (bool, bool, Vec<String>, Option<String>) {
+        (
+            result.completed,
+            result.program.is_some(),
+            result.missing_dependencies,
+            result.error.map(|error| error.to_string()),
+        )
+    }
+
+    #[test]
+    fn adapter_registration_preserves_order_for_all_none_and_mixed_routes() {
+        let scripts = ["left", "middle", "right"].map(|name| ScriptAssetRegistration {
+            name,
+            bytecode: &[255],
+            is_protocol: false,
+            missing_dependencies: Vec::new(),
+        });
+        // Invalid VM bytecode has a distinct observable result from adapter-owned
+        // payloads. Use the real VM as the oracle for assets delegated unchanged.
+        let baseline = ScriptVm::new()
+            .register_script_assets(&scripts)
+            .into_iter()
+            .map(summary)
+            .collect::<Vec<_>>();
+        assert_eq!(baseline.len(), scripts.len());
+        assert!(
+            baseline
+                .iter()
+                .all(|result| !result.0 && result.3.is_some())
+        );
+        let cases: [Option<&[&str]>; 5] = [
+            None,
+            Some(&[]),
+            Some(&["left", "middle", "right"]),
+            Some(&["middle"]),
+            Some(&["left", "right"]),
+        ];
+        for handled in cases {
+            let installed = InstalledScripts {
+                host: Box::new(NoopScriptHostExtensionInstance),
+                shader_authorities: RefCell::new(Vec::new()),
+                vm: Rc::new(ScriptVm::new()),
+                program_adapter: handled.map(|names| {
+                    Arc::new(Adapter {
+                        handled: names.iter().map(|name| (*name).to_owned()).collect(),
+                    }) as Arc<dyn nuxie_runtime::ScriptProgramAdapter>
+                }),
+            };
+            let expected = scripts
+                .iter()
+                .zip(&baseline)
+                .map(|(script, delegated)| {
+                    if handled.is_some_and(|names| names.contains(&script.name)) {
+                        (true, false, vec![format!("adapter:{}", script.name)], None)
+                    } else {
+                        delegated.clone()
+                    }
+                })
+                .collect::<Vec<_>>();
+            let actual = installed
+                .register_script_assets(&scripts)
+                .into_iter()
+                .map(summary)
+                .collect::<Vec<_>>();
+            assert_eq!(actual, expected, "adapter routes: {handled:?}");
+            assert!(installed.register_script_assets(&[]).is_empty());
+        }
+    }
 }

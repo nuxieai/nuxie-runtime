@@ -631,7 +631,10 @@ impl Image {
         let changed = size.is_some() && (size != self.runtime_size || self.runtime_frame.is_none());
         let mesh_changed = changed
             || frame.as_ref().map(|frame| frame.uv_transform())
-                != self.runtime_frame.as_ref().map(|frame| frame.uv_transform());
+                != self
+                    .runtime_frame
+                    .as_ref()
+                    .map(|frame| frame.uv_transform());
         self.runtime_frame = frame;
         if let Some(size) = size {
             self.runtime_size = Some(size);

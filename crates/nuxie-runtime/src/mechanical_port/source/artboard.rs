@@ -4273,6 +4273,9 @@ impl std::ops::DerefMut for Artboard {
 
 pub struct ArtboardInstance {
     pub base: Artboard,
+    /// Host observation state belongs to the occurrence, not a particular player.
+    /// It does not consume or alter native listener delivery queues.
+    pub(crate) host_nested_event_sequence: u64,
 }
 
 /// Shared identity for one instantiated Artboard runtime occurrence.
@@ -4498,6 +4501,7 @@ impl Default for ArtboardInstance {
     fn default() -> Self {
         Self {
             base: Artboard::default(),
+            host_nested_event_sequence: 0,
         }
     }
 }

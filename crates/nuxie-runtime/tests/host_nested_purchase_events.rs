@@ -4,12 +4,7 @@ use nuxie_runtime::{
     StateMachineReportedEvent,
 };
 
-fn purchase_events(
-    artboard_name: &str,
-    machine_name: Option<&str>,
-    taps: &[(f32, f32)],
-    host_write: bool,
-) -> Vec<StateMachineReportedEvent> {
+fn purchase_scene(artboard_name: &str) -> (ArtboardInstance, RuntimeOwnedViewModelHandle) {
     let bytes = include_bytes!("fixtures/purchase-scopes/screen.riv");
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("factory");
@@ -29,6 +24,16 @@ fn purchase_events(
         .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
         .expect("default view model");
     artboard.bind_owned_view_model_handle(view_model.clone());
+    (artboard, view_model)
+}
+
+fn purchase_events(
+    artboard_name: &str,
+    machine_name: Option<&str>,
+    taps: &[(f32, f32)],
+    host_write: bool,
+) -> Vec<StateMachineReportedEvent> {
+    let (mut artboard, view_model) = purchase_scene(artboard_name);
     if host_write {
         let mut transaction = nuxie_runtime::RuntimeOwnedViewModelTransaction::begin().unwrap();
         assert!(
@@ -174,4 +179,120 @@ fn nested_purchase_events_retain_distinct_view_model_identity() {
 #[test]
 fn host_scalar_write_preserves_nested_purchase_identity() {
     purchase_events("Purchase", None, &[(80.0, 50.0), (240.0, 50.0)], true);
+}
+
+#[test]
+fn players_sharing_an_occurrence_do_not_republish_nested_taps() {
+    let (mut artboard, model) = purchase_scene("Purchase");
+    let mut primary = artboard.state_machine_instance(0).unwrap();
+    primary.bind_owned_view_model_handle(model.clone());
+    let mut auxiliary = artboard.state_machine_instance(0).unwrap();
+    auxiliary.bind_owned_view_model_handle(model.clone());
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut primary), 0.0, true)
+        .unwrap();
+    primary.pointer_down(80.0, 50.0, 1);
+    primary.pointer_up(80.0, 50.0, 1);
+    let events = primary.take_reported_events();
+    assert_eq!(events.len(), 1);
+    assert!(
+        auxiliary.take_reported_events().is_empty(),
+        "another player must not republish the same occurrence event"
+    );
+    drop(primary);
+    let mut replacement = artboard.state_machine_instance(0).unwrap();
+    replacement.bind_owned_view_model_handle(model);
+    assert!(
+        replacement.take_reported_events().is_empty(),
+        "replacing a player must not replay an already observed tap"
+    );
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut replacement), 0.016, true)
+        .unwrap();
+    replacement.pointer_down(240.0, 50.0, 1);
+    replacement.pointer_up(240.0, 50.0, 1);
+    let next = replacement.take_reported_events();
+    assert_eq!(next.len(), 1, "a genuinely new tap must still publish");
+    assert_ne!(
+        events[0].context().unwrap().view_model_instance_id(),
+        next[0].context().unwrap().view_model_instance_id()
+    );
+    assert!(auxiliary.take_reported_events().is_empty());
+}
+
+#[test]
+fn batched_nested_taps_preserve_pointer_order_across_occurrences() {
+    let (mut artboard, model) = purchase_scene("Purchase");
+    let first = model
+        .linked_view_model_by_property_name_path("first")
+        .unwrap()
+        .instance_identity();
+    let second = model
+        .linked_view_model_by_property_name_path("second")
+        .unwrap()
+        .instance_identity();
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    machine.bind_owned_view_model_handle(model);
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.0, true)
+        .unwrap();
+    for x in [80.0, 240.0, 80.0] {
+        machine.pointer_down(x, 50.0, 1);
+        machine.pointer_up(x, 50.0, 1);
+    }
+    let sources: Vec<_> = machine
+        .take_reported_events()
+        .iter()
+        .map(|event| event.context().unwrap().view_model_instance_id().unwrap())
+        .collect();
+    assert_eq!(sources, [first, second, first]);
+    assert!(machine.take_reported_events().is_empty());
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.016, true)
+        .unwrap();
+    assert!(
+        machine.take_reported_events().is_empty(),
+        "native queue delivery must not republish observed taps"
+    );
+}
+
+#[test]
+fn queued_tap_keeps_its_source_when_the_authored_reference_is_replaced() {
+    let (mut artboard, model) = purchase_scene("Purchase");
+    let first = model
+        .linked_view_model_by_property_name_path("first")
+        .unwrap();
+    let second = model
+        .linked_view_model_by_property_name_path("second")
+        .unwrap();
+    let mut machine = artboard.state_machine_instance(0).unwrap();
+    machine.bind_owned_view_model_handle(model.clone());
+    artboard
+        .advance_state_machine_instances(std::slice::from_mut(&mut machine), 0.0, true)
+        .unwrap();
+    machine.pointer_down(80.0, 50.0, 1);
+    machine.pointer_up(80.0, 50.0, 1);
+    let mut transaction = nuxie_runtime::RuntimeOwnedViewModelTransaction::begin().unwrap();
+    assert!(
+        transaction
+            .link_view_model(&model, "first", &second)
+            .unwrap()
+    );
+    transaction.commit();
+    artboard.bind_owned_view_model_handle(model.clone());
+    machine.bind_owned_view_model_handle(model.clone());
+    assert_eq!(
+        model
+            .linked_view_model_by_property_name_path("first")
+            .unwrap()
+            .instance_identity(),
+        second.instance_identity()
+    );
+    let events = machine.take_reported_events();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].context().unwrap().view_model_instance_id(),
+        Some(first.instance_identity()),
+        "a queued tap must not be attributed to a replacement model"
+    );
 }

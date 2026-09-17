@@ -134,7 +134,15 @@ impl BrowserVideoProof {
                     )
                     .map_err(error)?;
                 decoded = Some((frame.pts, frame.rgba[..4].to_vec()));
-                Ok(std::rc::Rc::from(image))
+                let image: std::rc::Rc<dyn nuxie_render_api::RenderImage> =
+                    std::rc::Rc::from(image);
+                let view = nuxie_render_api::Factory::make_gpu_canvas_image_view(
+                    &mut *self.factory.borrow_mut(),
+                    image.clone(),
+                )
+                .expect("decoded frame must be available to GPU image sampling");
+                assert!(std::rc::Rc::ptr_eq(&image, &view));
+                Ok(view)
             })?;
         if status.presented {
             let (pts, pixel) = decoded.unwrap();

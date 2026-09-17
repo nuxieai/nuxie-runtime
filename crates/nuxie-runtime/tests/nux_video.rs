@@ -568,11 +568,16 @@ fn authored_poster_is_available_before_decode_and_after_frame_release() {
         })
         .unwrap();
     assert!(video.with(|v| v.drawable_will_draw()).unwrap());
-    let frame = Rc::from(factory.decode_image(&png).unwrap());
+    let frame: Rc<dyn nuxie_render_api::RenderImage> =
+        Rc::from(factory.decode_image(&png).unwrap());
     video
         .with_downcast_mut::<Video, _>(|v| {
-            assert!(v.present(0, frame, 0.0));
+            let poster = v.render_image().expect("authored poster snapshot");
+            assert!(v.present(0, frame.clone(), 0.0));
+            assert!(Rc::ptr_eq(&frame, &v.render_image().unwrap()));
+            assert!(!Rc::ptr_eq(&poster, &frame));
             v.clear_frame();
+            assert!(Rc::ptr_eq(&poster, &v.render_image().unwrap()));
         })
         .unwrap();
     assert!(video.with(|v| v.drawable_will_draw()).unwrap());

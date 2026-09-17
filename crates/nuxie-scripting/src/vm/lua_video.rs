@@ -142,6 +142,15 @@ impl UserData for ScriptVideo {
         methods.add_method("setLoopRange", |_, this, (start, end): (f64, f64)| {
             this.command(Command::LoopRange { start, end })
         });
+        methods.add_method("image", |lua, this, ()| {
+            this.with(|v| v.render_image())?
+                .map(|image| {
+                    lua.create_userdata(super::lua_image::ScriptedImage::from_render_image_rc(
+                        image,
+                    ))
+                })
+                .transpose()
+        });
         methods.add_method("caption", |_, this, ()| this.with(|v| v.caption_text()));
         methods.add_method("position", |_, this, ()| {
             this.with(|v| v.playback.position())
@@ -174,6 +183,104 @@ impl UserData for ScriptVideo {
 #[cfg(all(test, feature = "compiler"))]
 mod tests {
     use super::*;
+    #[derive(Clone)]
+    struct FrameImage(Rc<()>);
+    impl nuxie_render_api::RenderImage for FrameImage {
+        fn retain_image(&self) -> Rc<dyn nuxie_render_api::RenderImage> {
+            Rc::new(self.clone())
+        }
+        fn image_identity(&self) -> usize {
+            Rc::as_ptr(&self.0) as usize
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn width(&self) -> u32 {
+            7
+        }
+        fn height(&self) -> u32 {
+            11
+        }
+        fn uv_transform(&self) -> nuxie_render_api::Mat2D {
+            nuxie_render_api::Mat2D::IDENTITY
+        }
+    }
+
+    #[test]
+    fn video_images_share_frame_identity_and_keep_snapshots_alive() {
+        use super::super::lua_image::ScriptedImage;
+        use nuxie_render_api::RenderImage;
+        let arena = nuxie_runtime::source::core::CoreArena::default();
+        let handle = arena.insert(Video::default());
+        let alive = Rc::new(Cell::new(true));
+        let lua = luaur_rt::Lua::new();
+        lua.globals()
+            .set(
+                "video",
+                lua.create_userdata(ScriptVideo::new(
+                    handle.clone(),
+                    alive.clone(),
+                    Rc::new(Cell::new(false)),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        lua.load("assert(video:image() == nil)").exec().unwrap();
+        let frame: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
+        let weak = Rc::downgrade(&frame);
+        handle
+            .with_downcast_mut::<Video, _>(|v| {
+                v.playback.opened(0, 10.0);
+                assert!(v.present(0, frame.clone(), 0.0));
+            })
+            .unwrap();
+        let snapshot: luaur_rt::AnyUserData = lua.load("return video:image()").eval().unwrap();
+        assert!(Rc::ptr_eq(
+            &frame,
+            &snapshot
+                .borrow::<ScriptedImage>()
+                .unwrap()
+                .render_image()
+                .unwrap()
+        ));
+        lua.load("local image = video:image(); assert(image.width == 7 and image.height == 11)")
+            .exec()
+            .unwrap();
+        handle
+            .with_downcast_mut::<Video, _>(|v| {
+                let replacement: Rc<dyn RenderImage> = Rc::new(FrameImage(Rc::new(())));
+                assert!(!v.present(99, replacement.clone(), 1.0));
+                assert!(Rc::ptr_eq(&frame, &v.render_image().unwrap()));
+                assert!(v.present(0, replacement.clone(), 1.0));
+                assert!(Rc::ptr_eq(&replacement, &v.render_image().unwrap()));
+                v.clear_frame();
+                assert!(v.render_image().is_none());
+            })
+            .unwrap();
+        drop(frame);
+        assert!(
+            weak.upgrade().is_some(),
+            "snapshot must retain its frame after replacement/reclaim"
+        );
+        alive.set(false);
+        assert!(lua.load("video:image()").exec().is_err());
+        assert_eq!(
+            snapshot
+                .borrow::<ScriptedImage>()
+                .unwrap()
+                .render_image()
+                .unwrap()
+                .width(),
+            7
+        );
+        drop(snapshot);
+        lua.gc_collect().unwrap();
+        assert!(
+            weak.upgrade().is_none(),
+            "last snapshot must release the old frame"
+        );
+    }
+
     #[test]
     fn luau_group_commands_and_host_clocks_share_registered_occurrences() {
         use nuxie_runtime::video::sync::{MediaClock, report_media_clock};

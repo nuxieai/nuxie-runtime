@@ -1,6 +1,7 @@
 //! Host-neutral media bridge. Platform decoders own A/V timing; this surface
 //! routes their commands and observations through the live scene occurrence.
 use super::*;
+use nuxie::runtime::generated::core_registry::CoreCapabilities;
 use nuxie::video::{Video, VideoAsset, playback::*};
 
 /// Explicit assertion that the host has initialized a compatible decoder and
@@ -62,6 +63,14 @@ pub struct NuxVideoInfo {
     pub source_key: NuxStringView,
     pub content_type: NuxStringView,
     pub embedded_bytes: NuxByteView,
+    /// Authored component name in this player's artboard. Names may be empty or
+    /// repeated; hosts must reject ambiguous named targets rather than selecting
+    /// the first match. The view is borrowed for the duration of the callback.
+    pub component_name: NuxStringView,
+    /// Higher priorities win when a host cannot admit every visible decoder.
+    pub priority: u32,
+    /// Show immediately with poster=0, wait for first frame=1.
+    pub readiness: u32,
 }
 pub type NuxVideoInfoCallback = Option<unsafe extern "C" fn(*mut c_void, *const NuxVideoInfo)>;
 
@@ -170,6 +179,7 @@ pub unsafe extern "C" fn nux_player_visit_videos(
                     continue;
                 };
                 object.with_downcast::<Video, _>(|v| {
+                    let component_name = v.as_component().map_or("", |c| c.name());
                     let settings = v.playback.settings();
                     let source = v.asset().and_then(|asset| {
                         asset.with_downcast::<VideoAsset, _>(|a| {
@@ -205,6 +215,12 @@ pub unsafe extern "C" fn nux_player_visit_videos(
                             data: bytes.as_ref().map_or(ptr::null(), |b| b.as_ptr()),
                             len: bytes.as_ref().map_or(0, |b| b.len()),
                         },
+                        component_name: NuxStringView {
+                            data: component_name.as_ptr().cast(),
+                            len: component_name.len(),
+                        },
+                        priority: settings.priority,
+                        readiness: settings.readiness,
                     };
                     with_platform_callback(|| unsafe { callback(user_data, &info) });
                 });

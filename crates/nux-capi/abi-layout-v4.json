@@ -1149,7 +1149,7 @@
     },
     {
       "name": "NuxSemanticSnapshotInfo",
-      "size": 32,
+      "size": 40,
       "alignment": 8,
       "fields": [
         {
@@ -1167,6 +1167,14 @@
         {
           "name": "node_count",
           "offset": 24
+        },
+        {
+          "name": "modal_scope",
+          "offset": 32
+        },
+        {
+          "name": "modal_node_id",
+          "offset": 36
         }
       ]
     },

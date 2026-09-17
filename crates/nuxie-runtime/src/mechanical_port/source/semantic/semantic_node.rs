@@ -62,7 +62,9 @@ impl SemanticNode {
             }
             ancestor = entry.parent();
             if ancestor.is_none() {
-                return manager.with_semantic_manager(|manager| manager.contains_root(&current));
+                return manager.with_semantic_manager(|manager| {
+                    manager.contains_root(&current) && manager.modals_allow_path(&seen)
+                });
             }
         }
         true

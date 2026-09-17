@@ -110,6 +110,12 @@
 
 #define NUX_SCRIPT_VM_MEMORY_BYTES_HARD_MAX ((1024 * 1024) * 1024)
 
+#define NUX_SEMANTIC_MODAL_ACTIVE 1
+
+#define NUX_SEMANTIC_MODAL_NONE 0
+
+#define NUX_SEMANTIC_MODAL_UNRESOLVED 2
+
 #define NUX_SEMANTIC_ROLE_ALERT_DIALOG 15
 
 #define NUX_SEMANTIC_ROLE_BUTTON 1
@@ -1377,6 +1383,15 @@ typedef struct NuxSemanticSnapshotInfo {
   uint64_t render_revision;
   uint64_t tree_version;
   size_t node_count;
+  /**
+   * NUX_SEMANTIC_MODAL_NONE, ACTIVE, or UNRESOLVED. Frozen with this capture.
+   * UNRESOLVED must not expose background traversal or accept input.
+   */
+  uint32_t modal_scope;
+  /**
+   * Active modal semantic node identity; valid only when modal_scope is ACTIVE.
+   */
+  uint32_t modal_node_id;
 } NuxSemanticSnapshotInfo;
 
 typedef struct NuxSemanticNodeView {

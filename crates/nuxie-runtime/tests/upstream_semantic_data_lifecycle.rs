@@ -980,3 +980,95 @@ fn semantic_bounds_follow_artboard_frame_origin_translation() {
         "semantic y must include the renderer's frame-origin translation: {bounds:?}"
     );
 }
+
+#[test]
+fn queued_semantic_action_rechecks_modal_boundary() {
+    use nuxie_runtime::source::semantic::semantic_node::SemanticNode;
+    for state in [0, 1, 2, 3] {
+        let fixture = dropdown();
+        let target = fixture
+            .manager
+            .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id).unwrap());
+        let data = target.borrow().semantic_data.clone().unwrap();
+        fixture
+            .machine
+            .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+        let modal = SemanticNode::new(0);
+        {
+            let mut node = modal.borrow_mut();
+            node.role = 14; // Dialog role from the shared semantic contract.
+            node.state_flags = SemanticState::MODAL.0;
+            if state == 2 {
+                node.state_flags |= SemanticState::HIDDEN.0;
+            }
+        }
+        fixture.manager.add_child(None, modal.clone());
+        if state == 1 {
+            fixture.manager.remove_child(&target);
+            fixture.manager.add_child(Some(modal.clone()), target);
+        }
+        if state == 3 {
+            fixture.manager.remove_child(&modal);
+        }
+        for _ in 0..10 {
+            fixture.machine.advance_and_apply(0.1);
+        }
+        assert_eq!(
+            data.with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            state == 0,
+            "a newly opened modal fences queued background activation (state={state})"
+        );
+    }
+}
+
+#[test]
+fn bound_modal_flag_changes_update_queued_action_eligibility() {
+    use nuxie_runtime::source::semantic::semantic_node::SemanticNode;
+    for modal_remains_open in [true, false] {
+        let fixture = dropdown();
+        let candidates = fixture.manager.with_semantic_manager_mut(|manager| {
+            let ids: Vec<_> = manager.snapshot().iter().map(|node| node.id).collect();
+            ids.into_iter()
+                .filter_map(|id| manager.node_by_id(id))
+                .collect::<Vec<_>>()
+        });
+        let modal = candidates
+            .into_iter()
+            .find(|node| {
+                let entry = node.borrow();
+                entry.id() != fixture.button_id
+                    && entry.children().is_empty()
+                    && entry.semantic_data.is_some()
+                    && SemanticNode::is_action_eligible(node)
+            })
+            .expect("visible authored leaf for modal flag binding");
+        let modal_data = modal.borrow().semantic_data.clone().unwrap();
+        let target = fixture
+            .manager
+            .with_semantic_manager(|manager| manager.node_by_id(fixture.button_id).unwrap());
+        let target_data = target.borrow().semantic_data.clone().unwrap();
+        fixture
+            .machine
+            .fire_semantic_action(fixture.button_id, SemanticActionType::Tap as u8);
+        modal_data
+            .with_downcast_mut::<SemanticData, _>(|data| {
+                data.set_role(14);
+                data.set_is_modal(true);
+                if !modal_remains_open {
+                    data.set_is_modal(false);
+                }
+            })
+            .unwrap();
+        for _ in 0..10 {
+            fixture.machine.advance_and_apply(0.1);
+        }
+        assert_eq!(
+            target_data
+                .with_downcast::<SemanticData, _>(|data| data.is_expanded())
+                .unwrap(),
+            modal_remains_open,
+            "dispatch must use the current authored modal flag"
+        );
+    }
+}

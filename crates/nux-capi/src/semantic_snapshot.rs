@@ -3,7 +3,7 @@
 use super::*;
 use nuxie::runtime::semantic::{
     semantic_data::SemanticData,
-    semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
+    semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager, SemanticModalScope},
     semantic_node::{SemanticNode, SemanticNodeRef},
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
@@ -30,7 +30,13 @@ pub struct NuxSemanticSnapshot {
     tree_version: u64,
     nodes: Vec<SemanticsDiffNode>,
     actions: Vec<u32>,
+    modal_scope: u32,
+    modal_node_id: u32,
 }
+
+pub const NUX_SEMANTIC_MODAL_NONE: u32 = 0;
+pub const NUX_SEMANTIC_MODAL_ACTIVE: u32 = 1;
+pub const NUX_SEMANTIC_MODAL_UNRESOLVED: u32 = 2;
 
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -39,6 +45,11 @@ pub struct NuxSemanticSnapshotInfo {
     pub render_revision: u64,
     pub tree_version: u64,
     pub node_count: usize,
+    /// NUX_SEMANTIC_MODAL_NONE, ACTIVE, or UNRESOLVED. Frozen with this capture.
+    /// UNRESOLVED must not expose background traversal or accept input.
+    pub modal_scope: u32,
+    /// Active modal semantic node identity; valid only when modal_scope is ACTIVE.
+    pub modal_node_id: u32,
 }
 
 #[repr(C)]
@@ -176,9 +187,14 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
         }
         let captured = manager.with_semantic_manager_mut(|manager| {
             let nodes = copy_nodes(manager.snapshot())?;
-            Ok::<_, NuxStatus>((nodes, manager.version()))
+            let (modal_scope, modal_node_id) = match manager.modal_scope() {
+                SemanticModalScope::None => (NUX_SEMANTIC_MODAL_NONE, 0),
+                SemanticModalScope::Active(node) => (NUX_SEMANTIC_MODAL_ACTIVE, node.borrow().id()),
+                SemanticModalScope::Unresolved => (NUX_SEMANTIC_MODAL_UNRESOLVED, 0),
+            };
+            Ok::<_, NuxStatus>((nodes, manager.version(), modal_scope, modal_node_id))
         });
-        let (nodes, tree_version) = match captured {
+        let (nodes, tree_version, modal_scope, modal_node_id) = match captured {
             Ok(captured) => captured,
             Err(status) => return status,
         };
@@ -207,6 +223,8 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
             tree_version,
             nodes,
             actions,
+            modal_scope,
+            modal_node_id,
         }));
         register_handle(snapshot, HandleKind::SemanticSnapshot, player.owner_thread);
         unsafe { *out_snapshot = snapshot };
@@ -443,6 +461,8 @@ pub unsafe extern "C" fn nux_semantic_snapshot_info(
             render_revision: snapshot.render_revision,
             tree_version: snapshot.tree_version,
             node_count: snapshot.nodes.len(),
+            modal_scope: snapshot.modal_scope,
+            modal_node_id: snapshot.modal_node_id,
         };
         unsafe { write_caller_struct(out_info, &value, NUX_SEMANTIC_SNAPSHOT_INFO_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -921,6 +941,8 @@ mod tests {
             render_revision: 7,
             tree_version: 2,
             actions: vec![0],
+            modal_scope: NUX_SEMANTIC_MODAL_NONE,
+            modal_node_id: 0,
             nodes: vec![SemanticsDiffNode {
                 label: "Continue".into(),
                 ..Default::default()
@@ -961,6 +983,158 @@ mod tests {
                 NuxStatus::Ok
             );
             assert_eq!(nux_semantic_snapshot_free(ptr::null_mut()), NuxStatus::Ok);
+        }
+    }
+    #[test]
+    fn snapshot_info_retains_modal_identity_and_scope() {
+        for (modal_scope, modal_node_id) in [
+            (NUX_SEMANTIC_MODAL_NONE, 0),
+            (NUX_SEMANTIC_MODAL_ACTIVE, u32::MAX),
+            (NUX_SEMANTIC_MODAL_UNRESOLVED, 0),
+        ] {
+            let snapshot = Box::into_raw(Box::new(NuxSemanticSnapshot {
+                occurrence: std::rc::Weak::new(),
+                render_revision: 7,
+                tree_version: 2,
+                actions: vec![0],
+                modal_scope,
+                modal_node_id,
+                nodes: vec![SemanticsDiffNode {
+                    id: u32::MAX,
+                    ..Default::default()
+                }],
+            }));
+            register_handle(
+                snapshot,
+                HandleKind::SemanticSnapshot,
+                std::thread::current().id(),
+            );
+            let mut info = NuxSemanticSnapshotInfo {
+                struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+                ..Default::default()
+            };
+            unsafe {
+                assert_eq!(
+                    nux_semantic_snapshot_info(snapshot, &mut info),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    (info.modal_scope, info.modal_node_id),
+                    (modal_scope, modal_node_id)
+                );
+                assert_eq!(info.render_revision, 7);
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            }
+        }
+    }
+    #[test]
+    fn presented_capture_freezes_modal_scope_across_live_flag_changes() {
+        unsafe fn present_and_capture(player: *mut NuxPlayer) -> *mut NuxSemanticSnapshot {
+            unsafe {
+                let step = NuxPlayerStep {
+                    struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                    ..Default::default()
+                };
+                let mut result = std::ptr::null_mut();
+                assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                let mut scheduling = NuxPlayerSchedulingInfo {
+                    struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_step_result_scheduling(result, &mut scheduling),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    nux_player_acknowledge_presented(player, scheduling.render_revision),
+                    NuxStatus::Ok
+                );
+                assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                let mut snapshot = std::ptr::null_mut();
+                assert_eq!(
+                    nux_player_semantic_snapshot(player, &mut snapshot),
+                    NuxStatus::Ok
+                );
+                snapshot
+            }
+        }
+        let root = std::env::var_os("RIVE_RUNTIME_DIR")
+            .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());
+        let bytes = std::fs::read(
+            std::path::PathBuf::from(root).join("tests/unit_tests/assets/semantic/simpsons.riv"),
+        )
+        .unwrap();
+        unsafe {
+            let mut file = std::ptr::null_mut();
+            let mut instance = std::ptr::null_mut();
+            let mut player = std::ptr::null_mut();
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+            let initial = present_and_capture(player);
+            assert_eq!(nux_semantic_snapshot_free(initial), NuxStatus::Ok);
+            let native = (&(*player).artboard).instance.borrow().native_handle();
+            let manager = native
+                .with_artboard(|artboard| artboard.semantic_manager())
+                .unwrap();
+            let nodes = manager.with_semantic_manager_mut(|manager| {
+                let ids: Vec<_> = manager.snapshot().iter().map(|node| node.id).collect();
+                ids.into_iter()
+                    .filter_map(|id| manager.node_by_id(id))
+                    .collect::<Vec<_>>()
+            });
+            let node = nodes
+                .into_iter()
+                .find(|node| {
+                    node.borrow().semantic_data.is_some() && SemanticNode::is_action_eligible(node)
+                })
+                .unwrap();
+            let id = node.borrow().id();
+            let data = node.borrow().semantic_data.clone().unwrap();
+            data.with_downcast_mut::<SemanticData, _>(|data| {
+                data.set_role(14);
+                data.set_is_modal(true);
+            })
+            .unwrap();
+            let active = present_and_capture(player);
+            data.with_downcast_mut::<SemanticData, _>(|data| data.set_is_modal(false))
+                .unwrap();
+            let closed = present_and_capture(player);
+            let mut info = NuxSemanticSnapshotInfo {
+                struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(nux_semantic_snapshot_info(closed, &mut info), NuxStatus::Ok);
+            assert_eq!(info.modal_scope, NUX_SEMANTIC_MODAL_NONE);
+            let closed_version = info.tree_version;
+            assert_eq!(nux_semantic_snapshot_info(active, &mut info), NuxStatus::Ok);
+            assert_eq!(
+                (info.modal_scope, info.modal_node_id),
+                (NUX_SEMANTIC_MODAL_ACTIVE, id)
+            );
+            assert!(info.tree_version < closed_version);
+            assert_eq!(
+                nux_player_queue_semantic_action(player, active, id, 0),
+                NuxStatus::HandleMismatch,
+                "a readable old modal capture cannot authorize a new action"
+            );
+            assert_eq!(nux_semantic_snapshot_free(active), NuxStatus::Ok);
+            assert_eq!(nux_semantic_snapshot_free(closed), NuxStatus::Ok);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
         }
     }
 }

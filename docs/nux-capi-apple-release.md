@@ -81,6 +81,12 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.2 patch rejects missing or invalid fonts referenced by concrete authored
+text styles during configured import. Embedded and external bytes use the same
+validation. Unused font assets and unbound styles remain admissible. This uses
+the existing import error without public ABI or scene-format additions; System
+font sourcing and capability activation remain SDK responsibilities.
+
 The v0.10.1 patch separates explicit ViewModel binding from ordinary player
 advancement, matching the upstream host lifecycle. New players inherit the
 artboard context; later bindings and replacement models are applied once.

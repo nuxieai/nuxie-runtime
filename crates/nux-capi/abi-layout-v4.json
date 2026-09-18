@@ -1356,6 +1356,64 @@
       ]
     },
     {
+      "name": "NuxVideoDecoderBudget",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "max_players",
+          "offset": 4
+        },
+        {
+          "name": "managed_players",
+          "offset": 8
+        },
+        {
+          "name": "hardware_players",
+          "offset": 12
+        },
+        {
+          "name": "managed_pixels_per_second",
+          "offset": 16
+        },
+        {
+          "name": "software_pixels_per_second",
+          "offset": 24
+        }
+      ]
+    },
+    {
+      "name": "NuxVideoDecoderRequest",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "id",
+          "offset": 8
+        },
+        {
+          "name": "pixels_per_second",
+          "offset": 16
+        },
+        {
+          "name": "priority",
+          "offset": 24
+        },
+        {
+          "name": "flags",
+          "offset": 28
+        }
+      ]
+    },
+    {
       "name": "NuxVideoEvent",
       "size": 8,
       "alignment": 4,

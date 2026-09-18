@@ -66,6 +66,26 @@ must queue the suspension reason, immediately drain its actions, and execute
 pause before suspending their render loop. Resuming one reason does not clear
 other reasons. Requested play intent survives temporary suspension.
 
+## SDK decoder budgets and reclamation
+
+`nux_video_allocate_decoders` applies the shared priority policy to host-measured
+hardware slots, bounded platform-managed slots/work, and bounded software work.
+Each request identifies a live occurrence, visibility, priority, supported decode
+classes, and pixels per second. Results retain input order: hardware (0), software
+(1), poster (2), or platform-managed (3). Platform-managed does not assert hardware
+acceleration. The API accepts at most 65,536 unique requests and rejects invalid
+flags or struct sizes before writing any output. Invisible requests use no budget.
+
+Close all denied/replaced decoders before opening newly admitted ones. After a
+synchronous close, call `nux_player_video_reclaim_decoder` once for that transition,
+with blocked=1 for poster fallback or blocked=0 for admission. Drain authored
+commands before reclamation so their intent is retained. Reclamation increments
+the generation, clears the old frame, and retains position, playback settings,
+play intent, and all non-resource suspension reasons. Only the replacement decoder
+may use the returned generation; its ready observation restores the retained seek
+before play. Failed/disposed players remain terminal. Repeated frame updates must
+not repeatedly reclaim an already retired decoder.
+
 ## First-frame readiness
 
 `nux_player_video_readiness` evaluates the current occurrence using its authored

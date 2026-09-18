@@ -336,6 +336,44 @@ pub fn semantic_bounds(component: Option<&CoreHandle>) -> Bounds {
         .map_or(point, |artboard| root_transform_aabb(artboard, point))
 }
 
+/// Test rendered geometry against a root-artboard-space viewport, preserving
+/// clip contours and holes rather than intersecting only their bounding boxes.
+/// This does not depend on an image or video frame having been decoded.
+pub fn rendered_geometry_intersects_viewport(
+    component: &CoreHandle,
+    viewport: Bounds,
+) -> Result<bool, SemanticGeometryError> {
+    if ![
+        viewport.min_x,
+        viewport.min_y,
+        viewport.max_x,
+        viewport.max_y,
+    ]
+    .iter()
+    .all(|value| value.is_finite())
+    {
+        return Err(SemanticGeometryError::InvalidPath);
+    }
+    if viewport.is_empty_or_nan() || !semantic_source_is_visible(component) {
+        return Ok(false);
+    }
+    let corners = [
+        Vec2D::new(viewport.min_x, viewport.min_y),
+        Vec2D::new(viewport.max_x, viewport.min_y),
+        Vec2D::new(viewport.max_x, viewport.max_y),
+        Vec2D::new(viewport.min_x, viewport.max_y),
+    ];
+    for (owner, polygon) in semantic_geometry(component) {
+        let mut region = clip_to_rendered_ancestors(&owner, polygon.to_vec());
+        region.status()?;
+        region.intersect_polygon(&corners);
+        if !region.is_empty() {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn node_root_polygon(component: &CoreHandle) -> Option<[Vec2D; 4]> {
     if !component.is_type_of(NodeBase::TYPE_KEY) {
         return None;

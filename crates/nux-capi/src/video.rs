@@ -249,6 +249,49 @@ pub(crate) fn with_video<R>(
 pub(crate) fn status(result: Result<(), NuxStatus>) -> NuxStatus {
     result.err().unwrap_or(NuxStatus::Ok)
 }
+
+/// Query decoder demand after advancing the scene. Viewport coordinates are in
+/// root-artboard space (undo the host's fit transform first). Includes authored
+/// visibility, transforms, ancestor clipping and viewport intersection, even
+/// before decoding a frame. Returns 0 or 1; output is unchanged on error.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_is_visible(
+    player: *const NuxPlayer,
+    component_id: usize,
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
+    out_visible: *mut u32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        status(with_video(player, component_id, |video, _| {
+            if out_visible.is_null() {
+                return Err(NuxStatus::NullArgument);
+            }
+            if ![min_x, min_y, max_x, max_y]
+                .iter()
+                .all(|value| value.is_finite())
+                || min_x > max_x
+                || min_y > max_y
+            {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            let viewport = nuxie::runtime::semantic::semantic_snapshot::Bounds {
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+            };
+            let visible = nuxie::video::visibility::is_visible_in(video, viewport)
+                .map_err(|_| NuxStatus::RuntimeError)?;
+            unsafe {
+                *out_visible = u32::from(visible);
+            }
+            Ok(())
+        }))
+    })
+}
 pub(crate) fn command(kind: u32, value: f64, reason: u32) -> Result<Command, NuxStatus> {
     Ok(match kind {
         0 => Command::Play,

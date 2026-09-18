@@ -383,7 +383,13 @@ impl SemanticManager {
         absorbed: &mut HashSet<u32>,
     ) {
         let n = node.borrow();
-        if is_interactive_role_value(n.role) {
+        // Nuxie collection records own logical membership and must remain
+        // exported even while an ancestor derives its accessible label.
+        if is_interactive_role_value(n.role)
+            || n.semantic_data.as_ref().is_some_and(|data| {
+                data.is_type_of(crate::collection_semantics::SemanticCollectionData::TYPE_KEY)
+            })
+        {
             return;
         }
         absorbed.insert(n.id);

@@ -180,7 +180,7 @@ mod tests {
     }
 
     #[test]
-    fn absorbed_owner_cannot_discard_explicit_collection_metadata() {
+    fn label_absorption_preserves_explicit_collection_owners() {
         assert_absorbed_owner(true, false);
         assert_absorbed_owner(false, true);
         assert_absorbed_owner(true, true);
@@ -213,13 +213,21 @@ mod tests {
         let item = add(Some(list.clone()), 11, "Option", owned_item);
         manager.with_semantic_manager_mut(|manager| {
             let nodes = manager.snapshot().to_vec();
-            assert!(!nodes.iter().any(|node| node.id == list.borrow().id()));
+            assert_eq!(
+                nodes.iter().any(|node| node.id == list.borrow().id()),
+                owned_list
+            );
             let index = nodes
                 .iter()
                 .position(|node| node.id == item.borrow().id())
                 .unwrap();
             let metadata = capture_semantic_collections(manager, &nodes);
-            if owned_list || owned_item {
+            if owned_list {
+                assert_eq!(
+                    metadata.unwrap()[index].collection_id,
+                    Some(list.borrow().id())
+                );
+            } else if owned_item {
                 assert_eq!(metadata, Err(SemanticCollectionError::InvalidMetadata));
             } else {
                 assert_eq!(

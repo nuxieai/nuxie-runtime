@@ -1114,3 +1114,65 @@ fn video_visibility_respects_artboard_clipping_before_decoding() {
         assert_eq!(is_visible_in(&video, viewport).unwrap(), !clip);
     }
 }
+
+#[test]
+fn video_visibility_intersects_the_transformed_polygon_not_its_bounding_box() {
+    use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+    use nuxie_runtime::video::visibility::is_visible_in;
+    let mut records = scene_records(false);
+    records.last_mut().unwrap().properties.extend([
+        property("Video", "y", FixtureValue::Double(80.0)),
+        property(
+            "Video",
+            "rotation",
+            FixtureValue::Double(std::f32::consts::FRAC_PI_4),
+        ),
+    ]);
+    let bytes = encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+    artboard.update_pass(true);
+    let video = artboard
+        .with_artboard(|a| {
+            a.objects()
+                .iter()
+                .flatten()
+                .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                .cloned()
+        })
+        .unwrap();
+    // A 64x32 centered rectangle rotated 45 degrees has bounds approximately
+    // 46..114 on both axes, but its upper-left bounding-box corner is empty.
+    assert!(
+        !is_visible_in(
+            &video,
+            Bounds {
+                min_x: 47.0,
+                min_y: 47.0,
+                max_x: 49.0,
+                max_y: 49.0
+            }
+        )
+        .unwrap()
+    );
+    assert!(
+        is_visible_in(
+            &video,
+            Bounds {
+                min_x: 79.0,
+                min_y: 79.0,
+                max_x: 81.0,
+                max_y: 81.0
+            }
+        )
+        .unwrap()
+    );
+}

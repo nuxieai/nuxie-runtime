@@ -762,6 +762,11 @@ impl ArtboardComponentList {
                 .expect("live ArtboardComponentList");
             if create {
                 Self::create_artboard_at_occurrence(owner, index as i32, false);
+            } else if let Some(artboard) = owner
+                .with_downcast::<Self, _>(|owner| owner.artboard_instance(index as i32))
+                .flatten()
+            {
+                crate::collection_semantics::SemanticCollectionData::update_artboard_occurrence(&artboard, index as u32);
             }
             index += 1;
         }
@@ -1659,6 +1664,7 @@ impl ArtboardComponentList {
             return;
         };
         Self::bind_artboard_occurrence(owner, &artboard, &item);
+        crate::collection_semantics::SemanticCollectionData::update_artboard_occurrence(&artboard, index as u32);
         let parent = owner
             .with_downcast::<Self, _>(Self::parent_artboard)
             .expect("live ArtboardComponentList");

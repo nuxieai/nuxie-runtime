@@ -25,6 +25,8 @@ pub struct SemanticCollectionData {
     semantic: SemanticData,
     item_count: u32,
     item_position: u32,
+    position_source: u32,
+    occurrence_position: Option<u32>,
 }
 impl Default for SemanticCollectionData {
     fn default() -> Self {
@@ -32,6 +34,8 @@ impl Default for SemanticCollectionData {
             semantic: SemanticData::default(),
             item_count: u32::MAX,
             item_position: u32::MAX,
+            position_source: 0,
+            occurrence_position: None,
         }
     }
 }
@@ -41,7 +45,11 @@ impl SemanticCollectionData {
         (self.item_count != u32::MAX).then_some(self.item_count)
     }
     pub fn item_position(&self) -> Option<u32> {
-        (self.item_position != u32::MAX).then_some(self.item_position)
+        if self.position_source == 1 {
+            self.occurrence_position
+        } else {
+            (self.item_position != u32::MAX).then_some(self.item_position)
+        }
     }
     pub(crate) fn values_for_node(
         node: &crate::source::semantic::semantic_node::SemanticNode,
@@ -53,12 +61,54 @@ impl SemanticCollectionData {
             })
             .unwrap_or_default()
     }
+    /// Called only by the runtime list, with its logical source index.
+    pub(crate) fn update_occurrence_position(&mut self, position: u32) {
+        if self.position_source != 1 || self.occurrence_position == Some(position) {
+            return;
+        }
+        self.occurrence_position = Some(position);
+        self.mark_content_dirty();
+    }
+
+    pub(crate) fn update_artboard_occurrence(
+        artboard: &crate::source::artboard::RuntimeArtboardInstanceHandle,
+        position: u32,
+    ) {
+        let objects = artboard.with_artboard(|artboard| artboard.objects().to_vec());
+        for object in objects.into_iter().flatten() {
+            object.with_downcast_mut::<Self, _>(|data| data.update_occurrence_position(position));
+        }
+    }
+
+    fn mark_content_dirty(&self) {
+        if let Some(node) = self.semantic.existing_semantic_node() {
+            let (id, manager) = {
+                let node = node.borrow();
+                (node.id(), node.manager())
+            };
+            if let Some(manager) = manager {
+                manager.with_semantic_manager_mut(|manager| {
+                    manager.mark_node_dirty(
+                        id,
+                        crate::source::semantic::semantic_dirt::SemanticDirt::CONTENT,
+                    );
+                });
+            }
+        }
+    }
+
     fn subtype(key: u16) -> bool {
         key == Self::TYPE_KEY || SemanticDataBase::is_type_of(key)
     }
     fn valid_role(&self) -> bool {
+        if self.position_source > 1 || (self.position_source == 1 && self.item_position != u32::MAX)
+        {
+            return false;
+        }
         match self.semantic.base.role() {
-            role if role == SemanticRole::List as u32 => self.item_position == u32::MAX,
+            role if role == SemanticRole::List as u32 => {
+                self.item_position == u32::MAX && self.position_source == 0
+            }
             role if role == SemanticRole::ListItem as u32 => self.item_count == u32::MAX,
             _ => false,
         }
@@ -81,6 +131,7 @@ impl CoreRegistryObject for SemanticCollectionData {
         let (target, key) = match field {
             CoreField::SemanticCollectionItemCount => (&mut self.item_count, 60016),
             CoreField::SemanticCollectionItemPosition => (&mut self.item_position, 60017),
+            CoreField::SemanticCollectionPositionSource => (&mut self.position_source, 60018),
             _ => return self.semantic.set_uint(field, value),
         };
         if *target == value {
@@ -88,25 +139,14 @@ impl CoreRegistryObject for SemanticCollectionData {
         }
         *target = value;
         self.core_mut().notify_property_changed(key);
-        if let Some(node) = self.semantic.existing_semantic_node() {
-            let (id, manager) = {
-                let node = node.borrow();
-                (node.id(), node.manager())
-            };
-            if let Some(manager) = manager {
-                manager.with_semantic_manager_mut(|manager| {
-                    manager.mark_node_dirty(
-                        id,
-                        crate::source::semantic::semantic_dirt::SemanticDirt::CONTENT,
-                    );
-                });
-            }
-        }
+        self.mark_content_dirty();
     }
+
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
             CoreField::SemanticCollectionItemCount => self.item_count,
             CoreField::SemanticCollectionItemPosition => self.item_position,
+            CoreField::SemanticCollectionPositionSource => self.position_source,
             _ => self.semantic.get_uint(field),
         }
     }
@@ -167,12 +207,14 @@ impl CoreObject for SemanticCollectionData {
         cloned.semantic.base = base;
         cloned.item_count = self.item_count;
         cloned.item_position = self.item_position;
+        cloned.position_source = self.position_source;
         Some(Box::new(cloned))
     }
     fn deserialize(&mut self, key: u16, reader: &mut BinaryReader<'_>) -> bool {
         match key {
             60016 => self.item_count = reader.read_var_uint_as::<u32>(),
             60017 => self.item_position = reader.read_var_uint_as::<u32>(),
+            60018 => self.position_source = reader.read_var_uint_as::<u32>(),
             _ => return self.semantic.deserialize(key, reader),
         }
         true
@@ -230,6 +272,67 @@ mod tests {
         assert!(object.deserialize(key, &mut reader));
         assert!(!reader.has_error());
         object
+    }
+
+    #[test]
+    fn repeated_positions_belong_to_cloned_occurrences() {
+        let template = decoded(11, 60018, &[1]);
+        let mut first = template.clone_boxed().unwrap();
+        let mut second = template.clone_boxed().unwrap();
+        let data = |object: &mut Box<dyn CoreObject>, position| {
+            let data = object
+                .as_registry_any_mut()
+                .downcast_mut::<SemanticCollectionData>()
+                .unwrap();
+            data.update_occurrence_position(position);
+            assert_eq!(data.item_position(), Some(position));
+            assert!(data.valid_role());
+        };
+        data(&mut first, 0);
+        data(&mut second, 1);
+        data(&mut first, 1);
+        data(&mut second, 0);
+        assert_eq!(
+            template
+                .as_registry_any()
+                .downcast_ref::<SemanticCollectionData>()
+                .unwrap()
+                .item_position(),
+            None
+        );
+        let clone = first.clone_boxed().unwrap();
+        assert_eq!(
+            clone
+                .as_registry_any()
+                .downcast_ref::<SemanticCollectionData>()
+                .unwrap()
+                .item_position(),
+            None
+        );
+        let mut explicit = decoded(11, 60017, &[4]);
+        explicit
+            .as_registry_any_mut()
+            .downcast_mut::<SemanticCollectionData>()
+            .unwrap()
+            .update_occurrence_position(2);
+        assert_eq!(
+            explicit
+                .as_registry_any()
+                .downcast_ref::<SemanticCollectionData>()
+                .unwrap()
+                .item_position(),
+            Some(4)
+        );
+        for (role, mode) in [(10, 1), (11, 2)] {
+            let invalid = decoded(role, 60018, &[mode]);
+            assert!(
+                !invalid
+                    .as_registry_any()
+                    .downcast_ref::<SemanticCollectionData>()
+                    .unwrap()
+                    .valid_role()
+            );
+        }
     }
 
     #[test]

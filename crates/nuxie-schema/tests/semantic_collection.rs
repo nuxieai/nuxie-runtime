@@ -26,3 +26,21 @@ fn collection_metadata_extends_upstream_semantics_with_unknown_defaults() {
         assert!(!object_supports_property(668, key));
     }
 }
+
+#[test]
+fn occurrence_position_source_is_owned_and_defaults_to_explicit() {
+    let definition = definition_by_type_key(60002).unwrap();
+    assert_eq!(
+        core_registry_field_kind_by_property_key(60018),
+        Some(CoreRegistryFieldKind::Uint)
+    );
+    assert_eq!(
+        definition
+            .property_by_key(60018)
+            .unwrap()
+            .stored_field_initializer(),
+        Some(StoredFieldInitializer::Uint(0))
+    );
+    assert!(object_supports_property(60002, 60018));
+    assert!(!object_supports_property(668, 60018));
+}

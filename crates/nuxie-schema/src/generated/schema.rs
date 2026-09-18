@@ -2090,6 +2090,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         60015 => Some(CoreRegistryFieldKind::Double),
         60016 => Some(CoreRegistryFieldKind::Uint),
         60017 => Some(CoreRegistryFieldKind::Uint),
+        60018 => Some(CoreRegistryFieldKind::Uint),
         _ => None,
     }
 }
@@ -2729,6 +2730,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         60015 => Some(FieldKind::Double),
         60016 => Some(FieldKind::Uint),
         60017 => Some(FieldKind::Uint),
+        60018 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -3331,6 +3333,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         60015 => Some(FieldKind::Double),
         60016 => Some(FieldKind::Uint),
         60017 => Some(FieldKind::Uint),
+        60018 => Some(FieldKind::Uint),
         _ => None,
     }
 }
@@ -27483,6 +27486,43 @@ static DEF_352_PROPERTIES: &[Property] = &[
         passthrough: false,
         bitmask_passthrough: None,
     },
+    Property {
+        name: "positionSource",
+        key: Key {
+            int: 60018,
+            name: "positionSource",
+        },
+        alternates: &[],
+        declared_type: "uint",
+        runtime_type: FieldKind::Uint,
+        description: Some(
+            "Position authority: 0 uses itemPosition; 1 uses the enclosing repeated artboard occurrence logical index. Source 1 is valid only for a complete single-member template with unknown authored itemPosition.",
+        ),
+        initial_value: Some("0"),
+        initial_value_runtime: None,
+        group: None,
+        nullable: false,
+        override_set: false,
+        override_get: false,
+        virtual_: false,
+        editor_only: false,
+        coop: true,
+        with_rive_tools_only: false,
+        stores_data: true,
+        deserializes: true,
+        stores_field: true,
+        encoded: false,
+        bindable: false,
+        animates: false,
+        computed: false,
+        journal: None,
+        parentable: None,
+        records: None,
+        exports_to_runtime_conditionally: false,
+        pure_virtual: false,
+        passthrough: false,
+        bitmask_passthrough: None,
+    },
 ];
 
 static MIXIN_0_PROPERTIES: &[Property] = &[
@@ -29764,6 +29804,7 @@ pub fn property_by_key_in_hierarchy(
         (60002, 1009) => Some(("SemanticData", &DEF_326_PROPERTIES[27])),
         (60002, 60016) => Some(("SemanticCollectionData", &DEF_352_PROPERTIES[0])),
         (60002, 60017) => Some(("SemanticCollectionData", &DEF_352_PROPERTIES[1])),
+        (60002, 60018) => Some(("SemanticCollectionData", &DEF_352_PROPERTIES[2])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),

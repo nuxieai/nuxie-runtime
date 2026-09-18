@@ -1,19 +1,34 @@
 {
   "name": "SemanticCollectionData",
-  "key": { "int": 60002, "string": "semanticCollectionData" },
+  "key": {
+    "int": 60002,
+    "string": "semanticCollectionData"
+  },
   "extends": "semantic/semantic_data.json",
   "properties": {
     "itemCount": {
       "type": "uint",
-      "key": { "int": 60016 },
+      "key": {
+        "int": 60016
+      },
       "initialValue": "4294967295",
       "description": "Logical collection total, including offscreen members. UINT32_MAX means unknown; zero means a known empty collection. Only valid on the list role."
     },
     "itemPosition": {
       "type": "uint",
-      "key": { "int": 60017 },
+      "key": {
+        "int": 60017
+      },
       "initialValue": "4294967295",
       "description": "Zero-based logical item position within its owning collection. UINT32_MAX means unknown. Only valid on the list-item role; not a visible sibling index."
+    },
+    "positionSource": {
+      "type": "uint",
+      "key": {
+        "int": 60018
+      },
+      "initialValue": "0",
+      "description": "Position authority: 0 uses itemPosition; 1 uses the enclosing repeated artboard occurrence logical index. Source 1 is valid only for a complete single-member template with unknown authored itemPosition."
     }
   }
 }

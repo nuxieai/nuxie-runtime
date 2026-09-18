@@ -12,7 +12,7 @@ resolved explicitly.
 
 - VideoAsset: type 60000; properties 60000–60002.
 - Video: type 60001; properties 60003–60015.
-- SemanticCollectionData: type 60002; properties 60016–60017.
+- SemanticCollectionData: type 60002; properties 60016–60018.
 
 The JSON files are authoritative for allocations and defaults. Generate the
 schema with `cargo run -p nuxie-codegen -- --defs <upstream>/dev/defs --out crates/nuxie-schema/src/generated/schema.rs`.
@@ -44,6 +44,10 @@ logical metadata from the authored collection source, independent of clipping.
 Both default to UINT32_MAX (unknown); zero is a real count or first position.
 The list role owns itemCount; the list-item role owns itemPosition and belongs
 to its nearest logical list ancestor. Nested lists have separate membership.
+positionSource (60018) selects explicit itemPosition (0, default) or the enclosing
+repeated artboard occurrence index (1). Occurrence positions start unknown, reset
+on clone, and update on creation/reorder without mutating shared ViewModels.
+Source 1 requires the list-item role and unknown authored itemPosition.
 The compiler/runtime must validate role applicability and known position/count
 consistency before exposing these values. Schema availability alone does not
 establish runtime import, native projection or publication support.

@@ -1,10 +1,7 @@
 use crate::mechanical_port::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceWeakHandle,
     core::CoreHandle,
-    semantic::{
-        semantic_data::{SemanticData, SemanticListenerRef},
-        semantic_listener::SemanticListener,
-    },
+    semantic::{semantic_data::SemanticListenerRef, semantic_listener::SemanticListener},
 };
 use std::{
     cell::RefCell,
@@ -58,11 +55,9 @@ impl RuntimeSemanticListenerGroupHandle {
             let mut group = handle.0.borrow_mut();
             group.occurrence = occurrence;
             group.registration = Some(registration.clone());
-            group
-                .semantic_data
-                .with_downcast_mut::<SemanticData, _>(|semantic_data| {
-                    semantic_data.add_semantic_listener(registration);
-                });
+            group.semantic_data.with_semantic_data_mut(|semantic_data| {
+                semantic_data.add_semantic_listener(registration);
+            });
         }
         handle
     }
@@ -182,9 +177,8 @@ impl Drop for SemanticListenerGroup {
         let Some(registration) = self.registration.take() else {
             return;
         };
-        self.semantic_data
-            .with_downcast_mut::<SemanticData, _>(|semantic_data| {
-                semantic_data.remove_semantic_listener(&registration);
-            });
+        self.semantic_data.with_semantic_data_mut(|semantic_data| {
+            semantic_data.remove_semantic_listener(&registration);
+        });
     }
 }

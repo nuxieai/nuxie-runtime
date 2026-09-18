@@ -20,6 +20,18 @@ use std::{rc::Rc, vec::Vec};
 
 pub type SemanticListenerRef = Rc<dyn SemanticListener>;
 
+impl CoreHandle {
+    /// Access the upstream semantic owner, including Nuxie-owned subtypes.
+    pub fn with_semantic_data<R>(&self, f: impl FnOnce(&SemanticData) -> R) -> Option<R> {
+        self.with(|object| object.as_semantic_data().map(f))
+            .flatten()
+    }
+    pub fn with_semantic_data_mut<R>(&self, f: impl FnOnce(&mut SemanticData) -> R) -> Option<R> {
+        self.with_mut(|object| object.as_semantic_data_mut().map(f))
+            .flatten()
+    }
+}
+
 macro_rules! semantic_trait_flag {
     ($get:ident, $set:ident, $mask:ident, $property:ident) => {
         pub fn $get(&self) -> bool {
@@ -269,14 +281,11 @@ impl SemanticData {
     }
 
     pub fn request_focus_handle(owner: &CoreHandle) -> bool {
-        let Some(focus_data) = owner
-            .with_downcast::<Self, _>(Self::sibling_focus_data)
-            .flatten()
-        else {
+        let Some(focus_data) = owner.with_semantic_data(Self::sibling_focus_data).flatten() else {
             return false;
         };
         let Some(focus_manager) = owner
-            .with_downcast::<Self, _>(|data| {
+            .with_semantic_data(|data| {
                 data.component()
                     .with_artboard(Artboard::focus_manager_handle)
                     .flatten()

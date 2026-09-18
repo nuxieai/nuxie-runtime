@@ -79,7 +79,6 @@ use crate::mechanical_port::source::{
     process_event_result::ProcessEventResult,
     scripted::scripted_object::{ScriptUpdateRequestHost, ScriptedObject},
     semantic::{
-        semantic_data::SemanticData,
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
         semantic_node::{SemanticNode, SemanticNodeRef},
     },
@@ -3487,7 +3486,7 @@ impl StateMachineInstance {
             let eligible = event
                 .group
                 .with_group(|group| group.semantic_data())
-                .with_downcast::<SemanticData, _>(|data| {
+                .with_semantic_data(|data| {
                     !data.is_disabled()
                         && !data.is_hidden()
                         && data

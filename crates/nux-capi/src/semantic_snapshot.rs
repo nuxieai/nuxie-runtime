@@ -1,8 +1,9 @@
 //! Owned, bounded captures of the runtime's occurrence-local semantic tree.
 
 use super::*;
+#[cfg(test)]
+use nuxie::runtime::semantic::semantic_data::SemanticData;
 use nuxie::runtime::semantic::{
-    semantic_data::SemanticData,
     semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager, SemanticModalScope},
     semantic_node::{SemanticNode, SemanticNodeRef},
     semantic_snapshot::SemanticsDiffNode,
@@ -209,7 +210,7 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
                 let Ok(data) = eligible_data(&node) else {
                     return 0;
                 };
-                data.with_downcast::<SemanticData, _>(|data| {
+                data.with_semantic_data(|data| {
                     (0..3)
                         .filter(|action| data.supports_semantic_action(*action))
                         .fold(0u32, |mask, action| mask | (1 << action))
@@ -429,7 +430,7 @@ pub unsafe extern "C" fn nux_player_queue_semantic_action(
             Ok(data) => data,
             Err(status) => return status,
         };
-        data.with_downcast::<SemanticData, _>(|data| {
+        data.with_semantic_data(|data| {
             if !data.supports_semantic_action(action as u8) {
                 return NuxStatus::NotFound;
             }

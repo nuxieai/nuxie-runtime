@@ -23,10 +23,7 @@ use crate::mechanical_port::source::{
     layout_component::LayoutComponent,
     math::{aabb::Aabb, vec2d::Vec2D},
     parent_traversal::ParentTraversal,
-    semantic::{
-        semantic_data::SemanticData, semantic_provider::root_transform_aabb,
-        semantic_snapshot::Bounds,
-    },
+    semantic::{semantic_provider::root_transform_aabb, semantic_snapshot::Bounds},
 };
 
 #[derive(Clone)]
@@ -798,7 +795,7 @@ impl FocusData {
             listener.notify(true);
         }
         if let Some(sibling) = find_sibling_semantic_data(self.component()) {
-            sibling.with_downcast_mut::<SemanticData, _>(|sibling| sibling.set_focused_state(true));
+            sibling.with_semantic_data_mut(|sibling| sibling.set_focused_state(true));
         }
         if let Some(parent) = self.component().parent_handle() {
             parent.with_mut(|parent| {
@@ -816,8 +813,7 @@ impl FocusData {
             listener.notify(false);
         }
         if let Some(sibling) = find_sibling_semantic_data(self.component()) {
-            sibling
-                .with_downcast_mut::<SemanticData, _>(|sibling| sibling.set_focused_state(false));
+            sibling.with_semantic_data_mut(|sibling| sibling.set_focused_state(false));
         }
         if let Some(parent) = self.component().parent_handle() {
             parent.with_mut(|parent| {

@@ -182,7 +182,7 @@ fn read_runtime_object(
 ) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
     let core_object_key = reader.read_var_uint_as::<i32>();
     // Nuxie-owned types share the Rive record grammar and ordinary arena lifecycle.
-    let mut object = crate::video::make_core(core_object_key);
+    let mut object = crate::scene_objects::make_core(core_object_key);
     loop {
         let property_key = reader.read_var_uint_as::<u16>();
         if property_key == 0 {
@@ -467,6 +467,13 @@ impl File {
                     .with_mut(|object| object.import(&mut import_stack))
                     .unwrap_or(StatusCode::MissingObject)
             };
+            // Required collection meaning must not be silently discarded by
+            // the upstream permissive object-import path.
+            if object_type == crate::collection_semantics::SemanticCollectionData::TYPE_KEY
+                && import_result != StatusCode::Ok
+            {
+                return (ImportResult::Malformed, false);
+            }
             if import_result == StatusCode::Ok {
                 if admission
                     .as_ref()

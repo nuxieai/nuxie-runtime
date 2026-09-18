@@ -7,6 +7,8 @@
 #[doc(hidden)]
 pub mod mechanical_port;
 
+pub mod collection_semantics;
+mod scene_objects;
 pub mod video;
 
 mod host_animation;

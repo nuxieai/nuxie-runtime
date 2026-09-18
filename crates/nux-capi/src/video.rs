@@ -4,6 +4,119 @@ use super::*;
 use nuxie::runtime::generated::core_registry::CoreCapabilities;
 use nuxie::video::{Video, VideoAsset, playback::*};
 
+const MAX_VIDEO_SCENE_OBJECTS: usize = 65_536;
+const FIRST_NESTED_VIDEO_ID: usize = 1 << 30;
+
+pub(super) struct VideoOccurrences {
+    ids: std::collections::BTreeMap<(usize, usize, u64), usize>,
+    next_id: usize,
+}
+
+impl Default for VideoOccurrences {
+    fn default() -> Self {
+        Self {
+            ids: Default::default(),
+            next_id: FIRST_NESTED_VIDEO_ID,
+        }
+    }
+}
+
+struct LiveVideo {
+    id: usize,
+    source_artboard_index: usize,
+    source_component_id: usize,
+    handle: nuxie::CoreHandle,
+}
+
+impl VideoOccurrences {
+    fn collect(&mut self, root: &ArtboardInstance) -> Result<Vec<LiveVideo>, NuxStatus> {
+        use std::collections::BTreeSet;
+        let file = root.native_file();
+        let sources = file.with_file(|file| {
+            (0..file.artboard_count())
+                .map(|index| file.artboard_handle(index))
+                .collect::<Vec<_>>()
+        });
+        let mut pending = vec![(root.native_handle(), true)];
+        let mut visited = BTreeSet::new();
+        let mut live = BTreeSet::new();
+        let mut output = Vec::new();
+        let mut new_ids = std::collections::BTreeMap::new();
+        let mut object_count = 0usize;
+        while let Some((artboard, is_root)) = pending.pop() {
+            if !visited.insert(artboard.core_handle().identity_key()) {
+                continue;
+            }
+            if visited.len() > MAX_VIDEO_SCENE_OBJECTS {
+                return Err(NuxStatus::LimitExceeded);
+            }
+            let source = artboard.with_artboard(|artboard| artboard.base.artboard_source_handle());
+            let source_artboard_index = sources
+                .iter()
+                .position(|candidate| candidate.as_ref() == source.as_ref())
+                .filter(|_| source.is_some())
+                .ok_or(NuxStatus::RuntimeError)?;
+            let objects = artboard.with_artboard(|artboard| artboard.objects().to_vec());
+            object_count = object_count
+                .checked_add(objects.len())
+                .ok_or(NuxStatus::LimitExceeded)?;
+            if object_count > MAX_VIDEO_SCENE_OBJECTS {
+                return Err(NuxStatus::LimitExceeded);
+            }
+            for (source_component_id, handle) in objects.into_iter().enumerate() {
+                let Some(handle) = handle else {
+                    continue;
+                };
+                if handle.is_type_of(Video::TYPE_KEY) {
+                    let identity = handle.identity_key();
+                    live.insert(identity);
+                    let id = if is_root {
+                        source_component_id
+                    } else if let Some(id) =
+                        self.ids.get(&identity).or_else(|| new_ids.get(&identity))
+                    {
+                        *id
+                    } else {
+                        let id = self.next_id;
+                        self.next_id = id
+                            .checked_add(1)
+                            .filter(|next| *next <= i64::MAX as usize)
+                            .ok_or(NuxStatus::LimitExceeded)?;
+                        new_ids.insert(identity, id);
+                        id
+                    };
+                    output.push(LiveVideo {
+                        id,
+                        source_artboard_index,
+                        source_component_id,
+                        handle: handle.clone(),
+                    });
+                }
+                let children = handle
+                    .with(|object| {
+                        let Some(host) = object.as_artboard_host() else {
+                            return Ok(Vec::new());
+                        };
+                        if host.artboard_count() > MAX_VIDEO_SCENE_OBJECTS {
+                            return Err(NuxStatus::LimitExceeded);
+                        }
+                        Ok((0..host.artboard_count())
+                            .filter_map(|index| host.artboard_instance(index as i32))
+                            .collect::<Vec<_>>())
+                    })
+                    .ok_or(NuxStatus::RuntimeError)??;
+                if pending.len().saturating_add(children.len()) > MAX_VIDEO_SCENE_OBJECTS {
+                    return Err(NuxStatus::LimitExceeded);
+                }
+                pending.extend(children.into_iter().map(|child| (child, false)));
+            }
+        }
+        self.ids.retain(|identity, _| live.contains(identity));
+        self.ids.extend(new_ids);
+        Ok(output)
+    }
+}
+
 /// Explicit assertion that the host has initialized a compatible decoder and
 /// renderer. A null capabilities pointer means video is unavailable. This does
 /// not perform asset authentication or select/initialize a platform decoder.
@@ -71,6 +184,10 @@ pub struct NuxVideoInfo {
     pub priority: u32,
     /// Show immediately with poster=0, wait for first frame=1.
     pub readiness: u32,
+    /// Definition artboard index in the imported file, not a mounted-instance index.
+    pub source_artboard_index: usize,
+    /// Definition-local slot used by the signed authored-target inventory.
+    pub source_component_id: usize,
 }
 pub type NuxVideoInfoCallback = Option<unsafe extern "C" fn(*mut c_void, *const NuxVideoInfo)>;
 
@@ -112,15 +229,22 @@ pub(crate) fn with_video<R>(
     let _handle = enter_handle(player, HandleKind::Player)?;
     let player = unsafe { &*player };
     let _occurrence = enter_occurrence(&player.artboard)?;
-    let video = player
-        .artboard
-        .instance
-        .try_borrow()
+    let videos = player
+        .video_occurrences
+        .try_borrow_mut()
         .map_err(|_| NuxStatus::ReentrantCall)?
-        .object_handle(component_id)
-        .filter(|v| v.is_type_of(Video::TYPE_KEY))
+        .collect(
+            &*player
+                .artboard
+                .instance
+                .try_borrow()
+                .map_err(|_| NuxStatus::ReentrantCall)?,
+        )?;
+    let video = videos
+        .into_iter()
+        .find(|video| video.id == component_id)
         .ok_or(NuxStatus::NotFound)?;
-    body(&video, &player.artboard)
+    body(&video.handle, &player.artboard)
 }
 pub(crate) fn status(result: Result<(), NuxStatus>) -> NuxStatus {
     result.err().unwrap_or(NuxStatus::Ok)
@@ -152,8 +276,10 @@ pub(crate) fn command(kind: u32, value: f64, reason: u32) -> Result<Command, Nux
     })
 }
 
-/// Enumerate video occurrences in this player's artboard. Component IDs are
-/// occurrence-local and remain valid until the player/occurrence is replaced.
+/// Enumerate root, nested, and materialized list video occurrences. Root IDs
+/// retain their component slots; nested IDs are opaque and never reused within
+/// this player. Removed occurrences reject further commands. Definition fields
+/// identify authored targets; component_id identifies the mounted player only.
 /// Calls are creator-thread affine; callbacks cannot reenter any C API.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_visit_videos(
@@ -167,17 +293,20 @@ pub unsafe extern "C" fn nux_player_visit_videos(
             let _handle = enter_handle(player, HandleKind::Player)?;
             let player = unsafe { &*player };
             let _occurrence = enter_occurrence(&player.artboard)?;
-            let native = player
-                .artboard
-                .instance
-                .try_borrow()
+            let videos = player
+                .video_occurrences
+                .try_borrow_mut()
                 .map_err(|_| NuxStatus::ReentrantCall)?
-                .native_handle();
-            let objects = native.with_artboard(|a| a.objects().to_vec());
-            for (id, object) in objects.into_iter().enumerate() {
-                let Some(object) = object else {
-                    continue;
-                };
+                .collect(
+                    &*player
+                        .artboard
+                        .instance
+                        .try_borrow()
+                        .map_err(|_| NuxStatus::ReentrantCall)?,
+                )?;
+            for video in videos {
+                let id = video.id;
+                let object = video.handle;
                 object.with_downcast::<Video, _>(|v| {
                     let component_name = v.as_component().map_or("", |c| c.name());
                     let settings = v.playback.settings();
@@ -221,6 +350,8 @@ pub unsafe extern "C" fn nux_player_visit_videos(
                         },
                         priority: settings.priority,
                         readiness: settings.readiness,
+                        source_artboard_index: video.source_artboard_index,
+                        source_component_id: video.source_component_id,
                     };
                     with_platform_callback(|| unsafe { callback(user_data, &info) });
                 });

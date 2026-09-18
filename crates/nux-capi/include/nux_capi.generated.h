@@ -1265,6 +1265,14 @@ typedef struct NuxVideoInfo {
    * Show immediately with poster=0, wait for first frame=1.
    */
   uint32_t readiness;
+  /**
+   * Definition artboard index in the imported file, not a mounted-instance index.
+   */
+  size_t source_artboard_index;
+  /**
+   * Definition-local slot used by the signed authored-target inventory.
+   */
+  size_t source_component_id;
 } NuxVideoInfo;
 
 typedef void (*NuxVideoInfoCallback)(void*, const struct NuxVideoInfo*);
@@ -2259,8 +2267,10 @@ NuxStatus nux_player_video_step(const struct NuxPlayer *player,
                                 void *user_data);
 
 /**
- * Enumerate video occurrences in this player's artboard. Component IDs are
- * occurrence-local and remain valid until the player/occurrence is replaced.
+ * Enumerate root, nested, and materialized list video occurrences. Root IDs
+ * retain their component slots; nested IDs are opaque and never reused within
+ * this player. Removed occurrences reject further commands. Definition fields
+ * identify authored targets; component_id identifies the mounted player only.
  * Calls are creator-thread affine; callbacks cannot reenter any C API.
  */
 NuxStatus nux_player_visit_videos(const struct NuxPlayer *player,

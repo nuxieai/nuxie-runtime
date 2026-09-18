@@ -9,8 +9,10 @@
 
 mod asset_catalog;
 mod video;
+mod video_resources;
 mod video_sync;
 pub use video::*;
+pub use video_resources::*;
 pub use video_sync::*;
 mod player_view_models;
 mod render_callbacks;

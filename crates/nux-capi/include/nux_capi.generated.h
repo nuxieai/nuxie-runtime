@@ -1409,6 +1409,26 @@ typedef struct NuxSemanticNodeView {
   uint32_t actions;
 } NuxSemanticNodeView;
 
+typedef struct NuxVideoDecoderRequest {
+  uint32_t struct_size;
+  uint64_t id;
+  uint64_t pixels_per_second;
+  uint32_t priority;
+  /**
+   * Visible=1, hardware supported=2, software supported=4, platform managed=8.
+   */
+  uint32_t flags;
+} NuxVideoDecoderRequest;
+
+typedef struct NuxVideoDecoderBudget {
+  uint32_t struct_size;
+  uint32_t max_players;
+  uint32_t managed_players;
+  uint32_t hardware_players;
+  uint64_t managed_pixels_per_second;
+  uint64_t software_pixels_per_second;
+} NuxVideoDecoderBudget;
+
 /**
  * One member of a synchronization group. The first member is its leader.
  * Component IDs are local to the supplied live player occurrence.
@@ -2239,6 +2259,21 @@ NuxStatus nux_player_video_readiness(const struct NuxPlayer *player,
                                      uint32_t *out_readiness);
 
 /**
+ * After synchronously closing an occurrence's decoder, invalidate its old
+ * callbacks and clear its frame while retaining position/settings/play intent.
+ * blocked=1 selects its poster and resource suspension; blocked=0 releases only
+ * that suspension. Other lifecycle suspensions remain. The returned generation
+ * must be used by the replacement decoder. Do not call this on every frame:
+ * call once per decoder retirement/admission transition, after draining commands.
+ * A later ready observation seeks to the retained position before playing.
+ * Failed/disposed occurrences cannot be revived. Output is unchanged on error.
+ */
+NuxStatus nux_player_video_reclaim_decoder(const struct NuxPlayer *player,
+                                           size_t component_id,
+                                           uint32_t blocked,
+                                           uint64_t *out_generation);
+
+/**
  * Feed the current native clock to groups authored by Luau in this occurrence.
  * Use one monotonic seconds domain for all players; a null sample clears clock
  * availability. Call after commands/observations, even when no frame is uploaded.
@@ -2554,6 +2589,22 @@ NuxStatus nux_state_machine_instance_set_bool(struct NuxStateMachineInstance *st
 NuxStatus nux_state_machine_instance_set_number(struct NuxStateMachineInstance *state_machine,
                                                 const char *name,
                                                 float value);
+
+/**
+ * Allocate a host-measured budget across visible video occurrences. Higher
+ * priorities win; IDs break ties. This does not create or mutate decoders.
+ * Output has one value per input, in input order: hardware=0, software=1,
+ * poster=2, platform-managed=3. IDs must be unique and count <= 65536.
+ * Hardware/managed/software availability and pixel rates come from the host,
+ * not the renderer. A platform-managed allocation makes no hardware claim.
+ * The host closes denied/replaced decoders before opening admitted ones.
+ * Arrays must have count readable/writable elements; output is unchanged on
+ * validation failure. Empty arrays may be null. Each struct_size equals sizeof its declared type.
+ */
+NuxStatus nux_video_allocate_decoders(const struct NuxVideoDecoderRequest *requests,
+                                      size_t count,
+                                      const struct NuxVideoDecoderBudget *budget,
+                                      uint32_t *out_allocations);
 
 /**
  * Queue the same authored command on every member atomically. Command numbers

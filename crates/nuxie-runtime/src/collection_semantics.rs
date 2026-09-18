@@ -43,6 +43,16 @@ impl SemanticCollectionData {
     pub fn item_position(&self) -> Option<u32> {
         (self.item_position != u32::MAX).then_some(self.item_position)
     }
+    pub(crate) fn values_for_node(
+        node: &crate::source::semantic::semantic_node::SemanticNode,
+    ) -> (Option<u32>, Option<u32>) {
+        node.semantic_data
+            .as_ref()
+            .and_then(|handle| {
+                handle.with_downcast::<Self, _>(|data| (data.item_count(), data.item_position()))
+            })
+            .unwrap_or_default()
+    }
     fn subtype(key: u16) -> bool {
         key == Self::TYPE_KEY || SemanticDataBase::is_type_of(key)
     }

@@ -176,6 +176,15 @@ mod tests {
 
     #[test]
     fn runtime_property_updates_refresh_metadata_without_changing_identity() {
+        assert_property_update_versions(false);
+    }
+
+    #[test]
+    fn full_refresh_versions_collection_property_updates() {
+        assert_property_update_versions(true);
+    }
+
+    fn assert_property_update_versions(full_refresh: bool) {
         use crate::source::generated::core_registry::CoreRegistry;
         let arena = CoreArena::default();
         let manager = manager();
@@ -184,12 +193,51 @@ mod tests {
         let list_id = list.borrow().id();
         let item_id = item.borrow().id();
         let before = capture(&manager).unwrap();
+        let mut version = manager.with_semantic_manager_mut(|manager| {
+            manager.drain_diff();
+            manager.version()
+        });
         assert_eq!(before[0].item_count, Some(10));
         assert_eq!(before[1].item_position, Some(4));
         for (count, position) in [(6, 2), (1, 0), (u32::MAX, u32::MAX)] {
             assert!(CoreRegistry::set_uint_handle(&list_handle, 60016, count));
             assert!(CoreRegistry::set_uint_handle(&item_handle, 60017, position));
+            if full_refresh {
+                manager.with_semantic_manager_mut(|manager| {
+                    manager.mark_dirty(
+                        crate::source::semantic::semantic_dirt::SemanticDirt::STRUCTURE,
+                    );
+                });
+            }
             let updated = capture(&manager).unwrap();
+            manager.with_semantic_manager_mut(|manager| {
+                assert!(manager.version() > version);
+                version = manager.version();
+                let diff = manager.drain_diff();
+                assert_eq!(diff.tree_version, version);
+                let changed: HashSet<_> =
+                    diff.updated_semantic.iter().map(|node| node.id).collect();
+                assert_eq!(changed, HashSet::from([list_id, item_id]));
+                assert!(diff.added.is_empty());
+                assert!(diff.removed.is_empty());
+                for node in &diff.updated_semantic {
+                    if node.id == list_id {
+                        assert_eq!(node.item_count, (count != u32::MAX).then_some(count));
+                    } else {
+                        assert_eq!(
+                            node.item_position,
+                            (position != u32::MAX).then_some(position)
+                        );
+                    }
+                }
+            });
+            assert!(CoreRegistry::set_uint_handle(&list_handle, 60016, count));
+            assert!(CoreRegistry::set_uint_handle(&item_handle, 60017, position));
+            assert_eq!(capture(&manager).unwrap(), updated);
+            manager.with_semantic_manager_mut(|manager| {
+                assert_eq!(manager.version(), version);
+                assert!(manager.drain_diff().is_empty());
+            });
             assert_eq!(updated[0].item_count, (count != u32::MAX).then_some(count));
             assert_eq!(
                 updated[1].item_position,

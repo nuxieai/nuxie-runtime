@@ -453,6 +453,8 @@ impl SemanticManager {
             }
             return;
         }
+        let (item_count, item_position) =
+            crate::collection_semantics::SemanticCollectionData::values_for_node(&n);
         let flat = SemanticsDiffNode {
             id: n.id,
             role: n.role,
@@ -466,6 +468,8 @@ impl SemanticManager {
             state_flags: n.state_flags,
             trait_flags: n.trait_flags,
             heading_level: n.heading_level,
+            item_count,
+            item_position,
             min_x: n.bounds.min_x,
             min_y: n.bounds.min_y,
             max_x: n.bounds.max_x,
@@ -592,6 +596,8 @@ impl SemanticManager {
                 || p.label != n.label
                 || p.state_flags != n.state_flags
                 || p.trait_flags != n.trait_flags
+                || p.item_count != n.item_count
+                || p.item_position != n.item_position
             {
                 d.updated_semantic.push(n.clone());
             }
@@ -644,6 +650,8 @@ impl SemanticManager {
                     });
                 }
                 if self.dirty_content_nodes.contains(&entry.id) {
+                    let (item_count, item_position) =
+                        crate::collection_semantics::SemanticCollectionData::values_for_node(&n);
                     let label = self.derived_labels.get(&entry.id).unwrap_or(&n.label);
                     if entry.role != n.role
                         || &entry.label != label
@@ -652,6 +660,8 @@ impl SemanticManager {
                         || entry.state_flags != n.state_flags
                         || entry.trait_flags != n.trait_flags
                         || entry.heading_level != n.heading_level
+                        || entry.item_count != item_count
+                        || entry.item_position != item_position
                     {
                         entry.role = n.role;
                         entry.label = label.clone();
@@ -660,6 +670,8 @@ impl SemanticManager {
                         entry.state_flags = n.state_flags;
                         entry.trait_flags = n.trait_flags;
                         entry.heading_level = n.heading_level;
+                        entry.item_count = item_count;
+                        entry.item_position = item_position;
                         d.updated_semantic.push(entry.clone());
                     }
                 }

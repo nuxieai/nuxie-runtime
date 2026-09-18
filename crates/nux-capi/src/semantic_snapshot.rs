@@ -113,6 +113,8 @@ fn copy_nodes(nodes: &[SemanticsDiffNode]) -> Result<Vec<SemanticsDiffNode>, Nux
             state_flags: node.state_flags,
             trait_flags: node.trait_flags,
             heading_level: node.heading_level,
+            item_count: node.item_count,
+            item_position: node.item_position,
             min_x: node.min_x,
             min_y: node.min_y,
             max_x: node.max_x,
@@ -962,6 +964,35 @@ mod tests {
         );
         source[0].hint = "x".repeat(MAX_TEXT_BYTES);
         assert_eq!(copy_nodes(&source).unwrap_err(), NuxStatus::LimitExceeded);
+    }
+
+    #[test]
+    fn bounded_copy_preserves_collection_values_independently() {
+        let mut source = vec![
+            SemanticsDiffNode {
+                role: 10,
+                item_count: Some(0),
+                ..Default::default()
+            },
+            SemanticsDiffNode {
+                role: 11,
+                item_position: Some(0),
+                ..Default::default()
+            },
+            SemanticsDiffNode {
+                role: 10,
+                ..Default::default()
+            },
+        ];
+        let capture = copy_nodes(&source).unwrap();
+        source[0].item_count = Some(10);
+        source[1].item_position = Some(4);
+        assert_eq!(capture[0].item_count, Some(0));
+        assert_eq!(capture[1].item_position, Some(0));
+        assert_eq!(capture[2].item_count, None);
+        let updated = copy_nodes(&source).unwrap();
+        assert_eq!(updated[0].item_count, Some(10));
+        assert_eq!(updated[1].item_position, Some(4));
     }
 
     #[test]

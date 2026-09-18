@@ -16,6 +16,9 @@ pub struct SemanticsDiffNode {
     pub state_flags: u32,
     pub trait_flags: u32,
     pub heading_level: u32,
+    /// Nuxie-owned logical collection values, included in content diffs.
+    pub item_count: Option<u32>,
+    pub item_position: Option<u32>,
     pub min_x: f32,
     pub min_y: f32,
     pub max_x: f32,
@@ -34,6 +37,8 @@ impl Default for SemanticsDiffNode {
             state_flags: 0,
             trait_flags: 0,
             heading_level: 0,
+            item_count: None,
+            item_position: None,
             min_x: 0.0,
             min_y: 0.0,
             max_x: 0.0,

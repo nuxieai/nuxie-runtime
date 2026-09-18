@@ -1260,3 +1260,57 @@ fn video_visibility_queries_work_before_decode_and_preserve_output_on_invalid_in
         assert_eq!(nux_file_free(file), NuxStatus::Ok);
     }
 }
+
+#[test]
+fn published_video_is_visible_before_decode() {
+    let bytes = include_bytes!("fixtures/published-video.nux");
+    let (mut file, mut artboard, mut player) = (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+    unsafe {
+        assert_eq!(
+            import_video(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        let mut step_result = ptr::null_mut();
+        assert_eq!(
+            nux_player_step(
+                player,
+                &NuxPlayerStep {
+                    struct_size: size_of::<NuxPlayerStep>() as u32,
+                    correlation_id: 0,
+                    inputs: ptr::null(),
+                    input_count: 0,
+                    pointers: ptr::null(),
+                    pointer_count: 0,
+                    elapsed_seconds: 0.0
+                },
+                &mut step_result
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_step_result_free(step_result), NuxStatus::Ok);
+        let mut visible = 99;
+        assert_eq!(
+            nux_player_video_is_visible(player, 5, 0.0, 0.0, 320.0, 640.0, &mut visible),
+            NuxStatus::Ok
+        );
+        assert_eq!(visible, 1);
+        assert_eq!(
+            nux_player_video_is_visible(player, 5, 1000.0, 1000.0, 1100.0, 1100.0, &mut visible),
+            NuxStatus::Ok
+        );
+        assert_eq!(visible, 0);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
+}

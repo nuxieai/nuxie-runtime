@@ -117,6 +117,10 @@ pub fn resolve_semantic_data(component: Option<&CoreHandle>) -> ResolvedSemantic
 /// Authored visibility is checked again at action dispatch, before a pending
 /// opacity update has necessarily propagated into the rendered component tree.
 pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
+    source_ancestors_are_visible(component) && !semantic_is_fully_clipped(component)
+}
+
+fn source_ancestors_are_visible(component: &CoreHandle) -> bool {
     let mut current = Some(component.clone());
     let mut visited = std::collections::HashSet::new();
     while let Some(component) = current {
@@ -144,7 +148,7 @@ pub fn semantic_source_is_visible(component: &CoreHandle) -> bool {
         }
         current = parent;
     }
-    !semantic_is_fully_clipped(component)
+    true
 }
 
 fn semantic_is_fully_clipped(component: &CoreHandle) -> bool {
@@ -354,7 +358,7 @@ pub fn rendered_geometry_intersects_viewport(
     {
         return Err(SemanticGeometryError::InvalidPath);
     }
-    if viewport.is_empty_or_nan() || !semantic_source_is_visible(component) {
+    if viewport.is_empty_or_nan() || !source_ancestors_are_visible(component) {
         return Ok(false);
     }
     let corners = [
@@ -363,8 +367,47 @@ pub fn rendered_geometry_intersects_viewport(
         Vec2D::new(viewport.max_x, viewport.max_y),
         Vec2D::new(viewport.min_x, viewport.max_y),
     ];
-    for (owner, polygon) in semantic_geometry(component) {
-        let mut region = clip_to_rendered_ancestors(&owner, polygon.to_vec());
+    let mesh = component
+        .with_downcast::<crate::video::Video, _>(|video| video.image().mesh())
+        .flatten();
+    let geometry = if let Some(mesh) = mesh {
+        let triangles = mesh
+            .with_downcast::<crate::source::shapes::mesh::Mesh, _>(|mesh| {
+                Some((mesh.rendered_triangles()?, mesh.base.artboard_handle()?))
+            })
+            .flatten()
+            .ok_or(SemanticGeometryError::InvalidPath)?;
+        let (triangles, artboard) = triangles;
+        artboard
+            .with_downcast_mut::<Artboard, _>(|artboard| {
+                triangles
+                    .into_iter()
+                    .map(|triangle| {
+                        (
+                            component.clone(),
+                            triangle
+                                .into_iter()
+                                .map(|point| artboard.semantic_root_transform(point))
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .ok_or(SemanticGeometryError::InvalidPath)?
+    } else {
+        semantic_geometry(component)
+            .into_iter()
+            .map(|(owner, polygon)| (owner, polygon.to_vec()))
+            .collect()
+    };
+    for (owner, polygon) in geometry {
+        if !polygon
+            .iter()
+            .all(|point| point.x.is_finite() && point.y.is_finite())
+        {
+            return Err(SemanticGeometryError::InvalidPath);
+        }
+        let mut region = clip_to_rendered_ancestors(&owner, polygon);
         region.status()?;
         region.intersect_polygon(&corners);
         if !region.is_empty() {

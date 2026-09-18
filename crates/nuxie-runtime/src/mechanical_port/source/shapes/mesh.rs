@@ -79,6 +79,49 @@ impl SkinnableBehavior for Mesh {
 }
 
 impl Mesh {
+    /// The CPU positions and topology consumed by draw(), in artboard space.
+    /// Skinned positions already contain their world deformation.
+    pub(crate) fn rendered_triangles(&self) -> Option<Vec<[Vec2D; 3]>> {
+        let transform = if self.skin().is_none() {
+            self.base.parent_handle()?.with(|parent| {
+                parent
+                    .as_world_transform_component()
+                    .map(|parent| *parent.world_transform())
+            })??
+        } else {
+            Mat2D::identity()
+        };
+        let positions = self
+            .vertices
+            .iter()
+            .map(|vertex| {
+                vertex
+                    .with(|vertex| {
+                        vertex
+                            .as_vertex_behavior()
+                            .map(VertexBehavior::render_translation)
+                    })
+                    .flatten()
+                    .map(|point| transform * point)
+            })
+            .collect::<Option<Vec<_>>>()?;
+        let indices = self.index_buffer.as_ref()?;
+        if indices.0.len() % 3 != 0 {
+            return None;
+        }
+        indices
+            .0
+            .chunks_exact(3)
+            .map(|triangle| {
+                Some([
+                    *positions.get(usize::from(triangle[0]))?,
+                    *positions.get(usize::from(triangle[1]))?,
+                    *positions.get(usize::from(triangle[2]))?,
+                ])
+            })
+            .collect()
+    }
+
     pub fn clone_definition(&self) -> Self {
         let mut twin = Self::default();
         let mut base = std::mem::take(&mut twin.base.base);

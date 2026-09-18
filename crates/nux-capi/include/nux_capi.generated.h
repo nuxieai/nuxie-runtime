@@ -2222,6 +2222,23 @@ NuxStatus nux_player_video_present_metal(const struct NuxRenderer *renderer,
 #endif
 
 /**
+ * Evaluate initial presentation against the live frame and decoded poster.
+ * elapsed_seconds is monotonic time since this occurrence began waiting;
+ * timeout_seconds must be within 0..=60 and optional must be 0 or 1.
+ * Result: waiting=0, video frame=1, poster/optional blank=2, unavailable=3.
+ * This query does not mutate playback. For authored wait-mode occurrences,
+ * hosts latch the first non-waiting decision; seeks do not restart admission.
+ * After choosing wait-mode fallback, stop decoding before drawing the poster.
+ * Immediate-mode hosts present without this gate and continue decoding.
+ */
+NuxStatus nux_player_video_readiness(const struct NuxPlayer *player,
+                                     size_t component_id,
+                                     double elapsed_seconds,
+                                     double timeout_seconds,
+                                     uint32_t optional,
+                                     uint32_t *out_readiness);
+
+/**
  * Feed the current native clock to groups authored by Luau in this occurrence.
  * Use one monotonic seconds domain for all players; a null sample clears clock
  * availability. Call after commands/observations, even when no frame is uploaded.

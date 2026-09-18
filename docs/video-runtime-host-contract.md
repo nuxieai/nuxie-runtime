@@ -66,6 +66,28 @@ must queue the suspension reason, immediately drain its actions, and execute
 pause before suspending their render loop. Resuming one reason does not clear
 other reasons. Requested play intent survives temporary suspension.
 
+## First-frame readiness
+
+`nux_player_video_readiness` evaluates the current occurrence using its authored
+wait mode, a host-supplied elapsed monotonic wait, a bounded timeout (0–60
+seconds), and the host's optional-media policy. It returns waiting (0), decoded
+video frame (1), decoded poster or optional blank fallback (2), or unavailable
+required media (3). Poster availability means an actual loaded image, not merely
+an authored reference. Playback failure resolves the decision immediately;
+invalid arguments leave the output untouched.
+
+Hosts advance the scene first so bound list rows materialize, drive the decoder,
+and gate each newly mounted wait-mode occurrence before its initial presentation.
+Immediate-mode occurrences present their poster immediately and continue decoding;
+they do not use a poster result as a terminal fallback decision.
+Keep measuring elapsed time while waiting, excluding host suspension. Latch the
+first non-waiting decision per occurrence. Ordinary seeks do not restart initial
+admission. After selecting fallback, stop decoding and dispose playback through
+the normal command/action interface before drawing the poster; a late decoded
+frame must not undo the decision. Remove the latched decision when the occurrence
+unmounts. The query itself is read-only and does not advance, pause, or dispose
+playback.
+
 ## Reusing a visible video image
 
 Luau `context:video(name):image()` returns an ordinary Image snapshot of the

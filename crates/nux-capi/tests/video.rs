@@ -30,6 +30,10 @@ unsafe fn import_video(
 }
 
 fn scene() -> Vec<u8> {
+    scene_with_readiness(0)
+}
+
+fn scene_with_readiness(readiness: u32) -> Vec<u8> {
     nuxie_binary::encode_runtime_file(
         &nuxie_binary::RuntimeFile::from_fixture_records(vec![
             R {
@@ -69,6 +73,10 @@ fn scene() -> Vec<u8> {
             R {
                 type_key: 60001,
                 properties: vec![
+                    P {
+                        key: 60011,
+                        value: V::Uint(u64::from(readiness)),
+                    },
                     P {
                         key: 5,
                         value: V::Uint(0),
@@ -449,6 +457,15 @@ fn metal_video_frames_validate_renderer_domain_dimensions_and_generation() {
             NuxStatus::Ok
         );
         assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        let mut readiness = 99;
+        assert_eq!(
+            nux_player_video_readiness(player, 1, 0.0, 2.0, 0, &mut readiness),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            readiness, 3,
+            "Immediate presentation without a frame or poster is unavailable"
+        );
         let pixels = [255u8, 0, 0, 255].repeat(64 * 32);
         let mut frame = NuxVideoFrame {
             struct_size: std::mem::size_of::<NuxVideoFrame>() as u32,
@@ -469,6 +486,14 @@ fn metal_video_frames_validate_renderer_domain_dimensions_and_generation() {
         assert_eq!(
             nux_player_video_present_metal(renderer, player, 1, &frame),
             NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_video_readiness(player, 1, 0.0, 2.0, 0, &mut readiness),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            readiness, 1,
+            "A successfully imported GPU frame admits presentation"
         );
         frame.row_bytes = 1;
         assert_eq!(
@@ -1022,6 +1047,88 @@ fn nested_occurrences_have_stable_independent_playback_and_definition_addresses(
             NuxStatus::Ok
         );
         assert_eq!(after, vec![(first[0].0, 1, 1, 0), (first[1].0, 1, 1, 1)]);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
+}
+
+#[test]
+fn readiness_uses_live_failure_and_bounded_authored_wait() {
+    unsafe {
+        let bytes = scene_with_readiness(1);
+        let (mut file, mut artboard, mut player) =
+            (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        assert_eq!(
+            import_video(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        let mut state = 99;
+        for (elapsed, optional, expected) in [(0.0, 0, 0), (1.999, 0, 0), (2.0, 0, 3), (2.0, 1, 2)]
+        {
+            assert_eq!(
+                nux_player_video_readiness(player, 1, elapsed, 2.0, optional, &mut state),
+                NuxStatus::Ok
+            );
+            assert_eq!(state, expected);
+        }
+        for (elapsed, timeout, optional) in [
+            (f64::NAN, 2.0, 0),
+            (-1.0, 2.0, 0),
+            (0.0, 61.0, 0),
+            (0.0, 2.0, 2),
+        ] {
+            state = 99;
+            assert_eq!(
+                nux_player_video_readiness(player, 1, elapsed, timeout, optional, &mut state),
+                NuxStatus::InvalidArgument
+            );
+            assert_eq!(state, 99);
+        }
+        assert_eq!(
+            nux_player_video_readiness(player, 12345, 0.0, 2.0, 0, &mut state),
+            NuxStatus::NotFound
+        );
+        assert_eq!(
+            nux_player_video_readiness(player, 1, 0.0, 2.0, 0, ptr::null_mut()),
+            NuxStatus::NullArgument
+        );
+        let mut probe = Probe::default();
+        assert_eq!(
+            nux_player_video_step(
+                player,
+                1,
+                6,
+                0,
+                0.0,
+                Some(action),
+                ptr::from_mut(&mut probe).cast()
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_video_readiness(player, 1, 0.0, 2.0, 0, &mut state),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            state, 3,
+            "Failure resolves required readiness before the deadline"
+        );
+        assert_eq!(
+            nux_player_video_readiness(player, 1, 0.0, 2.0, 1, &mut state),
+            NuxStatus::Ok
+        );
+        assert_eq!(state, 2);
         assert_eq!(nux_player_free(player), NuxStatus::Ok);
         assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
         assert_eq!(nux_file_free(file), NuxStatus::Ok);

@@ -361,6 +361,71 @@ pub unsafe extern "C" fn nux_player_visit_videos(
     })
 }
 
+/// Evaluate initial presentation against the live frame and decoded poster.
+/// elapsed_seconds is monotonic time since this occurrence began waiting;
+/// timeout_seconds must be within 0..=60 and optional must be 0 or 1.
+/// Result: waiting=0, video frame=1, poster/optional blank=2, unavailable=3.
+/// This query does not mutate playback. For authored wait-mode occurrences,
+/// hosts latch the first non-waiting decision; seeks do not restart admission.
+/// After choosing wait-mode fallback, stop decoding before drawing the poster.
+/// Immediate-mode hosts present without this gate and continue decoding.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_video_readiness(
+    player: *const NuxPlayer,
+    component_id: usize,
+    elapsed_seconds: f64,
+    timeout_seconds: f64,
+    optional: u32,
+    out_readiness: *mut u32,
+) -> NuxStatus {
+    use nuxie::video::readiness::{FirstFrameGate, Readiness};
+    ffi_guard(NuxStatus::RuntimeError, || {
+        status(with_video(player, component_id, |video, _| {
+            if out_readiness.is_null() {
+                return Err(NuxStatus::NullArgument);
+            }
+            if !elapsed_seconds.is_finite() || elapsed_seconds < 0.0 || optional > 1 {
+                return Err(NuxStatus::InvalidArgument);
+            }
+            let result = video
+                .with_downcast::<Video, _>(|video| {
+                    let generation = video.playback.generation();
+                    let mut gate = FirstFrameGate::new(
+                        generation,
+                        0.0,
+                        timeout_seconds,
+                        video.playback.settings().readiness == 1,
+                        optional == 1,
+                    )
+                    .ok_or(NuxStatus::InvalidArgument)?;
+                    let failed = matches!(
+                        video.playback.state(),
+                        PlaybackState::Failed | PlaybackState::Disposed
+                    );
+                    Ok(
+                        match gate.evaluate(
+                            generation,
+                            elapsed_seconds,
+                            !failed && video.has_video_frame(),
+                            failed,
+                            video.has_poster(),
+                        ) {
+                            Readiness::Waiting => 0,
+                            Readiness::Frame => 1,
+                            Readiness::Poster => 2,
+                            Readiness::Unavailable => 3,
+                        },
+                    )
+                })
+                .ok_or(NuxStatus::NotFound)??;
+            unsafe {
+                *out_readiness = result;
+            }
+            Ok(())
+        }))
+    })
+}
+
 /// Queue one authored command: play=0, pause=1, seek=2, rate=3, volume=4,
 /// mute=5, suspend-reason=6, reenter=7, dispose=8, looping=9. Boolean values must be 0/1.
 /// Suspension reasons are hidden=1, background=2, interruption=4, resources=8.

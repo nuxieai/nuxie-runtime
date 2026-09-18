@@ -62,6 +62,7 @@ nux_player_validate_semantic_snapshot
 nux_player_video_caption
 nux_player_video_command
 nux_player_video_next_event
+nux_player_video_readiness
 nux_player_video_report_clock
 nux_player_video_set_captions
 nux_player_video_set_loop_range

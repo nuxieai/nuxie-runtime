@@ -481,12 +481,20 @@ impl Image {
         }
         let mut new_offset_x = 0.0;
         let mut new_offset_y = 0.0;
-        if let Some(render_image) = self
+        // Video admission needs fitted geometry before opening a decoder. Use
+        // its retained intrinsic dimensions until the first frame is available.
+        let image_size = self
             .render_image()
-            .filter(|_| !self.layout_width.is_nan() && !self.layout_height.is_nan())
-        {
-            let image_width = render_image.width() as f32;
-            let image_height = render_image.height() as f32;
+            .map(|image| (image.width() as f32, image.height() as f32))
+            .or(self.runtime_size);
+        if let Some((image_width, image_height)) = image_size.filter(|(width, height)| {
+            width.is_finite()
+                && *width > 0.0
+                && height.is_finite()
+                && *height > 0.0
+                && self.layout_width.is_finite()
+                && self.layout_height.is_finite()
+        }) {
             let fit = ImageFit::from(self.base.fit());
             let (new_scale_x, new_scale_y) = match fit {
                 ImageFit::Contain => {

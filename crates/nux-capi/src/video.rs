@@ -736,3 +736,146 @@ pub unsafe extern "C" fn nux_player_video_set_loop_range(
         }))
     })
 }
+
+#[cfg(test)]
+mod occurrence_tests {
+    use super::*;
+    use nuxie_runtime::source::{
+        core::CoreArena, nested_artboard::NestedArtboard,
+        viewmodel::viewmodel_instance_artboard::ViewModelInstanceArtboard,
+    };
+    use nuxie_binary::{FixtureProperty as P, FixtureRecord as R, FixtureValue as V};
+
+    #[test]
+    fn detached_nested_video_rejects_stale_commands_and_remount_gets_a_new_id() {
+        let records = vec![
+            R {
+                type_key: 23,
+                properties: vec![],
+            },
+            R {
+                type_key: 60000,
+                properties: vec![P {
+                    key: 60000,
+                    value: V::String("asset:clip".into()),
+                }],
+            },
+            R {
+                type_key: 1,
+                properties: vec![],
+            },
+            R {
+                type_key: 92,
+                properties: vec![
+                    P {
+                        key: 5,
+                        value: V::Uint(0),
+                    },
+                    P {
+                        key: 197,
+                        value: V::Uint(1),
+                    },
+                ],
+            },
+            R {
+                type_key: 1,
+                properties: vec![],
+            },
+            R {
+                type_key: 60001,
+                properties: vec![
+                    P {
+                        key: 5,
+                        value: V::Uint(0),
+                    },
+                    P {
+                        key: 206,
+                        value: V::Uint(0),
+                    },
+                ],
+            },
+        ];
+        let bytes = nuxie_binary::encode_runtime_file(
+            &nuxie_binary::RuntimeFile::from_fixture_records(records).unwrap(),
+        )
+        .unwrap();
+        unsafe extern "C" fn collect(data: *mut c_void, info: *const NuxVideoInfo) {
+            unsafe { &mut *data.cast::<Vec<usize>>() }.push(unsafe { (*info).component_id });
+        }
+        unsafe fn ids(player: *const NuxPlayer) -> Vec<usize> {
+            let mut ids = Vec::new();
+            assert_eq!(
+                unsafe {
+                    nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut ids).cast())
+                },
+                NuxStatus::Ok
+            );
+            ids
+        }
+        let (mut file, mut artboard, mut player, mut result) = (
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+            ptr::null_mut(),
+        );
+        let capabilities = NuxVideoPlaybackCapabilities {
+            playback_available: 1,
+            ..Default::default()
+        };
+        unsafe {
+            assert_eq!(
+                nux_file_import_with_video_capabilities(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &capabilities,
+                    &mut file,
+                    &mut result
+                ),
+                NuxStatus::Ok
+            );
+            nux_capi_result_free(result);
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut artboard),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+            let first = ids(player);
+            assert_eq!(first.len(), 1);
+            let host = (&*player)
+                .artboard
+                .instance
+                .borrow()
+                .object_handle(1)
+                .unwrap();
+            let arena = CoreArena::default();
+            let mut property = ViewModelInstanceArtboard::default();
+            property.set_property_value(u32::MAX);
+            let property = arena.insert(property);
+            NestedArtboard::update_artboard_occurrence(&host, Some(property.clone()));
+            assert!(ids(player).is_empty());
+            assert_eq!(
+                nux_player_video_command(player, first[0], 0, 0.0, 0),
+                NuxStatus::NotFound
+            );
+            property.with_downcast_mut::<ViewModelInstanceArtboard, _>(|property| {
+                property.set_property_value(1)
+            });
+            NestedArtboard::update_artboard_occurrence(&host, Some(property));
+            let second = ids(player);
+            assert_eq!(second.len(), 1);
+            assert_ne!(first[0], second[0]);
+            assert_eq!(
+                nux_player_video_command(player, first[0], 0, 0.0, 0),
+                NuxStatus::NotFound
+            );
+            assert_eq!(
+                nux_player_video_command(player, second[0], 0, 0.0, 0),
+                NuxStatus::Ok
+            );
+            nux_player_free(player);
+            nux_artboard_instance_free(artboard);
+            nux_file_free(file);
+        }
+    }
+}

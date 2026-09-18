@@ -175,6 +175,40 @@ mod tests {
     }
 
     #[test]
+    fn runtime_property_updates_refresh_metadata_without_changing_identity() {
+        use crate::source::generated::core_registry::CoreRegistry;
+        let arena = CoreArena::default();
+        let manager = manager();
+        let (list_handle, list) = add(&arena, &manager, None, 10, Some(10));
+        let (item_handle, item) = add(&arena, &manager, Some(list.clone()), 11, Some(4));
+        let list_id = list.borrow().id();
+        let item_id = item.borrow().id();
+        let before = capture(&manager).unwrap();
+        assert_eq!(before[0].item_count, Some(10));
+        assert_eq!(before[1].item_position, Some(4));
+        for (count, position) in [(6, 2), (1, 0), (u32::MAX, u32::MAX)] {
+            assert!(CoreRegistry::set_uint_handle(&list_handle, 60016, count));
+            assert!(CoreRegistry::set_uint_handle(&item_handle, 60017, position));
+            let updated = capture(&manager).unwrap();
+            assert_eq!(updated[0].item_count, (count != u32::MAX).then_some(count));
+            assert_eq!(
+                updated[1].item_position,
+                (position != u32::MAX).then_some(position)
+            );
+            assert_eq!(updated[1].collection_id, Some(list_id));
+            assert_eq!(list.borrow().id(), list_id);
+            assert_eq!(item.borrow().id(), item_id);
+        }
+        assert_eq!(before[0].item_count, Some(10));
+        assert_eq!(before[1].item_position, Some(4));
+        assert!(CoreRegistry::set_uint_handle(&list_handle, 60016, 0));
+        assert_eq!(
+            capture(&manager),
+            Err(SemanticCollectionError::InvalidMetadata)
+        );
+    }
+
+    #[test]
     fn upstream_label_absorption_does_not_reject_surviving_list_item() {
         assert_absorbed_owner(false, false);
     }

@@ -3125,6 +3125,8 @@ pub enum CoreField {
     SemanticDataIsToggleable,
     SemanticDataIsToggled,
     SemanticDataLabel,
+    SemanticCollectionItemCount,
+    SemanticCollectionItemPosition,
     SemanticDataRole,
     SemanticDataStateFlags,
     SemanticDataTraitFlags,
@@ -6836,6 +6838,8 @@ impl CoreRegistry {
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
+            60016 => CoreField::SemanticCollectionItemCount,
+            60017 => CoreField::SemanticCollectionItemPosition,
             118 => {
                 if let Some(color) = ColorChannelsBase::from_mut(object) {
                     color.set_color_red(value);
@@ -7524,6 +7528,8 @@ impl CoreRegistry {
     }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
+            60016 => CoreField::SemanticCollectionItemCount,
+            60017 => CoreField::SemanticCollectionItemPosition,
             118 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_red()),
             136 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_green()),
             210 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_blue()),
@@ -8267,6 +8273,7 @@ impl CoreRegistry {
 
     pub fn property_field_id(property_key: i32) -> i32 {
         match property_key {
+            60016 | 60017 => 0,
             118 => 0,
             136 => 0,
             210 => 0,
@@ -8895,6 +8902,7 @@ impl CoreRegistry {
     }
     pub fn object_supports_property(object: &dyn CoreRegistryObject, property_key: u32) -> bool {
         let owner_type = match property_key {
+            60016 | 60017 => crate::collection_semantics::SemanticCollectionData::TYPE_KEY,
             118 | 136 | 210 | 218 => return ColorChannelsBase::from(object).is_some(),
             549 => 427,
             550 => 427,

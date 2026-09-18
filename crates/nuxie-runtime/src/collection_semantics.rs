@@ -68,10 +68,37 @@ impl CoreRegistryObject for SemanticCollectionData {
         Self::subtype(key)
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
-        self.semantic.set_uint(field, value);
+        let (target, key) = match field {
+            CoreField::SemanticCollectionItemCount => (&mut self.item_count, 60016),
+            CoreField::SemanticCollectionItemPosition => (&mut self.item_position, 60017),
+            _ => return self.semantic.set_uint(field, value),
+        };
+        if *target == value {
+            return;
+        }
+        *target = value;
+        self.core_mut().notify_property_changed(key);
+        if let Some(node) = self.semantic.existing_semantic_node() {
+            let (id, manager) = {
+                let node = node.borrow();
+                (node.id(), node.manager())
+            };
+            if let Some(manager) = manager {
+                manager.with_semantic_manager_mut(|manager| {
+                    manager.mark_node_dirty(
+                        id,
+                        crate::source::semantic::semantic_dirt::SemanticDirt::CONTENT,
+                    );
+                });
+            }
+        }
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
-        self.semantic.get_uint(field)
+        match field {
+            CoreField::SemanticCollectionItemCount => self.item_count,
+            CoreField::SemanticCollectionItemPosition => self.item_position,
+            _ => self.semantic.get_uint(field),
+        }
     }
     fn set_string(&mut self, field: CoreField, value: String) {
         self.semantic.set_string(field, value);
@@ -229,6 +256,42 @@ mod tests {
                     .valid_role()
             );
         }
+    }
+
+    #[test]
+    fn collection_properties_support_runtime_binding_dispatch() {
+        use crate::source::generated::core_registry::CoreRegistry;
+        for (role, key) in [(10, 60016), (11, 60017)] {
+            let mut object = decoded(role, key, &[0]);
+            assert!(CoreRegistry::object_supports_property(
+                object.as_ref(),
+                key as u32
+            ));
+            assert_eq!(CoreRegistry::property_field_id(i32::from(key)), 0);
+            for value in [10, 4, 0, u32::MAX] {
+                CoreRegistry::set_uint(object.as_mut(), i32::from(key), value);
+                assert_eq!(
+                    CoreRegistry::get_uint(object.as_mut(), i32::from(key)),
+                    value
+                );
+                let data = object
+                    .as_registry_any()
+                    .downcast_ref::<SemanticCollectionData>()
+                    .unwrap();
+                let expected = (value != u32::MAX).then_some(value);
+                assert_eq!(
+                    if role == 10 {
+                        data.item_count()
+                    } else {
+                        data.item_position()
+                    },
+                    expected
+                );
+            }
+        }
+        let ordinary = SemanticData::default();
+        assert!(!CoreRegistry::object_supports_property(&ordinary, 60016));
+        assert!(!CoreRegistry::object_supports_property(&ordinary, 60017));
     }
 
     #[test]

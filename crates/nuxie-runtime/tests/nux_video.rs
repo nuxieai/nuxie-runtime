@@ -982,3 +982,135 @@ fn cropped_video_import_draws_its_authored_uv_mesh() {
     assert!(mesh.contains("vertexCount=4 indexCount=6"), "{mesh}");
     assert!(!mesh.contains("indices=0"), "{mesh}");
 }
+
+#[test]
+fn video_visibility_is_available_before_decoding_and_respects_viewport_and_opacity() {
+    use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+    use nuxie_runtime::video::visibility::is_visible_in;
+    for (opacity, expected) in [(1.0, true), (0.0, false)] {
+        let mut records = scene_records(false);
+        records.last_mut().unwrap().properties.extend([
+            property("Video", "y", FixtureValue::Double(80.0)),
+            property("Video", "opacity", FixtureValue::Double(opacity)),
+        ]);
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+        artboard.update_pass(true);
+        let video = artboard
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                    .cloned()
+            })
+            .unwrap();
+        let viewport = Bounds {
+            min_x: 0.0,
+            min_y: 0.0,
+            max_x: 200.0,
+            max_y: 200.0,
+        };
+        assert_eq!(is_visible_in(&video, viewport).unwrap(), expected);
+        // This video occupies x=48..112, y=64..96 with its default center origin.
+        assert!(
+            !is_visible_in(
+                &video,
+                Bounds {
+                    min_x: 120.0,
+                    ..viewport
+                }
+            )
+            .unwrap()
+        );
+        assert_eq!(
+            is_visible_in(
+                &video,
+                Bounds {
+                    min_x: 100.0,
+                    ..viewport
+                }
+            )
+            .unwrap(),
+            expected
+        );
+        assert!(
+            is_visible_in(
+                &video,
+                Bounds {
+                    max_x: f32::NAN,
+                    ..viewport
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            !is_visible_in(
+                &video,
+                Bounds {
+                    max_x: 0.0,
+                    ..viewport
+                }
+            )
+            .unwrap()
+        );
+    }
+}
+
+#[test]
+fn video_visibility_respects_artboard_clipping_before_decoding() {
+    use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+    use nuxie_runtime::video::visibility::is_visible_in;
+    for clip in [false, true] {
+        let mut records = scene_records(false);
+        records[2]
+            .properties
+            .push(property("Artboard", "clip", FixtureValue::Bool(clip)));
+        let x = property("Video", "x", FixtureValue::Double(300.0));
+        let video = records.last_mut().unwrap();
+        video.properties.retain(|p| p.key != x.key);
+        video
+            .properties
+            .extend([x, property("Video", "y", FixtureValue::Double(80.0))]);
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+        artboard.update_pass(true);
+        let video = artboard
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                    .cloned()
+            })
+            .unwrap();
+        // The wider host viewport includes the video, but the authored clip does not.
+        let viewport = Bounds {
+            min_x: 0.0,
+            min_y: 0.0,
+            max_x: 400.0,
+            max_y: 200.0,
+        };
+        assert_eq!(is_visible_in(&video, viewport).unwrap(), !clip);
+    }
+}

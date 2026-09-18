@@ -2213,6 +2213,20 @@ NuxStatus nux_player_video_command(const struct NuxPlayer *player,
                                    uint32_t reason);
 
 /**
+ * Query decoder demand after advancing the scene. Viewport coordinates are in
+ * root-artboard space (undo the host's fit transform first). Includes authored
+ * visibility, transforms, ancestor clipping and viewport intersection, even
+ * before decoding a frame. Returns 0 or 1; output is unchanged on error.
+ */
+NuxStatus nux_player_video_is_visible(const struct NuxPlayer *player,
+                                      size_t component_id,
+                                      float min_x,
+                                      float min_y,
+                                      float max_x,
+                                      float max_y,
+                                      uint32_t *out_visible);
+
+/**
  * Return NotFound when no event is pending. Output is written only on Ok.
  */
 NuxStatus nux_player_video_next_event(const struct NuxPlayer *player,

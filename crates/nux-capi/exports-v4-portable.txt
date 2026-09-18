@@ -61,6 +61,7 @@ nux_player_text_run_geometry
 nux_player_validate_semantic_snapshot
 nux_player_video_caption
 nux_player_video_command
+nux_player_video_is_visible
 nux_player_video_next_event
 nux_player_video_readiness
 nux_player_video_reclaim_decoder

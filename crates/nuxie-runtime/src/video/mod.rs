@@ -6,6 +6,7 @@ pub mod playback;
 pub mod readiness;
 pub mod resources;
 pub mod sync;
+pub mod visibility;
 pub use objects::{Video, VideoAsset};
 
 pub(crate) fn make_core(type_key: i32) -> Option<Box<dyn crate::source::core::CoreObject>> {

@@ -936,20 +936,47 @@ fn nested_occurrences_have_stable_independent_playback_and_definition_addresses(
         },
         R {
             type_key: 60000,
-            properties: vec![P {
-                key: 60000,
-                value: V::String("assets/shared.mp4".into()),
-            }],
+            properties: vec![
+                P {
+                    key: 60000,
+                    value: V::String("assets/shared.mp4".into()),
+                },
+                P {
+                    key: 208,
+                    value: V::Double(64.0),
+                },
+                P {
+                    key: 207,
+                    value: V::Double(32.0),
+                },
+            ],
         },
         R {
             type_key: 1,
-            properties: vec![],
+            properties: vec![
+                P {
+                    key: 7,
+                    value: V::Double(200.0),
+                },
+                P {
+                    key: 8,
+                    value: V::Double(200.0),
+                },
+            ],
         },
     ];
-    for _ in 0..2 {
+    for x in [40.0, 300.0] {
         records.push(R {
             type_key: 92,
             properties: vec![
+                P {
+                    key: 13,
+                    value: V::Double(x),
+                },
+                P {
+                    key: 14,
+                    value: V::Double(40.0),
+                },
                 P {
                     key: 5,
                     value: V::Uint(0),
@@ -963,7 +990,16 @@ fn nested_occurrences_have_stable_independent_playback_and_definition_addresses(
     }
     records.push(R {
         type_key: 1,
-        properties: vec![],
+        properties: vec![
+            P {
+                key: 7,
+                value: V::Double(100.0),
+            },
+            P {
+                key: 8,
+                value: V::Double(100.0),
+            },
+        ],
     });
     records.push(R {
         type_key: 60001,
@@ -1020,6 +1056,27 @@ fn nested_occurrences_have_stable_independent_playback_and_definition_addresses(
         );
         assert_eq!(first.len(), 2);
         assert_ne!(first[0].0, first[1].0);
+        let mut step_result = ptr::null_mut();
+        assert_eq!(
+            nux_player_step(player, &NuxPlayerStep::default(), &mut step_result),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_step_result_free(step_result), NuxStatus::Ok);
+        let mut visibility = Vec::new();
+        for video in &first {
+            let mut visible = 99;
+            assert_eq!(
+                nux_player_video_is_visible(player, video.0, 0.0, 0.0, 200.0, 200.0, &mut visible),
+                NuxStatus::Ok
+            );
+            visibility.push(visible);
+        }
+        visibility.sort();
+        assert_eq!(
+            visibility,
+            [0, 1],
+            "Nested instances use their mounted transforms before decoding"
+        );
         assert!(
             first
                 .iter()

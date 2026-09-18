@@ -1204,3 +1204,55 @@ fn video_visibility_intersects_the_transformed_polygon_not_its_bounding_box() {
         .unwrap()
     );
 }
+
+#[test]
+fn video_layout_uses_intrinsic_dimensions_before_decode() {
+    use nuxie_runtime::source::{
+        layout::layout_enums::{LayoutDirection, LayoutScaleType},
+        math::vec2d::Vec2D,
+    };
+    let bytes = scene(false);
+    let mut factory = PersistentFactory::new(RecordingFactory::new());
+    let file = File::import(
+        &bytes,
+        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+    artboard.update_pass(true);
+    let video = artboard
+        .with_artboard(|a| {
+            a.objects()
+                .iter()
+                .flatten()
+                .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                .cloned()
+        })
+        .unwrap();
+    video.with_mut(|object| {
+        object
+            .as_intrinsically_sizeable_mut()
+            .unwrap()
+            .control_size(
+                Vec2D::new(128.0, 64.0),
+                LayoutScaleType::Fixed,
+                LayoutScaleType::Fixed,
+                LayoutDirection::Ltr,
+            );
+    });
+    artboard.update_pass(true);
+    video.with(|object| {
+        let world = object.as_transform_component().unwrap().world_transform();
+        assert_eq!(
+            world[0], 2.0,
+            "128-wide layout scales the undecoded 64-wide asset"
+        );
+        assert_eq!(
+            world[3], 2.0,
+            "64-high layout scales the undecoded 32-high asset"
+        );
+    });
+}

@@ -347,6 +347,19 @@ pub fn rendered_geometry_intersects_viewport(
     component: &CoreHandle,
     viewport: Bounds,
 ) -> Result<bool, SemanticGeometryError> {
+    rendered_geometry_intersects_host_clip(component, viewport, None)
+}
+
+/// Intersect scene geometry with an additional host-owned clip in root space.
+/// The host must provide the same path and fill rule used while drawing.
+pub fn rendered_geometry_intersects_host_clip(
+    component: &CoreHandle,
+    viewport: Bounds,
+    host_clip: Option<(
+        &crate::source::math::raw_path::RawPath,
+        nuxie_render_api::FillRule,
+    )>,
+) -> Result<bool, SemanticGeometryError> {
     if ![
         viewport.min_x,
         viewport.min_y,
@@ -410,6 +423,10 @@ pub fn rendered_geometry_intersects_viewport(
         let mut region = clip_to_rendered_ancestors(&owner, polygon);
         region.status()?;
         region.intersect_polygon(&corners);
+        if let Some((path, fill_rule)) = host_clip {
+            region.intersect_path(path, fill_rule);
+            region.status()?;
+        }
         if !region.is_empty() {
             return Ok(true);
         }

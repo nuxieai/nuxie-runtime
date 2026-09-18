@@ -1256,3 +1256,82 @@ fn video_layout_uses_intrinsic_dimensions_before_decode() {
         );
     });
 }
+
+#[test]
+fn video_visibility_uses_curved_host_clip_before_decoding() {
+    use nuxie_runtime::source::{math::raw_path::RawPath, semantic::semantic_snapshot::Bounds};
+    use nuxie_runtime::video::visibility::{is_visible_in, is_visible_in_host_clip};
+    let viewport = Bounds {
+        min_x: 0.0,
+        min_y: 0.0,
+        max_x: 200.0,
+        max_y: 200.0,
+    };
+    // A circular 200x200 bezel: both candidates intersect its bounding box,
+    // but only the second reaches the curved visible region.
+    let mut clip = RawPath::default();
+    let curve = 100.0 * 0.552_284_8;
+    clip.move_to(100.0, 0.0);
+    clip.cubic_to(100.0 + curve, 0.0, 200.0, 100.0 - curve, 200.0, 100.0);
+    clip.cubic_to(200.0, 100.0 + curve, 100.0 + curve, 200.0, 100.0, 200.0);
+    clip.cubic_to(100.0 - curve, 200.0, 0.0, 100.0 + curve, 0.0, 100.0);
+    clip.cubic_to(0.0, 100.0 - curve, 100.0 - curve, 0.0, 100.0, 0.0);
+    clip.close();
+    for (x, expected) in [(5.0, false), (10.0, true)] {
+        let mut records = scene_records(false);
+        let x_key = property("Video", "x", FixtureValue::Double(x)).key;
+        records
+            .last_mut()
+            .unwrap()
+            .properties
+            .retain(|property| property.key != x_key);
+        records.last_mut().unwrap().properties.extend([
+            property("Video", "x", FixtureValue::Double(x)),
+            property("Video", "y", FixtureValue::Double(5.0)),
+        ]);
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+        let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+        artboard.update_pass(true);
+        let video = artboard
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                    .cloned()
+            })
+            .unwrap();
+        assert!(is_visible_in(&video, viewport).unwrap());
+        assert_eq!(
+            is_visible_in_host_clip(
+                &video,
+                viewport,
+                Some((&clip, nuxie_render_api::FillRule::NonZero))
+            )
+            .unwrap(),
+            expected
+        );
+        let mut invalid = RawPath::default();
+        invalid.move_to(f32::NAN, 0.0);
+        invalid.line_to(200.0, 200.0);
+        invalid.close();
+        assert!(
+            is_visible_in_host_clip(
+                &video,
+                viewport,
+                Some((&invalid, nuxie_render_api::FillRule::NonZero))
+            )
+            .is_err()
+        );
+    }
+}

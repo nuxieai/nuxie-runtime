@@ -47,15 +47,15 @@ impl DataConverterStringPad {
         let mut input_value = input
             .as_any()
             .downcast_ref::<DataValueString>()
-            .map_or_else(String::new, |value| value.value().to_owned());
+            .map_or_else(Vec::new, |value| value.value().as_bytes().to_vec());
         if input.as_any().is::<DataValueString>() {
             let mut input_length = input_value.len();
             let length = self.base.length() as usize;
             if input_length < length && !self.base.text().is_empty() {
-                let pad_pattern = self.base.text();
+                let pad_pattern = self.base.text().as_bytes();
                 let pad_length = pad_pattern.len();
                 input_value.reserve(length);
-                let mut pad_text = String::new();
+                let mut pad_text = Vec::new();
                 let pad_text_size = length - input_length;
                 pad_text.reserve(pad_text_size);
                 while input_length < length {
@@ -64,17 +64,21 @@ impl DataConverterStringPad {
                     } else {
                         pad_text_size
                     };
-                    pad_text.push_str(&pad_pattern[..max_length]);
+                    pad_text.extend_from_slice(&pad_pattern[..max_length]);
                     input_length += max_length;
                 }
                 if self.base.pad_type() == 1 {
-                    input_value.push_str(&pad_text[..pad_text_size]);
+                    input_value.extend_from_slice(&pad_text[..pad_text_size]);
                 } else {
-                    input_value.insert_str(0, &pad_text[..pad_text_size]);
+                    input_value.splice(0..0, pad_text[..pad_text_size].iter().copied());
                 }
             }
         }
-        self.output.set_value(input_value);
+        // Upstream std::string padding counts bytes and may cut a UTF-8 sequence.
+        // Preserve its byte operations, then use the runtime's text-boundary
+        // replacement policy once on the final output. Valid Unicode is unchanged.
+        self.output
+            .set_value(String::from_utf8_lossy(&input_value).into_owned());
         &self.output
     }
     pub fn length_changed(&mut self) {
@@ -111,3 +115,40 @@ impl DataConverterStringPadBaseCallbacks for DataConverterStringPad {
 }
 
 crate::impl_data_converter_capability_forward!(DataConverterStringPad, base.base);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn padding_preserves_valid_unicode_and_replaces_only_incomplete_output() {
+        for (input, length, pattern, prefix, suffix) in [
+            ("a", 2, "é", "�a", "a�"),
+            ("a", 3, "é", "éa", "aé"),
+            ("a", 4, "é", "é�a", "aé�"),
+            ("a", 5, "é", "ééa", "aéé"),
+            ("a", 3, "🙂", "�a", "a�"),
+            ("a", 5, "🙂", "🙂a", "a🙂"),
+            ("é", 4, "0", "00é", "é00"),
+            ("é", 1, "0", "é", "é"),
+            ("a", 5, "", "a", "a"),
+            ("a", 4, "xy", "xyxa", "axyx"),
+        ] {
+            for (side, expected) in [(0, prefix), (1, suffix)] {
+                let mut converter = DataConverterStringPad::new(length, side, pattern.into());
+                let input = DataValueString::new(input.into());
+                for _ in 0..2 {
+                    let output = converter.convert(&input);
+                    assert_eq!(
+                        output
+                            .as_any()
+                            .downcast_ref::<DataValueString>()
+                            .unwrap()
+                            .value(),
+                        expected
+                    );
+                }
+            }
+        }
+    }
+}

@@ -901,86 +901,114 @@ fn loop_fields_roundtrip_and_invalid_authored_range_rejects_import() {
 
 #[test]
 fn cropped_video_import_draws_its_authored_uv_mesh() {
-    let mut records = scene_records(false);
-    records.push(record(
-        "Mesh",
-        vec![
-            property("Mesh", "parentId", FixtureValue::Uint(1)),
-            property(
-                "Mesh",
-                "triangleIndexBytes",
-                FixtureValue::Bytes(vec![0, 1, 2, 0, 2, 3]),
-            ),
-        ],
-    ));
-    for (x, y, u, v) in [
-        (0.0, 0.0, 0.5, 0.0),
-        (1.0, 0.0, 1.0, 0.0),
-        (1.0, 1.0, 1.0, 1.0),
-        (0.0, 1.0, 0.5, 1.0),
-    ] {
+    for mesh_offset in [0.0, 100.0] {
+        let mut records = scene_records(false);
         records.push(record(
-            "MeshVertex",
+            "Mesh",
             vec![
-                property("MeshVertex", "parentId", FixtureValue::Uint(2)),
-                property("MeshVertex", "x", FixtureValue::Double(x)),
-                property("MeshVertex", "y", FixtureValue::Double(y)),
-                property("MeshVertex", "u", FixtureValue::Double(u)),
-                property("MeshVertex", "v", FixtureValue::Double(v)),
+                property("Mesh", "parentId", FixtureValue::Uint(1)),
+                property(
+                    "Mesh",
+                    "triangleIndexBytes",
+                    FixtureValue::Bytes(vec![0, 1, 2, 0, 2, 3]),
+                ),
             ],
         ));
-    }
-    let bytes = encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
-    let mut factory = PersistentFactory::new(RecordingFactory::new());
-    let file = File::import(
-        &bytes,
-        RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
-        None,
-        None,
-        None,
-    )
-    .unwrap();
-    let artboard = file.with_file(|f| f.artboard_default()).unwrap();
-    artboard.update_pass(true);
-    let video = artboard
-        .with_artboard(|a| {
-            a.objects()
-                .iter()
-                .flatten()
-                .find(|o| o.core_type() == Some(Video::TYPE_KEY))
-                .cloned()
-        })
+        for (x, y, u, v) in [
+            (0.0, 0.0, 0.5, 0.0),
+            (1.0, 0.0, 1.0, 0.0),
+            (1.0, 1.0, 1.0, 1.0),
+            (0.0, 1.0, 0.5, 1.0),
+        ] {
+            records.push(record(
+                "MeshVertex",
+                vec![
+                    property("MeshVertex", "parentId", FixtureValue::Uint(2)),
+                    property("MeshVertex", "x", FixtureValue::Double(x + mesh_offset)),
+                    property("MeshVertex", "y", FixtureValue::Double(y)),
+                    property("MeshVertex", "u", FixtureValue::Double(u)),
+                    property("MeshVertex", "v", FixtureValue::Double(v)),
+                ],
+            ));
+        }
+        let bytes =
+            encode_runtime_file(&RuntimeFile::from_fixture_records(records).unwrap()).unwrap();
+        let mut factory = PersistentFactory::new(RecordingFactory::new());
+        let file = File::import(
+            &bytes,
+            RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
+            None,
+            None,
+            None,
+        )
         .unwrap();
-    let mut png = Vec::new();
-    {
-        let mut encoder = png::Encoder::new(&mut png, 64, 32);
-        encoder.set_color(png::ColorType::Rgba);
-        encoder.set_depth(png::BitDepth::Eight);
-        encoder
-            .write_header()
-            .unwrap()
-            .write_image_data(&vec![255; 64 * 32 * 4])
+        let artboard = file.with_file(|f| f.artboard_default()).unwrap();
+        artboard.update_pass(true);
+        let video = artboard
+            .with_artboard(|a| {
+                a.objects()
+                    .iter()
+                    .flatten()
+                    .find(|o| o.core_type() == Some(Video::TYPE_KEY))
+                    .cloned()
+            })
             .unwrap();
+        use nuxie_runtime::source::semantic::semantic_snapshot::Bounds;
+        use nuxie_runtime::video::visibility::is_visible_in;
+        let viewport = Bounds {
+            min_x: 80.2 + mesh_offset,
+            min_y: 0.2,
+            max_x: 80.8 + mesh_offset,
+            max_y: 0.8,
+        };
+        assert!(
+            is_visible_in(&video, viewport).unwrap(),
+            "Authored mesh is visible before decoding"
+        );
+        assert!(
+            !is_visible_in(
+                &video,
+                Bounds {
+                    min_x: 90.0,
+                    min_y: 0.2,
+                    max_x: 91.0,
+                    max_y: 0.8
+                }
+            )
+            .unwrap(),
+            "Nominal video rectangle must not create decoder demand outside mesh triangles"
+        );
+        let mut png = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png, 64, 32);
+            encoder.set_color(png::ColorType::Rgba);
+            encoder.set_depth(png::BitDepth::Eight);
+            encoder
+                .write_header()
+                .unwrap()
+                .write_image_data(&vec![255; 64 * 32 * 4])
+                .unwrap();
+        }
+        let image = Rc::from(factory.decode_image(&png).unwrap());
+        video
+            .with_downcast_mut::<Video, _>(|v| assert!(v.present(0, image, 0.0)))
+            .unwrap();
+        artboard.update_pass(true);
+        let mut renderer = factory.borrow().make_renderer();
+        artboard.draw(&mut renderer);
+        let stream = factory.borrow().canonical_recording().stream().to_string();
+        let mesh = stream
+            .lines()
+            .find(|line| line.starts_with("drawImageMesh "))
+            .unwrap_or_else(|| panic!("cropped video must draw a mesh: {stream}"));
+        // Independent authored oracle: right-half UVs and two complete triangles.
+        assert!(
+            mesh.contains("data=0000003f000000000000803f000000000000803f0000803f0000003f0000803f}"),
+            "{mesh}"
+        );
+        assert!(mesh.contains("vertexCount=4 indexCount=6"), "{mesh}");
+        assert!(!mesh.contains("indices=0"), "{mesh}");
     }
-    let image = Rc::from(factory.decode_image(&png).unwrap());
-    video
-        .with_downcast_mut::<Video, _>(|v| assert!(v.present(0, image, 0.0)))
-        .unwrap();
-    artboard.update_pass(true);
-    let mut renderer = factory.borrow().make_renderer();
-    artboard.draw(&mut renderer);
-    let stream = factory.borrow().canonical_recording().stream().to_string();
-    let mesh = stream
-        .lines()
-        .find(|line| line.starts_with("drawImageMesh "))
-        .unwrap_or_else(|| panic!("cropped video must draw a mesh: {stream}"));
-    // Independent authored oracle: right-half UVs and two complete triangles.
-    assert!(
-        mesh.contains("data=0000003f000000000000803f000000000000803f0000803f0000003f0000803f}"),
-        "{mesh}"
-    );
-    assert!(mesh.contains("vertexCount=4 indexCount=6"), "{mesh}");
-    assert!(!mesh.contains("indices=0"), "{mesh}");
 }
 
 #[test]

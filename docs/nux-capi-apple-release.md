@@ -81,12 +81,14 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
-The v0.10.4 candidate appends the authored component name, decoder priority,
-and readiness policy to `NuxVideoInfo`. Hosts copy borrowed names during the
-visitor callback and check `struct_size` before accessing the new tail. Existing
-field offsets and ABI v4 are preserved. Names are scoped to a player artboard
-and may repeat; a named control must reject ambiguous matches. Separate videos
-sharing an asset keep independent playback intent.
+The v0.10.5 candidate enumerates root, nested, and materialized list videos.
+`NuxVideoInfo` appends `source_artboard_index` and `source_component_id` while
+preserving existing field offsets and ABI v4. Hosts check `struct_size` before
+reading the tail. The source coordinates identify the binary definition;
+`component_id` addresses a live occurrence in this player. Repeated definitions
+have independent playback owners. Reordering a list preserves surviving IDs;
+removed IDs reject commands, and newly mounted instances receive new IDs.
+The visitor copies no encoded video bytes and retains no removed scene objects.
 
 The inherited v0.10.3 behavior preserves deferred font loading during script-inert catalog
 inspection with an empty import configuration. Required-font validation applies

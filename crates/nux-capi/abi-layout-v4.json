@@ -1407,7 +1407,7 @@
     },
     {
       "name": "NuxVideoInfo",
-      "size": 144,
+      "size": 160,
       "alignment": 8,
       "fields": [
         {
@@ -1477,6 +1477,14 @@
         {
           "name": "readiness",
           "offset": 140
+        },
+        {
+          "name": "source_artboard_index",
+          "offset": 144
+        },
+        {
+          "name": "source_component_id",
+          "offset": 152
         }
       ]
     },

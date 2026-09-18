@@ -901,3 +901,129 @@ fn legacy_imports_reject_video_and_capability_records_are_validated() {
         }
     }
 }
+
+#[test]
+fn nested_occurrences_have_stable_independent_playback_and_definition_addresses() {
+    let mut records = vec![
+        R {
+            type_key: 23,
+            properties: vec![],
+        },
+        R {
+            type_key: 60000,
+            properties: vec![P {
+                key: 60000,
+                value: V::String("assets/shared.mp4".into()),
+            }],
+        },
+        R {
+            type_key: 1,
+            properties: vec![],
+        },
+    ];
+    for _ in 0..2 {
+        records.push(R {
+            type_key: 92,
+            properties: vec![
+                P {
+                    key: 5,
+                    value: V::Uint(0),
+                },
+                P {
+                    key: 197,
+                    value: V::Uint(1),
+                },
+            ],
+        });
+    }
+    records.push(R {
+        type_key: 1,
+        properties: vec![],
+    });
+    records.push(R {
+        type_key: 60001,
+        properties: vec![
+            P {
+                key: 5,
+                value: V::Uint(0),
+            },
+            P {
+                key: 206,
+                value: V::Uint(0),
+            },
+            P {
+                key: 60003,
+                value: V::Uint(1),
+            },
+        ],
+    });
+    let bytes = nuxie_binary::encode_runtime_file(
+        &nuxie_binary::RuntimeFile::from_fixture_records(records).unwrap(),
+    )
+    .unwrap();
+    type Snapshot = (usize, usize, usize, u32);
+    unsafe extern "C" fn collect(data: *mut c_void, info: *const NuxVideoInfo) {
+        let info = unsafe { &*info };
+        unsafe { &mut *data.cast::<Vec<Snapshot>>() }.push((
+            info.component_id,
+            info.source_artboard_index,
+            info.source_component_id,
+            info.wants_play,
+        ));
+    }
+    unsafe extern "C" fn discard(_: *mut c_void, _: *const NuxVideoAction) {}
+    let (mut file, mut artboard, mut player) = (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+    unsafe {
+        assert_eq!(
+            import_video(
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxRenderCallbacks::default(),
+                &mut file
+            ),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        let mut first: Vec<Snapshot> = Vec::new();
+        assert_eq!(
+            nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut first).cast()),
+            NuxStatus::Ok
+        );
+        assert_eq!(first.len(), 2);
+        assert_ne!(first[0].0, first[1].0);
+        assert!(
+            first
+                .iter()
+                .all(|video| (video.1, video.2, video.3) == (1, 1, 1))
+        );
+        assert_eq!(
+            nux_player_video_command(player, first[0].0, 1, 0.0, 0),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_player_video_step(
+                player,
+                first[0].0,
+                0,
+                0,
+                0.0,
+                Some(discard),
+                ptr::null_mut()
+            ),
+            NuxStatus::Ok
+        );
+        let mut after: Vec<Snapshot> = Vec::new();
+        assert_eq!(
+            nux_player_visit_videos(player, Some(collect), ptr::from_mut(&mut after).cast()),
+            NuxStatus::Ok
+        );
+        assert_eq!(after, vec![(first[0].0, 1, 1, 0), (first[1].0, 1, 1, 1)]);
+        assert_eq!(nux_player_free(player), NuxStatus::Ok);
+        assert_eq!(nux_artboard_instance_free(artboard), NuxStatus::Ok);
+        assert_eq!(nux_file_free(file), NuxStatus::Ok);
+    }
+}

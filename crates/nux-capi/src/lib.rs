@@ -767,6 +767,7 @@ impl Drop for ScriptEffectTransaction {
 /// Product-neutral selected player. This surface establishes selection,
 /// ownership, and metadata; playback operations are exposed separately.
 pub struct NuxPlayer {
+    video_occurrences: RefCell<video::VideoOccurrences>,
     instance: RefCell<PlayerInstance>,
     observed_view_model_binding_revision: Cell<u64>,
     artboard: Rc<ArtboardOccurrence>,
@@ -3034,6 +3035,7 @@ fn publish_player(
 ) -> NuxStatus {
     unsafe {
         let handle = Box::into_raw(Box::new(NuxPlayer {
+            video_occurrences: RefCell::new(video::VideoOccurrences::default()),
             instance: RefCell::new(player),
             // State-machine construction inherits the artboard's current context.
             observed_view_model_binding_revision: Cell::new(

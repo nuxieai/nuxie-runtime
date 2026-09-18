@@ -38,7 +38,16 @@ proof that the device can play the scene.
 ## Independent playback
 
 Enumerate `nux_player_visit_videos` and copy any source strings/embedded bytes
-needed beyond the callback. Each occurrence gets an independent decoder unless
+needed beyond the callback. Enumeration includes root, nested, and materialized
+list artboards, bounded to 65,536 visited scene objects/artboards. Unmaterialized
+list items do not consume a decoder. Root `component_id` values retain their
+component slots; nested values are opaque player-local IDs that are never
+reused. Reconcile decoder owners by this ID and release owners absent from the
+next enumeration. Removed occurrences reject commands and frame submission.
+`source_artboard_index` and `source_component_id` identify the imported definition
+for matching signed authored targets; they are not playback IDs. Multiple live
+occurrences can share this definition address without sharing playback intent.
+Each occurrence gets an independent decoder unless
 it is denied by the host's resource allocator. Shared encoded bytes do not
 share playback state. Apply commands through `nux_player_video_command` and
 `nux_player_video_set_loop_range`.

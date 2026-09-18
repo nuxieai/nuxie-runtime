@@ -72,7 +72,12 @@ Before release, replace the candidate sentinel in
 publisher fails closed while those values are unfrozen.
 
 The committed v0.4.0 baseline records its tag, exact source revision, original
-size-report SHA-256, and every measurement. Release maxima use independent 1 MiB rounding. Most remain frozen from the
+size-report SHA-256, and every measurement. Review maxima independently against
+measured artifacts, preserving unaffected limits. The original limits use 1 MiB
+rounding; the v0.10.8 visibility addition uses a narrower 128 KiB increase for
+the Intel iOS simulator slice. See its
+[size review](evidence/apple-video-visibility-size-review.md).
+Most remain frozen from the
 qualified v0.6.0 authored-data build. The v0.9.9 semantic API cut updates only
 the iOS arm64 device/simulator slice ceilings and iOS-only expanded ceiling;
 compressed archives, other slices and representative linked ceilings remain

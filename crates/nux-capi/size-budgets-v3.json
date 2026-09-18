@@ -14,7 +14,7 @@
         "aarch64-apple-ios": 49283072,
         "aarch64-apple-ios-sim": 49283072,
         "x86_64-apple-darwin": 49283072,
-        "x86_64-apple-ios": 48234496
+        "x86_64-apple-ios": 48365568
       }
     },
     "ios-only": {
@@ -27,7 +27,7 @@
       "sliceBytes": {
         "aarch64-apple-ios": 49283072,
         "aarch64-apple-ios-sim": 49283072,
-        "x86_64-apple-ios": 48234496
+        "x86_64-apple-ios": 48365568
       }
     }
   }

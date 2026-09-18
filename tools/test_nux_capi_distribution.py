@@ -259,7 +259,7 @@ class DistributionToolTests(unittest.TestCase):
                     "aarch64-apple-ios": 47 * mebibyte,
                     "aarch64-apple-ios-sim": 47 * mebibyte,
                     "x86_64-apple-darwin": 47 * mebibyte,
-                    "x86_64-apple-ios": 46 * mebibyte,
+                    "x86_64-apple-ios": 46 * mebibyte + 128 * 1024,
                 },
             },
             "ios-only": {
@@ -272,7 +272,7 @@ class DistributionToolTests(unittest.TestCase):
                 "sliceBytes": {
                     "aarch64-apple-ios": 47 * mebibyte,
                     "aarch64-apple-ios-sim": 47 * mebibyte,
-                    "x86_64-apple-ios": 46 * mebibyte,
+                    "x86_64-apple-ios": 46 * mebibyte + 128 * 1024,
                 },
             },
         }

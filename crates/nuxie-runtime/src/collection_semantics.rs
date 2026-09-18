@@ -1,4 +1,5 @@
 //! Logical collection metadata on the existing upstream semantic owner.
+mod capture;
 use crate::source::{
     component::Component,
     component_dirt::ComponentDirt,
@@ -14,6 +15,9 @@ use crate::source::{
     importers::import_stack::ImportStack,
     semantic::{semantic_data::SemanticData, semantic_role::SemanticRole},
     status_code::StatusCode,
+};
+pub use capture::{
+    SemanticCollectionError, SemanticCollectionMetadata, capture_semantic_collections,
 };
 use std::any::Any;
 

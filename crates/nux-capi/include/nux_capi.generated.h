@@ -1414,6 +1414,22 @@ typedef struct NuxSemanticNodeView {
    * Bit 0: tap; bit 1: increase; bit 2: decrease. Zero for ineligible nodes.
    */
   uint32_t actions;
+  /**
+   * Known-field bits: owner=1, count=2, position=4. Absent fields are unknown.
+   */
+  uint32_t collection_flags;
+  /**
+   * Occurrence-local list node ID; valid only with owner bit set.
+   */
+  uint32_t collection_id;
+  /**
+   * Logical total, including offscreen items; valid only with count bit set.
+   */
+  uint32_t item_count;
+  /**
+   * Zero-based logical position; valid only with position bit set.
+   */
+  uint32_t item_position;
 } NuxSemanticNodeView;
 
 /**

@@ -8,6 +8,9 @@
 //! Host authorization and allocation limits are explicit import boundaries.
 //! Applications and bindings must migrate to this API separately.
 
+pub use nuxie_runtime::collection_semantics::{
+    SemanticCollectionError, SemanticCollectionMetadata, capture_semantic_collections,
+};
 pub use nuxie_runtime::source as runtime;
 pub use nuxie_runtime::video;
 // Renderer DTOs have their own namespace; the primary math names below are

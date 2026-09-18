@@ -9,6 +9,7 @@ use nuxie::runtime::semantic::{
     semantic_snapshot::SemanticsDiffNode,
     semantic_state::SemanticState,
 };
+use nuxie::{SemanticCollectionError, SemanticCollectionMetadata, capture_semantic_collections};
 
 const MAX_NODES: usize = 16_384;
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
@@ -31,6 +32,7 @@ pub struct NuxSemanticSnapshot {
     tree_version: u64,
     nodes: Vec<SemanticsDiffNode>,
     actions: Vec<u32>,
+    collections: Vec<SemanticCollectionMetadata>,
     modal_scope: u32,
     modal_node_id: u32,
 }
@@ -73,6 +75,14 @@ pub struct NuxSemanticNodeView {
     pub hint: NuxStringView,
     /// Bit 0: tap; bit 1: increase; bit 2: decrease. Zero for ineligible nodes.
     pub actions: u32,
+    /// Known-field bits: owner=1, count=2, position=4. Absent fields are unknown.
+    pub collection_flags: u32,
+    /// Occurrence-local list node ID; valid only with owner bit set.
+    pub collection_id: u32,
+    /// Logical total, including offscreen items; valid only with count bit set.
+    pub item_count: u32,
+    /// Zero-based logical position; valid only with position bit set.
+    pub item_position: u32,
 }
 
 pub const NUX_SEMANTIC_SNAPSHOT_INFO_MIN_SIZE: usize =
@@ -193,9 +203,20 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
                 SemanticModalScope::Active(node) => (NUX_SEMANTIC_MODAL_ACTIVE, node.borrow().id()),
                 SemanticModalScope::Unresolved => (NUX_SEMANTIC_MODAL_UNRESOLVED, 0),
             };
-            Ok::<_, NuxStatus>((nodes, manager.version(), modal_scope, modal_node_id))
+            let collections =
+                capture_semantic_collections(manager, &nodes).map_err(|error| match error {
+                    SemanticCollectionError::InvalidMetadata => NuxStatus::InvalidArgument,
+                    SemanticCollectionError::LimitExceeded => NuxStatus::LimitExceeded,
+                })?;
+            Ok::<_, NuxStatus>((
+                nodes,
+                manager.version(),
+                modal_scope,
+                modal_node_id,
+                collections,
+            ))
         });
-        let (nodes, tree_version, modal_scope, modal_node_id) = match captured {
+        let (nodes, tree_version, modal_scope, modal_node_id, collections) = match captured {
             Ok(captured) => captured,
             Err(status) => return status,
         };
@@ -224,6 +245,7 @@ pub unsafe extern "C" fn nux_player_semantic_snapshot(
             tree_version,
             nodes,
             actions,
+            collections,
             modal_scope,
             modal_node_id,
         }));
@@ -486,6 +508,7 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
             data: value.as_ptr().cast(),
             len: value.len(),
         };
+        let collection = snapshot.collections[index];
         let value = NuxSemanticNodeView {
             struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
             id: node.id,
@@ -503,6 +526,12 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
             value: string(&node.value),
             hint: string(&node.hint),
             actions: snapshot.actions[index],
+            collection_flags: u32::from(collection.collection_id.is_some())
+                | (u32::from(collection.item_count.is_some()) << 1)
+                | (u32::from(collection.item_position.is_some()) << 2),
+            collection_id: collection.collection_id.unwrap_or(0),
+            item_count: collection.item_count.unwrap_or(0),
+            item_position: collection.item_position.unwrap_or(0),
         };
         unsafe { write_caller_struct(out_node, &value, NUX_SEMANTIC_NODE_VIEW_MIN_SIZE) }
             .map_or_else(|status| status, |()| NuxStatus::Ok)
@@ -942,6 +971,7 @@ mod tests {
             render_revision: 7,
             tree_version: 2,
             actions: vec![0],
+            collections: vec![SemanticCollectionMetadata::default()],
             modal_scope: NUX_SEMANTIC_MODAL_NONE,
             modal_node_id: 0,
             nodes: vec![SemanticsDiffNode {
@@ -987,6 +1017,74 @@ mod tests {
         }
     }
     #[test]
+    fn collection_fields_distinguish_unknown_zero_and_full_width_identity() {
+        for (metadata, flags) in [
+            (SemanticCollectionMetadata::default(), 0),
+            (
+                SemanticCollectionMetadata {
+                    item_count: Some(0),
+                    ..Default::default()
+                },
+                2,
+            ),
+            (
+                SemanticCollectionMetadata {
+                    collection_id: Some(u32::MAX),
+                    item_position: Some(0),
+                    ..Default::default()
+                },
+                5,
+            ),
+        ] {
+            let snapshot = Box::into_raw(Box::new(NuxSemanticSnapshot {
+                occurrence: std::rc::Weak::new(),
+                render_revision: 1,
+                tree_version: 1,
+                nodes: vec![SemanticsDiffNode::default()],
+                actions: vec![0],
+                collections: vec![metadata],
+                modal_scope: NUX_SEMANTIC_MODAL_NONE,
+                modal_node_id: 0,
+            }));
+            register_handle(
+                snapshot,
+                HandleKind::SemanticSnapshot,
+                std::thread::current().id(),
+            );
+            unsafe {
+                let mut view = NuxSemanticNodeView {
+                    struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_semantic_snapshot_node(snapshot, 0, &mut view),
+                    NuxStatus::Ok
+                );
+                assert_eq!(view.collection_flags, flags);
+                assert_eq!(view.collection_id, metadata.collection_id.unwrap_or(0));
+                assert_eq!(view.item_count, metadata.item_count.unwrap_or(0));
+                assert_eq!(view.item_position, metadata.item_position.unwrap_or(0));
+                // Appended fields cannot overwrite a caller's accepted prefix.
+                let mut storage = [u64::MAX; 32];
+                let out = storage.as_mut_ptr().cast::<NuxSemanticNodeView>();
+                out.cast::<u32>()
+                    .write(NUX_SEMANTIC_NODE_VIEW_MIN_SIZE as u32);
+                assert_eq!(nux_semantic_snapshot_node(snapshot, 0, out), NuxStatus::Ok);
+                let bytes = std::slice::from_raw_parts(
+                    storage.as_ptr().cast::<u8>(),
+                    std::mem::size_of_val(&storage),
+                );
+                assert!(
+                    bytes[NUX_SEMANTIC_NODE_VIEW_MIN_SIZE..]
+                        .iter()
+                        .all(|byte| *byte == 255)
+                );
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            }
+        }
+    }
+
+    #[test]
     fn snapshot_info_retains_modal_identity_and_scope() {
         for (modal_scope, modal_node_id) in [
             (NUX_SEMANTIC_MODAL_NONE, 0),
@@ -998,6 +1096,7 @@ mod tests {
                 render_revision: 7,
                 tree_version: 2,
                 actions: vec![0],
+                collections: vec![SemanticCollectionMetadata::default()],
                 modal_scope,
                 modal_node_id,
                 nodes: vec![SemanticsDiffNode {

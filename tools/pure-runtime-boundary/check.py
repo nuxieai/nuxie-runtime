@@ -150,6 +150,9 @@ PORTABLE_ABI_FACADE_ALLOWED_FEATURE_FORWARDINGS = {
     ("apple-authored-msl", "ore-metal-authored-msl"),
 }
 PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS = {
+    "SemanticCollectionError",
+    "SemanticCollectionMetadata",
+    "capture_semantic_collections",
     "AudioAsset",
     "Artboard",
     "ArtboardInstance",

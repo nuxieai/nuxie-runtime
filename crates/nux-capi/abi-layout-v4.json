@@ -1078,7 +1078,7 @@
     },
     {
       "name": "NuxSemanticNodeView",
-      "size": 104,
+      "size": 120,
       "alignment": 8,
       "fields": [
         {
@@ -1144,6 +1144,22 @@
         {
           "name": "actions",
           "offset": 96
+        },
+        {
+          "name": "collection_flags",
+          "offset": 100
+        },
+        {
+          "name": "collection_id",
+          "offset": 104
+        },
+        {
+          "name": "item_count",
+          "offset": 108
+        },
+        {
+          "name": "item_position",
+          "offset": 112
         }
       ]
     },

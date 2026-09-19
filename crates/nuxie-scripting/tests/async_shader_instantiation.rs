@@ -313,6 +313,15 @@ impl Factory for AsyncFactory {
     ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
         Ok(recording_gpu::canvas(width, height))
     }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
+        // Late-bound script contexts request the deferred allocation seam.
+        // This recorder creates no device resources in either path.
+        Ok(recording_gpu::canvas(width, height))
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,
@@ -394,6 +403,31 @@ impl Factory for AsyncFactory {
             ));
         }
         Ok(self.fresh_observed_shader(&observed.source))
+    }
+
+    fn make_gpu_canvas_shader_artifact(
+        &mut self,
+        artifact: &nuxie_render_api::GpuCanvasShaderArtifact,
+    ) -> Result<Arc<dyn RenderGpuCanvasShader>, GpuCanvasError> {
+        if let Some(context) = self.routed_ore.clone() {
+            // Match ore(): once rerouted, artifact construction belongs to
+            // that recorder, not the original device used by deferred loads.
+            let anchor: std::rc::Rc<dyn Any> = std::rc::Rc::new(context.clone());
+            return Ok(Arc::new(
+                nuxie_render_api::authored_ore_shader::ExactGpuCanvasShaderOccurrence::compile(
+                    &mut *context.borrow_mut(),
+                    self.gpu_canvas_shader_profile(),
+                    artifact,
+                    anchor,
+                )?,
+            ));
+        }
+        match artifact {
+            nuxie_render_api::GpuCanvasShaderArtifact::WebGpu(shader) => {
+                self.make_gpu_canvas_shader(shader)
+            }
+            _ => Err(GpuCanvasError::unsupported()),
+        }
     }
 
     fn load_gpu_canvas_shader(&mut self, shader: &GpuCanvasShader) -> GpuCanvasShaderLoad {

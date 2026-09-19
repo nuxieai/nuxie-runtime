@@ -53,6 +53,7 @@ lipo_path="$(command -v lipo)"
 ditto_path="$(command -v ditto)"
 swift_path="$(command -v swift)"
 clang_path="$(xcrun --find clang)"
+strip_path="$(xcrun --find strip)"
 rustc_version="$("${rust_compiler}" -vV | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 cargo_version="$("${rust_cargo}" -Vv | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
 runtime_version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' "${repo_root}/crates/nux-apple-product-extension/Cargo.toml" | head -1)"
@@ -146,6 +147,7 @@ build_inputs_hash="$(
         --tool "cargo=${rust_cargo}" \
         --tool "rustc=${rust_compiler}" \
         --tool "llvm-objcopy=${rust_llvm_objcopy}" \
+        --tool "strip=${strip_path}" \
         --tool "xcodebuild=${xcodebuild_path}" \
         --tool "lipo=${lipo_path}" \
         --tool "ditto=${ditto_path}" \
@@ -207,6 +209,9 @@ for target in "${targets[@]}"; do
         --remove-section=__LLVM,__bitcode \
         --remove-section=__LLVM,__cmdline \
         "${stripped_root}/${target}/libnux_apple_product_extension.a"
+    # Preserve externally linkable symbols and relocations; local/debug symbols
+    # are not part of the shipped static-library contract.
+    "${strip_path}" -S -x "${stripped_root}/${target}/libnux_apple_product_extension.a"
 done
 
 device_library="${stripped_root}/aarch64-apple-ios/libnux_apple_product_extension.a"

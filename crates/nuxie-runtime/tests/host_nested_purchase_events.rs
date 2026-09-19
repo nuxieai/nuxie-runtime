@@ -5,7 +5,7 @@ use nuxie_runtime::{
 };
 
 fn purchase_scene(artboard_name: &str) -> (ArtboardInstance, RuntimeOwnedViewModelHandle) {
-    let bytes = include_bytes!("fixtures/purchase-scopes/screen.riv");
+    let bytes = include_bytes!("../../../fixtures/purchase-scopes/screen.riv");
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("factory");
     let file = File::import(bytes, retained, None, None, None).expect("purchase fixture imports");

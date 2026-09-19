@@ -303,6 +303,107 @@ PORTABLE_ABI_FACADE_PRODUCT_METHOD = re.compile(
     r"FlowSession[A-Za-z0-9_]*|"
     r"Scene(?:Tx)?[A-Za-z0-9_]*|ProjectData[A-Za-z0-9_]*)\b"
 )
+# Exact baseline paths used by the semantic/text and video C adapters. These
+# are not permission to import the runtime or video module wholesale.
+PORTABLE_ABI_FACADE_FILE_PATHS = {
+    "crates/nux-capi/src/data_binding.rs": {
+        "runtime::core::CoreHandle", "runtime::text::text_value_run::TextValueRun",
+    },
+    "crates/nux-capi/tests/data_binding.rs": {
+        "runtime::viewmodel::viewmodel_instance_value::ViewModelInstanceValueDelegate",
+        "runtime::viewmodel::viewmodel_instance_value::ViewModelInstanceValueDelegateHandle",
+    },
+    "crates/nux-capi/src/semantic_types.rs": {
+        "runtime::semantic::semantic_role::SemanticRole",
+        "runtime::semantic::semantic_state::SemanticState",
+        "runtime::semantic::semantic_trait::SemanticTrait",
+    },
+    "crates/nux-capi/src/semantic_snapshot.rs": {
+        "runtime::core::CoreHandle", "runtime::core::CoreType",
+        "runtime::semantic::semantic_data::SemanticData",
+        "runtime::semantic::semantic_manager::RuntimeSemanticManagerHandle",
+        "runtime::semantic::semantic_manager::SemanticManager",
+        "runtime::semantic::semantic_node::SemanticNode",
+        "runtime::semantic::semantic_node::SemanticNodeRef",
+        "runtime::semantic::semantic_snapshot::SemanticsDiffNode",
+        "runtime::semantic::semantic_state::SemanticState",
+        "runtime::semantic::semantic_provider::SemanticGeometryError",
+        "runtime::semantic::semantic_provider::validate_semantic_geometry",
+        "runtime::text::text_value_run::TextValueRun",
+        "runtime::generated::core_registry::CoreRegistry",
+        "runtime::generated::component_base::ComponentBase",
+        "runtime::generated::layout_component_base::LayoutComponentBase",
+        "runtime::math::path_types::PathDirection",
+    },
+    "crates/nux-capi/src/text_geometry.rs": {
+        "runtime::layout_component::LayoutComponent", "runtime::text::text::Text",
+        "runtime::text::text_value_run::TextValueRun",
+        "runtime::generated::component_base::ComponentBaseCallbacks",
+    },
+    "crates/nux-capi/src/video.rs": {
+        "runtime::generated::core_registry::CoreCapabilities",
+        "runtime::semantic::semantic_snapshot::Bounds",
+        "video::Video", "video::VideoAsset",
+        "video::playback::Command", "video::playback::DecoderAction",
+        "video::playback::PlaybackError", "video::playback::PlaybackEvent",
+        "video::playback::PlaybackState", "video::playback::SuspensionReason",
+        "video::readiness::FirstFrameGate", "video::readiness::Readiness",
+        "video::visibility::is_visible_in", "video::captions::CaptionTrack",
+        "video::captions::Cue",
+    },
+    "crates/nux-capi/src/video_resources.rs": {
+        "video::Video", "video::resources::Allocation", "video::resources::DecoderBudget",
+        "video::resources::DecoderRequest", "video::resources::allocate",
+        "video::playback::Command", "video::playback::DecoderAction",
+        "video::playback::SuspensionReason",
+    },
+    "crates/nux-capi/src/video_sync.rs": {
+        "video::playback::Command", "video::playback::PlaybackError",
+        "video::sync::MediaClock", "video::sync::SyncError",
+        "video::sync::SynchronizationGroup", "video::sync::report_media_clock",
+    },
+}
+
+
+def facade_import_paths(body: str) -> list[str] | None:
+    """Expand plain Rust use trees; aliases, globs and dynamic tokens fail closed."""
+    tokens = re.findall(r"::|[A-Za-z_][A-Za-z0-9_]*|[{},]|\S", body)
+    index = 0
+
+    def tree(prefix: list[str]) -> list[str]:
+        nonlocal index
+        path = prefix[:]
+        while index < len(tokens):
+            token = tokens[index]
+            index += 1
+            if token == "{":
+                result = []
+                while index < len(tokens) and tokens[index] != "}":
+                    result.extend(tree(path))
+                    if tokens[index] == ",":
+                        index += 1
+                    elif tokens[index] != "}":
+                        raise ValueError()
+                if index >= len(tokens) or tokens[index] != "}":
+                    raise ValueError()
+                index += 1
+                if not result:
+                    raise ValueError()
+                return result
+            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", token) or token in {"as", "self", "super", "crate"}:
+                raise ValueError()
+            path.append(token)
+            if index < len(tokens) and tokens[index] == "::":
+                index += 1
+                continue
+            return ["::".join(path)]
+        raise ValueError()
+
+    try:
+        paths = tree([])
+        return paths if index == len(tokens) else None
+    except (ValueError, IndexError):
+        return None
 PORTABLE_ABI_FORBIDDEN_VOCABULARY = re.compile(
     r"(?-i:\b[A-Za-z0-9_]*(?:Apple|CAMetal(?:Layer|Drawable)?|FlowSession|"
     r"NuxExperience|Experience(?:Context|Package|Session)|Project(?:DO|Data)|"
@@ -338,6 +439,7 @@ PORTABLE_ABI_CONTRACT_SUFFIXES = {
 # forbidden even in these files, and Apple terms in portable ABI files still
 # fail closed.
 APPLE_PLATFORM_EXTENSION_VOCABULARY_FILES = {
+    "crates/nux-capi/examples/video_apple.rs",
     "crates/nux-capi/Cargo.toml",
     "crates/nux-capi/build.rs",
     "crates/nux-capi/cbindgen.toml",
@@ -476,6 +578,7 @@ INTERNAL_DEBT_MARKERS = {
 # mechanics in every other protected source file.
 APPROVED_NEUTRAL_MECHANICS_FILES = {
     "apple-presentation": {
+        "crates/nux-capi/examples/video_apple.rs",
         "crates/nux-capi/tests/apple_metal.rs",
         "crates/nux-capi/tests/support/apple_metal_authored_gpu_canvas.rs",
         "crates/nux-capi/src/apple_metal.rs",
@@ -540,6 +643,10 @@ RUST_MODULE_AFTER_CFG = re.compile(
     r"(?:pub(?:\([^)]*\))?\s+)?mod\s+[A-Za-z_][A-Za-z0-9_]*\s*\{"
 )
 ALLOWED_DYNAMIC_INCLUDES = {
+    "crates/nuxie-renderer/tests/native_metal_resource_shaders.rs": re.compile(
+        r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
+        r'\s*"/mechanical_shader_generated/runtime_shader_exports\.rs"\s*\)\s*\)'
+    ),
     "crates/nuxie-runtime/src/objects.rs": re.compile(
         r'include!\s*\(\s*concat!\s*\(\s*env!\s*\(\s*"OUT_DIR"\s*\)\s*,'
         r'\s*"/runtime_objects\.rs"\s*\)\s*\)'
@@ -1308,6 +1415,8 @@ def android_product_import_boundary_errors(relative: str, source: str) -> list[s
 
 def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     errors = []
+    scoped_paths = PORTABLE_ABI_FACADE_FILE_PATHS.get(relative, set())
+    scoped_import_ranges = []
     test_module_ranges = cfg_test_module_ranges(source)
     allowed_root_symbols = PORTABLE_ABI_FACADE_ALLOWED_SYMBOLS | (
         PORTABLE_ABI_FACADE_FILE_SYMBOLS.get(relative, set())
@@ -1373,6 +1482,13 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
     for match in RUST_USE_STATEMENT.finditer(source):
         body = match.group("body").strip()
         if re.search(r"\bnuxie\b", body) is None:
+            continue
+        if re.match(r"nuxie\s*::\s*(?:runtime|video)\s*::", body):
+            paths = facade_import_paths(body)
+            line = source.count("\n", 0, match.start()) + 1
+            if paths is None or any(path.removeprefix("nuxie::") not in scoped_paths for path in paths):
+                errors.append(f"{relative}:{line}: portable ABI facade use tree contains an unapproved baseline path")
+            scoped_import_ranges.append((match.start(), match.end()))
             continue
         imported_symbols: list[str] | None = None
         direct = re.fullmatch(r"nuxie\s*::\s*([A-Za-z_][A-Za-z0-9_]*)", body)
@@ -1441,7 +1557,14 @@ def portable_abi_facade_source_errors(relative: str, source: str) -> list[str]:
             f"${match.group('metavar')}:: is not approved in the portable ABI facade"
         )
     for match in DIRECT_NUXIE_PATH.finditer(source):
+        if any(start <= match.start() < end for start, end in scoped_import_ranges):
+            continue
         symbol = match.group("symbol")
+        if symbol in {"runtime", "video"}:
+            qualified = re.match(r"nuxie\s*::\s*([A-Za-z_][A-Za-z0-9_]*(?:\s*::\s*[A-Za-z_][A-Za-z0-9_]*)*)", source[match.start():])
+            path = re.sub(r"\s", "", qualified.group(1)) if qualified else ""
+            if any(path == allowed or path.startswith(allowed + "::") for allowed in scoped_paths):
+                continue
         nested_symbol = match.group("nested_symbol")
         module_symbols = allowed_module_symbols(symbol)
         if module_symbols is not None:
@@ -1535,6 +1658,14 @@ def portable_abi_vocabulary_errors(
             errors.append(f"{relative}: cannot read portable ABI contract: {error}")
             continue
         for match in PORTABLE_ABI_FORBIDDEN_VOCABULARY.finditer(source):
+            # Video upload implementation/tests share the portable source file,
+            # but compile the platform branch only under the existing feature.
+            # Do not allow arbitrary Apple identifiers in these files.
+            if relative in {"crates/nux-capi/src/video.rs", "crates/nux-capi/tests/video.rs"} and match.group(0) == "apple":
+                before = source[max(0, match.start() - 11):match.start()]
+                after = source[match.end():match.end() + 7]
+                if before == 'feature = "' and after == '-metal"':
+                    continue
             if match.group(0) in ANDROID_PRODUCT_IMPORT_ALLOWED_VOCABULARY.get(
                 relative, set()
             ):

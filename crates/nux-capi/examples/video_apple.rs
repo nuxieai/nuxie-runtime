@@ -111,7 +111,7 @@ mod proof {
                 ..Default::default()
             };
             let source = format!(
-                "{}/../nuxie-video-host/tests/fixtures/red-blue-sync.mp4",
+                "{}/../../fixtures/video/red-blue-sync.mp4",
                 env!("CARGO_MANIFEST_DIR")
             );
             let bytes = scene(&source);
@@ -294,7 +294,7 @@ mod proof {
                 ..Default::default()
             };
             let source = format!(
-                "{}/../nuxie-video-host/tests/fixtures/red-blue-audio.mp4",
+                "{}/../../fixtures/video/red-blue-audio.mp4",
                 env!("CARGO_MANIFEST_DIR")
             );
             let bytes = scene(&source);

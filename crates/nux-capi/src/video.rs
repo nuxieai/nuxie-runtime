@@ -2,7 +2,12 @@
 //! routes their commands and observations through the live scene occurrence.
 use super::*;
 use nuxie::runtime::generated::core_registry::CoreCapabilities;
-use nuxie::video::{Video, VideoAsset, playback::*};
+use nuxie::video::{
+    Video, VideoAsset,
+    playback::{
+        Command, DecoderAction, PlaybackError, PlaybackEvent, PlaybackState, SuspensionReason,
+    },
+};
 
 const MAX_VIDEO_SCENE_OBJECTS: usize = 65_536;
 const FIRST_NESTED_VIDEO_ID: usize = 1 << 30;

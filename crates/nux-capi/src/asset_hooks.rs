@@ -2169,7 +2169,7 @@ mod tests {
 
     #[test]
     fn deferred_font_catalog_import_does_not_require_asset_bindings() {
-        // Apple catalog inspection uses this same factory import with an empty
+        // Catalog inspection uses this same factory import with an empty
         // config before authenticating and supplying external font bytes.
         let scene = required_font_file("TextStyle", 0, None);
         let config = NuxFileImportConfig::default();

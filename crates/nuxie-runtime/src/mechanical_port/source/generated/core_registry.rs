@@ -7836,6 +7836,29 @@ impl CoreRegistry {
     }
     pub fn get_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> bool {
         let field = match property_key {
+            // Virtual semantic getters added upstream in d4fe1022. These must
+            // mirror the setters: reverse bindings read the current target.
+            989 => CoreField::SemanticDataIsExpandable,
+            990 => CoreField::SemanticDataIsSelectable,
+            991 => CoreField::SemanticDataIsCheckable,
+            992 => CoreField::SemanticDataIsToggleable,
+            993 => CoreField::SemanticDataIsRequirable,
+            994 => CoreField::SemanticDataIsEnablable,
+            995 => CoreField::SemanticDataIsFocusable,
+            996 => CoreField::SemanticDataIsExpanded,
+            997 => CoreField::SemanticDataIsSelected,
+            998 => CoreField::SemanticDataIsChecked,
+            999 => CoreField::SemanticDataIsMixed,
+            1000 => CoreField::SemanticDataIsToggled,
+            1001 => CoreField::SemanticDataIsRequired,
+            1002 => CoreField::SemanticDataIsDisabled,
+            1003 => CoreField::SemanticDataIsFocused,
+            1004 => CoreField::SemanticDataIsHidden,
+            1005 => CoreField::SemanticDataIsLiveRegion,
+            1006 => CoreField::SemanticDataIsReadOnly,
+            1007 => CoreField::SemanticDataIsModal,
+            1008 => CoreField::SemanticDataIsObscured,
+            1009 => CoreField::SemanticDataIsMultiline,
             593 => CoreField::ViewModelInstanceBooleanPropertyValue,
             364 => CoreField::FollowPathConstraintOrient,
             365 => CoreField::FollowPathConstraintOffset,

@@ -13,16 +13,16 @@ pub fn call_bin_tm(
     p2: *const TValue,
     res: StkId,
     event: TMS,
-) -> i32 {
+) -> crate::records::lua_exception::LuaResult<i32> {
     unsafe {
         let mut tm = lua_t_gettmbyobj(L, p1, event); // try first operand
         if ttisnil!(tm) {
             tm = lua_t_gettmbyobj(L, p2, event); // try second operand
         }
         if ttisnil!(tm) {
-            return 0;
+            return Ok(0);
         }
-        call_t_mres(L, res, tm, p1, p2);
-        1
+        call_t_mres(L, res, tm, p1, p2)?;
+        Ok(1)
     }
 }

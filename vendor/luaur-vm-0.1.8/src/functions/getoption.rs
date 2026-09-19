@@ -6,7 +6,11 @@ use crate::macros::maxalign::MAXALIGN;
 use crate::records::header::Header;
 use core::ffi::c_char;
 
-pub fn getoption(h: *mut Header, fmt: *mut *const c_char, size: *mut i32) -> KOption {
+pub fn getoption(
+    h: *mut Header,
+    fmt: *mut *const c_char,
+    size: *mut i32,
+) -> crate::records::lua_exception::LuaResult<KOption> {
     let opt = unsafe { **fmt as c_char };
     unsafe {
         *fmt = (*fmt).add(1);
@@ -20,133 +24,133 @@ pub fn getoption(h: *mut Header, fmt: *mut *const c_char, size: *mut i32) -> KOp
             unsafe {
                 *size = 1;
             }
-            KOption::Kint
+            Ok(KOption::Kint)
         }
         'B' => {
             unsafe {
                 *size = 1;
             }
-            KOption::Kuint
+            Ok(KOption::Kuint)
         }
         'h' => {
             unsafe {
                 *size = 2;
             }
-            KOption::Kint
+            Ok(KOption::Kint)
         }
         'H' => {
             unsafe {
                 *size = 2;
             }
-            KOption::Kuint
+            Ok(KOption::Kuint)
         }
         'l' => {
             unsafe {
                 *size = 8;
             }
-            KOption::Kint
+            Ok(KOption::Kint)
         }
         'L' => {
             unsafe {
                 *size = 8;
             }
-            KOption::Kuint
+            Ok(KOption::Kuint)
         }
         'j' => {
             unsafe {
                 *size = 4;
             }
-            KOption::Kint
+            Ok(KOption::Kint)
         }
         'J' => {
             unsafe {
                 *size = 4;
             }
-            KOption::Kuint
+            Ok(KOption::Kuint)
         }
         'T' => {
             unsafe {
                 *size = 4;
             }
-            KOption::Kuint
+            Ok(KOption::Kuint)
         }
         'f' => {
             unsafe {
                 *size = 4;
             }
-            KOption::Kfloat
+            Ok(KOption::Kfloat)
         }
         'd' => {
             unsafe {
                 *size = 8;
             }
-            KOption::Kfloat
+            Ok(KOption::Kfloat)
         }
         'n' => {
             unsafe {
                 *size = 8;
             }
-            KOption::Kfloat
+            Ok(KOption::Kfloat)
         }
         'i' => {
             unsafe {
-                *size = getnumlimit(h, fmt, 4);
+                *size = getnumlimit(h, fmt, 4)?;
             }
-            KOption::Kint
+            Ok(KOption::Kint)
         }
         'I' => {
             unsafe {
-                *size = getnumlimit(h, fmt, 4);
+                *size = getnumlimit(h, fmt, 4)?;
             }
-            KOption::Kuint
+            Ok(KOption::Kuint)
         }
         's' => {
             unsafe {
-                *size = getnumlimit(h, fmt, 4);
+                *size = getnumlimit(h, fmt, 4)?;
             }
-            KOption::Kstring
+            Ok(KOption::Kstring)
         }
         'c' => {
             unsafe {
-                *size = getnum(h, fmt, -1);
+                *size = getnum(h, fmt, -1)?;
             }
             if unsafe { *size } == -1 {
                 luaL_error!(unsafe { (*h).L }, "missing size for format option 'c'");
             }
-            KOption::Kchar
+            Ok(KOption::Kchar)
         }
-        'z' => KOption::Kzstr,
+        'z' => Ok(KOption::Kzstr),
         'x' => {
             unsafe {
                 *size = 1;
             }
-            KOption::Kpadding
+            Ok(KOption::Kpadding)
         }
-        'X' => KOption::Kpaddalign,
-        ' ' => KOption::Knop,
+        'X' => Ok(KOption::Kpaddalign),
+        ' ' => Ok(KOption::Knop),
         '<' => {
             unsafe {
                 (*h).islittle = 1;
             }
-            KOption::Knop
+            Ok(KOption::Knop)
         }
         '>' => {
             unsafe {
                 (*h).islittle = 0;
             }
-            KOption::Knop
+            Ok(KOption::Knop)
         }
         '=' => {
             unsafe {
                 (*h).islittle = if cfg!(target_endian = "little") { 1 } else { 0 };
             }
-            KOption::Knop
+            Ok(KOption::Knop)
         }
         '!' => {
             unsafe {
-                (*h).maxalign = getnumlimit(h, fmt, MAXALIGN);
+                (*h).maxalign = getnumlimit(h, fmt, MAXALIGN)?;
             }
-            KOption::Knop
+            Ok(KOption::Knop)
         }
         _ => {
             luaL_error!(
@@ -154,7 +158,6 @@ pub fn getoption(h: *mut Header, fmt: *mut *const c_char, size: *mut i32) -> KOp
                 "invalid format option '{}'",
                 opt as u8 as char
             );
-            unreachable!()
         }
     }
 }

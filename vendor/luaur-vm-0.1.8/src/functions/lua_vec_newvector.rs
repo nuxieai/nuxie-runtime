@@ -12,7 +12,7 @@ pub unsafe fn luaVec_newvector(
     y: f64,
     z: f64,
     w: f64,
-) -> *mut LuauVector {
+) -> crate::records::lua_exception::LuaResult<*mut LuauVector> {
     let v = luaM_newgcofixed!(
         l,
         LuauVector,
@@ -28,7 +28,7 @@ pub unsafe fn luaVec_newvector(
     } else {
         let _ = w;
     }
-    v
+    Ok(v)
 }
 
 #[allow(unused_imports)]

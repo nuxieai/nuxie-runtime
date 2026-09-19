@@ -14,13 +14,15 @@ use crate::type_aliases::t_value::TValue;
 
 #[export_name = "luaur_tfind"]
 #[allow(non_snake_case)]
-pub unsafe fn tfind(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
-    lua_l_checkany(L, 2);
-    let init = lua_l_optinteger(L, 3, 1);
+pub unsafe fn tfind(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
+    lua_l_checkany(L, 2)?;
+    let init = lua_l_optinteger(L, 3, 1)?;
     if init < 1 {
         // The dependency card for lua_l_argerror_l shows it takes &str.
-        crate::functions::lua_l_argerror_l::lua_l_argerror_l(L, 3, "index out of range");
+        return crate::functions::lua_l_argerror_l::lua_l_argerror_l(L, 3, "index out of range");
     }
 
     let t = hvalue!((*L).base);
@@ -35,8 +37,8 @@ pub unsafe fn tfind(L: *mut lua_State) -> core::ffi::c_int {
         let v: StkId = (*L).base.offset(1);
 
         if equalobj!(L, v, e) {
-            lua_pushinteger(L, i);
-            return 1;
+            lua_pushinteger(L, i)?;
+            return Ok(1);
         }
         // C++ does `i++` unconditionally; if the table has an element at INT_MAX
         // that doesn't match, the increment is signed-overflow UB (upstream
@@ -47,6 +49,6 @@ pub unsafe fn tfind(L: *mut lua_State) -> core::ffi::c_int {
         i += 1;
     }
 
-    lua_pushnil(L);
-    1
+    lua_pushnil(L)?;
+    Ok(1)
 }

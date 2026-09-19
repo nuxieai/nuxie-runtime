@@ -14,7 +14,12 @@ use crate::type_aliases::pfunc::Pfunc;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_pcall(L: *mut lua_State, nargs: c_int, nresults: c_int, errfunc: c_int) -> c_int {
+pub unsafe fn lua_pcall(
+    L: *mut lua_State,
+    nargs: c_int,
+    nresults: c_int,
+    errfunc: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_check!(L, nargs >= 0);
     api_check!(L, nresults >= LUA_MULTRET);
     api_checknelems!(L, nargs + 1);
@@ -44,11 +49,11 @@ pub unsafe fn lua_pcall(L: *mut lua_State, nargs: c_int, nresults: c_int, errfun
         &mut c as *mut CallS as *mut c_void,
         savestack!(L, c.func) as isize,
         func,
-    );
+    )?;
 
     if nresults == LUA_MULTRET && (*L).top.offset_from((*(*L).ci).top) >= 0 {
         (*(*L).ci).top = (*L).top;
     }
 
-    status
+    Ok(status)
 }

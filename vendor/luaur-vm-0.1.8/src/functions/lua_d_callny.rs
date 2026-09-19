@@ -11,19 +11,23 @@ use crate::type_aliases::stk_id::StkId;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[export_name = "luaur_lua_d_callny"]
-pub unsafe fn lua_d_callny(L: *mut lua_State, func: StkId, nresults: core::ffi::c_int) {
+pub unsafe fn lua_d_callny(
+    L: *mut lua_State,
+    func: StkId,
+    nresults: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     let l_ref = &mut *L;
 
     l_ref.nCcalls += 1;
     if l_ref.nCcalls >= LUAI_MAXCCALLS as u16 {
-        luaD_checkCstack(L);
+        luaD_checkCstack(L)?;
     }
 
     LUAU_ASSERT!(l_ref.nCcalls > l_ref.baseCcalls);
 
     let funcoffset = savestack!(L, func);
 
-    performcall(L, func, nresults, false);
+    performcall(L, func, nresults, false)?;
 
     LUAU_ASSERT!(!isyielded(L));
 
@@ -33,4 +37,5 @@ pub unsafe fn lua_d_callny(L: *mut lua_State, func: StkId, nresults: core::ffi::
 
     (*L).nCcalls -= 1;
     luaC_checkGC!(L);
+    Ok(())
 }

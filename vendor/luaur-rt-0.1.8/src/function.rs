@@ -45,6 +45,7 @@ impl Function {
         let args: MultiValue = args.into_lua_multi(&lua)?;
 
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             let base = lua_gettop(state);
             let nargs = args.len() as c_int;
             // Guard against pushing more values than the Lua stack can hold:
@@ -61,7 +62,8 @@ impl Function {
                 lua.push_value(v)?;
             }
             // LUA_MULTRET == -1: keep every result.
-            let status = lua_pcall(state, nargs, -1, 0);
+            let status = lua_pcall(state, nargs, -1, 0)
+                .map_err(|error| crate::error::Error::from_vm(error))?;
             if status != 0 {
                 return Err(lua.pop_error(status));
             }
@@ -74,7 +76,6 @@ impl Function {
             // of headroom for it. (Found by the `run` fuzzer:
             // `local t={a=1}; return <~20 values including t>`.)
             if lua_checkstack(state, 2) == 0 {
-                lua_settop(state, base);
                 return Err(crate::error::Error::RuntimeError(
                     "stack overflow: too many return values".to_string(),
                 ));
@@ -87,7 +88,6 @@ impl Function {
                 let idx = base + 1 + i;
                 results.push_back(lua.value_from_stack(idx)?);
             }
-            lua_settop(state, base);
             R::from_lua_multi(results, &lua)
         }
     }
@@ -277,7 +277,7 @@ impl Function {
         unsafe {
             self.reference.push();
             let p = lua_topointer(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             p
         }
     }
@@ -285,25 +285,31 @@ impl Function {
     /// The function's environment table (its globals), or `None` for a Rust
     /// (C) function. Mirrors `mlua::Function::environment`.
     pub fn environment(&self) -> Option<crate::table::Table> {
+        self.try_environment()
+            .expect("allocation failed while reading a Lua environment")
+    }
+
+    pub fn try_environment(&self) -> Result<Option<crate::table::Table>> {
         let lua = self.lua();
         let state = lua.state();
         unsafe {
-            self.reference.push();
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.try_push()?;
             // `lua_getfenv` only applies to Lua closures; a C function has no
             // accessible environment.
             if !self.is_lua_closure() {
-                lua_pop(state, 1);
-                return None;
+                lua_pop(state, 1).expect("shrinking the stack cannot fail");
+                return Ok(None);
             }
-            lua_getfenv(state, -1);
+            lua_getfenv(state, -1).map_err(|error| crate::error::Error::from_vm(error))?;
             // stack: [func, env]
             if lua_type(state, -1) != ttype::TABLE {
-                lua_pop(state, 2);
-                return None;
+                lua_pop(state, 2).expect("shrinking the stack cannot fail");
+                return Ok(None);
             }
-            let env = crate::table::Table::from_ref(lua.pop_ref());
-            lua_pop(state, 1); // pop func
-            Some(env)
+            let env = crate::table::Table::from_ref(lua.try_pop_ref()?);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop func
+            Ok(Some(env))
         }
     }
 
@@ -316,14 +322,14 @@ impl Function {
         unsafe {
             self.reference.push();
             if !self.is_lua_closure() {
-                lua_pop(state, 1);
+                lua_pop(state, 1).expect("shrinking the stack cannot fail");
                 return Ok(false);
             }
             // stack: [func]; push env, then lua_setfenv(func_index).
             env.push_to_stack();
             let ok = lua_setfenv(state, -2);
             // lua_setfenv pops the env table; pop the function too.
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             Ok(ok != 0)
         }
     }
@@ -333,13 +339,12 @@ impl Function {
     unsafe fn is_lua_closure(&self) -> bool {
         let state = self.reference.state();
         unsafe {
-            // The function is on top of the stack (index -1). Ask lua_getinfo
-            // about it via the ">" level convention: push the function and use
-            // option ">" so it pops the function and reads its info.
-            lua_pushvalue(state, -1);
+            // Luau uses a negative stack index; unlike Lua's ">" convention,
+            // this metadata query neither pushes nor consumes the function.
             let mut ar: LuaDebug = core::mem::zeroed();
-            let opt = c">s";
-            let ok = lua_getinfo(state, -1, opt.as_ptr() as *const c_char, &mut ar);
+            let opt = c"s";
+            let ok = lua_getinfo(state, -1, opt.as_ptr() as *const c_char, &mut ar)
+                .expect("debug metadata options do not push values or allocate");
             if ok == 0 {
                 return false;
             }
@@ -363,7 +368,8 @@ impl Function {
             // u=upvalues. The ">" prefix pops the function from the stack and
             // reads info about it.
             let opt = c">nsau";
-            let ok = lua_getinfo(state, -1, opt.as_ptr() as *const c_char, &mut ar);
+            let ok = lua_getinfo(state, -1, opt.as_ptr() as *const c_char, &mut ar)
+                .expect("debug metadata options do not push values or allocate");
             if ok == 0 {
                 return FunctionInfo::default();
             }

@@ -14,14 +14,14 @@ pub unsafe fn luau_f_ldexp(
     nresults: c_int,
     args: StkId,
     nparams: c_int,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
         let a1 = nvalue!(arg0);
         let a2 = nvalue!(args);
         setnvalue!(res, ldexp(a1, a2 as i32));
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }
 

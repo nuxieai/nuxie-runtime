@@ -14,8 +14,10 @@ use crate::records::lua_l_reg::LuaLReg;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
-pub unsafe fn luaopen_coroutine(l: *mut lua_State) -> c_int {
-    lua_l_register(l, c"coroutine".as_ptr(), CO_FUNCS.0.as_ptr());
+pub unsafe fn luaopen_coroutine(
+    l: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<c_int> {
+    lua_l_register(l, c"coroutine".as_ptr(), CO_FUNCS.0.as_ptr())?;
 
     lua_pushcclosurek(
         l,
@@ -23,10 +25,10 @@ pub unsafe fn luaopen_coroutine(l: *mut lua_State) -> c_int {
         c"resume".as_ptr(),
         0,
         Some(coresumecont),
-    );
-    lua_setfield(l, -2, c"resume".as_ptr());
+    )?;
+    lua_setfield(l, -2, c"resume".as_ptr())?;
 
-    1
+    Ok(1)
 }
 
 struct SyncLuaLReg([LuaLReg; 8]);

@@ -49,10 +49,12 @@ impl Table {
         // Drive the (possibly metamethod-invoking) settable under pcall so a
         // raising `__newindex` (or readonly table) surfaces as `Err`.
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             self.reference.push(); // table
             lua.push_value(&k)?; // key
             lua.push_value(&v)?; // value
-            let status = protected_settable(state);
+            let status =
+                protected_settable(state).map_err(|error| crate::error::Error::from_vm(error))?;
             if status != 0 {
                 return Err(lua.pop_error(status));
             }
@@ -70,14 +72,16 @@ impl Table {
         let state = lua.state();
         let k = key.into_lua(&lua)?;
         let value = unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             self.reference.push(); // table
             lua.push_value(&k)?; // key
-            let status = protected_gettable(state);
+            let status =
+                protected_gettable(state).map_err(|error| crate::error::Error::from_vm(error))?;
             if status != 0 {
                 return Err(lua.pop_error(status));
             }
             let v = lua.value_from_stack(-1)?;
-            lua_pop(state, 1); // pop the result value
+            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop the result value
             v
         };
         V::from_lua(value, &lua)
@@ -89,22 +93,14 @@ impl Table {
     /// hot callback dispatch from materializing an intermediate registry-owned
     /// [`Function`](crate::Function) or collecting an unused `LUA_MULTRET`
     /// result vector. Returns `false` when the field is not a function.
-    pub fn call_function_unit(
-        &self,
-        key: impl IntoLua,
-        args: impl IntoLuaMulti,
-    ) -> Result<bool> {
+    pub fn call_function_unit(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         self.call_function_predicate(key, args, Some(c_call_function_unit))
     }
 
     /// Look up a table field, call it for one result, and apply Lua truthiness
     /// inside the same protected boundary. Returns `false` when the field is
     /// absent/non-callable or its result is `nil`/`false`.
-    pub fn call_function_truthy(
-        &self,
-        key: impl IntoLua,
-        args: impl IntoLuaMulti,
-    ) -> Result<bool> {
+    pub fn call_function_truthy(&self, key: impl IntoLua, args: impl IntoLuaMulti) -> Result<bool> {
         self.call_function_predicate(key, args, Some(c_call_function_truthy))
     }
 
@@ -119,7 +115,7 @@ impl Table {
         let key = key.into_lua(&lua)?;
         let args: MultiValue = args.into_lua_multi(&lua)?;
         unsafe {
-            let base = lua_gettop(state);
+            let _stack = crate::stack_guard::StackGuard::new(state);
             let nargs = args.len() as c_int;
             if lua_checkstack(state, nargs.saturating_add(5)) == 0 {
                 return Err(crate::error::Error::RuntimeError(
@@ -132,18 +128,19 @@ impl Table {
                 c"luaur-rt-table-function-call".as_ptr(),
                 0,
                 None,
-            );
+            )
+            .map_err(|error| crate::error::Error::from_vm(error))?;
             self.reference.push();
             lua.push_value(&key)?;
             for value in args.iter() {
                 lua.push_value(value)?;
             }
-            let status = lua_pcall(state, nargs + 2, 1, 0);
+            let status = lua_pcall(state, nargs + 2, 1, 0)
+                .map_err(|error| crate::error::Error::from_vm(error))?;
             if status != 0 {
                 return Err(lua.pop_error(status));
             }
             let result = lua_toboolean(state, -1) != 0;
-            lua_settop(state, base);
             Ok(result)
         }
     }
@@ -165,7 +162,7 @@ impl Table {
         unsafe {
             self.reference.push();
             let n = lua_objlen(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             n.max(0) as usize
         }
     }
@@ -177,7 +174,7 @@ impl Table {
     pub fn len(&self) -> Result<usize> {
         let lua = self.lua();
         // Fast path: no metatable -> raw border length (no metamethod possible).
-        if self.metatable().is_none() {
+        if self.try_metatable()?.is_none() {
             return Ok(self.raw_len());
         }
         // Evaluate `#self` protected so a raising/returning `__len` is honored.
@@ -199,18 +196,18 @@ impl Table {
     /// hash part (a table with only string keys is *not* empty). Uses a single
     /// `lua_next` probe — present iff the table has at least one key.
     pub fn is_empty(&self) -> bool {
+        self.try_is_empty()
+            .expect("allocation failed while inspecting a Lua table")
+    }
+
+    /// Fallible counterpart of [`Table::is_empty`], including stack growth.
+    pub fn try_is_empty(&self) -> Result<bool> {
         let state = self.reference.state();
         unsafe {
-            self.reference.push(); // table
-            lua_pushnil(state); // first key
-            if lua_next(state, -2) == 0 {
-                // No first key: table is empty. `lua_next` already popped the key.
-                lua_pop(state, 1); // pop table
-                return true;
-            }
-            // stack: table, key, value — pop value+key+table.
-            lua_pop(state, 3);
-            false
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.try_push()?;
+            lua_pushnil(state).map_err(|error| crate::error::Error::from_vm(error))?;
+            Ok(lua_next(state, -2).map_err(|error| crate::error::Error::from_vm(error))? == 0)
         }
     }
 
@@ -283,11 +280,12 @@ impl Table {
             ));
         }
         unsafe {
-            self.reference.push(); // table
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.try_push()?; // table
             lua.push_value(&k)?; // key
             lua.push_value(&v)?; // value
-            lua_rawset(state, -3);
-            lua_pop(state, 1); // pop table
+            lua_rawset(state, -3).map_err(|error| crate::error::Error::from_vm(error))?;
+            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop table
         }
         Ok(())
     }
@@ -300,11 +298,12 @@ impl Table {
         let state = lua.state();
         let k = key.into_lua(&lua)?;
         let value = unsafe {
-            self.reference.push(); // table
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.try_push()?; // table
             lua.push_value(&k)?; // key
             lua_rawget(state, -2); // replaces key with value
             let v = lua.value_from_stack(-1)?;
-            lua_pop(state, 2); // pop value + table
+            lua_pop(state, 2).expect("shrinking the stack cannot fail"); // pop value + table
             v
         };
         V::from_lua(value, &lua)
@@ -423,15 +422,16 @@ impl Table {
         let state = lua.state();
         let mut keys: Vec<Value> = Vec::new();
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             self.reference.push(); // table
-            lua_pushnil(state); // first key
-            while lua_next(state, -2) != 0 {
+            lua_pushnil(state).map_err(|error| crate::error::Error::from_vm(error))?; // first key
+            while lua_next(state, -2).map_err(|error| crate::error::Error::from_vm(error))? != 0 {
                 // stack: table, key, value
                 let k = lua.value_from_stack(-2)?;
                 keys.push(k);
-                lua_pop(state, 1); // pop value, keep key for next iteration
+                lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop value, keep key for next iteration
             }
-            lua_pop(state, 1); // pop table
+            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop table
         }
         for k in keys {
             self.raw_set(k, Value::Nil)?;
@@ -448,7 +448,7 @@ impl Table {
         unsafe {
             self.reference.push();
             let p = lua_topointer(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             p
         }
     }
@@ -457,31 +457,35 @@ impl Table {
     /// Mirrors `mlua::Table::equals`.
     pub fn equals(&self, other: &Table) -> Result<bool> {
         let lua = self.lua();
-        let state = lua.state();
         unsafe {
-            self.reference.push();
-            other.reference.push();
-            let eq = lua_equal(state, -2, -1);
-            lua_pop(state, 2);
-            Ok(eq != 0)
+            lua.exec_raw((self.clone(), other.clone()), |state| {
+                let eq = lua_equal(state, 1, 2)?;
+                lua_pushboolean(state, eq)
+            })
         }
     }
 
     /// The table's metatable, if any. Mirrors `mlua::Table::metatable`.
     pub fn metatable(&self) -> Option<Table> {
+        self.try_metatable()
+            .expect("allocation failed while inspecting a Lua metatable")
+    }
+
+    /// Fallible counterpart of [`Table::metatable`], including reference allocation.
+    pub fn try_metatable(&self) -> Result<Option<Table>> {
         let lua = self.lua();
         let state = lua.state();
         unsafe {
-            self.reference.push();
-            let has = lua_getmetatable(state, -1);
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            self.reference.try_push()?;
+            let has =
+                lua_getmetatable(state, -1).map_err(|error| crate::error::Error::from_vm(error))?;
             if has == 0 {
-                lua_pop(state, 1); // pop table
-                return None;
+                return Ok(None);
             }
             // stack: table, metatable
-            let mt = Table::from_ref(lua.pop_ref());
-            lua_pop(state, 1); // pop table
-            Some(mt)
+            let mt = Table::from_ref(lua.try_pop_ref()?);
+            Ok(Some(mt))
         }
     }
 
@@ -499,10 +503,10 @@ impl Table {
             self.reference.push(); // table
             match metatable {
                 Some(mt) => mt.push_to_stack(),
-                None => lua_pushnil(state),
+                None => lua_pushnil(state).map_err(|error| crate::error::Error::from_vm(error))?,
             }
-            lua_setmetatable(state, -2);
-            lua_pop(state, 1); // pop table
+            lua_setmetatable(state, -2).map_err(|error| crate::error::Error::from_vm(error))?;
+            lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop table
         }
         Ok(())
     }
@@ -516,7 +520,7 @@ impl Table {
         unsafe {
             self.reference.push();
             let ro = lua_getreadonly(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             ro != 0
         }
     }
@@ -528,7 +532,7 @@ impl Table {
         unsafe {
             self.reference.push();
             lua_setreadonly(state, -1, enabled as c_int);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
         }
     }
 }
@@ -631,16 +635,19 @@ impl<K: FromLua, V: FromLua> Iterator for TablePairs<K, V> {
         let lua = self.table.lua();
         let state = lua.state();
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             self.table.reference.push(); // [.. table]
-            if lua.push_value(&key).is_err() {
-                lua_pop(state, 1);
-                return None;
+            if let Err(error) = lua.push_value(&key) {
+                return Some(Err(error));
             }
             // stack: [table, key]
-            let has = lua_next(state, -2);
+            let has = match lua_next(state, -2) {
+                Ok(has) => has,
+                Err(error) => return Some(Err(crate::error::Error::from_vm(error))),
+            };
             if has == 0 {
                 // lua_next popped the key; pop the table.
-                lua_pop(state, 1);
+                lua_pop(state, 1).expect("shrinking the stack cannot fail");
                 self.next_key = None;
                 return None;
             }
@@ -648,20 +655,20 @@ impl<K: FromLua, V: FromLua> Iterator for TablePairs<K, V> {
             let k_val = match lua.value_from_stack(-2) {
                 Ok(v) => v,
                 Err(e) => {
-                    lua_pop(state, 3);
+                    lua_pop(state, 3).expect("shrinking the stack cannot fail");
                     return Some(Err(e));
                 }
             };
             let v_val = match lua.value_from_stack(-1) {
                 Ok(v) => v,
                 Err(e) => {
-                    lua_pop(state, 3);
+                    lua_pop(state, 3).expect("shrinking the stack cannot fail");
                     return Some(Err(e));
                 }
             };
             // Remember the key for the next iteration, then clean the stack.
             self.next_key = Some(k_val.clone());
-            lua_pop(state, 3); // value, next_key, table
+            lua_pop(state, 3).expect("shrinking the stack cannot fail"); // value, next_key, table
 
             let k = match K::from_lua(k_val, &lua) {
                 Ok(k) => k,
@@ -677,11 +684,12 @@ impl<K: FromLua, V: FromLua> Iterator for TablePairs<K, V> {
 }
 
 /// Create a fresh empty table on `lua` and return a handle.
-pub(crate) fn create_table(lua: &Lua) -> Table {
+pub(crate) fn create_table(lua: &Lua) -> Result<Table> {
     let state = lua.state();
     unsafe {
-        lua_createtable(state, 0, 0);
-        Table::from_ref(lua.pop_ref())
+        let _stack = crate::stack_guard::StackGuard::new(state);
+        lua_createtable(state, 0, 0).map_err(|error| crate::error::Error::from_vm(error))?;
+        Ok(Table::from_ref(lua.try_pop_ref()?))
     }
 }
 
@@ -697,63 +705,69 @@ pub(crate) fn create_table(lua: &Lua) -> Table {
 
 /// C trampoline: stack is `[table, key]`; performs `lua_gettable` and leaves
 /// the result on top.
-unsafe fn c_gettable(state: *mut lua_State) -> c_int {
+unsafe fn c_gettable(state: *mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
-        lua_gettable(state, 1);
-        1
+        lua_gettable(state, 1)?;
+        Ok(1)
     }
 }
 
 /// C trampoline: stack is `[table, key, value]`; performs `lua_settable`.
-unsafe fn c_settable(state: *mut lua_State) -> c_int {
+unsafe fn c_settable(state: *mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
-        lua_settable(state, 1);
-        0
+        lua_settable(state, 1)?;
+        Ok(0)
     }
 }
 
 /// C trampoline: stack is `[table, key, args...]`. Resolve `table[key]` and,
 /// when it is callable, invoke it with the remaining arguments and no result.
 /// The enclosing `lua_pcall` catches errors from both lookup and invocation.
-unsafe fn c_call_function_unit(state: *mut lua_State) -> c_int {
+unsafe fn c_call_function_unit(
+    state: *mut lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let nargs = lua_gettop(state) - 2;
-        lua_pushvalue(state, 2);
-        lua_gettable(state, 1);
+        lua_pushvalue(state, 2)?;
+        lua_gettable(state, 1)?;
         if lua_type(state, -1) != ttype::FUNCTION {
-            lua_pushboolean(state, 0);
-            return 1;
+            lua_pushboolean(state, 0)?;
+            return Ok(1);
         }
         lua_insert(state, 3);
-        lua_call(state, nargs, 0);
-        lua_pushboolean(state, 1);
-        1
+        lua_call(state, nargs, 0)?;
+        lua_pushboolean(state, 1)?;
+        Ok(1)
     }
 }
 
 /// C trampoline equivalent to [`c_call_function_unit`], but request one Lua
 /// result and collapse it to native truthiness before returning to Rust.
-unsafe fn c_call_function_truthy(state: *mut lua_State) -> c_int {
+unsafe fn c_call_function_truthy(
+    state: *mut lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let nargs = lua_gettop(state) - 2;
-        lua_pushvalue(state, 2);
-        lua_gettable(state, 1);
+        lua_pushvalue(state, 2)?;
+        lua_gettable(state, 1)?;
         if lua_type(state, -1) != ttype::FUNCTION {
-            lua_pushboolean(state, 0);
-            return 1;
+            lua_pushboolean(state, 0)?;
+            return Ok(1);
         }
         lua_insert(state, 3);
-        lua_call(state, nargs, 1);
+        lua_call(state, nargs, 1)?;
         let truthy = lua_toboolean(state, -1);
-        lua_pushboolean(state, truthy);
-        1
+        lua_pushboolean(state, truthy)?;
+        Ok(1)
     }
 }
 
 /// Run `lua_gettable` protected. Expects `[table, key]` on top; on success
 /// leaves `[result]` where the two inputs were; on failure leaves the error
 /// object on top and returns the non-zero status.
-unsafe fn protected_gettable(state: *mut lua_State) -> c_int {
+unsafe fn protected_gettable(
+    state: *mut lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         // Insert the C function below the two arguments: [t, k] -> [f, t, k].
         lua_pushcclosurek(
@@ -762,7 +776,7 @@ unsafe fn protected_gettable(state: *mut lua_State) -> c_int {
             c"luaur-rt-gettable".as_ptr(),
             0,
             None,
-        );
+        )?;
         lua_insert(state, -3);
         lua_pcall(state, 2, 1, 0)
     }
@@ -770,7 +784,9 @@ unsafe fn protected_gettable(state: *mut lua_State) -> c_int {
 
 /// Run `lua_settable` protected. Expects `[table, key, value]` on top; pops
 /// them on success; on failure leaves the error object and returns the status.
-unsafe fn protected_settable(state: *mut lua_State) -> c_int {
+unsafe fn protected_settable(
+    state: *mut lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         // [t, k, v] -> [f, t, k, v].
         lua_pushcclosurek(
@@ -779,7 +795,7 @@ unsafe fn protected_settable(state: *mut lua_State) -> c_int {
             c"luaur-rt-settable".as_ptr(),
             0,
             None,
-        );
+        )?;
         lua_insert(state, -4);
         lua_pcall(state, 3, 0, 0)
     }

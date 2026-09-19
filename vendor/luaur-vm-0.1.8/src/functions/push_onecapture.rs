@@ -11,27 +11,19 @@ pub(crate) unsafe fn push_onecapture(
     i: c_int,
     s: *const c_char,
     e: *const c_char,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     if i >= (*ms).level {
         if i == 0 {
-            // lua_pushlstring(ms->L, s, e - s);
+            // lua_pushlstring(ms->L, s, e - s)?;
             let len = (e as usize).wrapping_sub(s as usize);
-            // The dependency card shows lua_pushlstring() with no args in the stub,
-            // but the contract requires calling with real arguments.
-            let pushlstring_ptr = lua_pushlstring as *const ();
-            let pushlstring_fn: unsafe fn(
-                *mut crate::records::lua_state::LuaState,
-                *const c_char,
-                usize,
-            ) = core::mem::transmute(pushlstring_ptr);
-            pushlstring_fn((*ms).L, s, len);
+            lua_pushlstring((*ms).L, s, len)?;
         } else {
             // The luaL_error macro expansion calls lua_l_error_l.
             // Per contract: "Pass &str to a callee even if its current stub signature still shows *const i8".
             // However, the compiler error shows the current stub for lua_l_error_l expects *const c_char.
             // We cast the &str to a pointer to satisfy the current stub while it is being updated.
             let fmt = "invalid capture index";
-            crate::functions::lua_l_error_l::lua_l_error_l(
+            return crate::functions::lua_l_error_l::lua_l_error_l(
                 (*ms).L,
                 fmt.as_ptr() as *const c_char,
                 core::format_args!("{}", fmt),
@@ -41,7 +33,7 @@ pub(crate) unsafe fn push_onecapture(
         let l = (*ms).capture[i as usize].len;
         if l == CAP_UNFINISHED as isize {
             let fmt = "unfinished capture";
-            crate::functions::lua_l_error_l::lua_l_error_l(
+            return crate::functions::lua_l_error_l::lua_l_error_l(
                 (*ms).L,
                 fmt.as_ptr() as *const c_char,
                 core::format_args!("{}", fmt),
@@ -50,16 +42,11 @@ pub(crate) unsafe fn push_onecapture(
             // lua_pushinteger(ms->L, (int)(ms->capture[i].init - ms->src_init) + 1);
             let pos = ((*ms).capture[i as usize].init as usize)
                 .wrapping_sub((*ms).src_init as usize) as c_int;
-            lua_pushinteger((*ms).L, pos + 1);
+            lua_pushinteger((*ms).L, pos + 1)?;
         } else {
-            // lua_pushlstring(ms->L, ms->capture[i].init, l);
-            let pushlstring_ptr = lua_pushlstring as *const ();
-            let pushlstring_fn: unsafe fn(
-                *mut crate::records::lua_state::LuaState,
-                *const c_char,
-                usize,
-            ) = core::mem::transmute(pushlstring_ptr);
-            pushlstring_fn((*ms).L, (*ms).capture[i as usize].init, l as usize);
+            // lua_pushlstring(ms->L, ms->capture[i].init, l)?;
+            lua_pushlstring((*ms).L, (*ms).capture[i as usize].init, l as usize)?;
         }
     }
+    Ok(())
 }

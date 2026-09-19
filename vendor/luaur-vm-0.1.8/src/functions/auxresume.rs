@@ -17,7 +17,11 @@ use core::ffi::c_int;
 const STATNAMES: [&str; 5] = ["running", "suspended", "normal", "dead", "dead"];
 
 #[allow(non_snake_case)]
-pub unsafe fn auxresume(l: *mut lua_State, co: *mut lua_State, narg: c_int) -> c_int {
+pub unsafe fn auxresume(
+    l: *mut lua_State,
+    co: *mut lua_State,
+    narg: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     // error handling for edge cases
     if (*co).status != lua_Status::LUA_YIELD as u8 {
         let status = lua_costatus(l, co);
@@ -26,24 +30,24 @@ pub unsafe fn auxresume(l: *mut lua_State, co: *mut lua_State, narg: c_int) -> c
                 l,
                 c"cannot resume %s coroutine".as_ptr(),
                 format_args!("cannot resume {} coroutine", STATNAMES[status as usize]),
-            );
-            return CO_STATUS_ERROR;
+            )?;
+            return Ok(CO_STATUS_ERROR);
         }
     }
 
     if narg != 0 {
         if lua_checkstack(co, narg) == 0 {
-            lua_l_error_l(
+            return lua_l_error_l(
                 l,
                 c"too many arguments to resume".as_ptr(),
                 format_args!("too many arguments to resume"),
             );
         }
-        lua_xmove(l, co, narg);
+        lua_xmove(l, co, narg)?;
     } else {
         // coroutine might be completely full already
         if ((*co).top.offset_from((*co).base) as i32) > LUAI_MAXCSTACK {
-            lua_l_error_l(
+            return lua_l_error_l(
                 l,
                 c"too many arguments to resume".as_ptr(),
                 format_args!("too many arguments to resume"),
@@ -53,25 +57,25 @@ pub unsafe fn auxresume(l: *mut lua_State, co: *mut lua_State, narg: c_int) -> c
 
     (*co).singlestep = (*l).singlestep;
 
-    let status = lua_resume(co, l, narg);
+    let status = lua_resume(co, l, narg)?;
     if status == 0 || status == lua_Status::LUA_YIELD as c_int {
         let nres = cast_int!((*co).top.offset_from((*co).base));
         if nres != 0 {
             // +1 accounts for true/false status in resumefinish
             if nres + 1 > LUA_MINSTACK && lua_checkstack(l, nres + 1) == 0 {
-                lua_l_error_l(
+                return lua_l_error_l(
                     l,
                     c"too many results to resume".as_ptr(),
                     format_args!("too many results to resume"),
                 );
             }
-            lua_xmove(co, l, nres); // move yielded values
+            lua_xmove(co, l, nres)?; // move yielded values
         }
-        return nres;
+        return Ok(nres);
     } else if status == lua_Status::LUA_BREAK as c_int {
-        return CO_STATUS_BREAK;
+        return Ok(CO_STATUS_BREAK);
     } else {
-        lua_xmove(co, l, 1); // move error message
-        return CO_STATUS_ERROR;
+        lua_xmove(co, l, 1)?; // move error message
+        return Ok(CO_STATUS_ERROR);
     }
 }

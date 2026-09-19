@@ -17,7 +17,7 @@ pub unsafe fn lua_getcoverage(
     funcindex: core::ffi::c_int,
     context: *mut core::ffi::c_void,
     callback: lua_Coverage,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let func: *const TValue = luaA_toobject(L, funcindex);
     api_check!(L, ttisfunction!(func) && (*clvalue!(func)).isC == 0);
 
@@ -27,7 +27,7 @@ pub unsafe fn lua_getcoverage(
 
     let size = getmaxline(p) as usize + 1;
     if size == 0 {
-        return;
+        return Ok(());
     }
 
     let buffer = luaM_newarray!(L, size, core::ffi::c_int, 0);
@@ -41,4 +41,5 @@ pub unsafe fn lua_getcoverage(
         core::ffi::c_int,
         0
     );
+    Ok(())
 }

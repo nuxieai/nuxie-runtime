@@ -2,7 +2,7 @@
 macro_rules! luaD_checkstack {
     ($L:expr, $n:expr) => {
         if crate::macros::stacklimitreached::stacklimitreached($L, $n) {
-            $crate::functions::lua_d_growstack::lua_d_growstack($L, $n);
+            $crate::functions::lua_d_growstack::lua_d_growstack($L, $n)?;
         } else {
             crate::macros::condhardstacktests::condhardstacktests!(
                 crate::functions::lua_d_reallocstack::luaD_reallocstack(

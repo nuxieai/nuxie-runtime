@@ -6,7 +6,11 @@ use crate::type_aliases::t_value::TValue;
 
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
-pub unsafe fn sort_func(L: *mut lua_State, l: *const TValue, r: *const TValue) -> core::ffi::c_int {
+pub unsafe fn sort_func(
+    L: *mut lua_State,
+    l: *const TValue,
+    r: *const TValue,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     LUAU_ASSERT!(unsafe { (*L).top == (*L).base.offset(2) }); // table, function
 
     let top = unsafe { (*L).top };
@@ -18,9 +22,9 @@ pub unsafe fn sort_func(L: *mut lua_State, l: *const TValue, r: *const TValue) -
 
     unsafe {
         (*L).top = top.offset(3); // safe because of LUA_MINSTACK guarantee
-        lua_d_call(L, top, 1);
+        lua_d_call(L, top, 1)?;
         (*L).top = (*L).top.offset(-1); // maintain stack depth
 
-        (!l_isfalse!((*L).top)) as core::ffi::c_int
+        Ok((!l_isfalse!((*L).top)) as core::ffi::c_int)
     }
 }

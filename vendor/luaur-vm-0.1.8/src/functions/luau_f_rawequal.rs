@@ -12,7 +12,7 @@ pub unsafe fn luauF_rawequal(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     LUAU_FASTMATH_END!();
 
     if nparams >= 2 && nresults <= 1 {
@@ -21,8 +21,8 @@ pub unsafe fn luauF_rawequal(
         let i_o: *mut TValue = res;
         (*i_o).value.b = b;
         (*i_o).tt = crate::enums::lua_type::lua_Type::LUA_TBOOLEAN as i32;
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

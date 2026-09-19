@@ -10,7 +10,11 @@ use crate::records::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *const c_char {
+pub unsafe fn lua_getupvalue(
+    L: *mut lua_State,
+    funcindex: c_int,
+    n: c_int,
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
     let mut val: *mut TValue = core::ptr::null_mut();
@@ -21,5 +25,5 @@ pub unsafe fn lua_getupvalue(L: *mut lua_State, funcindex: c_int, n: c_int) -> *
         api_incr_top!(L);
     }
 
-    name
+    Ok(name)
 }

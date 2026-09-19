@@ -16,7 +16,10 @@ unsafe fn same_bytes(a: *const core::ffi::c_char, b: *const core::ffi::c_char, l
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaS_buffinish(l: *mut lua_State, ts: *mut TString) -> *mut TString {
+pub unsafe fn luaS_buffinish(
+    l: *mut lua_State,
+    ts: *mut TString,
+) -> crate::records::lua_exception::LuaResult<*mut TString> {
     let h = luaS_hash((*ts).data.as_ptr(), (*ts).len as usize);
     let tb: *mut stringtable = core::ptr::addr_of_mut!((*(*l).global).strt);
     let bucket = lmod!(h, (*tb).size) as i32;
@@ -29,7 +32,7 @@ pub unsafe fn luaS_buffinish(l: *mut lua_State, ts: *mut TString) -> *mut TStrin
             if crate::isdead!((*l).global, el as *mut GCObject) {
                 (*el).hdr.marked ^= WHITEBITS as u8;
             }
-            return el;
+            return Ok(el);
         }
         el = (*el).next;
     }
@@ -44,10 +47,10 @@ pub unsafe fn luaS_buffinish(l: *mut lua_State, ts: *mut TString) -> *mut TStrin
 
     (*tb).nuse = (*tb).nuse.wrapping_add(1);
     if (*tb).nuse > (*tb).size as u32 && (*tb).size <= core::ffi::c_int::MAX / 2 {
-        luaS_resize(l, (*tb).size * 2);
+        luaS_resize(l, (*tb).size * 2)?;
     }
 
-    ts
+    Ok(ts)
 }
 
 #[allow(unused_imports)]

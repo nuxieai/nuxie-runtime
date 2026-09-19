@@ -17,7 +17,7 @@ unsafe extern "C" {
 }
 
 #[export_name = "luaur_os_time"]
-pub unsafe fn os_time(l: *mut lua_State) -> c_int {
+pub unsafe fn os_time(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let t: i64;
 
     if lua_isnoneornil!(l, 1) {
@@ -35,28 +35,28 @@ pub unsafe fn os_time(l: *mut lua_State) -> c_int {
             tm_isdst: 0,
         };
 
-        lua_l_checktype(l, 1, lua_Type::LUA_TTABLE as c_int);
-        lua_settop(l, 1);
+        lua_l_checktype(l, 1, lua_Type::LUA_TTABLE as c_int)?;
+        lua_settop(l, 1)?;
 
-        ts.tm_sec = getfield(l, "sec", 0);
-        ts.tm_min = getfield(l, "min", 0);
-        ts.tm_hour = getfield(l, "hour", 12);
-        ts.tm_mday = getfield(l, "day", -1);
+        ts.tm_sec = getfield(l, "sec", 0)?;
+        ts.tm_min = getfield(l, "min", 0)?;
+        ts.tm_hour = getfield(l, "hour", 12)?;
+        ts.tm_mday = getfield(l, "day", -1)?;
         // wrapping_sub avoids `int` underflow on an INT_MIN month/year (UB in
         // C++; panic with overflow-checks). os_timegm widens to i64 and the
         // `t == -1` path rejects out-of-range dates, so a wrapped field can't UB.
-        ts.tm_mon = getfield(l, "month", -1).wrapping_sub(1);
-        ts.tm_year = getfield(l, "year", -1).wrapping_sub(1900);
-        ts.tm_isdst = getboolfield(l, "isdst");
+        ts.tm_mon = getfield(l, "month", -1)?.wrapping_sub(1);
+        ts.tm_year = getfield(l, "year", -1)?.wrapping_sub(1900);
+        ts.tm_isdst = getboolfield(l, "isdst")?;
 
         t = os_timegm(&ts);
     }
 
     if t == -1 {
-        lua_pushnil(l);
+        lua_pushnil(l)?;
     } else {
-        lua_pushnumber(l, t as f64);
+        lua_pushnumber(l, t as f64)?;
     }
 
-    1
+    Ok(1)
 }

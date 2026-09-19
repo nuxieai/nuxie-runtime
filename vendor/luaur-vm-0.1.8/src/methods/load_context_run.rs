@@ -24,7 +24,7 @@ impl LoadContextRun for LoadContext {
             (*ctx).data,
             (*ctx).size,
             (*ctx).env,
-        );
+        )?;
         Ok(())
     }
 }

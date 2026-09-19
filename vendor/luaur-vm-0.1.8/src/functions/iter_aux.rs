@@ -8,9 +8,9 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[export_name = "luaur_iter_aux"]
-pub unsafe fn iter_aux(L: *mut lua_State) -> c_int {
+pub unsafe fn iter_aux(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut len: usize = 0;
-    let s = lua_l_checklstring(L, 1, &mut len);
+    let s = lua_l_checklstring(L, 1, &mut len)?;
     let mut n = lua_tointeger!(L, 2) - 1;
 
     if n < 0 {
@@ -23,19 +23,19 @@ pub unsafe fn iter_aux(L: *mut lua_State) -> c_int {
     }
 
     if n >= len as c_int {
-        0
+        Ok(0)
     } else {
         let mut code: i32 = 0;
         let next = utf_8_decode(s.add(n as usize), &mut code);
         if next.is_null() || iscont(next) {
-            lua_l_error_l(
+            return lua_l_error_l(
                 L,
                 c"invalid UTF-8 code".as_ptr(),
                 core::format_args!("invalid UTF-8 code"),
             );
         }
-        lua_pushinteger(L, n + 1);
-        lua_pushinteger(L, code);
-        2
+        lua_pushinteger(L, n + 1)?;
+        lua_pushinteger(L, code)?;
+        Ok(2)
     }
 }

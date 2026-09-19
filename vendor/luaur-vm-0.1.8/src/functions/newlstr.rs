@@ -17,12 +17,12 @@ pub unsafe fn newlstr(
     str_: *const c_char,
     len: usize,
     mut h: c_uint,
-) -> *mut TString {
+) -> crate::records::lua_exception::LuaResult<*mut TString> {
     if len > MAXSSIZE as usize {
-        lua_m_toobig(l);
+        return lua_m_toobig(l);
     }
 
-    let ts = crate::functions::lua_m_newgco::luaM_newgco_(l, sizestring(len), (*l).activememcat)
+    let ts = crate::functions::lua_m_newgco::luaM_newgco_(l, sizestring(len), (*l).activememcat)?
         as *mut TString;
 
     luaC_init!(l, ts, lua_Type::LUA_TSTRING as c_int);
@@ -40,8 +40,8 @@ pub unsafe fn newlstr(
 
     (*tb).nuse = (*tb).nuse.wrapping_add(1);
     if (*tb).nuse > (*tb).size as u32 && (*tb).size <= c_int::MAX / 2 {
-        luaS_resize(l, (*tb).size * 2);
+        luaS_resize(l, (*tb).size * 2)?;
     }
 
-    ts
+    Ok(ts)
 }

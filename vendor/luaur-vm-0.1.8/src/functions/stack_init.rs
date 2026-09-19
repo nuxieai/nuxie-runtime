@@ -11,7 +11,10 @@ use crate::records::call_info::CallInfo;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
 
-pub unsafe fn stack_init(L1: *mut lua_State, L: *mut lua_State) {
+pub unsafe fn stack_init(
+    L1: *mut lua_State,
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<()> {
     // initialize CallInfo array
     (*L1).base_ci = luaM_newarray!(L, BASIC_CI_SIZE, CallInfo, (*L1).hdr.memcat);
     (*L1).ci = (*L1).base_ci;
@@ -34,4 +37,5 @@ pub unsafe fn stack_init(L1: *mut lua_State, L: *mut lua_State) {
     (*L1).base = (*L1).top;
     (*(*L1).ci).base = (*L1).top;
     (*(*L1).ci).top = (*L1).top.add(LUA_MINSTACK as usize);
+    Ok(())
 }

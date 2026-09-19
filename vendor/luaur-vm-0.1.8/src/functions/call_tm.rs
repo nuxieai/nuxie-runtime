@@ -1,5 +1,6 @@
 use crate::macros::lua_d_checkstack::luaD_checkstack;
 use crate::macros::setobj_2_s::setobj2s;
+use crate::records::lua_exception::LuaResult;
 
 use crate::functions::lua_d_call::lua_d_call;
 
@@ -14,7 +15,7 @@ pub unsafe fn call_tm(
     p1: *const TValue,
     p2: *const TValue,
     p3: *const TValue,
-) {
+) -> LuaResult<()> {
     LUAU_ASSERT!((*L).top.offset(4) < (*L).stack.add((*L).stacksize as usize));
 
     setobj2s!(L, (*L).top, f);
@@ -25,5 +26,5 @@ pub unsafe fn call_tm(
     luaD_checkstack!(L, 4);
     (*L).top = (*L).top.add(4);
 
-    lua_d_call(L, (*L).top.offset(-4), 0);
+    lua_d_call(L, (*L).top.offset(-4), 0)
 }

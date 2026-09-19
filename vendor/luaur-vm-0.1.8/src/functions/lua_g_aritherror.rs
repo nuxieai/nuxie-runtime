@@ -12,12 +12,12 @@ use crate::type_aliases::t_value::TValue;
 use crate::type_aliases::tms::TMS;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_aritherror(
+pub unsafe fn lua_g_aritherror<T>(
     L: *mut lua_State,
     p1: *const TValue,
     p2: *const TValue,
     op: TMS,
-) -> ! {
+) -> crate::records::lua_exception::LuaResult<T> {
     let t1: *const c_char = lua_t_objtypename(L, p1);
     let t2: *const c_char = lua_t_objtypename(L, p2);
     // skip __ from metamethod name
@@ -43,11 +43,11 @@ pub unsafe fn lua_g_aritherror(
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaG_aritherror(
+pub unsafe fn luaG_aritherror<T>(
     L: *mut lua_State,
     p1: *const TValue,
     p2: *const TValue,
     op: TMS,
-) -> ! {
+) -> crate::records::lua_exception::LuaResult<T> {
     lua_g_aritherror(L, p1, p2, op)
 }

@@ -17,7 +17,7 @@ pub unsafe fn luau_f_vectorscaleandadd(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisvector!(arg0)
@@ -31,8 +31,8 @@ pub unsafe fn luau_f_vectorscaleandadd(
         let y = b.add(1).read().mul_add(scale, a.add(1).read());
         let z = b.add(2).read().mul_add(scale, a.add(2).read());
         setvvalue!(l, res, x, y, z, 0.0 as LuaVectorType);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

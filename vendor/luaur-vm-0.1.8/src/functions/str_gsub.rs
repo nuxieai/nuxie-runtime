@@ -24,13 +24,13 @@ use crate::records::match_state::MatchState;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::{c_char, c_int};
 
-pub unsafe fn str_gsub(L: *mut lua_State) -> c_int {
+pub unsafe fn str_gsub(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut srcl: usize = 0;
     let mut lp: usize = 0;
-    let mut src = lua_l_checklstring(L, 1, &mut srcl);
-    let mut p = lua_l_checklstring(L, 2, &mut lp);
+    let mut src = lua_l_checklstring(L, 1, &mut srcl)?;
+    let mut p = lua_l_checklstring(L, 2, &mut lp)?;
     let tr = lua_type(L, 3);
-    let max_s = lua_l_optinteger(L, 4, srcl as c_int + 1);
+    let max_s = lua_l_optinteger(L, 4, srcl as c_int + 1)?;
     let anchor = *p == b'^' as c_char;
     let mut n: c_int = 0;
 
@@ -64,17 +64,17 @@ pub unsafe fn str_gsub(L: *mut lua_State) -> c_int {
 
     while n < max_s {
         reprepstate(&mut ms);
-        let e = match_item(&mut ms, src, p);
+        let e = match_item(&mut ms, src, p)?;
         if !e.is_null() {
             n += 1;
-            add_value(&mut ms, &mut b, src, e, tr);
+            add_value(&mut ms, &mut b, src, e, tr)?;
         }
 
         if !e.is_null() && e > src {
             // non empty match?
             src = e; // skip it
         } else if src < ms.src_end {
-            lua_l_addchar(&mut b, *src);
+            lua_l_addchar(&mut b, *src)?;
             src = src.add(1);
         } else {
             break;
@@ -85,8 +85,8 @@ pub unsafe fn str_gsub(L: *mut lua_State) -> c_int {
         }
     }
 
-    lua_l_addlstring(&mut b, src, ms.src_end.offset_from(src) as usize);
-    lua_l_pushresult(&mut b);
-    lua_pushinteger(L, n); // number of substitutions
-    2
+    lua_l_addlstring(&mut b, src, ms.src_end.offset_from(src) as usize)?;
+    lua_l_pushresult(&mut b)?;
+    lua_pushinteger(L, n)?; // number of substitutions
+    Ok(2)
 }

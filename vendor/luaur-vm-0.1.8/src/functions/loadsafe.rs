@@ -95,7 +95,7 @@ pub unsafe fn loadsafe(
     data: *const c_char,
     size: usize,
     env: c_int,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut offset: usize = 0;
 
     let version: u8 = read(data, size, &mut offset);
@@ -109,8 +109,8 @@ pub unsafe fn loadsafe(
             chunkname,
             c_strlen(chunkname),
         );
-        push_chunk_prefixed_slice(L, chunkid, data.add(offset), size - offset);
-        return 1;
+        push_chunk_prefixed_slice(L, chunkid, data.add(offset), size - offset)?;
+        return Ok(1);
     }
 
     if (version < LBC_VERSION_MIN.0 as u8 || version > LBC_VERSION_MAX.0 as u8)
@@ -130,8 +130,8 @@ pub unsafe fn loadsafe(
             LBC_VERSION_MAX.0,
             version
         );
-        push_rust_string(L, &message);
-        return 1;
+        push_rust_string(L, &message)?;
+        return Ok(1);
     }
 
     let mut typesversion: u8 = 0;
@@ -156,8 +156,8 @@ pub unsafe fn loadsafe(
                 LBC_TYPE_VERSION_MAX.0,
                 typesversion
             );
-            push_rust_string(L, &message);
-            return 1;
+            push_rust_string(L, &message)?;
+            return Ok(1);
         }
     }
 
@@ -168,16 +168,16 @@ pub unsafe fn loadsafe(
         hvalue!(luaA_toobject(L, env))
     };
 
-    let source: *mut TString = luaS_new(L, chunkname);
+    let source: *mut TString = luaS_new(L, chunkname)?;
 
     // string table
     let string_count = read_var_int(data, size, &mut offset);
-    strings.allocate(L, string_count as usize);
+    strings.allocate(L, string_count as usize)?;
 
     for i in 0..string_count {
         let length = read_var_int(data, size, &mut offset);
 
-        *strings.data.add(i as usize) = luaS_newlstr(L, data.add(offset), length as usize);
+        *strings.data.add(i as usize) = luaS_newlstr(L, data.add(offset), length as usize)?;
         offset += length as usize;
     }
 
@@ -204,7 +204,7 @@ pub unsafe fn loadsafe(
 
     // proto table
     let proto_count = read_var_int(data, size, &mut offset);
-    protos.allocate(L, proto_count as usize);
+    protos.allocate(L, proto_count as usize)?;
 
     for i in 0..proto_count {
         let proto_size = if version >= 12 {
@@ -214,7 +214,7 @@ pub unsafe fn loadsafe(
         };
         let proto_start_offset = offset;
 
-        let p = lua_f_newproto(L);
+        let p = lua_f_newproto(L)?;
         (*p).source = source;
         (*p).bytecodeid = i as c_int;
         (*p).funid = if (*(*L).global).lastprotoid == 0 {
@@ -354,17 +354,17 @@ pub unsafe fn loadsafe(
 
                 LBC_CONSTANT_IMPORT_U8 => {
                     let iid: u32 = read(data, size, &mut offset);
-                    resolve_import_safe(L, envt, (*p).k, iid);
+                    resolve_import_safe(L, envt, (*p).k, iid)?;
                     setobj!(L, k, (*L).top.sub(1));
                     (*L).top = (*L).top.sub(1);
                 }
 
                 LBC_CONSTANT_TABLE_U8 => {
                     let keys = read_var_int(data, size, &mut offset) as c_int;
-                    let h = lua_h_new(L, 0, keys);
+                    let h = lua_h_new(L, 0, keys)?;
                     for _ in 0..keys {
                         let key = read_var_int(data, size, &mut offset) as c_int;
-                        let val = luaH_set(L, h, (*p).k.add(key as usize) as *const TValue);
+                        let val = luaH_set(L, h, (*p).k.add(key as usize) as *const TValue)?;
                         setnvalue!(val, 0.0);
                     }
                     sethvalue!(L, k, h);
@@ -372,15 +372,15 @@ pub unsafe fn loadsafe(
 
                 LBC_CONSTANT_TABLE_WITH_CONSTANTS_U8 => {
                     let keys = read_var_int(data, size, &mut offset);
-                    let h = lua_h_new(L, 0, keys as c_int);
+                    let h = lua_h_new(L, 0, keys as c_int)?;
 
                     let mut nil_keys: TempBuffer<i32> = TempBuffer::temp_buffer();
-                    nil_keys.allocate(L, keys as usize);
+                    nil_keys.allocate(L, keys as usize)?;
                     let mut nil_keys_size: usize = 0;
 
                     for _ in 0..keys {
                         let key = read_var_int(data, size, &mut offset) as i32;
-                        let val = luaH_set(L, h, (*p).k.add(key as usize) as *const TValue);
+                        let val = luaH_set(L, h, (*p).k.add(key as usize) as *const TValue)?;
                         let constant_idx: i32 = read(data, size, &mut offset);
                         if constant_idx >= 0 {
                             let constant = (*p).k.add(constant_idx as usize);
@@ -398,7 +398,7 @@ pub unsafe fn loadsafe(
 
                     for idx in 0..nil_keys_size {
                         let key = *nil_keys.data.add(idx);
-                        let val = luaH_set(L, h, (*p).k.add(key as usize) as *const TValue);
+                        let val = luaH_set(L, h, (*p).k.add(key as usize) as *const TValue)?;
                         setnilvalue!(val);
                     }
 
@@ -408,7 +408,7 @@ pub unsafe fn loadsafe(
                 LBC_CONSTANT_CLOSURE_U8 => {
                     let fid = read_var_int(data, size, &mut offset);
                     let proto = *protos.data.add(fid as usize);
-                    let cl = lua_f_new_lclosure(L, (*proto).nups as c_int, envt, proto);
+                    let cl = lua_f_new_lclosure(L, (*proto).nups as c_int, envt, proto)?;
                     (*cl).preload = if (*cl).nupvalues > 0 { 1 } else { 0 };
                     setclvalue!(L, k, cl);
                 }
@@ -422,7 +422,7 @@ pub unsafe fn loadsafe(
                     let num_members = num_methods + num_properties;
                     let offset_to_member =
                         luaM_newarray!(L, num_members as usize, *mut TString, (*L).activememcat);
-                    let members_to_offset = lua_h_new(L, 0, num_members as c_int);
+                    let members_to_offset = lua_h_new(L, 0, num_members as c_int)?;
 
                     for idx in 0..num_members {
                         let mid = read_var_int(data, size, &mut offset);
@@ -433,7 +433,7 @@ pub unsafe fn loadsafe(
                             L,
                             members_to_offset,
                             tsvalue!(member_name) as *mut TString,
-                        );
+                        )?;
                         setnvalue!(val, idx as f64);
                     }
 
@@ -446,7 +446,7 @@ pub unsafe fn loadsafe(
                         offset_to_member,
                         num_properties,
                         num_methods,
-                    );
+                    )?;
                     setclassvalue!(L, k, lco);
                 }
 
@@ -618,14 +618,19 @@ pub unsafe fn loadsafe(
         lua_c_barrierback(L, thread_obj, &mut (*L).gclist);
     }
 
-    let cl = lua_f_new_lclosure(L, 0, envt, main);
+    let cl = lua_f_new_lclosure(L, 0, envt, main)?;
     setclvalue!(L, (*L).top, cl);
     incr_top!(L);
 
-    0
+    Ok(0)
 }
 
-unsafe fn resolve_import_safe(L: *mut lua_State, _env: *mut LuaTable, k: *mut TValue, id: u32) {
+unsafe fn resolve_import_safe(
+    L: *mut lua_State,
+    _env: *mut LuaTable,
+    k: *mut TValue,
+    id: u32,
+) -> crate::records::lua_exception::LuaResult<()> {
     let mut ri = ResolveImport { k, id };
 
     if (*(*L).gt).safeenv != 0 {
@@ -637,7 +642,7 @@ unsafe fn resolve_import_safe(L: *mut lua_State, _env: *mut LuaTable, k: *mut TV
             &mut ri as *mut ResolveImport as *mut core::ffi::c_void,
             savestack!(L, (*L).top) as isize,
             0,
-        );
+        )?;
         LUAU_ASSERT!(old_top + 1 == lua_gettop(L)); // if an error occurred, luaD_pcall saves it on stack
 
         if status != lua_Status::LUA_OK as c_int {
@@ -648,6 +653,7 @@ unsafe fn resolve_import_safe(L: *mut lua_State, _env: *mut LuaTable, k: *mut TV
         setnilvalue!((*L).top);
         (*L).top = (*L).top.add(1);
     }
+    Ok(())
 }
 
 unsafe fn c_strlen(s: *const c_char) -> usize {
@@ -667,15 +673,18 @@ unsafe fn push_chunk_prefixed_slice(
     chunkid: *const c_char,
     bytes: *const c_char,
     len: usize,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let prefix = core::slice::from_raw_parts(chunkid as *const u8, c_strlen(chunkid));
     let payload = core::slice::from_raw_parts(bytes as *const u8, len);
     let mut message = Vec::with_capacity(prefix.len() + payload.len());
     message.extend_from_slice(prefix);
     message.extend_from_slice(payload);
-    lua_pushlstring(L, message.as_ptr() as *const c_char, message.len());
+    lua_pushlstring(L, message.as_ptr() as *const c_char, message.len())
 }
 
-unsafe fn push_rust_string(L: *mut lua_State, message: &str) {
-    lua_pushlstring(L, message.as_ptr() as *const c_char, message.len());
+unsafe fn push_rust_string(
+    L: *mut lua_State,
+    message: &str,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_pushlstring(L, message.as_ptr() as *const c_char, message.len())
 }

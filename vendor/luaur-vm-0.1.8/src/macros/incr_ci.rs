@@ -11,7 +11,7 @@ macro_rules! incr_ci {
     ($L:expr) => {{
         let L = $L;
         if (*L).ci == (*L).end_ci {
-            crate::functions::lua_d_grow_ci::luaD_growCI(L);
+            crate::functions::lua_d_grow_ci::luaD_growCI(L)?;
         } else {
             crate::macros::condhardstacktests::condhardstacktests!(
                 crate::functions::lua_d_realloc_ci::luaD_reallocCI(L, (*L).size_ci)

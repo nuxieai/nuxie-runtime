@@ -8,7 +8,7 @@ macro_rules! tostring {
     ($L:expr, $o:expr) => {
         ($crate::macros::ttype::ttype!($o)
             == ($crate::enums::lua_type::lua_Type::LUA_TSTRING as i32))
-            || ($crate::functions::lua_v_tostring::lua_v_tostring($L, $o) != 0)
+            || ($crate::functions::lua_v_tostring::lua_v_tostring($L, $o)? != 0)
     };
 }
 

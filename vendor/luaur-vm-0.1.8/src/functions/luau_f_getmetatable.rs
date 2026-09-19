@@ -23,7 +23,7 @@ pub unsafe fn luau_f_getmetatable(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 {
         let mut mt: *mut LuaTable = core::ptr::null_mut();
         if ttistable!(arg0) {
@@ -43,17 +43,17 @@ pub unsafe fn luau_f_getmetatable(
 
         if !ttisnil!(mtv) {
             setobj_2_s!(L, res, mtv);
-            return 1;
+            return Ok(1);
         }
 
         if !mt.is_null() {
             sethvalue!(L, res, mt);
-            return 1;
+            return Ok(1);
         } else {
             setnilvalue!(res);
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

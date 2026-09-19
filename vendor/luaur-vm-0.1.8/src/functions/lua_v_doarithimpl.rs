@@ -18,10 +18,10 @@ use crate::macros::ttisnumber::ttisnumber;
 use crate::macros::ttisvector::ttisvector;
 use crate::macros::vvalue::vvalue;
 use crate::records::lua_state::lua_State;
+use crate::type_aliases::lua_vector_type::LuaVectorType;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 use crate::type_aliases::tms::TMS;
-use crate::type_aliases::lua_vector_type::LuaVectorType;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
@@ -31,7 +31,7 @@ pub unsafe fn lua_v_doarithimpl(
     rb: *const TValue,
     rc: *const TValue,
     op: TMS,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let mut tempb = TValue::default();
     let mut tempc = TValue::default();
     let b: *const TValue;
@@ -51,58 +51,63 @@ pub unsafe fn lua_v_doarithimpl(
     if !vb.is_null() && !vc.is_null() {
         match op {
             TMS::TM_ADD => {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     ra,
                     *vb.add(0) + *vc.add(0),
                     *vb.add(1) + *vc.add(1),
                     *vb.add(2) + *vc.add(2),
                     *vb.add(3) + *vc.add(3)
                 );
-                return;
+                return Ok(());
             }
             TMS::TM_SUB => {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     ra,
                     *vb.add(0) - *vc.add(0),
                     *vb.add(1) - *vc.add(1),
                     *vb.add(2) - *vc.add(2),
                     *vb.add(3) - *vc.add(3)
                 );
-                return;
+                return Ok(());
             }
             TMS::TM_MUL => {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     ra,
                     *vb.add(0) * *vc.add(0),
                     *vb.add(1) * *vc.add(1),
                     *vb.add(2) * *vc.add(2),
                     *vb.add(3) * *vc.add(3)
                 );
-                return;
+                return Ok(());
             }
             TMS::TM_DIV => {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     ra,
                     *vb.add(0) / *vc.add(0),
                     *vb.add(1) / *vc.add(1),
                     *vb.add(2) / *vc.add(2),
                     *vb.add(3) / *vc.add(3)
                 );
-                return;
+                return Ok(());
             }
             TMS::TM_IDIV => {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     ra,
                     luai_numidiv(*vb.add(0) as f64, *vc.add(0) as f64) as LuaVectorType,
                     luai_numidiv(*vb.add(1) as f64, *vc.add(1) as f64) as LuaVectorType,
                     luai_numidiv(*vb.add(2) as f64, *vc.add(2) as f64) as LuaVectorType,
                     luai_numidiv(*vb.add(3) as f64, *vc.add(3) as f64) as LuaVectorType
                 );
-                return;
+                return Ok(());
             }
             TMS::TM_UNM => {
                 setvvalue!(L, ra, -*vb.add(0), -*vb.add(1), -*vb.add(2), -*vb.add(3));
-                return;
+                return Ok(());
             }
             _ => {}
         }
@@ -116,34 +121,37 @@ pub unsafe fn lua_v_doarithimpl(
             let nc = cast_to!(LuaVectorType, nvalue!(c_ptr));
             match op {
                 TMS::TM_MUL => {
-                    setvvalue!(L,
+                    setvvalue!(
+                        L,
                         ra,
                         *vb.add(0) * nc,
                         *vb.add(1) * nc,
                         *vb.add(2) * nc,
                         *vb.add(3) * nc
                     );
-                    return;
+                    return Ok(());
                 }
                 TMS::TM_DIV => {
-                    setvvalue!(L,
+                    setvvalue!(
+                        L,
                         ra,
                         *vb.add(0) / nc,
                         *vb.add(1) / nc,
                         *vb.add(2) / nc,
                         *vb.add(3) / nc
                     );
-                    return;
+                    return Ok(());
                 }
                 TMS::TM_IDIV => {
-                    setvvalue!(L,
+                    setvvalue!(
+                        L,
                         ra,
                         luai_numidiv(*vb.add(0) as f64, nc as f64) as LuaVectorType,
                         luai_numidiv(*vb.add(1) as f64, nc as f64) as LuaVectorType,
                         luai_numidiv(*vb.add(2) as f64, nc as f64) as LuaVectorType,
                         luai_numidiv(*vb.add(3) as f64, nc as f64) as LuaVectorType
                     );
-                    return;
+                    return Ok(());
                 }
                 _ => {}
             }
@@ -158,34 +166,37 @@ pub unsafe fn lua_v_doarithimpl(
             let nb = cast_to!(LuaVectorType, nvalue!(b_ptr));
             match op {
                 TMS::TM_MUL => {
-                    setvvalue!(L,
+                    setvvalue!(
+                        L,
                         ra,
                         nb * *vc.add(0),
                         nb * *vc.add(1),
                         nb * *vc.add(2),
                         nb * *vc.add(3)
                     );
-                    return;
+                    return Ok(());
                 }
                 TMS::TM_DIV => {
-                    setvvalue!(L,
+                    setvvalue!(
+                        L,
                         ra,
                         nb / *vc.add(0),
                         nb / *vc.add(1),
                         nb / *vc.add(2),
                         nb / *vc.add(3)
                     );
-                    return;
+                    return Ok(());
                 }
                 TMS::TM_IDIV => {
-                    setvvalue!(L,
+                    setvvalue!(
+                        L,
                         ra,
                         luai_numidiv(nb as f64, *vc.add(0) as f64) as LuaVectorType,
                         luai_numidiv(nb as f64, *vc.add(1) as f64) as LuaVectorType,
                         luai_numidiv(nb as f64, *vc.add(2) as f64) as LuaVectorType,
                         luai_numidiv(nb as f64, *vc.add(3) as f64) as LuaVectorType
                     );
-                    return;
+                    return Ok(());
                 }
                 _ => {}
             }
@@ -208,87 +219,88 @@ pub unsafe fn lua_v_doarithimpl(
             TMS::TM_UNM => setnvalue!(ra, luai_numunm(nb)),
             _ => LUAU_ASSERT!(false),
         }
-    } else if call_bin_tm(L, rb, rc, ra, op) == 0 {
-        luaG_aritherror(L, rb, rc, op);
+    } else if call_bin_tm(L, rb, rc, ra, op)? == 0 {
+        return luaG_aritherror(L, rb, rc, op);
     }
+    Ok(())
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_ADD"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_add(
+pub unsafe fn lua_v_doarithimpl_tm_add(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_ADD);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_ADD)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_SUB"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_sub(
+pub unsafe fn lua_v_doarithimpl_tm_sub(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_SUB);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_SUB)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_MUL"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_mul(
+pub unsafe fn lua_v_doarithimpl_tm_mul(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_MUL);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_MUL)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_DIV"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_div(
+pub unsafe fn lua_v_doarithimpl_tm_div(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_DIV);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_DIV)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_IDIV"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_idiv(
+pub unsafe fn lua_v_doarithimpl_tm_idiv(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_IDIV);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_IDIV)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_MOD"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_mod(
+pub unsafe fn lua_v_doarithimpl_tm_mod(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_MOD);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_MOD)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_POW"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_pow(
+pub unsafe fn lua_v_doarithimpl_tm_pow(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_POW);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_POW)
 }
 
 #[export_name = "luaur_luaV_doarithimpl_TM_UNM"]
-pub unsafe extern "C" fn lua_v_doarithimpl_tm_unm(
+pub unsafe fn lua_v_doarithimpl_tm_unm(
     L: *mut lua_State,
     ra: StkId,
     rb: *const TValue,
     rc: *const TValue,
-) {
-    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_UNM);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_doarithimpl(L, ra, rb, rc, TMS::TM_UNM)
 }

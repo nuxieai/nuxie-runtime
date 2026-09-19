@@ -6,6 +6,6 @@ use core::ffi::{c_char, c_int};
 pub unsafe fn lua_getglobal(
     L: *mut crate::records::lua_state::lua_State,
     s: *const c_char,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     lua_getfield(L, LUA_GLOBALSINDEX, s)
 }

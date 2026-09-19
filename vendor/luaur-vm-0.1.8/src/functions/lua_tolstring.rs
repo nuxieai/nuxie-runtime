@@ -11,16 +11,20 @@ use crate::records::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char {
+pub unsafe fn lua_tolstring(
+    L: *mut lua_State,
+    idx: c_int,
+    len: *mut usize,
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     let mut o: StkId = index2addr(L, idx);
 
     if !ttisstring!(o) {
         lua_c_threadbarrier_lapi(L);
-        if lua_v_tostring(L, o) == 0 {
+        if lua_v_tostring(L, o)? == 0 {
             if !len.is_null() {
                 *len = 0;
             }
-            return core::ptr::null();
+            return Ok(core::ptr::null());
         }
         luaC_checkGC!(L);
         o = index2addr(L, idx);
@@ -30,5 +34,5 @@ pub unsafe fn lua_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *
         *len = (*tsvalue!(o)).len as usize;
     }
 
-    svalue!(o)
+    Ok(svalue!(o))
 }

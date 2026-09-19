@@ -15,14 +15,14 @@ pub unsafe fn luau_f_round(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     LUAU_FASTMATH_BEGIN!();
 
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let v = nvalue!(arg0);
         setnvalue!(res, v.round());
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

@@ -2,9 +2,9 @@ use core::ffi::c_int;
 
 use crate::enums::lua_type::lua_Type;
 use crate::functions::lua_absindex::lua_absindex;
-use crate::functions::lua_rawiter::lua_rawiter;
 use crate::functions::lua_g_readonlyerror::lua_g_readonlyerror;
 use crate::functions::lua_rawgeti::lua_rawgeti;
+use crate::functions::lua_rawiter::lua_rawiter;
 use crate::functions::lua_rawseti::lua_rawseti;
 use crate::functions::lua_tointegerx::lua_tointegerx;
 use crate::functions::lua_tonumberx::lua_tonumberx;
@@ -13,8 +13,8 @@ use crate::macros::hvalue::hvalue;
 use crate::macros::lua_c_barrierfast::lua_c_barrierfast;
 use crate::macros::lua_newtable::lua_newtable;
 use crate::macros::lua_pop::lua_pop;
-use crate::macros::sizenode::sizenode;
 use crate::macros::setobj_2_t::setobj2t;
+use crate::macros::sizenode::sizenode;
 use crate::records::lua_table::LuaTable;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
@@ -67,12 +67,12 @@ pub unsafe fn moveelements(
     e: i32,
     t: i32,
     sparsemove: bool,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let src = hvalue!((*L).base.offset((srct - 1) as isize));
     let dst = hvalue!((*L).base.offset((dstt - 1) as isize));
 
     if (*dst).readonly != 0 {
-        lua_g_readonlyerror(L);
+        return lua_g_readonlyerror(L);
     }
 
     let n = e - f + 1;
@@ -111,65 +111,66 @@ pub unsafe fn moveelements(
         // Temporary table holding the source entries in the requested range.
         // Keeping the entries alive also makes overlapping source/destination
         // moves behave exactly like the C++ implementation.
-        lua_newtable(L);
+        lua_newtable(L)?;
 
         // Collect only integer keys in [f, e]. `lua_rawiter` leaves key/value
         // at -2/-1; rawseti consumes the value and the explicit pop consumes
         // the key, restoring the temporary table at the top each iteration.
         let mut iter = 0;
         loop {
-            iter = crate::functions::lua_rawiter::lua_rawiter(L, srcta, iter);
+            iter = crate::functions::lua_rawiter::lua_rawiter(L, srcta, iter)?;
             if iter == -1 {
                 break;
             }
 
             if let Some(ikey) = to_valid_int_key(L, -2, f, e) {
-                lua_rawseti(L, -3, ikey);
+                lua_rawseti(L, -3, ikey)?;
             } else {
-                lua_pop(L, 1);
+                lua_pop(L, 1)?;
             }
-            lua_pop(L, 1);
+            lua_pop(L, 1)?;
         }
 
         // Clear destination entries in [t, te] before copying.  Iteration is
         // over the actual hash/array entries, so sparse ranges stay bounded.
         let mut iter = 0;
         loop {
-            iter = lua_rawiter(L, dstta, iter);
+            iter = lua_rawiter(L, dstta, iter)?;
             if iter == -1 {
                 break;
             }
 
             if let Some(ikey) = to_valid_int_key(L, -2, t, te) {
-                crate::functions::lua_pushnil::lua_pushnil(L);
-                lua_rawseti(L, dstta, ikey);
+                crate::functions::lua_pushnil::lua_pushnil(L)?;
+                lua_rawseti(L, dstta, ikey)?;
             }
-            lua_pop(L, 2);
+            lua_pop(L, 2)?;
         }
 
         // Copy the collected entries to their translated destination keys.
         let mut iter = 0;
         loop {
-            iter = lua_rawiter(L, -1, iter);
+            iter = lua_rawiter(L, -1, iter)?;
             if iter == -1 {
                 break;
             }
             let ikey = lua_tointegerx(L, -2, core::ptr::null_mut());
-            lua_rawseti(L, dstta, ikey - f + t);
-            lua_pop(L, 1);
+            lua_rawseti(L, dstta, ikey - f + t)?;
+            lua_pop(L, 1)?;
         }
-        lua_pop(L, 1);
+        lua_pop(L, 1)?;
     } else {
         if t > e || t <= f || dst != src {
             for i in 0..n {
-                lua_rawgeti(L, srct, f + i);
-                lua_rawseti(L, dstt, t + i);
+                lua_rawgeti(L, srct, f + i)?;
+                lua_rawseti(L, dstt, t + i)?;
             }
         } else {
             for i in (0..n).rev() {
-                lua_rawgeti(L, srct, f + i);
-                lua_rawseti(L, dstt, t + i);
+                lua_rawgeti(L, srct, f + i)?;
+                lua_rawseti(L, dstt, t + i)?;
             }
         }
     }
+    Ok(())
 }

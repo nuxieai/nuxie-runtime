@@ -7,10 +7,12 @@ use crate::macros::mask_64::mask64;
 use crate::type_aliases::lua_state::LuaState;
 
 #[export_name = "luaur_int64_extract"]
-pub unsafe fn int64_extract(l: *mut LuaState) -> core::ffi::c_int {
-    let n = lua_l_checkinteger_64(l, 1);
-    let f = lua_l_checkinteger_64(l, 2);
-    let w = lua_l_optinteger_64(l, 3, 1);
+pub unsafe fn int64_extract(
+    l: *mut LuaState,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    let n = lua_l_checkinteger_64(l, 1)?;
+    let f = lua_l_checkinteger_64(l, 2)?;
+    let w = lua_l_optinteger_64(l, 3, 1)?;
 
     luaL_argcheck!(
         l,
@@ -25,7 +27,7 @@ pub unsafe fn int64_extract(l: *mut LuaState) -> core::ffi::c_int {
         luaL_error!(l, "trying to access non-existent bits");
     }
 
-    lua_pushinteger_64(l, (((n as u64) >> f as u32) & mask64(w as i32)) as i64);
+    lua_pushinteger_64(l, (((n as u64) >> f as u32) & mask64(w as i32)) as i64)?;
 
-    1
+    Ok(1)
 }

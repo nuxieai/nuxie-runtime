@@ -40,13 +40,16 @@ impl LuaString {
         unsafe {
             self.reference.push();
             let mut len = 0usize;
-            let p = lua_tolstring(state, -1, &mut len);
+            // The handle guarantees this is already a string: no numeric
+            // conversion, allocation, or guest code runs on this path.
+            let p = lua_tolstring(state, -1, &mut len)
+                .expect("reading an existing Lua string cannot fail");
             let bytes = if p.is_null() {
                 Vec::new()
             } else {
                 core::slice::from_raw_parts(p as *const u8, len).to_vec()
             };
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             bytes
         }
     }
@@ -85,7 +88,7 @@ impl LuaString {
         unsafe {
             self.reference.push();
             let p = lua_topointer(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             p
         }
     }
@@ -218,7 +221,8 @@ impl PartialEq<std::borrow::Cow<'_, [u8]>> for LuaString {
 pub(crate) fn create_string(lua: &Lua, bytes: &[u8]) -> LuaString {
     let state = lua.state();
     unsafe {
-        lua_pushlstring(state, bytes.as_ptr() as *const c_char, bytes.len());
+        lua_pushlstring(state, bytes.as_ptr() as *const c_char, bytes.len())
+            .expect("allocation failed in an infallible Lua string constructor");
         LuaString::from_ref(lua.pop_ref())
     }
 }

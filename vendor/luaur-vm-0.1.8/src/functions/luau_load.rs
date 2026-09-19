@@ -17,7 +17,7 @@ pub unsafe fn luau_load(
     data: *const c_char,
     size: usize,
     env: c_int,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     // we will allocate a fair amount of memory so check GC before we do
     luaC_checkGC!(L);
 
@@ -50,7 +50,10 @@ pub unsafe fn luau_load(
     );
 
     let result = if status == lua_Status::LUA_ERRMEM as c_int {
-        lua_pushstring(L, b"not enough memory\0".as_ptr() as *const c_char);
+        // Upstream: the pinned OOM message needs no allocation; loading owns
+        // the stack slot used to report it.
+        lua_pushstring(L, b"not enough memory\0".as_ptr() as *const c_char)
+            .expect("initialized VM must retain its pinned OOM string and load error slot");
         1
     } else {
         ctx.result
@@ -58,5 +61,5 @@ pub unsafe fn luau_load(
 
     pause_gc.drop();
 
-    result
+    Ok(result)
 }

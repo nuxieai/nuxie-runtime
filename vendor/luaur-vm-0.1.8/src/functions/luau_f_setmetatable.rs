@@ -15,12 +15,12 @@ pub unsafe fn luau_f_setmetatable(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // note: setmetatable(_, nil) is rare so we use fallback for it to optimize the fast path
     if nparams >= 2 && nresults <= 1 && ttistable!(arg0) && ttistable!(args) {
         let t = hvalue!(arg0);
         if (*t).readonly != 0 || !(*t).metatable.is_null() {
-            return -1; // note: overwriting non-null metatable is very rare but it requires __metatable check
+            return Ok(-1); // note: overwriting non-null metatable is very rare but it requires __metatable check
         }
 
         let mt = hvalue!(args);
@@ -42,8 +42,8 @@ pub unsafe fn luau_f_setmetatable(
         }
 
         sethvalue!(L, res, t);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

@@ -4,7 +4,10 @@ use crate::records::t_string::TString;
 use core::ffi::{c_char, CStr};
 
 #[allow(non_snake_case)]
-pub fn luaS_newliteral(L: *mut lua_State, s: *const c_char) -> *mut TString {
+pub fn luaS_newliteral(
+    L: *mut lua_State,
+    s: *const c_char,
+) -> crate::records::lua_exception::LuaResult<*mut TString> {
     unsafe {
         let len = CStr::from_ptr(s).to_bytes().len();
         luaS_newlstr(L, s, len)
@@ -12,6 +15,9 @@ pub fn luaS_newliteral(L: *mut lua_State, s: *const c_char) -> *mut TString {
 }
 
 #[allow(non_snake_case)]
-pub fn LUA_S_NEWLITERAL(L: *mut lua_State, s: *const c_char) -> *mut TString {
+pub fn LUA_S_NEWLITERAL(
+    L: *mut lua_State,
+    s: *const c_char,
+) -> crate::records::lua_exception::LuaResult<*mut TString> {
     luaS_newliteral(L, s)
 }

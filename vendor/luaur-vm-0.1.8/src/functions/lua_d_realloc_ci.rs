@@ -4,7 +4,10 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaD_reallocCI(l: *mut lua_State, newsize: c_int) {
+pub unsafe fn luaD_reallocCI(
+    l: *mut lua_State,
+    newsize: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     let oldci = (*l).base_ci;
     let oldoffset = (*l).ci.offset_from(oldci);
 
@@ -14,11 +17,12 @@ pub unsafe fn luaD_reallocCI(l: *mut lua_State, newsize: c_int) {
         (*l).size_ci as usize * core::mem::size_of::<CallInfo>(),
         newsize as usize * core::mem::size_of::<CallInfo>(),
         (*l).hdr.memcat,
-    ) as *mut CallInfo;
+    )? as *mut CallInfo;
 
     (*l).size_ci = newsize;
     (*l).ci = (*l).base_ci.offset(oldoffset);
     (*l).end_ci = (*l).base_ci.add(((*l).size_ci - 1) as usize);
+    Ok(())
 }
 
 #[allow(unused_imports)]

@@ -9,13 +9,15 @@ use crate::macros::lua_l_error::luaL_error;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn buffer_readinteger<T>(L: *mut lua_State) -> core::ffi::c_int
+pub unsafe fn buffer_readinteger<T>(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int>
 where
     T: Copy + Into<f64>,
 {
     let mut len: usize = 0;
-    let buf = lua_l_checkbuffer(L, 1, &mut len);
-    let offset = lua_l_checkinteger(L, 2);
+    let buf = lua_l_checkbuffer(L, 1, &mut len)?;
+    let offset = lua_l_checkinteger(L, 2)?;
 
     if isoutofbounds(offset, len, core::mem::size_of::<T>()) {
         luaL_error!(L, "buffer access out of bounds");
@@ -32,6 +34,6 @@ where
         val = buffer_swapbe(val);
     }
 
-    lua_pushnumber(L, val.into());
-    1
+    lua_pushnumber(L, val.into())?;
+    Ok(1)
 }

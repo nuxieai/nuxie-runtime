@@ -3,7 +3,10 @@ use crate::records::lua_l_strbuf::LuaLStrbuf;
 use core::ffi::c_char;
 
 #[allow(non_snake_case)]
-pub fn lua_l_prepbuffsize(B: *mut LuaLStrbuf, size: usize) -> *mut c_char {
+pub fn lua_l_prepbuffsize(
+    B: *mut LuaLStrbuf,
+    size: usize,
+) -> crate::records::lua_exception::LuaResult<*mut c_char> {
     unsafe {
         let current_p = (*B).p;
         let current_end = (*B).end;
@@ -14,7 +17,7 @@ pub fn lua_l_prepbuffsize(B: *mut LuaLStrbuf, size: usize) -> *mut c_char {
                 -1,
             )
         } else {
-            current_p
+            Ok(current_p)
         }
     }
 }

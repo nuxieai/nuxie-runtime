@@ -4,7 +4,7 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::tms::TMS;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaT_init(l: *mut lua_State) {
+pub unsafe fn luaT_init(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<()> {
     #[cfg(not(feature = "lua_vector_double"))]
     let typenames = [
         c"nil".as_ptr(),
@@ -67,17 +67,18 @@ pub unsafe fn luaT_init(l: *mut lua_State) {
 
     let mut i = 0;
     while i < typenames.len() {
-        (*(*l).global).ttname[i] = luaS_new(l, typenames[i]);
+        (*(*l).global).ttname[i] = luaS_new(l, typenames[i])?;
         luaS_fix!((*(*l).global).ttname[i]);
         i += 1;
     }
 
     i = 0;
     while i < TMS::TM_N as usize {
-        (*(*l).global).tmname[i] = luaS_new(l, eventnames[i]);
+        (*(*l).global).tmname[i] = luaS_new(l, eventnames[i])?;
         luaS_fix!((*(*l).global).tmname[i]);
         i += 1;
     }
+    Ok(())
 }
 
 #[allow(unused_imports)]

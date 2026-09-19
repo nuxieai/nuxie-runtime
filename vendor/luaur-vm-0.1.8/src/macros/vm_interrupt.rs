@@ -14,14 +14,14 @@ macro_rules! VM_INTERRUPT {
             $crate::macros::vm_protect::vm_protect!($L, $pc, $base, {
                 unsafe {
                     (*(*$L).ci).context.savedpc = (*(*$L).ci).context.savedpc.add(1);
-                    interrupt($L, -1);
+                    interrupt($L, -1)?;
                 }
             });
             if unsafe { (*$L).status } != 0 {
                 unsafe {
                     (*(*$L).ci).context.savedpc = (*(*$L).ci).context.savedpc.sub(1);
                 }
-                return;
+                return Ok(());
             }
         }
     }};

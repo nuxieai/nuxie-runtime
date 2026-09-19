@@ -22,7 +22,9 @@ static DBLIB: DblibWrapper = DblibWrapper([
     },
 ]);
 
-pub unsafe fn luaopen_debug(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_register(L, c"debug".as_ptr(), DBLIB.0.as_ptr());
-    1
+pub unsafe fn luaopen_debug(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_register(L, c"debug".as_ptr(), DBLIB.0.as_ptr())?;
+    Ok(1)
 }

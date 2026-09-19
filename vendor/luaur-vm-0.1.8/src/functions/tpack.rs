@@ -10,9 +10,11 @@ use crate::records::lua_t_value::TValue;
 use crate::records::lua_table::LuaTable;
 
 #[export_name = "luaur_tpack"]
-pub unsafe fn tpack(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn tpack(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let n = lua_gettop(L); // number of elements to pack
-    lua_createtable(L, n, 1); // create result table
+    lua_createtable(L, n, 1)?; // create result table
 
     let t: *mut LuaTable = hvalue!((*L).top.offset(-1));
 
@@ -25,9 +27,9 @@ pub unsafe fn tpack(L: *mut lua_State) -> core::ffi::c_int {
     let nv = lua_h_setstr(
         L,
         t,
-        luaS_newliteral(L, b"n\0" as *const _ as *const core::ffi::c_char),
-    );
+        luaS_newliteral(L, b"n\0" as *const _ as *const core::ffi::c_char)?,
+    )?;
     setnvalue!(nv, n as f64);
 
-    1 // return table
+    Ok(1) // return table
 }

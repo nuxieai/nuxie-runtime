@@ -69,6 +69,7 @@
 //! their own runtime.
 
 #![forbid(unsafe_op_in_unsafe_fn)]
+#![deny(unused_must_use)]
 
 // `send` + `async` now compose. The async bridge keeps its per-VM waker +
 // implicit-thread ownership map in a process-wide table keyed by the VM's
@@ -108,6 +109,7 @@ mod registry;
 mod scope;
 #[cfg(feature = "serde")]
 mod serde;
+mod stack_guard;
 pub mod state;
 mod string;
 mod sync;
@@ -167,7 +169,7 @@ pub fn luau_direct_field_get() -> bool {
 /// [`Error::TypeError`](crate::Error::TypeError).
 #[cfg(feature = "typecheck")]
 #[cfg_attr(docsrs, doc(cfg(feature = "typecheck")))]
-pub use typecheck::{Checker, TypeDiagnostic, check, check_with_definitions};
+pub use typecheck::{check, check_with_definitions, Checker, TypeDiagnostic};
 
 pub use app_data::{AppDataRef, AppDataRefMut};
 /// The [`AsyncThread`] driver — a coroutine being run to completion as a Rust

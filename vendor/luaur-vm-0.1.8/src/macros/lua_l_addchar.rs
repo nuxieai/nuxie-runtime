@@ -5,7 +5,7 @@
 macro_rules! luaL_addchar {
     ($B:expr, $c:expr) => {{
         if !((*$B).p < (*$B).end) {
-            $crate::functions::lua_l_prepbuffsize::lua_l_prepbuffsize($B, 1);
+            $crate::functions::lua_l_prepbuffsize::lua_l_prepbuffsize($B, 1)?;
         }
         *(*$B).p = $c as core::ffi::c_char;
         (*$B).p = (*$B).p.add(1);

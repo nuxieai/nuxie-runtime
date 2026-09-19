@@ -20,7 +20,7 @@ pub unsafe fn luau_f_select(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams == 1 && nresults == 1 {
         let func = (*(*l).ci).func;
         let p = if FFlag::LuauCIProto.get() {
@@ -38,12 +38,12 @@ pub unsafe fn luau_f_select(
 
             if ((i - 1) as u32) < (n as u32) {
                 setobj_2_s!(l, res, (*l).base.offset((-n + (i - 1)) as isize));
-                return 1;
+                return Ok(1);
             }
         } else if ttisstring!(arg0) && *svalue!(arg0) == b'#' as core::ffi::c_char {
             setnvalue!(res, n as f64);
-            return 1;
+            return Ok(1);
         }
     }
-    -1
+    Ok(-1)
 }

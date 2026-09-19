@@ -1,8 +1,7 @@
 //! Differential-oracle driver: load precompiled Luau bytecode (produced by
-//! the C++ `luau-compile --binary`) and run it on the Rust VM. Errors —
-//! including `todo!()` panics from not-yet-ported functions — surface as Lua
-//! errors via the catch_unwind in luaD_rawrunprotected, so every run either
-//! prints results or names the next function to port.
+//! the C++ `luau-compile --binary`) and run it on the Rust VM. Protected
+//! guest errors are reported as Lua statuses; setup/API failures propagate
+//! as explicit Results. Rust panics are not the guest-error protocol.
 //!
 //! Mirrors the real `luau` CLI: the chunk is loaded into a fresh thread and
 //! run with `lua_resume` (not `lua_pcall` on the main thread), so top-level
@@ -20,7 +19,7 @@ use luaur_vm::functions::lua_tonumberx::lua_tonumberx;
 use luaur_vm::functions::lua_type::lua_type;
 use luaur_vm::functions::luau_load::luau_load;
 
-fn main() {
+fn main() -> luaur_vm::records::lua_exception::LuaResult<()> {
     std::panic::set_hook(Box::new(|_| {}));
 
     let path = std::env::args()
@@ -38,12 +37,12 @@ fn main() {
     unsafe {
         let l = lua_l_newstate();
         assert!(!l.is_null(), "lua_l_newstate returned null");
-        lua_l_openlibs(l);
+        lua_l_openlibs(l)?;
 
         // Run the chunk on a fresh thread, like CLI/src/Repl.cpp's runCode: the
         // thread T is rooted on L's stack, and we load the function directly into
         // T (the global string table / GC is shared), then resume it.
-        let t = lua_newthread(l);
+        let t = lua_newthread(l)?;
         assert!(!t.is_null(), "lua_newthread returned null");
 
         let rc = luau_load(
@@ -52,18 +51,18 @@ fn main() {
             bc.as_ptr() as *const core::ffi::c_char,
             bc.len(),
             0,
-        );
+        )?;
         if rc != 0 {
             eprintln!("luau_load failed: rc={rc}");
             std::process::exit(2);
         }
 
-        let status = lua_resume(t, core::ptr::null_mut(), 0);
+        let status = lua_resume(t, core::ptr::null_mut(), 0)?;
         if status != 0 {
             // The error object is on top of T's stack — surface its text so the
             // differential oracle reports WHY a run failed, not just the status.
             let mut len = 0usize;
-            let s = lua_tolstring(t, -1, &mut len);
+            let s = lua_tolstring(t, -1, &mut len)?;
             let msg = if s.is_null() {
                 "<non-string error>".to_string()
             } else {
@@ -79,7 +78,7 @@ fn main() {
         for i in 1..=n {
             if lua_type(t, i) == luaur_vm::enums::lua_type::lua_Type::LUA_TSTRING as i32 {
                 let mut len = 0usize;
-                let s = lua_tolstring(t, i, &mut len);
+                let s = lua_tolstring(t, i, &mut len)?;
                 if !s.is_null() {
                     let bytes = std::slice::from_raw_parts(s as *const u8, len);
                     let text = String::from_utf8_lossy(bytes);
@@ -94,7 +93,7 @@ fn main() {
                     println!("  [{i}] = {v}");
                 } else {
                     let mut len = 0usize;
-                    let s = lua_tolstring(t, i, &mut len);
+                    let s = lua_tolstring(t, i, &mut len)?;
                     if !s.is_null() {
                         let bytes = std::slice::from_raw_parts(s as *const u8, len);
                         let text = String::from_utf8_lossy(bytes);
@@ -106,4 +105,5 @@ fn main() {
             }
         }
     }
+    Ok(())
 }

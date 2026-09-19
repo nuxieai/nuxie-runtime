@@ -11,7 +11,11 @@ use crate::type_aliases::t_value::TValue;
 use crate::macros::lua_o_nilobject::luaO_nilobject;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_h_setstr(L: *mut lua_State, t: *mut LuaTable, key: *mut TString) -> *mut TValue {
+pub unsafe fn lua_h_setstr(
+    L: *mut lua_State,
+    t: *mut LuaTable,
+    key: *mut TString,
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     // The dependency card for lua_h_getstr shows a stub signature pub fn lua_h_getstr();
     // We must transmute it to the real signature (t, key) -> *const TValue to call it.
     type LuaHGetStrFn = unsafe fn(*mut LuaTable, *mut TString) -> *const TValue;
@@ -22,16 +26,11 @@ pub unsafe fn lua_h_setstr(L: *mut lua_State, t: *mut LuaTable, key: *mut TStrin
     invalidateTMcache(t);
 
     if p != luaO_nilobject {
-        cast_to!(*mut TValue, p)
+        Ok(cast_to!(*mut TValue, p))
     } else {
         let mut k: TValue = core::mem::zeroed();
         setsvalue!(L, &mut k, key);
 
-        // The newkey stub in the context is fn newkey(), but the C++ source and
-        // other examples show it takes (L, t, k). We must use the real signature
-        // required by the logic.
-        type NewKeyFn = unsafe fn(*mut lua_State, *mut LuaTable, *const TValue) -> *mut TValue;
-        let newkey_ptr: NewKeyFn = core::mem::transmute(newkey as *const core::ffi::c_void);
-        newkey_ptr(L, t, &k)
+        newkey(L, t, &k)
     }
 }

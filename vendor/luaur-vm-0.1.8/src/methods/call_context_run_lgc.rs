@@ -4,7 +4,10 @@ use crate::type_aliases::lua_state::lua_State;
 
 impl CallContext {
     #[allow(non_snake_case)]
-    pub unsafe extern "C" fn run(l: *mut lua_State, _ud: *mut core::ffi::c_void) {
-        shrinkstack(l);
+    pub unsafe fn run(
+        l: *mut lua_State,
+        _ud: *mut core::ffi::c_void,
+    ) -> crate::records::lua_exception::LuaResult<()> {
+        shrinkstack(l)
     }
 }

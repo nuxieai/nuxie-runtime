@@ -16,16 +16,20 @@ use luaur_common::macros::luau_likely::LUAU_LIKELY;
 use luaur_common::macros::luau_unlikely::LUAU_UNLIKELY;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_v_lessthan(L: *mut lua_State, l: *const TValue, r: *const TValue) -> c_int {
+pub unsafe fn lua_v_lessthan(
+    L: *mut lua_State,
+    l: *const TValue,
+    r: *const TValue,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     if LUAU_UNLIKELY!(ttype!(l) != ttype!(r)) {
-        luaG_ordererror(L, l, r, TMS::TM_LT);
+        luaG_ordererror(L, l, r, TMS::TM_LT)
     } else if LUAU_LIKELY!(ttisnumber!(l)) {
-        luai_numlt(nvalue!(l), nvalue!(r)) as c_int
+        Ok(luai_numlt(nvalue!(l), nvalue!(r)) as c_int)
     } else if ttisstring!(l) {
         if luaV_strcmp(tsvalue!(l), tsvalue!(r)) < 0 {
-            1
+            Ok(1)
         } else {
-            0
+            Ok(0)
         }
     } else {
         call_orderTM(L, l, r, TMS::TM_LT, true)
@@ -33,10 +37,10 @@ pub unsafe fn lua_v_lessthan(L: *mut lua_State, l: *const TValue, r: *const TVal
 }
 
 #[export_name = "luaur_luaV_lessthan"]
-pub unsafe extern "C" fn lua_v_lessthan_export(
+pub unsafe fn lua_v_lessthan_export(
     L: *mut lua_State,
     l: *const TValue,
     r: *const TValue,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     lua_v_lessthan(L, l, r)
 }

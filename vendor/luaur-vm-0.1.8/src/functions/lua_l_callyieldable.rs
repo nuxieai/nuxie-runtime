@@ -9,16 +9,20 @@ use crate::macros::isyielded::isyielded;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int {
+pub unsafe fn lua_callyieldable(
+    L: *mut lua_State,
+    nargs: c_int,
+    nresults: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_check!(L, iscfunction!((*(*L).ci).func));
     let cl = clvalue!((*(*L).ci).func);
     let c = core::ptr::addr_of!((*cl).inner.c).cast::<crate::records::closure::CClosure>();
     api_check!(L, (*c).cont.is_some());
 
-    lua_call(L, nargs, nresults);
+    lua_call(L, nargs, nresults)?;
 
     if isyielded(L) {
-        return C_CALL_YIELD;
+        return Ok(C_CALL_YIELD);
     }
 
     ((*c).cont.unwrap())(L, crate::enums::lua_status::LuaStatus::LUA_OK as c_int)
@@ -26,6 +30,10 @@ pub unsafe fn lua_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int
 
 // `lualib.h` keeps this spelling as a backwards-compatibility macro.
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_callyieldable(L: *mut lua_State, nargs: c_int, nresults: c_int) -> c_int {
+pub unsafe fn lua_l_callyieldable(
+    L: *mut lua_State,
+    nargs: c_int,
+    nresults: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     lua_callyieldable(L, nargs, nresults)
 }

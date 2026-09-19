@@ -5,10 +5,14 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_char;
 use core::ffi::c_int;
 
-pub unsafe fn lua_l_checklstring(L: *mut lua_State, narg: c_int, len: *mut usize) -> *const c_char {
-    let s = lua_tolstring(L, narg, len);
+pub unsafe fn lua_l_checklstring(
+    L: *mut lua_State,
+    narg: c_int,
+    len: *mut usize,
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
+    let s = lua_tolstring(L, narg, len)?;
     if s.is_null() {
-        tag_error(L, narg, lua_Type::LUA_TSTRING as c_int);
+        return tag_error(L, narg, lua_Type::LUA_TSTRING as c_int);
     }
-    s
+    Ok(s)
 }

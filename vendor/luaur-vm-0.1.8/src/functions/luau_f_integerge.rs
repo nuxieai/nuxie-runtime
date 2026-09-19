@@ -14,14 +14,14 @@ pub unsafe fn luau_f_integerge(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
         let a: i64 = lvalue!(arg0);
         let b: i64 = lvalue!(args);
 
         setbvalue!(res, a >= b);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

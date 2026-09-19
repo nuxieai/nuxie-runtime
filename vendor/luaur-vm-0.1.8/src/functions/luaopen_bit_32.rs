@@ -18,7 +18,9 @@ use crate::functions::b_swap::b_swap;
 use crate::functions::b_test::b_test;
 use crate::functions::b_xor::b_xor;
 
-pub unsafe fn luaopen_bit32(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_bit32(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // Faithful port of bitlib[] in lbitlib.cpp (Lua name -> b_* function).
     let bitlib: [LuaLReg; 16] = [
         LuaLReg {
@@ -87,7 +89,7 @@ pub unsafe fn luaopen_bit32(L: *mut lua_State) -> core::ffi::c_int {
         },
     ];
 
-    lua_l_register(L, c"bit32".as_ptr(), bitlib.as_ptr());
+    lua_l_register(L, c"bit32".as_ptr(), bitlib.as_ptr())?;
 
-    1
+    Ok(1)
 }

@@ -16,19 +16,19 @@ pub unsafe fn luau_f_tinsert(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams == 2 && nresults <= 0 && ttistable!(arg0) {
         let t = hvalue!(arg0);
         if (*t).readonly != 0 {
-            return -1;
+            return Ok(-1);
         }
 
         let pos = lua_h_getn(t) + 1;
-        let slot = luaH_setnum(L, t, pos);
+        let slot = luaH_setnum(L, t, pos)?;
         setobj2t!(L, slot, args);
         luaC_barriert!(L, t, args);
-        return 0;
+        return Ok(0);
     }
 
-    -1
+    Ok(-1)
 }

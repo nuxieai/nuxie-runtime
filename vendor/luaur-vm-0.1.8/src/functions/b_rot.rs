@@ -6,8 +6,11 @@ use crate::type_aliases::lua_state::lua_State;
 
 use crate::macros::nbits::NBITS;
 
-pub fn b_rot(l: *mut lua_State, mut i: core::ffi::c_int) -> core::ffi::c_int {
-    let mut r: b_uint = lua_l_checkunsigned(l, 1);
+pub fn b_rot(
+    l: *mut lua_State,
+    mut i: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    let mut r: b_uint = lua_l_checkunsigned(l, 1)?;
 
     // i = i % NBITS (avoid undefined shift when i == 0)
     i &= (NBITS - 1) as core::ffi::c_int;
@@ -18,6 +21,6 @@ pub fn b_rot(l: *mut lua_State, mut i: core::ffi::c_int) -> core::ffi::c_int {
         r = (r << i_u) | (r >> (NBITS as u32 - i_u));
     }
 
-    lua_pushunsigned(l, trim(r));
-    1
+    lua_pushunsigned(l, trim(r))?;
+    Ok(1)
 }

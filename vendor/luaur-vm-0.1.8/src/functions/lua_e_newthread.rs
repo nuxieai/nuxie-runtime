@@ -12,17 +12,19 @@ use crate::type_aliases::lua_state::lua_State;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaE_newthread(L: *mut lua_State) -> *mut lua_State {
+pub unsafe fn luaE_newthread(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<*mut lua_State> {
     let L1 =
-        luaM_newgco_(L, core::mem::size_of::<lua_State>(), (*L).activememcat) as *mut lua_State;
+        luaM_newgco_(L, core::mem::size_of::<lua_State>(), (*L).activememcat)? as *mut lua_State;
     luaC_init!(L, L1, lua_Type::LUA_TTHREAD as i32);
     preinit_state(L1, (*L).global);
     (*L1).activememcat = (*L).activememcat; // inherit the active memory category
-    stack_init(L1, L); // init stack
+    stack_init(L1, L)?; // init stack
     (*L1).gt = (*L).gt; // share table of globals
     (*L1).singlestep = (*L).singlestep;
     LUAU_ASSERT!(iswhite!(L1 as *mut GcObject)); // iswhite(obj2gco(L1))
-    L1
+    Ok(L1)
 }
 
 #[allow(unused_imports)]

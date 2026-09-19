@@ -22,15 +22,13 @@ pub unsafe fn lua_r_inheritclass(
     L: *mut lua_State,
     child: *const LuauClass,
     parent: *const LuauClass,
-) -> *mut LuauClass {
+) -> crate::records::lua_exception::LuaResult<*mut LuauClass> {
     for idx in 0..(*parent).numberofinstancemembers {
         let member_name = *(*parent).offsettomember.add(idx as usize);
-        let existing = crate::functions::lua_h_getstr::lua_h_getstr(
-            (*child).memberstooffset,
-            member_name,
-        );
+        let existing =
+            crate::functions::lua_h_getstr::lua_h_getstr((*child).memberstooffset, member_name);
         if !ttisnil!(existing) {
-            lua_g_runerror!(
+            return lua_g_runerror!(
                 L,
                 "Cannot override instance member '{}' of parent class '{}' in child class '{}'",
                 string_value(member_name),
@@ -40,15 +38,12 @@ pub unsafe fn lua_r_inheritclass(
         }
     }
 
-    let new_class =
-        crate::functions::lua_r_newblankclass::lua_r_newblankclass(L, (*child).name);
+    let new_class = crate::functions::lua_r_newblankclass::lua_r_newblankclass(L, (*child).name)?;
     let mut num_static_members_to_copy = 0u32;
     for idx in (*parent).numberofinstancemembers..(*parent).numberofallmembers {
         let member_name = *(*parent).offsettomember.add(idx as usize);
-        let existing = crate::functions::lua_h_getstr::lua_h_getstr(
-            (*child).memberstooffset,
-            member_name,
-        );
+        let existing =
+            crate::functions::lua_h_getstr::lua_h_getstr((*child).memberstooffset, member_name);
         if ttisnil!(existing) {
             num_static_members_to_copy += 1;
         }
@@ -57,11 +52,10 @@ pub unsafe fn lua_r_inheritclass(
     let num_members = (*child).numberofallmembers
         + (*parent).numberofinstancemembers
         + num_static_members_to_copy;
-    (*new_class).offsettomember =
-        luaM_newarray!(L, num_members, *mut TString, (*new_class).memcat);
+    (*new_class).offsettomember = luaM_newarray!(L, num_members, *mut TString, (*new_class).memcat);
     (*new_class).numberofallmembers = num_members;
     (*new_class).memberstooffset =
-        crate::functions::lua_h_new::lua_h_new(L, 0, num_members as i32);
+        crate::functions::lua_h_new::lua_h_new(L, 0, num_members as i32)?;
     luaC_objbarrier!(L, new_class, (*new_class).memberstooffset);
 
     let mut offset = 0u32;
@@ -72,7 +66,7 @@ pub unsafe fn lua_r_inheritclass(
             L,
             (*new_class).memberstooffset,
             member_name,
-        );
+        )?;
         setnvalue!(value, offset as f64);
         luaC_barrier!(L, (*new_class).memberstooffset, value as *const TValue);
         offset += 1;
@@ -85,7 +79,7 @@ pub unsafe fn lua_r_inheritclass(
             L,
             (*new_class).memberstooffset,
             member_name,
-        );
+        )?;
         setnvalue!(value, offset as f64);
         luaC_barrier!(L, (*new_class).memberstooffset, value as *const TValue);
         offset += 1;
@@ -98,10 +92,8 @@ pub unsafe fn lua_r_inheritclass(
     let mut num_static_members_copied = 0u32;
     for idx in (*parent).numberofinstancemembers..(*parent).numberofallmembers {
         let member_name = *(*parent).offsettomember.add(idx as usize);
-        let existing = crate::functions::lua_h_getstr::lua_h_getstr(
-            (*child).memberstooffset,
-            member_name,
-        );
+        let existing =
+            crate::functions::lua_h_getstr::lua_h_getstr((*child).memberstooffset, member_name);
         if ttisnil!(existing) {
             let parent_value = (*parent)
                 .staticmembers
@@ -113,7 +105,7 @@ pub unsafe fn lua_r_inheritclass(
                 parent_value,
                 offset,
                 num_static_members_copied,
-            );
+            )?;
             offset += 1;
             num_static_members_copied += 1;
         }
@@ -131,7 +123,7 @@ pub unsafe fn lua_r_inheritclass(
             child_value,
             offset,
             num_static_members_copied,
-        );
+        )?;
         offset += 1;
         num_static_members_copied += 1;
     }
@@ -141,16 +133,14 @@ pub unsafe fn lua_r_inheritclass(
             == num_static_members_to_copy
                 + ((*child).numberofallmembers - (*child).numberofinstancemembers)
     );
-    crate::functions::lua_r_addclassmetatable::lua_r_addclassmetatable(L, new_class);
+    crate::functions::lua_r_addclassmetatable::lua_r_addclassmetatable(L, new_class)?;
     if !(*parent).instancemetatable.is_null() {
-        (*new_class).instancemetatable = crate::functions::lua_h_clone::lua_h_clone(
-            L,
-            (*parent).instancemetatable,
-        );
+        (*new_class).instancemetatable =
+            crate::functions::lua_h_clone::lua_h_clone(L, (*parent).instancemetatable)?;
         luaC_objbarrier!(L, new_class, (*new_class).instancemetatable);
     } else {
         (*new_class).instancemetatable = core::ptr::null_mut();
     }
 
-    new_class
+    Ok(new_class)
 }

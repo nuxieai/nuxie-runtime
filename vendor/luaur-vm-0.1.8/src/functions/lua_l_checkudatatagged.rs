@@ -5,10 +5,14 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::{c_int, c_void, CStr};
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_checkudatatagged(L: *mut lua_State, ud: c_int, tag: c_int) -> *mut c_void {
+pub unsafe fn lua_l_checkudatatagged(
+    L: *mut lua_State,
+    ud: c_int,
+    tag: c_int,
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     let p = lua_touserdatatagged(L, ud, tag);
     if !p.is_null() {
-        return p;
+        return Ok(p);
     }
 
     // C passes the raw TString bytes to luaL_typeerrorL; luaur's error layer

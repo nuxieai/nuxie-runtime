@@ -20,7 +20,7 @@ pub fn lua_gc(
     L: *mut lua_State,
     what: core::ffi::c_int,
     data: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut res: core::ffi::c_int = 0;
     unsafe {
         condhardmemtests!(lua_c_validate(L), 1);
@@ -70,7 +70,7 @@ pub fn lua_gc(
                 let mut actualwork: usize = 0;
 
                 while (*g).GCthreshold <= (*g).totalbytes {
-                    let stepsize = luaC_step(L, false);
+                    let stepsize = luaC_step(L, false)?;
                     actualwork += stepsize;
 
                     let gcstate_i32 = i32::from((*g).gcstate);
@@ -143,7 +143,7 @@ pub fn lua_gc(
             }
         }
     }
-    res
+    Ok(res)
 }
 
 type ptrdiff_t = core::ffi::c_long;

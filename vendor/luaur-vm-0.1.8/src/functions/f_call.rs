@@ -9,6 +9,5 @@ pub unsafe fn f_call(
     ud: *mut core::ffi::c_void,
 ) -> Result<(), crate::records::lua_exception::lua_exception> {
     let c = cast_to!(*mut CallS, ud);
-    lua_d_call(L, (*c).func, (*c).nresults);
-    Ok(())
+    lua_d_call(L, (*c).func, (*c).nresults)
 }

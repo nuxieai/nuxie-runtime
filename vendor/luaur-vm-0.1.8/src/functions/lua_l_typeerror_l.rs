@@ -8,7 +8,11 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_typeerror_l(L: *mut lua_State, narg: core::ffi::c_int, tname: &str) -> ! {
+pub unsafe fn lua_l_typeerror_l<T>(
+    L: *mut lua_State,
+    narg: core::ffi::c_int,
+    tname: &str,
+) -> crate::records::lua_exception::LuaResult<T> {
     let fname: *const c_char = currfuncname(L);
     let obj: *const TValue = luaA_toobject(L, narg);
 
@@ -25,7 +29,7 @@ pub unsafe fn lua_l_typeerror_l(L: *mut lua_State, narg: core::ffi::c_int, tname
                     "invalid argument #{} to '{}' ({} expected, got {})",
                     narg, fname, tname, objtypename
                 ),
-            );
+            )
         } else {
             lua_l_error_l(
                 L,
@@ -34,7 +38,7 @@ pub unsafe fn lua_l_typeerror_l(L: *mut lua_State, narg: core::ffi::c_int, tname
                     "invalid argument #{} ({} expected, got {})",
                     narg, tname, objtypename
                 ),
-            );
+            )
         }
     } else {
         if !fname.is_null() {
@@ -46,15 +50,13 @@ pub unsafe fn lua_l_typeerror_l(L: *mut lua_State, narg: core::ffi::c_int, tname
                     "missing argument #{} to '{}' ({} expected)",
                     narg, fname, tname
                 ),
-            );
+            )
         } else {
             lua_l_error_l(
                 L,
                 c"missing argument #%d (%s expected)".as_ptr(),
                 format_args!("missing argument #{} ({} expected)", narg, tname),
-            );
+            )
         }
     }
-
-    core::hint::unreachable_unchecked()
 }

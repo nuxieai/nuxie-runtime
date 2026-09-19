@@ -8,6 +8,8 @@ description = "Workspace-patched integration coverage for Nuxie's vendored luaur
 
 [features]
 send = ["luaur-rt/send"]
+async = ["luaur-rt/async"]
+serde = ["luaur-rt/serde"]
 
 [dependencies]
 luaur-common = "=0.1.8"

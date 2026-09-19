@@ -15,7 +15,7 @@ pub unsafe fn luau_f_vectordot(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let _ = lua_Type::LUA_TNIL;
 
     if nparams >= 2 && nresults <= 1 && ttisvector!(arg0) && ttisvector!(args) {
@@ -32,14 +32,11 @@ pub unsafe fn luau_f_vectordot(
             );
         } else {
             let xy = (*a.offset(0)).mul_add(*b.offset(0), (*a.offset(1)) * (*b.offset(1)));
-            setnvalue!(
-                res,
-                (*a.offset(2)).mul_add(*b.offset(2), xy) as f64
-            );
+            setnvalue!(res, (*a.offset(2)).mul_add(*b.offset(2), xy) as f64);
         }
 
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

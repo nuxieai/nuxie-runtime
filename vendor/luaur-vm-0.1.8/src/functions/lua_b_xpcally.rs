@@ -8,12 +8,12 @@ use crate::macros::lua_multret::LUA_MULTRET;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_b_xpcally(L: *mut lua_State) -> i32 {
-    lua_l_checktype(L, 2, lua_Type::LUA_TFUNCTION as i32);
+pub unsafe fn lua_b_xpcally(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    lua_l_checktype(L, 2, lua_Type::LUA_TFUNCTION as i32)?;
 
     // swap function & error function
-    lua_pushvalue(L, 1);
-    lua_pushvalue(L, 2);
+    lua_pushvalue(L, 1)?;
+    lua_pushvalue(L, 2)?;
     lua_replace(L, 1);
     lua_replace(L, 2);
     // at this point the stack looks like err, f, args

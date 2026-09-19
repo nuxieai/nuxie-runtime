@@ -14,11 +14,11 @@ pub unsafe fn luau_f_rawget(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttistable!(arg0) {
         setobj_2_s!(L, res, lua_h_get(hvalue!(arg0), args));
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

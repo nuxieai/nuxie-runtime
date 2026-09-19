@@ -17,7 +17,7 @@ pub unsafe fn luaD_reallocstack(
     L: *mut lua_State,
     newsize: core::ffi::c_int,
     fornewci: core::ffi::c_int,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     // throw 'out of memory' error because space for a custom error message cannot be guaranteed here
     if newsize > MAX_STACK_SIZE {
         // reallocation was performed to setup a new CallInfo frame, which we have to remove
@@ -29,7 +29,7 @@ pub unsafe fn luaD_reallocstack(
             (*L).top = (*cip).top;
         }
 
-        lua_d_throw(L, crate::enums::lua_status::lua_Status::LUA_ERRMEM as i32);
+        return lua_d_throw(L, crate::enums::lua_status::lua_Status::LUA_ERRMEM as i32);
     }
 
     let oldstack = (*L).stack;
@@ -42,8 +42,7 @@ pub unsafe fn luaD_reallocstack(
     let newsize_bytes = if realsize as usize <= usize::MAX / core::mem::size_of::<TValue>() {
         realsize as usize * core::mem::size_of::<TValue>()
     } else {
-        lua_m_toobig(L);
-        usize::MAX
+        return lua_m_toobig(L);
     };
 
     (*L).stack = cast_to!(
@@ -54,7 +53,7 @@ pub unsafe fn luaD_reallocstack(
             oldsize_bytes,
             newsize_bytes,
             (*L).activememcat as u8
-        )
+        )?
     );
 
     let newstack = (*L).stack;
@@ -67,6 +66,7 @@ pub unsafe fn luaD_reallocstack(
     (*L).stack_last = newstack.add(newsize as usize);
 
     correctstack(L, oldstack);
+    Ok(())
 }
 
 #[allow(unused_imports)]

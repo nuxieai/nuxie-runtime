@@ -14,7 +14,7 @@ pub unsafe fn luau_f_integermin(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
         let a1: i64 = lvalue!(arg0);
         let a2: i64 = lvalue!(args);
@@ -24,7 +24,7 @@ pub unsafe fn luau_f_integermin(
         for i in 3..=nparams {
             let idx = (i - 2) as isize;
             if !ttisinteger!(args.offset(idx)) {
-                return -1;
+                return Ok(-1);
             }
 
             let a: i64 = lvalue!(args.offset(idx));
@@ -32,8 +32,8 @@ pub unsafe fn luau_f_integermin(
         }
 
         setlvalue!(res, r);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

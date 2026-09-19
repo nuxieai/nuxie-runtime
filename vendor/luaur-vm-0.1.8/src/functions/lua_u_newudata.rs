@@ -9,22 +9,30 @@ use core::ffi::c_int;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_u_newudata(L: *mut lua_State, s: usize, tag: c_int) -> *mut Udata {
+pub unsafe fn lua_u_newudata(
+    L: *mut lua_State,
+    s: usize,
+    tag: c_int,
+) -> crate::records::lua_exception::LuaResult<*mut Udata> {
     if s > c_int::MAX as usize - core::mem::size_of::<Udata>() {
-        lua_m_toobig(L);
+        return lua_m_toobig(L);
     }
 
-    let u = luaM_newgco_(L, sizeudata(s), (*L).activememcat) as *mut Udata;
+    let u = luaM_newgco_(L, sizeudata(s), (*L).activememcat)? as *mut Udata;
     luaC_init!(L, u, lua_Type::LUA_TUSERDATA as c_int);
     (*u).len = s as c_int;
     (*u).metatable = core::ptr::null_mut();
     LUAU_ASSERT!(tag >= 0 && tag <= 255);
     (*u).tag = tag as u8;
-    u
+    Ok(u)
 }
 
 #[allow(non_snake_case)]
 #[export_name = "luaur_luaU_newudata"]
-pub unsafe extern "C" fn luaU_newudata(L: *mut lua_State, s: usize, tag: c_int) -> *mut Udata {
+pub unsafe fn luaU_newudata(
+    L: *mut lua_State,
+    s: usize,
+    tag: c_int,
+) -> crate::records::lua_exception::LuaResult<*mut Udata> {
     lua_u_newudata(L, s, tag)
 }

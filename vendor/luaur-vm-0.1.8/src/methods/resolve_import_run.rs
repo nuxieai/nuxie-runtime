@@ -26,7 +26,7 @@ impl ResolveImport {
             (*L).top.sub(1),
             (*self_).id,
             true, /* propagatenil= */
-        );
+        )?;
         Ok(())
     }
 }

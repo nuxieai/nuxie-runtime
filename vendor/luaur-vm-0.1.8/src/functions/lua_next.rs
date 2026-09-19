@@ -15,18 +15,21 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_next(L: *mut lua_State, idx: c_int) -> c_int {
+pub unsafe fn lua_next(
+    L: *mut lua_State,
+    idx: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_checknelems!(L, 1);
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
     let t: StkId = index2addr(L, idx);
     api_check!(L, ttistable!(t));
 
-    let more = lua_h_next(L, hvalue!(t), (*L).top.sub(1));
+    let more = lua_h_next(L, hvalue!(t), (*L).top.sub(1))?;
     if more != 0 {
         api_incr_top!(L);
     } else {
         (*L).top = (*L).top.sub(1);
     }
-    more
+    Ok(more)
 }

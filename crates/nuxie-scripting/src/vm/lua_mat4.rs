@@ -24,6 +24,7 @@ use luaur_vm::functions::lua_registeruserdatadirectfieldget::lua_registeruserdat
 use luaur_vm::functions::lua_setuserdatametatable::lua_setuserdatametatable;
 use luaur_vm::functions::lua_touserdatatagged::lua_touserdatatagged;
 use luaur_vm::functions::lua_userdatadirectfield_setnumber::lua_userdatadirectfield_setnumber;
+use luaur_vm::records::lua_exception::LuaResult;
 
 // Keep this synchronized with ScriptedMat4::luaTag in rive_lua_libs.hpp.
 const MAT4_USERDATA_TAG: c_int = LUA_T_COUNT as c_int + 62;
@@ -55,7 +56,7 @@ impl ScriptedMat4 {
 pub(super) fn install_mat4_global(lua: &Lua) -> Result<()> {
     // Upstream registers one metatable per userdata tag. Every result can then
     // allocate only its inline 64-byte payload and attach that shared table.
-    let metatable = lua.create_table();
+    let metatable = lua.create_table_result()?;
     set_c_function(lua, &metatable, "__index", mat4_index)?;
     set_c_function(lua, &metatable, "__newindex", mat4_newindex)?;
     set_c_function(lua, &metatable, "__mul", mat4_mul)?;
@@ -65,15 +66,15 @@ pub(super) fn install_mat4_global(lua: &Lua) -> Result<()> {
     let _: () = unsafe {
         lua.exec_raw(metatable, |state| {
             lua_setuserdatametatable(state, MAT4_USERDATA_TAG);
-            register_direct_fields(state);
+            register_direct_fields(state)
         })?
     };
 
-    let table = lua.create_table();
+    let table = lua.create_table_result()?;
     for (name, function) in [
         (
             "identity",
-            mat4_identity as unsafe fn(*mut lua_State) -> c_int,
+            mat4_identity as unsafe fn(*mut lua_State) -> LuaResult<c_int>,
         ),
         ("values", mat4_values),
         ("fromTranslation", mat4_from_translation),
@@ -101,62 +102,65 @@ fn set_c_function(
     lua: &Lua,
     table: &Table,
     name: &str,
-    function: unsafe fn(*mut lua_State) -> c_int,
+    function: unsafe fn(*mut lua_State) -> LuaResult<c_int>,
 ) -> Result<()> {
     let function: lua_CFunction = Some(function);
     table.set(name, unsafe { lua.create_c_function(function)? })
 }
 
-unsafe fn push_mat4(state: *mut lua_State, values: [f32; 16]) -> *mut ScriptedMat4 {
+unsafe fn push_mat4(state: *mut lua_State, values: [f32; 16]) -> LuaResult<*mut ScriptedMat4> {
     let storage = unsafe {
         lua_newuserdatataggedwithmetatable(
             state,
             core::mem::size_of::<ScriptedMat4>(),
             MAT4_USERDATA_TAG,
-        )
+        )?
     }
     .cast::<ScriptedMat4>();
     unsafe { storage.write(ScriptedMat4 { values }) };
-    storage
+    Ok(storage)
 }
 
-unsafe fn check_mat4(state: *mut lua_State, index: c_int) -> *mut ScriptedMat4 {
+unsafe fn check_mat4(state: *mut lua_State, index: c_int) -> LuaResult<*mut ScriptedMat4> {
     let matrix = unsafe { lua_touserdatatagged(state, index, MAT4_USERDATA_TAG) };
     if matrix.is_null() {
-        unsafe { lua_l_typeerror_l(state, index, "Mat4") };
+        return unsafe { lua_l_typeerror_l(state, index, "Mat4") };
     }
-    matrix.cast::<ScriptedMat4>()
+    Ok(matrix.cast::<ScriptedMat4>())
 }
 
-unsafe fn mat4_values(state: *mut lua_State) -> c_int {
-    let values = std::array::from_fn(|index| lua_l_checknumber(state, index as c_int + 1) as f32);
-    unsafe { push_mat4(state, values) };
-    1
+unsafe fn mat4_values(state: *mut lua_State) -> LuaResult<c_int> {
+    let mut values = [0.0; 16];
+    for (index, value) in values.iter_mut().enumerate() {
+        *value = lua_l_checknumber(state, index as c_int + 1)? as f32;
+    }
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_identity(state: *mut lua_State) -> c_int {
-    unsafe { push_mat4(state, IDENTITY) };
-    1
+unsafe fn mat4_identity(state: *mut lua_State) -> LuaResult<c_int> {
+    unsafe { push_mat4(state, IDENTITY)? };
+    Ok(1)
 }
 
-unsafe fn mat4_from_translation(state: *mut lua_State) -> c_int {
+unsafe fn mat4_from_translation(state: *mut lua_State) -> LuaResult<c_int> {
     let mut values = IDENTITY;
-    values[12] = lua_l_checknumber(state, 1) as f32;
-    values[13] = lua_l_checknumber(state, 2) as f32;
-    values[14] = lua_l_checknumber(state, 3) as f32;
-    unsafe { push_mat4(state, values) };
-    1
+    values[12] = lua_l_checknumber(state, 1)? as f32;
+    values[13] = lua_l_checknumber(state, 2)? as f32;
+    values[14] = lua_l_checknumber(state, 3)? as f32;
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_from_scale(state: *mut lua_State) -> c_int {
-    let scale_x = lua_l_checknumber(state, 1) as f32;
+unsafe fn mat4_from_scale(state: *mut lua_State) -> LuaResult<c_int> {
+    let scale_x = lua_l_checknumber(state, 1)? as f32;
     let scale_y = if unsafe { lua_isnumber(state, 2) } != 0 {
-        lua_l_checknumber(state, 2) as f32
+        lua_l_checknumber(state, 2)? as f32
     } else {
         scale_x
     };
     let scale_z = if unsafe { lua_isnumber(state, 3) } != 0 {
-        lua_l_checknumber(state, 3) as f32
+        lua_l_checknumber(state, 3)? as f32
     } else {
         scale_x
     };
@@ -164,12 +168,12 @@ unsafe fn mat4_from_scale(state: *mut lua_State) -> c_int {
     values[0] = scale_x;
     values[5] = scale_y;
     values[10] = scale_z;
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_from_rotation_x(state: *mut lua_State) -> c_int {
-    let radians = lua_l_checknumber(state, 1) as f32;
+unsafe fn mat4_from_rotation_x(state: *mut lua_State) -> LuaResult<c_int> {
+    let radians = lua_l_checknumber(state, 1)? as f32;
     let cosine = radians.cos();
     let sine = radians.sin();
     let mut values = IDENTITY;
@@ -177,12 +181,12 @@ unsafe fn mat4_from_rotation_x(state: *mut lua_State) -> c_int {
     values[6] = sine;
     values[9] = -sine;
     values[10] = cosine;
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_from_rotation_y(state: *mut lua_State) -> c_int {
-    let radians = lua_l_checknumber(state, 1) as f32;
+unsafe fn mat4_from_rotation_y(state: *mut lua_State) -> LuaResult<c_int> {
+    let radians = lua_l_checknumber(state, 1)? as f32;
     let cosine = radians.cos();
     let sine = radians.sin();
     let mut values = IDENTITY;
@@ -190,12 +194,12 @@ unsafe fn mat4_from_rotation_y(state: *mut lua_State) -> c_int {
     values[2] = -sine;
     values[8] = sine;
     values[10] = cosine;
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_from_rotation_z(state: *mut lua_State) -> c_int {
-    let radians = lua_l_checknumber(state, 1) as f32;
+unsafe fn mat4_from_rotation_z(state: *mut lua_State) -> LuaResult<c_int> {
+    let radians = lua_l_checknumber(state, 1)? as f32;
     let cosine = radians.cos();
     let sine = radians.sin();
     let mut values = IDENTITY;
@@ -203,15 +207,15 @@ unsafe fn mat4_from_rotation_z(state: *mut lua_State) -> c_int {
     values[1] = sine;
     values[4] = -sine;
     values[5] = cosine;
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_perspective(state: *mut lua_State) -> c_int {
-    let fov_y = lua_l_checknumber(state, 1) as f32;
-    let aspect = lua_l_checknumber(state, 2) as f32;
-    let near = lua_l_checknumber(state, 3) as f32;
-    let far = lua_l_checknumber(state, 4) as f32;
+unsafe fn mat4_perspective(state: *mut lua_State) -> LuaResult<c_int> {
+    let fov_y = lua_l_checknumber(state, 1)? as f32;
+    let aspect = lua_l_checknumber(state, 2)? as f32;
+    let near = lua_l_checknumber(state, 3)? as f32;
+    let far = lua_l_checknumber(state, 4)? as f32;
     let focal_length = 1.0 / (fov_y * 0.5).tan();
     let inverse_depth = 1.0 / (near - far);
     let mut values = [0.0; 16];
@@ -220,28 +224,28 @@ unsafe fn mat4_perspective(state: *mut lua_State) -> c_int {
     values[10] = far * inverse_depth;
     values[11] = -1.0;
     values[14] = far * near * inverse_depth;
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_perspective_reverse_z(state: *mut lua_State) -> c_int {
-    let fov_y = lua_l_checknumber(state, 1) as f32;
-    let aspect = lua_l_checknumber(state, 2) as f32;
-    let near = lua_l_checknumber(state, 3) as f32;
+unsafe fn mat4_perspective_reverse_z(state: *mut lua_State) -> LuaResult<c_int> {
+    let fov_y = lua_l_checknumber(state, 1)? as f32;
+    let aspect = lua_l_checknumber(state, 2)? as f32;
+    let near = lua_l_checknumber(state, 3)? as f32;
     let focal_length = 1.0 / (fov_y * 0.5).tan();
     let mut values = [0.0; 16];
     values[0] = focal_length / aspect;
     values[5] = focal_length;
     values[11] = -1.0;
     values[14] = near;
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_look_at(state: *mut lua_State) -> c_int {
-    let eye_ptr = lua_l_checkvector(state, 1);
-    let center_ptr = lua_l_checkvector(state, 2);
-    let up_ptr = lua_l_checkvector(state, 3);
+unsafe fn mat4_look_at(state: *mut lua_State) -> LuaResult<c_int> {
+    let eye_ptr = lua_l_checkvector(state, 1)?;
+    let center_ptr = lua_l_checkvector(state, 2)?;
+    let up_ptr = lua_l_checkvector(state, 3)?;
     let eye = unsafe { [*eye_ptr, *eye_ptr.add(1), *eye_ptr.add(2)] };
     let center = unsafe { [*center_ptr, *center_ptr.add(1), *center_ptr.add(2)] };
     let up = unsafe { [*up_ptr, *up_ptr.add(1), *up_ptr.add(2)] };
@@ -282,17 +286,17 @@ unsafe fn mat4_look_at(state: *mut lua_State) -> c_int {
     values[12] = -(side[0] * eye[0] + side[1] * eye[1] + side[2] * eye[2]);
     values[13] = -(corrected_up[0] * eye[0] + corrected_up[1] * eye[1] + corrected_up[2] * eye[2]);
     values[14] = forward[0] * eye[0] + forward[1] * eye[1] + forward[2] * eye[2];
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_ortho(state: *mut lua_State) -> c_int {
-    let left = lua_l_checknumber(state, 1) as f32;
-    let right = lua_l_checknumber(state, 2) as f32;
-    let bottom = lua_l_checknumber(state, 3) as f32;
-    let top = lua_l_checknumber(state, 4) as f32;
-    let near = lua_l_checknumber(state, 5) as f32;
-    let far = lua_l_checknumber(state, 6) as f32;
+unsafe fn mat4_ortho(state: *mut lua_State) -> LuaResult<c_int> {
+    let left = lua_l_checknumber(state, 1)? as f32;
+    let right = lua_l_checknumber(state, 2)? as f32;
+    let bottom = lua_l_checknumber(state, 3)? as f32;
+    let top = lua_l_checknumber(state, 4)? as f32;
+    let near = lua_l_checknumber(state, 5)? as f32;
+    let far = lua_l_checknumber(state, 6)? as f32;
     let mut values = IDENTITY;
     values[0] = 2.0 / (right - left);
     values[5] = 2.0 / (top - bottom);
@@ -300,50 +304,50 @@ unsafe fn mat4_ortho(state: *mut lua_State) -> c_int {
     values[12] = -(right + left) / (right - left);
     values[13] = -(top + bottom) / (top - bottom);
     values[14] = -near / (far - near);
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_static_multiply(state: *mut lua_State) -> c_int {
-    let output = unsafe { check_mat4(state, 1) };
-    let lhs = unsafe { (*check_mat4(state, 2)).values };
-    let rhs = unsafe { (*check_mat4(state, 3)).values };
+unsafe fn mat4_static_multiply(state: *mut lua_State) -> LuaResult<c_int> {
+    let output = unsafe { check_mat4(state, 1)? };
+    let lhs = unsafe { (*check_mat4(state, 2)?).values };
+    let rhs = unsafe { (*check_mat4(state, 3)?).values };
     unsafe { (*output).values = multiply(lhs, rhs) };
-    unsafe { lua_pushvalue(state, 1) };
-    1
+    unsafe { lua_pushvalue(state, 1)? };
+    Ok(1)
 }
 
-unsafe fn mat4_static_multiply_affine(state: *mut lua_State) -> c_int {
-    let output = unsafe { check_mat4(state, 1) };
-    let lhs = unsafe { (*check_mat4(state, 2)).values };
-    let rhs = unsafe { (*check_mat4(state, 3)).values };
+unsafe fn mat4_static_multiply_affine(state: *mut lua_State) -> LuaResult<c_int> {
+    let output = unsafe { check_mat4(state, 1)? };
+    let lhs = unsafe { (*check_mat4(state, 2)?).values };
+    let rhs = unsafe { (*check_mat4(state, 3)?).values };
     unsafe { (*output).values = multiply_affine(lhs, rhs) };
-    unsafe { lua_pushvalue(state, 1) };
-    1
+    unsafe { lua_pushvalue(state, 1)? };
+    Ok(1)
 }
 
-unsafe fn mat4_static_invert(state: *mut lua_State) -> c_int {
-    let output = unsafe { check_mat4(state, 1) };
-    let input = unsafe { (*check_mat4(state, 2)).values };
+unsafe fn mat4_static_invert(state: *mut lua_State) -> LuaResult<c_int> {
+    let output = unsafe { check_mat4(state, 1)? };
+    let input = unsafe { (*check_mat4(state, 2)?).values };
     if let Some(values) = invert(input) {
         unsafe { (*output).values = values };
-        unsafe { lua_pushboolean(state, 1) };
+        unsafe { lua_pushboolean(state, 1)? };
     } else {
-        unsafe { lua_pushboolean(state, 0) };
+        unsafe { lua_pushboolean(state, 0)? };
     }
-    1
+    Ok(1)
 }
 
-unsafe fn mat4_static_invert_affine(state: *mut lua_State) -> c_int {
-    let output = unsafe { check_mat4(state, 1) };
-    let input = unsafe { (*check_mat4(state, 2)).values };
+unsafe fn mat4_static_invert_affine(state: *mut lua_State) -> LuaResult<c_int> {
+    let output = unsafe { check_mat4(state, 1)? };
+    let input = unsafe { (*check_mat4(state, 2)?).values };
     if let Some(values) = invert_affine(input) {
         unsafe { (*output).values = values };
-        unsafe { lua_pushboolean(state, 1) };
+        unsafe { lua_pushboolean(state, 1)? };
     } else {
-        unsafe { lua_pushboolean(state, 0) };
+        unsafe { lua_pushboolean(state, 0)? };
     }
-    1
+    Ok(1)
 }
 
 fn matrix_index(name: &[u8]) -> Option<usize> {
@@ -381,94 +385,95 @@ fn matrix_index(name: &[u8]) -> Option<usize> {
         .then_some(value - 1)
 }
 
-unsafe fn mat4_index(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { check_mat4(state, 1) };
+unsafe fn mat4_index(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { check_mat4(state, 1)? };
     let mut name_len = 0;
-    let name = unsafe { lua_l_checklstring(state, 2, &mut name_len) };
+    let name = unsafe { lua_l_checklstring(state, 2, &mut name_len)? };
     let name_bytes = unsafe { core::slice::from_raw_parts(name.cast::<u8>(), name_len) };
     if let Some(index) = matrix_index(name_bytes) {
-        unsafe { lua_pushnumber(state, f64::from((*matrix).values[index])) };
-        return 1;
+        unsafe { lua_pushnumber(state, f64::from((*matrix).values[index]))? };
+        return Ok(1);
     }
     unsafe { invalid_index(state, name) }
 }
 
-unsafe fn mat4_newindex(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { check_mat4(state, 1) };
+unsafe fn mat4_newindex(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { check_mat4(state, 1)? };
     let mut name_len = 0;
-    let name = unsafe { lua_l_checklstring(state, 2, &mut name_len) };
-    let value = lua_l_checknumber(state, 3) as f32;
+    let name = unsafe { lua_l_checklstring(state, 2, &mut name_len)? };
+    let value = lua_l_checknumber(state, 3)? as f32;
     let name_bytes = unsafe { core::slice::from_raw_parts(name.cast::<u8>(), name_len) };
     if let Some(index) = matrix_index(name_bytes) {
         unsafe { (*matrix).values[index] = value };
-        return 0;
+        return Ok(0);
     }
     unsafe { invalid_index(state, name) }
 }
 
-unsafe fn invalid_index(state: *mut lua_State, name: *const core::ffi::c_char) -> ! {
+unsafe fn invalid_index(state: *mut lua_State, name: *const core::ffi::c_char) -> LuaResult<c_int> {
     let name = unsafe { CStr::from_ptr(name) }.to_string_lossy();
     unsafe {
-        lua_l_error_l(
+        lua_l_error_l::<()>(
             state,
             c"'%s' is not a valid index of Mat4".as_ptr(),
             format_args!("'{name}' is not a valid index of Mat4"),
-        )
+        )?
     };
-    unsafe { core::hint::unreachable_unchecked() }
+
+    Ok(0)
 }
 
-unsafe fn mat4_mul(state: *mut lua_State) -> c_int {
-    let lhs = unsafe { (*check_mat4(state, 1)).values };
-    let rhs = unsafe { (*check_mat4(state, 2)).values };
-    unsafe { push_mat4(state, multiply(lhs, rhs)) };
-    1
+unsafe fn mat4_mul(state: *mut lua_State) -> LuaResult<c_int> {
+    let lhs = unsafe { (*check_mat4(state, 1)?).values };
+    let rhs = unsafe { (*check_mat4(state, 2)?).values };
+    unsafe { push_mat4(state, multiply(lhs, rhs))? };
+    Ok(1)
 }
 
-unsafe fn mat4_eq(state: *mut lua_State) -> c_int {
-    let lhs = unsafe { (*check_mat4(state, 1)).values };
-    let rhs = unsafe { (*check_mat4(state, 2)).values };
-    unsafe { lua_pushboolean(state, c_int::from(lhs == rhs)) };
-    1
+unsafe fn mat4_eq(state: *mut lua_State) -> LuaResult<c_int> {
+    let lhs = unsafe { (*check_mat4(state, 1)?).values };
+    let rhs = unsafe { (*check_mat4(state, 2)?).values };
+    unsafe { lua_pushboolean(state, c_int::from(lhs == rhs))? };
+    Ok(1)
 }
 
-unsafe fn mat4_invert(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { (*check_mat4(state, 1)).values };
+unsafe fn mat4_invert(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { (*check_mat4(state, 1)?).values };
     if let Some(values) = invert(matrix) {
-        unsafe { push_mat4(state, values) };
+        unsafe { push_mat4(state, values)? };
     } else {
-        unsafe { lua_pushnil(state) };
+        unsafe { lua_pushnil(state)? };
     }
-    1
+    Ok(1)
 }
 
-unsafe fn mat4_invert_affine(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { (*check_mat4(state, 1)).values };
+unsafe fn mat4_invert_affine(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { (*check_mat4(state, 1)?).values };
     if let Some(values) = invert_affine(matrix) {
-        unsafe { push_mat4(state, values) };
+        unsafe { push_mat4(state, values)? };
     } else {
-        unsafe { lua_pushnil(state) };
+        unsafe { lua_pushnil(state)? };
     }
-    1
+    Ok(1)
 }
 
-unsafe fn mat4_transpose(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { (*check_mat4(state, 1)).values };
+unsafe fn mat4_transpose(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { (*check_mat4(state, 1)?).values };
     let mut values = [0.0; 16];
     for row in 0..4 {
         for column in 0..4 {
             values[row * 4 + column] = matrix[column * 4 + row];
         }
     }
-    unsafe { push_mat4(state, values) };
-    1
+    unsafe { push_mat4(state, values)? };
+    Ok(1)
 }
 
-unsafe fn mat4_transform_point(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { &*check_mat4(state, 1) };
-    let x = lua_l_checknumber(state, 2) as f32;
-    let y = lua_l_checknumber(state, 3) as f32;
-    let z = lua_l_checknumber(state, 4) as f32;
+unsafe fn mat4_transform_point(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { &*check_mat4(state, 1)? };
+    let x = lua_l_checknumber(state, 2)? as f32;
+    let y = lua_l_checknumber(state, 3)? as f32;
+    let z = lua_l_checknumber(state, 4)? as f32;
     let out = matrix.transform_vec4(x, y, z, 1.0);
     if out[3] != 0.0 && out[3] != 1.0 {
         let inverse_w = 1.0 / out[3];
@@ -478,40 +483,39 @@ unsafe fn mat4_transform_point(state: *mut lua_State) -> c_int {
                 out[0] * inverse_w,
                 out[1] * inverse_w,
                 out[2] * inverse_w,
-            )
+            )?
         };
     } else {
-        unsafe { lua_pushvector_lua_state_f32_f32_f32(state, out[0], out[1], out[2]) };
+        unsafe { lua_pushvector_lua_state_f32_f32_f32(state, out[0], out[1], out[2])? };
     }
-    1
+    Ok(1)
 }
 
-unsafe fn mat4_transform_vec4(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { &*check_mat4(state, 1) };
-    let x = lua_l_checknumber(state, 2) as f32;
-    let y = lua_l_checknumber(state, 3) as f32;
-    let z = lua_l_checknumber(state, 4) as f32;
-    let w = lua_l_checknumber(state, 5) as f32;
+unsafe fn mat4_transform_vec4(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { &*check_mat4(state, 1)? };
+    let x = lua_l_checknumber(state, 2)? as f32;
+    let y = lua_l_checknumber(state, 3)? as f32;
+    let z = lua_l_checknumber(state, 4)? as f32;
+    let w = lua_l_checknumber(state, 5)? as f32;
     for value in matrix.transform_vec4(x, y, z, w) {
-        unsafe { lua_pushnumber(state, f64::from(value)) };
+        unsafe { lua_pushnumber(state, f64::from(value))? };
     }
-    4
+    Ok(4)
 }
 
-unsafe fn mat4_write_to_buffer(state: *mut lua_State) -> c_int {
-    let matrix = unsafe { &*check_mat4(state, 1) };
+unsafe fn mat4_write_to_buffer(state: *mut lua_State) -> LuaResult<c_int> {
+    let matrix = unsafe { &*check_mat4(state, 1)? };
     let mut buffer_len = 0;
-    let buffer = lua_l_checkbuffer(state, 2, &mut buffer_len).cast::<u8>();
-    let offset = lua_l_checkinteger(state, 3);
+    let buffer = lua_l_checkbuffer(state, 2, &mut buffer_len)?.cast::<u8>();
+    let offset = lua_l_checkinteger(state, 3)?;
     if offset < 0 || offset as usize + 64 > buffer_len {
         unsafe {
-            lua_l_error_l(
+            lua_l_error_l::<()>(
                 state,
                 c"Mat4:writeToBuffer offset out of range".as_ptr(),
                 format_args!("Mat4:writeToBuffer offset out of range"),
-            )
+            )?
         };
-        unsafe { core::hint::unreachable_unchecked() }
     }
     unsafe {
         core::ptr::copy_nonoverlapping(
@@ -520,10 +524,10 @@ unsafe fn mat4_write_to_buffer(state: *mut lua_State) -> c_int {
             64,
         )
     };
-    0
+    Ok(0)
 }
 
-unsafe fn mat4_namecall(state: *mut lua_State) -> c_int {
+unsafe fn mat4_namecall(state: *mut lua_State) -> LuaResult<c_int> {
     let mut atom = 0;
     let name = unsafe { lua_namecallatom(state, &mut atom) };
     if !name.is_null() {
@@ -543,13 +547,13 @@ unsafe fn mat4_namecall(state: *mut lua_State) -> c_int {
         unsafe { CStr::from_ptr(name) }.to_string_lossy()
     };
     unsafe {
-        lua_l_error_l(
+        lua_l_error_l::<()>(
             state,
             c"%s is not a valid method of Mat4".as_ptr(),
             format_args!("{name} is not a valid method of Mat4"),
-        )
+        )?
     };
-    0
+    Ok(0)
 }
 
 macro_rules! direct_field_getter {
@@ -578,7 +582,7 @@ direct_field_getter!(mat4_get_m24, 13);
 direct_field_getter!(mat4_get_m34, 14);
 direct_field_getter!(mat4_get_m44, 15);
 
-unsafe fn register_direct_fields(state: *mut lua_State) {
+unsafe fn register_direct_fields(state: *mut lua_State) -> LuaResult<()> {
     for (name, getter) in [
         (c"m11", mat4_get_m11 as unsafe extern "C" fn(_, _)),
         (c"m21", mat4_get_m21 as unsafe extern "C" fn(_, _)),
@@ -603,9 +607,10 @@ unsafe fn register_direct_fields(state: *mut lua_State) {
                 MAT4_USERDATA_TAG,
                 name.as_ptr(),
                 Some(getter),
-            )
+            )?
         };
     }
+    Ok(())
 }
 
 fn multiply(lhs: [f32; 16], rhs: [f32; 16]) -> [f32; 16] {

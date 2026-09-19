@@ -12,14 +12,14 @@ pub unsafe fn luau_f_assert(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // The macro l_isfalse! depends on lua_Type being in scope in the caller's context
     // because it expands to comparisons against lua_Type::LUA_TNIL etc.
     let _ = lua_Type::LUA_TNIL;
 
     if nparams >= 1 && nresults == 0 && !l_isfalse!(arg0) {
-        return 0;
+        return Ok(0);
     }
 
-    -1
+    Ok(-1)
 }

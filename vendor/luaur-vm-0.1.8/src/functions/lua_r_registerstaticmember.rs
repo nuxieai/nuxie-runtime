@@ -14,8 +14,10 @@ pub unsafe fn lua_r_registerstaticmember(
     val: *const TValue,
     offset: u32,
     static_member_offset: u32,
-) {
-    let destination = (*classobject).staticmembers.add(static_member_offset as usize);
+) -> crate::records::lua_exception::LuaResult<()> {
+    let destination = (*classobject)
+        .staticmembers
+        .add(static_member_offset as usize);
     setobj2class!(L, destination, val);
     luaC_barrier!(L, classobject, destination as *const TValue);
     *(*classobject).offsettomember.add(offset as usize) = member_name;
@@ -23,7 +25,12 @@ pub unsafe fn lua_r_registerstaticmember(
         L,
         (*classobject).memberstooffset,
         member_name,
-    );
+    )?;
     setnvalue!(offset_val, offset as f64);
-    luaC_barrier!(L, (*classobject).memberstooffset, offset_val as *const TValue);
+    luaC_barrier!(
+        L,
+        (*classobject).memberstooffset,
+        offset_val as *const TValue
+    );
+    Ok(())
 }

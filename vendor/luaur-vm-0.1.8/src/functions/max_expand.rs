@@ -8,7 +8,7 @@ pub(crate) unsafe fn max_expand(
     s: *const c_char,
     p: *const c_char,
     ep: *const c_char,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     let mut i: isize = 0; // counts maximum expand for item
 
     // while (singlematch(ms, s + i, p, ep))
@@ -19,14 +19,14 @@ pub(crate) unsafe fn max_expand(
 
     // keeps trying to match with the maximum repetitions
     while i >= 0 {
-        let res = match_item(ms, s.offset(i), ep.offset(1));
+        let res = match_item(ms, s.offset(i), ep.offset(1))?;
 
         if !res.is_null() {
-            return res;
+            return Ok(res);
         }
 
         i -= 1; // else didn't match; reduce 1 repetition to try again
     }
 
-    core::ptr::null()
+    Ok(core::ptr::null())
 }

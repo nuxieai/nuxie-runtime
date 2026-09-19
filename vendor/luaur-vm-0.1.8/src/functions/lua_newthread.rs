@@ -6,16 +6,18 @@ use crate::macros::setthvalue::setthvalue;
 use crate::records::global_state::global_State;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn lua_newthread(L: *mut lua_State) -> *mut lua_State {
+pub unsafe fn lua_newthread(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<*mut lua_State> {
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
-    let L1 = lua_e_newthread(L);
+    let L1 = lua_e_newthread(L)?;
     setthvalue!(L, (*L).top, L1);
     api_incr_top!(L);
     let g = (*L).global as *mut global_State;
     if let Some(userthread) = (*g).cb.userthread {
         userthread(L, L1);
     }
-    L1
+    Ok(L1)
 }

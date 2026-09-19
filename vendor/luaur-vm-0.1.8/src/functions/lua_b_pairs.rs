@@ -6,10 +6,10 @@ use crate::macros::lua_upvalueindex::lua_upvalueindex;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_b_pairs"]
-pub unsafe fn lua_b_pairs(L: *mut lua_State) -> i32 {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as i32);
-    lua_pushvalue(L, lua_upvalueindex(1));
-    lua_pushvalue(L, 1);
-    lua_pushnil(L);
-    3
+pub unsafe fn lua_b_pairs(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as i32)?;
+    lua_pushvalue(L, lua_upvalueindex(1))?;
+    lua_pushvalue(L, 1)?;
+    lua_pushnil(L)?;
+    Ok(3)
 }

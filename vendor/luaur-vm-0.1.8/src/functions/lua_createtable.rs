@@ -9,11 +9,16 @@ use crate::macros::sethvalue::sethvalue;
 use crate::records::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_createtable(L: *mut lua_State, narray: c_int, nrec: c_int) {
+pub unsafe fn lua_createtable(
+    L: *mut lua_State,
+    narray: c_int,
+    nrec: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(L, narray >= 0 && nrec >= 0);
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
-    sethvalue!(L, (*L).top, lua_h_new(L, narray, nrec));
+    sethvalue!(L, (*L).top, lua_h_new(L, narray, nrec)?);
     api_incr_top!(L);
+    Ok(())
 }

@@ -26,8 +26,7 @@ unsafe fn call_context_run(
     ud: *mut c_void,
 ) -> Result<(), crate::records::lua_exception::lua_exception> {
     let ctx = ud as *mut CallContext;
-    lua_d_callint(L, (*ctx).func, (*ctx).nresults, lua_isyieldable(L) != 0);
-    Ok(())
+    lua_d_callint(L, (*ctx).func, (*ctx).nresults, lua_isyieldable(L) != 0)
 }
 
 #[allow(non_snake_case)]
@@ -36,7 +35,7 @@ pub unsafe fn lua_pcallyieldable(
     nargs: c_int,
     nresults: c_int,
     errfunc: c_int,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_check!(L, iscfunction!((*(*L).ci).func));
     let cl = clvalue!((*(*L).ci).func);
     let c = core::ptr::addr_of!((*cl).inner.c).cast::<CClosure>();
@@ -68,12 +67,12 @@ pub unsafe fn lua_pcallyieldable(
         &mut ctx as *mut CallContext as *mut c_void,
         savedfunc,
         savederrfunc,
-    );
+    )?;
 
     expandstacklimit!(L, (*L).top);
 
     if status == 0 && isyielded(L) {
-        return C_CALL_YIELD;
+        return Ok(C_CALL_YIELD);
     }
 
     (*(*L).ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
@@ -88,6 +87,6 @@ pub unsafe fn lua_l_pcallyieldable(
     nargs: c_int,
     nresults: c_int,
     errfunc: c_int,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     lua_pcallyieldable(L, nargs, nresults, errfunc)
 }

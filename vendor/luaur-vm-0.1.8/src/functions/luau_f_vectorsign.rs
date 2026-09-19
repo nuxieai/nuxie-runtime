@@ -15,12 +15,13 @@ pub unsafe fn luau_f_vectorsign(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
 
         if LUA_VECTOR_SIZE == 4 {
-            setvvalue!(L,
+            setvvalue!(
+                L,
                 res,
                 luaui_signf(*v.offset(0)),
                 luaui_signf(*v.offset(1)),
@@ -28,7 +29,8 @@ pub unsafe fn luau_f_vectorsign(
                 luaui_signf(*v.offset(3))
             );
         } else {
-            setvvalue!(L,
+            setvvalue!(
+                L,
                 res,
                 luaui_signf(*v.offset(0)),
                 luaui_signf(*v.offset(1)),
@@ -37,8 +39,8 @@ pub unsafe fn luau_f_vectorsign(
             );
         }
 
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

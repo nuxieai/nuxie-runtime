@@ -18,7 +18,7 @@ macro_rules! lua_m_reallocarray {
                     core::mem::size_of::<$t>()
                 ),
                 $memcat as u8
-            )
+            )?
         )
     };
 }

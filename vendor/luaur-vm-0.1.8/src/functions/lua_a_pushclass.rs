@@ -8,7 +8,10 @@ use crate::type_aliases::luau_class::LuauClass;
 
 #[export_name = "luaur_luaA_pushclass"]
 #[allow(non_snake_case)]
-pub unsafe fn luaA_pushclass(l: *mut lua_State, lco: *mut LuauClass) {
+pub unsafe fn luaA_pushclass(
+    l: *mut lua_State,
+    lco: *mut LuauClass,
+) -> crate::records::lua_exception::LuaResult<()> {
     crate::ensure_stack!(l, 1);
     crate::api_check!(l, !lco.is_null());
 
@@ -17,4 +20,5 @@ pub unsafe fn luaA_pushclass(l: *mut lua_State, lco: *mut LuauClass) {
     (*i_o).set_tt(lua_Type::LUA_TCLASS as core::ffi::c_int);
 
     crate::api_incr_top!(l);
+    Ok(())
 }

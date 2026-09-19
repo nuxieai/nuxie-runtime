@@ -1147,8 +1147,9 @@ fn create_scripted_enum_values(lua: &Lua, values: Vec<String>) -> luaur_rt::Resu
     let values = lua.create_userdata(ScriptedEnumValues { values })?;
     let metatable: Table = unsafe {
         lua.exec_raw(Value::UserData(values.clone()), |state| {
-            let has_metatable = lua_getmetatable(state, 1);
+            let has_metatable = lua_getmetatable(state, 1)?;
             debug_assert_ne!(has_metatable, 0);
+            Ok(())
         })?
     };
     metatable.set(
@@ -1577,8 +1578,9 @@ fn create_scripted_property_list(
     // list indexing in front of it on this userdata instance.
     let metatable: Table = unsafe {
         lua.exec_raw(Value::UserData(property.clone()), |state| {
-            let has_metatable = lua_getmetatable(state, 1);
+            let has_metatable = lua_getmetatable(state, 1)?;
             debug_assert_ne!(has_metatable, 0);
+            Ok(())
         })?
     };
     if !metatable
@@ -1851,8 +1853,8 @@ fn lua_check_c_string(lua: &Lua, value: Option<Value>) -> luaur_rt::Result<Vec<u
     let checked: luaur_rt::Result<luaur_rt::LuaString> = unsafe {
         let check_argument_two = |state| {
             let mut length = 0;
-            luaur_vm::functions::lua_l_checklstring::lua_l_checklstring(state, 2, &mut length);
-            luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 2);
+            luaur_vm::functions::lua_l_checklstring::lua_l_checklstring(state, 2, &mut length)?;
+            luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 2)
         };
         match value {
             Some(value) => lua.exec_raw((Value::Nil, value), check_argument_two),

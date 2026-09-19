@@ -20,9 +20,9 @@ pub unsafe fn lua_registeruserdatadirectfieldget(
     tag: c_int,
     field: *const c_char,
     fn_: lua_UserdataDirectFieldGet,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     if !luaur_common::FFlag::LuauDirectFieldGet.get() {
-        return;
+        return Ok(());
     }
 
     api_check!(L, (tag as u32) < LUA_UTAG_LIMIT as u32);
@@ -32,12 +32,13 @@ pub unsafe fn lua_registeruserdatadirectfieldget(
     let g: *mut global_State = (*L).global;
 
     if (*g).udatadirectfields[tag as usize].is_null() {
-        (*g).udatadirectfields[tag as usize] = lua_h_new(L, 0, 1);
+        (*g).udatadirectfields[tag as usize] = lua_h_new(L, 0, 1)?;
     }
 
-    let ts: *mut TString = luaS_new(L, field);
+    let ts: *mut TString = luaS_new(L, field)?;
     l_setbit!((*ts).hdr.marked, FIXEDBIT);
 
-    let slot: *mut TValue = lua_h_setstr(L, (*g).udatadirectfields[tag as usize], ts);
+    let slot: *mut TValue = lua_h_setstr(L, (*g).udatadirectfields[tag as usize], ts)?;
     setpvalue!(slot, fn_.unwrap() as *mut c_void, 0);
+    Ok(())
 }

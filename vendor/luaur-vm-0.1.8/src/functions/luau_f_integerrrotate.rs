@@ -14,7 +14,7 @@ pub unsafe fn luau_f_integerrrotate(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(_args) {
         let n: u64 = lvalue!(arg0) as u64;
         let s: u32 = (lvalue!(_args) as u64 % 64) as u32;
@@ -30,8 +30,8 @@ pub unsafe fn luau_f_integerrrotate(
         // Keep lua_Type import live for macro expansions / symbol expectations.
         let _ = lua_Type::LUA_TINTEGER;
 
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

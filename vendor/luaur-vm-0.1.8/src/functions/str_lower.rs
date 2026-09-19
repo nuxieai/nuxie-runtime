@@ -7,10 +7,10 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_char;
 use core::ffi::c_int;
 
-pub fn str_lower(L: *mut lua_State) -> c_int {
+pub fn str_lower(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let mut len: usize = 0;
-        let s = lua_l_checklstring(L, 1, &mut len);
+        let s = lua_l_checklstring(L, 1, &mut len)?;
 
         let mut b: LuaLStrbuf = LuaLStrbuf {
             p: core::ptr::null_mut(),
@@ -19,7 +19,7 @@ pub fn str_lower(L: *mut lua_State) -> c_int {
             storage: core::ptr::null_mut(),
             buffer: [0; 512],
         };
-        let ptr = lua_l_buffinitsize(L, &mut b, len as usize);
+        let ptr = lua_l_buffinitsize(L, &mut b, len as usize)?;
 
         for i in 0..len as usize {
             unsafe {
@@ -27,7 +27,7 @@ pub fn str_lower(L: *mut lua_State) -> c_int {
             }
         }
 
-        lua_l_pushresultsize(&mut b, len as usize);
-        1
+        lua_l_pushresultsize(&mut b, len as usize)?;
+        Ok(1)
     }
 }

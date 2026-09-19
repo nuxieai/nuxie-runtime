@@ -14,7 +14,7 @@ pub unsafe fn luauF_vectormin(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisvector!(arg0) && ttisvector!(args) {
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
@@ -49,7 +49,7 @@ pub unsafe fn luauF_vectormin(
 
         for i in 3..=nparams {
             if !ttisvector!(args.offset(i as isize - 2)) {
-                return -1;
+                return Ok(-1);
             }
 
             let c = vvalue!(args.offset(i as isize - 2)).as_ptr();
@@ -79,8 +79,8 @@ pub unsafe fn luauF_vectormin(
         }
 
         setvvalue!(L, res, result[0], result[1], result[2], result[3]);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

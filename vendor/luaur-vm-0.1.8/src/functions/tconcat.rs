@@ -12,13 +12,15 @@ use crate::records::lua_l_strbuf::LuaLStrbuf;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_tconcat"]
-pub unsafe fn tconcat(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn tconcat(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut lsep: usize = 0;
-    let sep = lua_l_optlstring(L, 2, core::ptr::null(), &mut lsep);
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
-    let i = lua_l_optinteger(L, 3, 1);
+    let sep = lua_l_optlstring(L, 2, core::ptr::null(), &mut lsep)?;
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
+    let i = lua_l_optinteger(L, 3, 1)?;
     let last = lua_objlen(L, 1);
-    let last = lua_l_optinteger(L, 4, last);
+    let last = lua_l_optinteger(L, 4, last)?;
 
     let t = hvalue!((*L).base);
 
@@ -32,15 +34,15 @@ pub unsafe fn tconcat(L: *mut lua_State) -> core::ffi::c_int {
     lua_l_buffinit(L, &mut b);
     let mut current_i = i;
     while current_i < last {
-        addfield(L, &mut b, current_i, t);
+        addfield(L, &mut b, current_i, t)?;
         if lsep != 0 {
-            lua_l_addlstring(&mut b, sep, lsep);
+            lua_l_addlstring(&mut b, sep, lsep)?;
         }
         current_i += 1;
     }
     if current_i == last {
-        addfield(L, &mut b, current_i, t);
+        addfield(L, &mut b, current_i, t)?;
     }
-    lua_l_pushresult(&mut b);
-    1
+    lua_l_pushresult(&mut b)?;
+    Ok(1)
 }

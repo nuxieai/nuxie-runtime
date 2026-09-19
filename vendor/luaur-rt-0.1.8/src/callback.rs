@@ -15,27 +15,23 @@
 //!  1. The trampoline fetches upvalue 1 with [`lua_upvalueindex`] and recovers
 //!     `&BoxedCallback` from the userdata pointer.
 //!  2. It pops all on-stack arguments into a [`MultiValue`].
-//!  3. It runs the closure **inside [`catch_unwind`]** — so a `panic!` in user
-//!     code can never become a nested panic while we are about to call
-//!     [`lua_error`].
+//!  3. It runs the closure inside [`catch_unwind`] for host-panic isolation
+//!     on unwind builds. This is not the guest-error mechanism and cannot
+//!     recover Rust panics on abort builds.
 //!  4. On success it pushes the results and returns the count.
 //!  5. On a returned `Err`, or a caught panic, it pushes a message string and
-//!     calls [`lua_error`]. `lua_error` raises the VM's normal longjmp-style
-//!     error (a `panic_any(lua_exception)`), which unwinds this trampoline
-//!     frame up to the VM's protected-call boundary — the VM's own mechanism.
-//!
-//! Because the user panic is caught *before* `lua_error` is called, there is
-//! never a double-unwind, and a genuine Rust panic in user code surfaces as an
-//! ordinary catchable Lua error, not a process abort.
+//!     returns [`lua_error`]'s failure to the VM's protected-call boundary.
+//!     Guest errors use returned values, including on abort builds.
 
 use std::any::TypeId;
-use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::multi::MultiValue;
 use crate::state::Lua;
 use crate::sys::*;
+use luaur_vm::records::lua_exception::LuaResult;
 
 // ---------------------------------------------------------------------------
 // Structured error objects (for errors that must survive the Lua boundary)
@@ -102,17 +98,17 @@ pub(crate) fn is_structured(err: &Error) -> bool {
 }
 
 /// Push a structured [`Error`] as a wrapped-error userdata error object and
-/// invoke [`lua_error`]. Diverges (unwinds via the VM's longjmp).
+/// return [`lua_error`]'s explicit VM failure.
 ///
 /// # Safety
 /// `state` must be a valid `lua_State` with at least one free stack slot.
-pub(crate) unsafe fn raise_structured_error(state: *mut lua_State, err: Error) -> c_int {
+pub(crate) unsafe fn raise_structured_error(state: *mut lua_State, err: Error) -> LuaResult<c_int> {
     unsafe {
         let storage = lua_newuserdatadtor(
             state,
             core::mem::size_of::<WrappedError>(),
             Some(wrapped_error_dtor),
-        );
+        )?;
         if storage.is_null() {
             // Fall back to a string error if we cannot allocate the userdata.
             return raise_lua_error(state, &err.to_string());
@@ -124,7 +120,7 @@ pub(crate) unsafe fn raise_structured_error(state: *mut lua_State, err: Error) -
                 error: Box::new(err),
             },
         );
-        lua_error(state) // diverges (`-> !`)
+        lua_error(state)
     }
 }
 
@@ -179,7 +175,7 @@ unsafe extern "C" fn callback_dtor(ptr: *mut c_void) {
 }
 
 /// The one C trampoline shared by every `create_function` closure.
-unsafe fn trampoline(state: *mut lua_State) -> c_int {
+unsafe fn trampoline(state: *mut lua_State) -> LuaResult<c_int> {
     unsafe {
         // 1. Recover the boxed callback from upvalue 1.
         let ud = lua_touserdata(state, lua_upvalueindex(1));
@@ -221,7 +217,7 @@ unsafe fn trampoline(state: *mut lua_State) -> c_int {
                         return raise_lua_error(state, &e.to_string());
                     }
                 }
-                n
+                Ok(n)
             }
             Ok(Err(err)) => {
                 // 5b. The closure returned Err -> raise it as a Lua error.
@@ -264,25 +260,23 @@ unsafe fn collect_args(lua: &Lua, nargs: c_int) -> Result<MultiValue> {
     Ok(m)
 }
 
-/// Push `msg` as the error object and invoke [`lua_error`]. Never returns
-/// normally (it unwinds), but is typed `-> c_int` so call sites read naturally.
-unsafe fn raise_lua_error(state: *mut lua_State, msg: &str) -> c_int {
+/// Push `msg` as the error object and return the VM failure to the caller.
+unsafe fn raise_lua_error(state: *mut lua_State, msg: &str) -> LuaResult<c_int> {
     unsafe {
-        lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len());
-        lua_error(state) // diverges (`-> !`)
+        lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len())?;
+        lua_error(state)
     }
 }
 
 /// Raise `msg` with the Lua caller location, matching `luaL_error(L, "%s",
 /// msg)` from a translated C callback.
-unsafe fn raise_lua_l_runtime_error(state: *mut lua_State, msg: &str) -> c_int {
+unsafe fn raise_lua_l_runtime_error(state: *mut lua_State, msg: &str) -> LuaResult<c_int> {
     unsafe {
         luaur_vm::functions::lua_l_error_l::lua_l_error_l(
             state,
             c"%s".as_ptr(),
             format_args!("{msg}"),
-        );
-        0
+        )
     }
 }
 
@@ -302,12 +296,14 @@ fn panic_message(payload: &Box<dyn std::any::Any + Send>) -> String {
 pub(crate) fn create_callback_function(lua: &Lua, callback: BoxedCallback) -> Result<Function> {
     let state = lua.state();
     unsafe {
+        let _stack = crate::stack_guard::StackGuard::new(state);
         // Allocate userdata sized for a BoxedCallback, with our dtor.
         let storage = lua_newuserdatadtor(
             state,
             core::mem::size_of::<BoxedCallback>(),
             Some(callback_dtor),
-        );
+        )
+        .map_err(|error| Error::from_vm(error))?;
         if storage.is_null() {
             return Err(Error::runtime(
                 "luaur-rt: failed to allocate callback userdata",
@@ -324,49 +320,9 @@ pub(crate) fn create_callback_function(lua: &Lua, callback: BoxedCallback) -> Re
             c"luaur-rt-callback".as_ptr(),
             1, // nup: consumes the userdata above as upvalue 1
             None,
-        );
+        )
+        .map_err(|error| Error::from_vm(error))?;
         // The closure is now on top; take a registry ref.
-        Ok(Function::from_ref(lua.pop_ref()))
-    }
-}
-
-/// Neutralise a scope-created callback: replace the boxed closure stored in the
-/// function's upvalue-1 userdata with a sentinel that always returns
-/// [`Error::CallbackDestructed`], dropping the original closure (and thereby
-/// ending any borrows it held).
-///
-/// This is the **invalidation half** of `Lua::scope`'s soundness guarantee: the
-/// original closure (which may borrow non-`'static` data) is dropped here, on
-/// scope exit, *before* the borrowed data's lifetime can end. The Lua function
-/// object itself is left fully valid — only its behavior changes to "destructed"
-/// — so a post-scope call from Lua hits the sentinel and surfaces as
-/// `CallbackError { cause: CallbackDestructed }` instead of touching freed
-/// memory.
-///
-/// Must be called while the scope (and hence the VM) is still alive.
-pub(crate) fn destruct_callback(func: &Function) {
-    let lua = func.lua();
-    let state = lua.state();
-    unsafe {
-        // Push the function, then fetch its upvalue 1 (the callback userdata).
-        func.push_to_stack();
-        let name = lua_getupvalue(state, -1, 1);
-        if name.is_null() {
-            // No upvalue (should not happen for our callbacks); just pop the fn.
-            lua_pop(state, 1);
-            return;
-        }
-        // stack: [func, upvalue-userdata]
-        let ud = lua_touserdata(state, -1);
-        if !ud.is_null() {
-            let slot = ud as *mut BoxedCallback;
-            // Swap in the sentinel; the returned old box is dropped at end of
-            // scope here, running Drop on the original closure's captures.
-            let sentinel: BoxedCallback = Box::new(|_lua, _args| Err(Error::CallbackDestructed));
-            let old = core::ptr::replace(slot, sentinel);
-            drop(old);
-        }
-        // Pop the upvalue and the function.
-        lua_pop(state, 2);
+        Ok(Function::from_ref(lua.try_pop_ref()?))
     }
 }

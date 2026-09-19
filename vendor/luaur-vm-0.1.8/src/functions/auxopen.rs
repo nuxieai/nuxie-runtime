@@ -11,8 +11,9 @@ pub(crate) unsafe fn auxopen(
     name: *const c_char,
     f: lua_CFunction,
     u: lua_CFunction,
-) {
-    LUA_PUSHCFUNCTION(L, u, core::ptr::null());
-    LUA_PUSHCCLOSURE(L, f, name, 1);
-    lua_setfield(L, -2, name);
+) -> crate::records::lua_exception::LuaResult<()> {
+    LUA_PUSHCFUNCTION(L, u, core::ptr::null())?;
+    LUA_PUSHCCLOSURE(L, f, name, 1)?;
+    lua_setfield(L, -2, name)?;
+    Ok(())
 }

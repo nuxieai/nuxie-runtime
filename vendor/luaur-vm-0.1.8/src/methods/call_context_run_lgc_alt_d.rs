@@ -9,7 +9,7 @@ impl CallContext {
         ud: *mut core::ffi::c_void,
     ) -> Result<(), crate::records::lua_exception::lua_exception> {
         let ctx = ud as *mut CallContext;
-        luaS_resize(l, (*ctx).newsize);
+        luaS_resize(l, (*ctx).newsize)?;
         Ok(())
     }
 }

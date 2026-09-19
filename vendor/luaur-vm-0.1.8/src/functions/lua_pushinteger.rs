@@ -4,10 +4,14 @@ use crate::macros::cast_num::cast_num;
 use crate::macros::setnvalue::setnvalue;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn lua_pushinteger(l: *mut lua_State, n: core::ffi::c_int) {
+pub fn lua_pushinteger(
+    l: *mut lua_State,
+    n: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     crate::ensure_stack!(l, 1);
     unsafe {
         setnvalue!((*l).top, cast_num!(n));
     }
     api_incr_top!(l);
+    Ok(())
 }

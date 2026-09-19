@@ -3,8 +3,11 @@ use crate::functions::lua_l_error_l::lua_l_error_l;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
-#[export_name = "luaur_lua_l_argerror_l"]
-pub unsafe fn lua_l_argerror_l(L: *mut lua_State, narg: c_int, extramsg: &str) -> ! {
+pub unsafe fn lua_l_argerror_l<T>(
+    L: *mut lua_State,
+    narg: c_int,
+    extramsg: &str,
+) -> crate::records::lua_exception::LuaResult<T> {
     let fname = currfuncname(L);
 
     if !fname.is_null() {
@@ -13,19 +16,21 @@ pub unsafe fn lua_l_argerror_l(L: *mut lua_State, narg: c_int, extramsg: &str) -
             L,
             c"invalid argument #%d to '%s' (%s)".as_ptr(),
             format_args!("invalid argument #{} to '{}' ({})", narg, fname, extramsg),
-        );
+        )
     } else {
         lua_l_error_l(
             L,
             c"invalid argument #%d (%s)".as_ptr(),
             format_args!("invalid argument #{} ({})", narg, extramsg),
-        );
+        )
     }
-
-    core::hint::unreachable_unchecked()
 }
 
 #[allow(non_snake_case)]
-pub fn luaL_argerrorL(L: *mut lua_State, narg: c_int, extramsg: &str) -> ! {
+pub fn luaL_argerrorL<T>(
+    L: *mut lua_State,
+    narg: c_int,
+    extramsg: &str,
+) -> crate::records::lua_exception::LuaResult<T> {
     unsafe { lua_l_argerror_l(L, narg, extramsg) }
 }

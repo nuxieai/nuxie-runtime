@@ -11,7 +11,10 @@ use core::ffi::c_int;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaF_findupval(l: *mut lua_State, level: StkId) -> *mut UpVal {
+pub unsafe fn luaF_findupval(
+    l: *mut lua_State,
+    level: StkId,
+) -> crate::records::lua_exception::LuaResult<*mut UpVal> {
     let g = (*l).global;
     let mut pp: *mut *mut UpVal = core::ptr::addr_of_mut!((*l).openupval);
 
@@ -20,7 +23,7 @@ pub unsafe fn luaF_findupval(l: *mut lua_State, level: StkId) -> *mut UpVal {
         LUAU_ASSERT!(!isdead!(g, p as *mut GCObject));
         LUAU_ASSERT!(upisopen!(p));
         if (*p).v == level {
-            return p;
+            return Ok(p);
         }
 
         pp = core::ptr::addr_of_mut!((*p).u.open.threadnext);
@@ -33,7 +36,7 @@ pub unsafe fn luaF_findupval(l: *mut lua_State, level: StkId) -> *mut UpVal {
         l,
         core::mem::size_of::<UpVal>(),
         (*l).activememcat,
-    ) as *mut UpVal;
+    )? as *mut UpVal;
 
     luaC_init!(l, uv, lua_Type::LUA_TUPVAL as c_int);
     (*uv).markedopen = 0;
@@ -50,16 +53,16 @@ pub unsafe fn luaF_findupval(l: *mut lua_State, level: StkId) -> *mut UpVal {
 
     LUAU_ASSERT!((*(*uv).u.open.next).u.open.prev == uv && (*(*uv).u.open.prev).u.open.next == uv);
 
-    uv
+    Ok(uv)
 }
 
 #[allow(unused_imports)]
 pub use luaF_findupval as lua_f_findupval;
 
 #[export_name = "luaur_luaF_findupval"]
-pub unsafe extern "C" fn lua_f_findupval_export(
+pub unsafe fn lua_f_findupval_export(
     l: *mut lua_State,
     level: StkId,
-) -> *mut core::ffi::c_void {
-    luaF_findupval(l, level).cast()
+) -> crate::records::lua_exception::LuaResult<*mut core::ffi::c_void> {
+    Ok(luaF_findupval(l, level)?.cast())
 }

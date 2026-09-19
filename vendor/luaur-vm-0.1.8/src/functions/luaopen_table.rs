@@ -104,11 +104,13 @@ static TAB_FUNCS: TabFuncs = TabFuncs([
 ]);
 
 #[allow(non_snake_case)]
-pub unsafe fn luaopen_table(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_register(L, c"table".as_ptr(), TAB_FUNCS.0.as_ptr());
+pub unsafe fn luaopen_table(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_register(L, c"table".as_ptr(), TAB_FUNCS.0.as_ptr())?;
 
-    LUA_PUSHCFUNCTION(L, Some(tunpack), c"unpack".as_ptr());
-    lua_setglobal(L, c"unpack".as_ptr());
+    LUA_PUSHCFUNCTION(L, Some(tunpack), c"unpack".as_ptr())?;
+    lua_setglobal(L, c"unpack".as_ptr())?;
 
-    1
+    Ok(1)
 }

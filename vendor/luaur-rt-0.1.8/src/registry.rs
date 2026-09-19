@@ -80,7 +80,7 @@ impl Lua {
     pub fn create_registry_value(&self, value: impl IntoLua) -> Result<RegistryKey> {
         let v = value.into_lua(self)?;
         self.push_value(&v)?;
-        Ok(RegistryKey::from_ref(self.pop_ref()))
+        Ok(RegistryKey::from_ref(self.try_pop_ref()?))
     }
 
     /// Read back a value previously stored with [`Lua::create_registry_value`],
@@ -93,7 +93,7 @@ impl Lua {
         let value = unsafe {
             key.push();
             let v = self.value_from_stack(-1)?;
-            crate::sys::lua_pop(state, 1);
+            crate::sys::lua_pop(state, 1).expect("shrinking the stack cannot fail");
             v
         };
         T::from_lua(value, self)
@@ -145,9 +145,11 @@ impl Lua {
         let cname = std::ffi::CString::new(name)
             .map_err(|_| Error::runtime("registry name contains a NUL byte"))?;
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             self.push_value(&v)?;
             // lua_setfield pops the value and stores registry[name] = value.
-            crate::sys::lua_setfield(state, crate::sys::LUA_REGISTRYINDEX, cname.as_ptr());
+            crate::sys::lua_setfield(state, crate::sys::LUA_REGISTRYINDEX, cname.as_ptr())
+                .map_err(|error| Error::from_vm(error))?;
         }
         Ok(())
     }
@@ -161,9 +163,11 @@ impl Lua {
         let cname = std::ffi::CString::new(name)
             .map_err(|_| Error::runtime("registry name contains a NUL byte"))?;
         let value = unsafe {
-            crate::sys::lua_getfield(state, crate::sys::LUA_REGISTRYINDEX, cname.as_ptr());
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            crate::sys::lua_getfield(state, crate::sys::LUA_REGISTRYINDEX, cname.as_ptr())
+                .map_err(|error| Error::from_vm(error))?;
             let v = self.value_from_stack(-1)?;
-            crate::sys::lua_pop(state, 1);
+            crate::sys::lua_pop(state, 1).expect("shrinking the stack cannot fail");
             v
         };
         T::from_lua(value, self)
@@ -196,7 +200,7 @@ impl IntoLua for &RegistryKey {
         unsafe {
             self.push();
             let v = lua.value_from_stack(-1)?;
-            crate::sys::lua_pop(state, 1);
+            crate::sys::lua_pop(state, 1).expect("shrinking the stack cannot fail");
             Ok(v)
         }
     }

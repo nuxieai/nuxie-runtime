@@ -5,11 +5,15 @@ use crate::macros::lua_g_runerror::lua_g_runerror;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_readonlyerror(L: *mut lua_State) -> ! {
+pub unsafe fn lua_g_readonlyerror<T>(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<T> {
     lua_g_runerror!(L, "attempt to modify a readonly table")
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaG_readonlyerror(L: *mut lua_State) -> ! {
+pub unsafe fn luaG_readonlyerror<T>(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<T> {
     lua_g_readonlyerror(L)
 }

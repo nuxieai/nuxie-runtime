@@ -6,7 +6,7 @@ pub type sort_predicate = Option<
         L: *mut crate::type_aliases::lua_state::lua_State,
         l: *const TValue,
         r: *const TValue,
-    ) -> core::ffi::c_int,
+    ) -> crate::records::lua_exception::LuaResult<core::ffi::c_int>,
 >;
 
 pub type SortPredicate = sort_predicate;

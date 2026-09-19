@@ -13,19 +13,25 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TCLASS as core::ffi::c_int);
+pub unsafe fn lua_r_createobject(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TCLASS as core::ffi::c_int)?;
     let classobject = core::ptr::addr_of_mut!((*(*(*L).base).value.gc).lclass)
         as *mut crate::records::luau_class::LuauClass;
     let classinst = crate::functions::lua_m_newgco::luaM_newgco_(
         L,
         core::mem::size_of::<crate::records::luau_object::LuauObject>(),
         (*L).activememcat,
-    ) as *mut crate::records::luau_object::LuauObject;
+    )? as *mut crate::records::luau_object::LuauObject;
     luaC_init!(L, classinst, lua_Type::LUA_TOBJECT as core::ffi::c_int);
     (*classinst).lclass = classobject;
-    (*classinst).members =
-        luaM_newarray!(L, (*classobject).numberofinstancemembers, TValue, (*L).activememcat);
+    (*classinst).members = luaM_newarray!(
+        L,
+        (*classobject).numberofinstancemembers,
+        TValue,
+        (*L).activememcat
+    );
     (*classinst).numberofmembers = (*classobject).numberofinstancemembers;
     let numargs: core::ffi::c_int = lua_gettop(L);
 
@@ -62,7 +68,7 @@ pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
                     (*L).base.add(1),
                     &mut key,
                     (*L).top.wrapping_sub(1),
-                );
+                )?;
                 setobj!(
                     L,
                     (*classinst).members.add(idx as usize),
@@ -71,7 +77,7 @@ pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
             }
         }
         _ => {
-            crate::functions::lua_l_error_l::lua_l_error_l(
+            return crate::functions::lua_l_error_l::lua_l_error_l(
                 L,
                 c"wrong number of arguments for constructing a '%s'".as_ptr(),
                 core::format_args!(
@@ -89,5 +95,5 @@ pub unsafe fn lua_r_createobject(L: *mut lua_State) -> core::ffi::c_int {
     // Preserve the GC invariant, moving barrier back once after writing multiple objects (similar to SETLIST)
     luaC_barrierfast!(L, classinst);
 
-    1
+    Ok(1)
 }

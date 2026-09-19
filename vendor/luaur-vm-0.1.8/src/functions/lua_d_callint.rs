@@ -14,10 +14,15 @@ use crate::type_aliases::stk_id::StkId;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_d_callint(l: *mut lua_State, func: StkId, nresults: c_int, preparereentry: bool) {
+pub unsafe fn lua_d_callint(
+    l: *mut lua_State,
+    func: StkId,
+    nresults: c_int,
+    preparereentry: bool,
+) -> crate::records::lua_exception::LuaResult<()> {
     (*l).nCcalls = (*l).nCcalls.wrapping_add(1);
     if (*l).nCcalls as i32 >= LUAI_MAXCCALLS {
-        luaD_checkCstack(l);
+        luaD_checkCstack(l)?;
     }
 
     let mut fromyieldableccall = false;
@@ -34,7 +39,7 @@ pub unsafe fn lua_d_callint(l: *mut lua_State, func: StkId, nresults: c_int, pre
     let funcoffset = savestack!(l, func);
     let cioffset = saveci!(l, (*l).ci);
 
-    performcall(l, func, nresults, preparereentry);
+    performcall(l, func, nresults, preparereentry)?;
 
     let yielded = isyielded(l);
 
@@ -57,6 +62,7 @@ pub unsafe fn lua_d_callint(l: *mut lua_State, func: StkId, nresults: c_int, pre
 
     (*l).nCcalls = (*l).nCcalls.wrapping_sub(1);
     luaC_checkGC!(l);
+    Ok(())
 }
 
 #[allow(unused_imports)]

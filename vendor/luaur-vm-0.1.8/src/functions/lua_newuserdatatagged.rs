@@ -12,19 +12,23 @@ use crate::records::gc_object::GCObject;
 use crate::records::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub fn lua_newuserdatatagged(L: *mut lua_State, sz: usize, tag: c_int) -> *mut c_void {
+pub fn lua_newuserdatatagged(
+    L: *mut lua_State,
+    sz: usize,
+    tag: c_int,
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     unsafe {
         api_check!(L, (tag as u32) < LUA_UTAG_LIMIT as u32 || tag == UTAG_PROXY);
         luaC_checkGC!(L);
         lua_c_threadbarrier_lapi(L);
         crate::ensure_stack!(L, 1);
 
-        let u = lua_u_newudata(L, sz, tag);
+        let u = lua_u_newudata(L, sz, tag)?;
         (*(*L).top).value.gc = u as *mut GCObject;
         (*(*L).top).tt = lua_Type::LUA_TUSERDATA as c_int;
         crate::macros::checkliveness::checkliveness!((*L).global, (*L).top);
         api_incr_top!(L);
 
-        (*u).data.as_mut_ptr().cast()
+        Ok((*u).data.as_mut_ptr().cast())
     }
 }

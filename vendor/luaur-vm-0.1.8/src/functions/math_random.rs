@@ -14,7 +14,7 @@ use crate::macros::lua_l_argcheck::luaL_argcheck;
 use crate::macros::lua_l_error::luaL_error;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn math_random(L: *mut lua_State) -> i32 {
+pub unsafe fn math_random(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
     let g = (*L).global;
     match lua_gettop(L) {
         0 => {
@@ -22,30 +22,30 @@ pub unsafe fn math_random(L: *mut lua_State) -> i32 {
             let rh = pcg_32_random(&mut (*g).rngstate);
             let bits = (rl as u64) | ((rh as u64) << 32);
             let rd = (bits as f64) * 2.0f64.powi(-64);
-            lua_pushnumber(L, rd);
+            lua_pushnumber(L, rd)?;
         }
         1 => {
-            let u = lua_l_checkinteger(L, 1);
+            let u = lua_l_checkinteger(L, 1)?;
             luaL_argcheck!(L, 1 <= u, 1, "interval is empty");
 
             let x = (u as u64).wrapping_mul(pcg_32_random(&mut (*g).rngstate) as u64);
             let r = (1 + (x >> 32)) as i32;
-            lua_pushinteger(L, r);
+            lua_pushinteger(L, r)?;
         }
         2 => {
-            let l = lua_l_checkinteger(L, 1);
-            let u = lua_l_checkinteger(L, 2);
+            let l = lua_l_checkinteger(L, 1)?;
+            let u = lua_l_checkinteger(L, 2)?;
             luaL_argcheck!(L, l <= u, 2, "interval is empty");
 
             let ul = (u as u32).wrapping_sub(l as u32);
             luaL_argcheck!(L, ul < u32::MAX, 2, "interval is too large");
             let x = (ul as u64 + 1).wrapping_mul(pcg_32_random(&mut (*g).rngstate) as u64);
             let r = (l as i64 + (x >> 32) as i64) as i32;
-            lua_pushinteger(L, r);
+            lua_pushinteger(L, r)?;
         }
         _ => {
             luaL_error!(L, "wrong number of arguments");
         }
     }
-    1
+    Ok(1)
 }

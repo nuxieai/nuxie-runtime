@@ -14,7 +14,7 @@ pub unsafe fn luau_f_integerclamp(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisinteger!(arg0)
@@ -26,7 +26,7 @@ pub unsafe fn luau_f_integerclamp(
         let rmax: i64 = lvalue!(args.add(1));
 
         if rmin > rmax {
-            return -1;
+            return Ok(-1);
         }
 
         setlvalue!(
@@ -39,8 +39,8 @@ pub unsafe fn luau_f_integerclamp(
                 a
             }
         );
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

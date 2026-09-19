@@ -13,13 +13,17 @@ use crate::type_aliases::lua_table::LuaTable;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_h_newkey(l: *mut lua_State, t: *mut LuaTable, key: *const TValue) -> *mut TValue {
+pub unsafe fn lua_h_newkey(
+    l: *mut lua_State,
+    t: *mut LuaTable,
+    key: *const TValue,
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     if ttisnil!(key) {
-        lua_g_runerror_l(l, core::ptr::null(), format_args!("table index is nil"));
+        return lua_g_runerror_l(l, core::ptr::null(), format_args!("table index is nil"));
     } else if ttisnumber!(key) && luai_numisnan(nvalue!(key)) {
-        lua_g_runerror_l(l, core::ptr::null(), format_args!("table index is NaN"));
+        return lua_g_runerror_l(l, core::ptr::null(), format_args!("table index is NaN"));
     } else if ttisvector!(key) && luai_vecisnan(vvalue!(key).as_ptr()) {
-        lua_g_runerror_l(
+        return lua_g_runerror_l(
             l,
             core::ptr::null(),
             format_args!("table index contains NaN"),

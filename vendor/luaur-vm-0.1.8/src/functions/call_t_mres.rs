@@ -16,7 +16,7 @@ pub unsafe fn call_t_mres(
     f: *const TValue,
     p1: *const TValue,
     p2: *const TValue,
-) -> StkId {
+) -> crate::records::lua_exception::LuaResult<StkId> {
     let result = savestack!(L, res);
 
     LUAU_ASSERT!((*L).top.offset(3) < (*L).stack.add((*L).stacksize as usize));
@@ -28,11 +28,11 @@ pub unsafe fn call_t_mres(
     luaD_checkstack!(L, 3);
     (*L).top = (*L).top.add(3);
 
-    lua_d_call(L, (*L).top.offset(-3), 1);
+    lua_d_call(L, (*L).top.offset(-3), 1)?;
 
     res = restorestack!(L, result);
     (*L).top = (*L).top.offset(-1);
     setobj2s!(L, res, (*L).top);
 
-    res
+    Ok(res)
 }

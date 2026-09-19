@@ -15,7 +15,7 @@ pub unsafe fn lua_breakpoint(
     funcindex: core::ffi::c_int,
     line: core::ffi::c_int,
     enabled: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let func: *const TValue = luaA_toobject(L, funcindex);
     api_check!(L, ttisfunction!(func) && (*clvalue!(func)).isC == 0);
 
@@ -26,8 +26,8 @@ pub unsafe fn lua_breakpoint(
     let target = getnextline(p, line);
 
     if target != -1 {
-        lua_g_breakpoint(L, p, target, enabled != 0);
+        lua_g_breakpoint(L, p, target, enabled != 0)?;
     }
 
-    target
+    Ok(target)
 }

@@ -14,7 +14,7 @@ pub unsafe fn luau_f_vectorlengthsquared(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
         let xy = v
@@ -22,8 +22,8 @@ pub unsafe fn luau_f_vectorlengthsquared(
             .read()
             .mul_add(v.add(0).read(), v.add(1).read() * v.add(1).read());
         setnvalue!(res, v.add(2).read().mul_add(v.add(2).read(), xy) as f64);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

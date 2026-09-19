@@ -15,7 +15,7 @@ pub unsafe fn luau_f_countlz(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
 
@@ -25,8 +25,8 @@ pub unsafe fn luau_f_countlz(
         let r = if n == 0 { 32 } else { n.leading_zeros() as i32 };
 
         setnvalue!(res, r as f64);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

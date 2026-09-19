@@ -9,15 +9,22 @@ use core::ffi::c_int;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[inline]
-unsafe fn gc_interrupt(l: *mut lua_State, state: c_int) {
+unsafe fn gc_interrupt(
+    l: *mut lua_State,
+    state: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     let g = &*(*l).global;
     if let Some(interrupt) = g.cb.interrupt {
-        interrupt(l, state);
+        interrupt(l, state)?;
     }
+    Ok(())
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
+pub unsafe fn luaC_step(
+    l: *mut lua_State,
+    assist: bool,
+) -> crate::records::lua_exception::LuaResult<usize> {
     let g = (*l).global;
 
     let mut lim = ((*g).gcstepsize as usize * (*g).gcstepmul as usize) / 100;
@@ -33,7 +40,7 @@ pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
         }
     }
 
-    gc_interrupt(l, 0);
+    gc_interrupt(l, 0)?;
 
     if (*g).gcstate == 0 {
         (*g).gcstats.starttimestamp = lua_clock();
@@ -80,12 +87,15 @@ pub unsafe fn luaC_step(l: *mut lua_State, assist: bool) -> usize {
         }
     }
 
-    gc_interrupt(l, lastgcstate);
+    gc_interrupt(l, lastgcstate)?;
 
-    actualstepsize
+    Ok(actualstepsize)
 }
 
 #[export_name = "luaur_luaC_step"]
-pub unsafe extern "C" fn lua_c_step_export(l: *mut lua_State, assist: bool) -> usize {
+pub unsafe fn lua_c_step_export(
+    l: *mut lua_State,
+    assist: bool,
+) -> crate::records::lua_exception::LuaResult<usize> {
     luaC_step(l, assist)
 }

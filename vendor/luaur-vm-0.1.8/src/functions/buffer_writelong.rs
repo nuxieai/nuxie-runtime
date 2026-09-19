@@ -8,11 +8,13 @@ use crate::macros::isoutofbounds::isoutofbounds;
 use crate::macros::lua_l_error::luaL_error;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn buffer_writelong(L: *mut lua_State) -> core::ffi::c_int {
+pub fn buffer_writelong(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut len: usize = 0;
-    let buf = lua_l_checkbuffer(L, 1, &mut len) as *mut core::ffi::c_char;
-    let offset = lua_l_checkinteger(L, 2);
-    let value = unsafe { lua_l_checkinteger_64(L, 3) };
+    let buf = lua_l_checkbuffer(L, 1, &mut len)? as *mut core::ffi::c_char;
+    let offset = lua_l_checkinteger(L, 2)?;
+    let value = unsafe { lua_l_checkinteger_64(L, 3)? };
 
     if isoutofbounds(offset, len, core::mem::size_of::<i64>()) {
         unsafe {
@@ -34,5 +36,5 @@ pub fn buffer_writelong(L: *mut lua_State) -> core::ffi::c_int {
         );
     }
 
-    0
+    Ok(0)
 }

@@ -7,7 +7,10 @@ use crate::records::gc_object::GCObject;
 use crate::records::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub fn lua_getuserdatametatable(L: *mut lua_State, tag: core::ffi::c_int) {
+pub fn lua_getuserdatametatable(
+    L: *mut lua_State,
+    tag: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(L, (tag as u32) < LUA_UTAG_LIMIT as u32);
 
     unsafe {
@@ -29,4 +32,5 @@ pub fn lua_getuserdatametatable(L: *mut lua_State, tag: core::ffi::c_int) {
         api_check!(L, (*L).top < (*(*L).ci).top);
         (*L).top = (*L).top.add(1);
     }
+    Ok(())
 }

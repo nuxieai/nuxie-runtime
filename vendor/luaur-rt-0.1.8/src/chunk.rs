@@ -136,12 +136,13 @@ impl Chunk {
                 bytecode.as_ptr() as *const c_char,
                 bytecode.len(),
                 0,
-            );
+            )
+            .map_err(|error| crate::error::Error::from_vm(error))?;
             if rc != 0 {
                 // luau_load failure leaves an error message on the stack.
                 return Err(self.lua.pop_error(rc));
             }
-            let func = Function::from_ref(self.lua.pop_ref());
+            let func = Function::from_ref(self.lua.try_pop_ref()?);
             if let Some(env) = &self.environment {
                 func.set_environment(env.clone())?;
             }

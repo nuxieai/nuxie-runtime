@@ -26,9 +26,9 @@ pub unsafe fn luau_precall(
     L: *mut lua_State,
     func: StkId,
     nresults: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if !ttisfunction!(func as *const TValue) {
-        lua_v_tryfunc_tm(L, func);
+        lua_v_tryfunc_tm(L, func)?;
         // L->top is incremented by tryfuncTM
     }
 
@@ -48,7 +48,7 @@ pub unsafe fn luau_precall(
     (*L).base = (*ci).base;
     // Note: L->top is assigned externally
 
-    luaD_checkstackfornewci(L, (*ccl).stacksize as i32);
+    luaD_checkstackfornewci(L, (*ccl).stacksize as i32)?;
     LUAU_ASSERT!((*ci).top <= (*L).stack_last);
 
     if (*ccl).isC == 0 {
@@ -73,20 +73,20 @@ pub unsafe fn luau_precall(
             (*ci).flags = LUA_CALLINFO_NATIVE as u32;
         }
 
-        PCRLUA
+        Ok(PCRLUA)
     } else {
         let f = {
             let c = &(*ccl).inner.c;
             c.f
         };
         let n = match f {
-            Some(f) => f(L),
+            Some(f) => f(L)?,
             None => 0,
         };
 
         // yield
         if n < 0 {
-            return PCRYIELD;
+            return Ok(PCRYIELD);
         }
 
         // ci is our callinfo, cip is our parent
@@ -118,6 +118,6 @@ pub unsafe fn luau_precall(
         (*L).base = (*cip).base;
         (*L).top = res;
 
-        PCRC
+        Ok(PCRC)
     }
 }

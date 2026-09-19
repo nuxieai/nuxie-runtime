@@ -11,21 +11,21 @@ use crate::type_aliases::t_value::TValue;
 use core::ffi::c_int;
 
 #[export_name = "luaur_tclone"]
-pub unsafe fn tclone(L: *mut lua_State) -> c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as c_int);
+pub unsafe fn tclone(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as c_int)?;
 
     luaL_argcheck!(
         L,
-        lua_l_getmetafield(L, 1, c"__metatable".as_ptr()) == 0,
+        lua_l_getmetafield(L, 1, c"__metatable".as_ptr())? == 0,
         1,
         "table has a protected metatable"
     );
 
-    let tt = lua_h_clone(L, hvalue!((*L).base));
+    let tt = lua_h_clone(L, hvalue!((*L).base))?;
 
     let mut v: TValue = core::mem::zeroed();
     sethvalue!(L, &mut v, tt);
-    luaA_pushvalue(L, &v);
+    luaA_pushvalue(L, &v)?;
 
-    1
+    Ok(1)
 }

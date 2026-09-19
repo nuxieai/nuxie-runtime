@@ -14,25 +14,25 @@ use crate::type_aliases::sort_predicate::SortPredicate;
 use core::ffi::c_int;
 
 #[export_name = "luaur_tsort"]
-pub unsafe fn tsort(L: *mut lua_State) -> c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as c_int);
+pub unsafe fn tsort(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as c_int)?;
 
     let t = hvalue!((*L).base) as *mut LuaTable;
     let n = lua_h_getn(t);
 
     if (*t).readonly != 0 {
-        lua_g_readonlyerror(L);
+        return lua_g_readonlyerror(L);
     }
 
     let mut pred: SortPredicate = Some(lua_v_lessthan);
     if !lua_isnoneornil!(L, 2) {
-        lua_l_checktype(L, 2, lua_Type::LUA_TFUNCTION as c_int);
+        lua_l_checktype(L, 2, lua_Type::LUA_TFUNCTION as c_int)?;
         pred = Some(sort_func);
     }
-    lua_settop(L, 2);
+    lua_settop(L, 2)?;
 
     if n > 0 {
-        sort_rec(L, t, 0, n - 1, n, pred);
+        sort_rec(L, t, 0, n - 1, n, pred)?;
     }
-    0
+    Ok(0)
 }

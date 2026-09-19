@@ -15,12 +15,12 @@ pub unsafe fn luau_f_fround(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let value = nvalue!(arg0);
         setnvalue!(res, (value as f32) as f64);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

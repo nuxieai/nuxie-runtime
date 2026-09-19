@@ -24,11 +24,10 @@
 //!
 //! 1. On scope exit, *before* returning to the caller (and therefore before any
 //!    `'scope`-borrowed data can be dropped), every registered destructor runs.
-//! 2. A callback's destructor ([`destruct_callback`]) overwrites the boxed
-//!    closure inside the function's upvalue with a sentinel that returns
-//!    [`Error::CallbackDestructed`], and **drops the original box** — ending the
-//!    borrows right there. The Lua function object itself stays valid; only its
-//!    behavior changes. A post-scope call therefore hits the sentinel and
+//! 2. A callback's destructor clears its shared Rust-owned slot and **drops
+//!    the original box** — ending the borrows without allocating or accessing
+//!    the VM stack. The Lua function object itself stays valid; only its
+//!    behavior changes. A post-scope call finds the empty slot and
 //!    surfaces as `CallbackError { cause: CallbackDestructed }`, never a
 //!    use-after-free.
 //! 3. A userdata's destructor `take()`s the wrapped value out of its cell
@@ -50,7 +49,7 @@ use std::cell::RefCell;
 use std::marker::PhantomData;
 use std::mem;
 
-use crate::callback::{create_callback_function, destruct_callback, BoxedCallback};
+use crate::callback::{create_callback_function, BoxedCallback};
 use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::multi::MultiValue;
@@ -126,6 +125,26 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
                 let r = func(lua, a)?;
                 r.into_lua_multi(lua)
             });
+        // Keep invalidation independent of the VM stack: growing that stack
+        // can fail, but ending these borrows must always happen on scope exit.
+        // Register before VM allocation, which can fail after capturing the
+        // wrapper in userdata but before returning a Function handle.
+        let slot = std::rc::Rc::new(RefCell::new(Some(boxed)));
+        let cleanup = slot.clone();
+        let cleanup: Box<dyn FnOnce() + 'scope> = Box::new(move || {
+            cleanup.borrow_mut().take();
+        });
+        // The destructor list is drained before 'scope ends.
+        let cleanup: Box<dyn FnOnce()> = unsafe { mem::transmute(cleanup) };
+        self.destructors.list.borrow_mut().push(cleanup);
+        let boxed: Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue> + 'scope> =
+            Box::new(move |lua, args| {
+                let callback = slot.borrow();
+                match callback.as_ref() {
+                    Some(callback) => callback(lua, args),
+                    None => Err(Error::CallbackDestructed),
+                }
+            });
         let boxed: BoxedCallback = unsafe {
             mem::transmute::<
                 Box<dyn Fn(&Lua, MultiValue) -> Result<MultiValue> + 'scope>,
@@ -133,17 +152,7 @@ impl<'scope, 'env: 'scope> Scope<'scope, 'env> {
             >(boxed)
         };
 
-        let f = create_callback_function(&self.lua, boxed)?;
-
-        // Register the neutraliser: on scope exit, swap the upvalue's boxed
-        // closure for a `CallbackDestructed` sentinel and drop the original.
-        let f_for_dtor = f.clone();
-        self.destructors
-            .list
-            .borrow_mut()
-            .push(Box::new(move || destruct_callback(&f_for_dtor)));
-
-        Ok(f)
+        create_callback_function(&self.lua, boxed)
     }
 
     /// Wrap a non-`'static` mutable Rust closure into a callable Lua [`Function`]

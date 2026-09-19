@@ -15,31 +15,31 @@ pub fn call_orderTM(
     p2: *const TValue,
     event: TMS,
     error: bool,
-) -> i32 {
+) -> crate::records::lua_exception::LuaResult<i32> {
     unsafe {
         let tm1 = lua_t_gettmbyobj(L, p1, event);
         let tm2;
 
         if ttisnil!(tm1) {
             if error {
-                luaG_ordererror(L, p1, p2, event);
+                return luaG_ordererror(L, p1, p2, event);
             }
-            return -1;
+            return Ok(-1);
         }
 
         tm2 = lua_t_gettmbyobj(L, p2, event);
         if luaO_rawequalObj(tm1, tm2) == 0 {
             if error {
-                luaG_ordererror(L, p1, p2, event);
+                return luaG_ordererror(L, p1, p2, event);
             }
-            return -1;
+            return Ok(-1);
         }
 
-        call_t_mres(L, (*L).top, tm1, p1, p2);
+        call_t_mres(L, (*L).top, tm1, p1, p2)?;
         if l_isfalse!((*L).top) {
-            0
+            Ok(0)
         } else {
-            1
+            Ok(1)
         }
     }
 }

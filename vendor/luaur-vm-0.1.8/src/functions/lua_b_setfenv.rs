@@ -12,22 +12,22 @@ use crate::functions::lua_setsafeenv::lua_setsafeenv;
 use crate::macros::lua_tonumber::lua_tonumber;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn lua_b_setfenv(L: *mut lua_State) -> i32 {
-    lua_l_checktype(L, 2, lua_Type::LUA_TTABLE as i32);
-    getfunc(L, 0);
-    lua_pushvalue(L, 2);
+pub unsafe fn lua_b_setfenv(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    lua_l_checktype(L, 2, lua_Type::LUA_TTABLE as i32)?;
+    getfunc(L, 0)?;
+    lua_pushvalue(L, 2)?;
     lua_setsafeenv(L, -1, 0);
     if lua_isnumber(L, 1) != 0 && lua_tonumber!(L, 1) == 0.0 {
-        lua_pushthread(L);
+        lua_pushthread(L)?;
         lua_insert(L, -2);
         lua_setfenv(L, -2);
-        return 0;
+        return Ok(0);
     } else if lua_iscfunction(L, -2) != 0 || lua_setfenv(L, -2) == 0 {
-        lua_l_error_l(
+        return lua_l_error_l(
             L,
             c"'setfenv' cannot change environment of given object".as_ptr(),
             format_args!("'setfenv' cannot change environment of given object"),
         );
     }
-    1
+    Ok(1)
 }

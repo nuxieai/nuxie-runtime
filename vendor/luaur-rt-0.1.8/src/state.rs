@@ -148,11 +148,12 @@ impl Lua {
         unsafe {
             let state = lua_l_newstate();
             assert!(!state.is_null(), "lua_l_newstate returned null");
-            lua_l_openlibs(state);
-            Lua {
+            let lua = Lua {
                 inner: XRc::new(LuaInner::new(state, true)),
                 _not_sync: NOT_SYNC,
-            }
+            };
+            lua_l_openlibs(state).expect("failed to initialize Lua standard libraries");
+            lua
         }
     }
 
@@ -202,13 +203,13 @@ impl Lua {
         unsafe {
             let state = lua_l_newstate();
             assert!(!state.is_null(), "lua_l_newstate returned null");
-            if !libs.is_none() {
-                lua_l_openlibs(state);
-            }
             let lua = Lua {
                 inner: XRc::new(LuaInner::new(state, true)),
                 _not_sync: NOT_SYNC,
             };
+            if !libs.is_none() {
+                lua_l_openlibs(state).map_err(|error| Error::from_vm(error))?;
+            }
             lua.set_catch_rust_panics(options.catch_rust_panics);
             Ok(lua)
         }
@@ -235,19 +236,27 @@ impl Lua {
 
     /// Register a value sitting at stack index `idx` in the registry and return
     /// a [`LuaRef`] that owns the slot. Does not pop the value.
-    pub(crate) fn register_ref(&self, idx: c_int) -> LuaRef {
-        let id = unsafe { lua_ref(self.state(), idx) };
-        LuaRef {
+    pub(crate) fn register_ref(&self, idx: c_int) -> Result<LuaRef> {
+        let id = unsafe { lua_ref(self.state(), idx).map_err(|error| Error::from_vm(error))? };
+        Ok(LuaRef {
             inner: self.inner.clone(),
             id: Cell::new(id),
-        }
+        })
     }
 
     /// Pop the top stack value and register it, returning a [`LuaRef`].
     pub(crate) fn pop_ref(&self) -> LuaRef {
-        let r = self.register_ref(-1);
-        unsafe { lua_pop(self.state(), 1) };
-        r
+        self.try_pop_ref()
+            .expect("allocation failed in an infallible Lua handle operation")
+    }
+
+    /// Fallible handle creation for APIs that already return Result. Keep
+    /// registry allocation errors out of the legacy infallible convenience
+    /// path above; a failed registration leaves the value for stack cleanup.
+    pub(crate) fn try_pop_ref(&self) -> Result<LuaRef> {
+        let r = self.register_ref(-1)?;
+        unsafe { lua_pop(self.state(), 1).expect("popping a registered value cannot allocate") };
+        Ok(r)
     }
 }
 
@@ -315,24 +324,24 @@ impl Lua {
         unsafe {
             // Push the globals table (a copy of the LUA_GLOBALSINDEX pseudo
             // value) and take a ref to it.
-            lua_pushvalue(state, LUA_GLOBALSINDEX);
+            lua_pushvalue(state, LUA_GLOBALSINDEX)
+                .expect("allocation failed in an infallible Lua handle operation");
             Table::from_ref(self.pop_ref())
         }
     }
 
     /// Create a new, empty table.
     ///
-    /// Mirrors `mlua::Lua::create_table` (infallible here, so no `Result`
-    /// wrapper is strictly needed — but we also provide the `_result` variant
-    /// for signature parity below).
+    /// Convenience API that panics on allocation failure. Use
+    /// [`Lua::create_table_result`] when allocation failure must be returned.
     pub fn create_table(&self) -> Table {
-        crate::table::create_table(self)
+        self.create_table_result()
+            .expect("allocation failed in an infallible Lua handle operation")
     }
 
-    /// `Result`-returning alias of [`Lua::create_table`] for mlua signature
-    /// parity.
+    /// Create a table, returning allocation or registry failures to the caller.
     pub fn create_table_result(&self) -> Result<Table> {
-        Ok(self.create_table())
+        crate::table::create_table(self)
     }
 
     /// Create a Lua string from bytes/str.
@@ -351,7 +360,7 @@ impl Lua {
         V: crate::traits::IntoLua,
         I: IntoIterator<Item = (K, V)>,
     {
-        let t = self.create_table();
+        let t = self.create_table_result()?;
         for (k, v) in iter {
             t.raw_set(k, v)?;
         }
@@ -366,7 +375,7 @@ impl Lua {
         V: crate::traits::IntoLua,
         I: IntoIterator<Item = V>,
     {
-        let t = self.create_table();
+        let t = self.create_table_result()?;
         for (i, v) in iter.into_iter().enumerate() {
             t.raw_set((i + 1) as i64, v)?;
         }
@@ -378,7 +387,8 @@ impl Lua {
     /// Mirrors `mlua::Lua::gc_collect` (infallible here — luaur's `lua_gc`
     /// cannot fail for `collect`).
     pub fn gc_collect(&self) -> Result<()> {
-        lua_gc(self.state(), lua_GCOp::LUA_GCCOLLECT as c_int, 0);
+        lua_gc(self.state(), lua_GCOp::LUA_GCCOLLECT as c_int, 0)
+            .map_err(|error| unsafe { Error::from_vm(error) })?;
         Ok(())
     }
 
@@ -540,11 +550,12 @@ impl Lua {
                 bytecode.as_ptr().cast(),
                 bytecode.len(),
                 0,
-            );
+            )
+            .map_err(|error| crate::error::Error::from_vm(error))?;
             if rc != 0 {
                 return Err(self.pop_error(rc));
             }
-            Ok(Function::from_ref(self.pop_ref()))
+            Ok(Function::from_ref(self.try_pop_ref()?))
         }
     }
 
@@ -581,7 +592,7 @@ impl Lua {
             self.push_value(&value)?;
             let mut isnum: c_int = 0;
             let n = lua_tonumberx(state, -1, &mut isnum);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             if isnum == 0 {
                 return Ok(None);
             }
@@ -602,7 +613,7 @@ impl Lua {
             self.push_value(&value)?;
             let mut isnum: c_int = 0;
             let n = lua_tonumberx(state, -1, &mut isnum);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             if isnum == 0 {
                 Ok(None)
             } else {
@@ -639,9 +650,11 @@ impl Lua {
     pub fn traceback(&self, msg: Option<&str>, level: usize) -> Result<LuaString> {
         let state = self.state();
         unsafe {
-            lua_l_traceback(state, state, msg, level as c_int);
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            lua_l_traceback(state, state, msg, level as c_int)
+                .map_err(|error| Error::from_vm(error))?;
             // luaL_traceback pushes the resulting string onto the stack.
-            Ok(LuaString::from_ref(self.pop_ref()))
+            Ok(LuaString::from_ref(self.try_pop_ref()?))
         }
     }
 }
@@ -774,6 +787,11 @@ impl LuaRef {
 
     /// Push the referenced value back onto the stack.
     pub(crate) fn push(&self) {
+        self.try_push()
+            .expect("allocation failed in an infallible Lua handle operation");
+    }
+
+    pub(crate) fn try_push(&self) -> Result<()> {
         // The registry table lives at LUA_REGISTRYINDEX; `lua_ref` stores
         // values keyed by their integer id, so a `rawgeti` on the registry
         // recovers them. luaur exposes this through getfield on the registry
@@ -784,7 +802,9 @@ impl LuaRef {
                 self.state(),
                 luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX,
                 self.id.get(),
-            );
+            )
+            .map(|_| ())
+            .map_err(|error| crate::error::Error::from_vm(error))
         }
     }
 }
@@ -824,21 +844,15 @@ impl Lua {
     /// Metatable-aware `tostring` of a [`Value`] (honors `__tostring`),
     /// mirroring Lua's `tostring`/`luaL_tolstring`.
     pub(crate) fn value_to_string(&self, value: &Value) -> Result<String> {
-        let state = self.state();
-        unsafe {
-            self.push_value(value)?;
-            let mut len = 0usize;
-            let p = lua_l_tolstring(state, -1, &mut len);
-            let out = if p.is_null() {
-                String::new()
-            } else {
-                let bytes = core::slice::from_raw_parts(p as *const u8, len);
-                String::from_utf8_lossy(bytes).into_owned()
-            };
-            // luaL_tolstring pushes the result string; pop it plus the value.
-            lua_pop(state, 2);
-            Ok(out)
-        }
+        // __tostring can execute guest code. Use the existing protected raw
+        // call so failure restores call frames as well as the value stack.
+        let text: LuaString = unsafe {
+            self.exec_raw(value.clone(), |state| {
+                lua_l_tolstring(state, 1, core::ptr::null_mut())?;
+                Ok(())
+            })?
+        };
+        Ok(text.to_string_lossy())
     }
 
     /// Map a `lua_pcall`/`luau_load` status code plus the error object on the
@@ -851,7 +865,7 @@ impl Lua {
             // userdata (raised for scope-destruction errors). If so, recover the
             // original `Error` and wrap it in `CallbackError`, mirroring mlua.
             if let Some(cause) = crate::callback::recover_wrapped_error(state, -1) {
-                lua_pop(state, 1);
+                lua_pop(state, 1).expect("shrinking the stack cannot fail");
                 return Error::CallbackError {
                     traceback: String::new(),
                     cause: std::sync::Arc::new(cause),
@@ -859,14 +873,21 @@ impl Lua {
             }
             // Otherwise, fall back to the flat string error path.
             let mut len = 0usize;
-            let s = lua_tolstring(state, -1, &mut len);
+            let s = match lua_tolstring(state, -1, &mut len) {
+                Ok(s) => s,
+                Err(error) => {
+                    let error = Error::from_vm(error);
+                    lua_pop(state, 1).expect("popping the error object cannot allocate");
+                    return error;
+                }
+            };
             let msg = if s.is_null() {
                 "<non-string error>".to_string()
             } else {
                 let bytes = core::slice::from_raw_parts(s as *const u8, len);
                 String::from_utf8_lossy(bytes).into_owned()
             };
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             // `LUA_ERRMEM` (status 4) is an out-of-memory error (the VM set the
             // error object to "not enough memory"); surface it as `MemoryError`
             // so `set_memory_limit` callers can match it, mirroring mlua.

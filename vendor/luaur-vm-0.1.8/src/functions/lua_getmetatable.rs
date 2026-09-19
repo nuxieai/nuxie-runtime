@@ -14,7 +14,10 @@ use crate::records::lua_table::LuaTable;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_getmetatable(L: *mut lua_State, objindex: c_int) -> c_int {
+pub unsafe fn lua_getmetatable(
+    L: *mut lua_State,
+    objindex: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
 
@@ -41,5 +44,5 @@ pub unsafe fn lua_getmetatable(L: *mut lua_State, objindex: c_int) -> c_int {
         api_incr_top!(L);
     }
 
-    (!mt.is_null()) as c_int
+    Ok((!mt.is_null()) as c_int)
 }

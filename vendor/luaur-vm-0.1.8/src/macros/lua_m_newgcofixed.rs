@@ -2,7 +2,7 @@
 #[macro_export]
 macro_rules! lua_m_newgcofixed {
     ($L:expr, $t:ty, $size:expr, $memcat:expr) => {
-        $crate::functions::lua_m_newgcofixed::luaM_newgcofixed_($L, $size, $memcat) as *mut $t
+        $crate::functions::lua_m_newgcofixed::luaM_newgcofixed_($L, $size, $memcat)? as *mut $t
     };
 }
 

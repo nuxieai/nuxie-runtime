@@ -14,7 +14,7 @@ pub unsafe fn luau_f_max(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
         let a1 = nvalue!(arg0);
         let a2 = nvalue!(args);
@@ -25,7 +25,7 @@ pub unsafe fn luau_f_max(
             let arg_i = args.add((i - 2) as usize);
 
             if !ttisnumber!(arg_i) {
-                return -1;
+                return Ok(-1);
             }
 
             let a = nvalue!(arg_i);
@@ -33,8 +33,8 @@ pub unsafe fn luau_f_max(
         }
 
         setnvalue!(res, r);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

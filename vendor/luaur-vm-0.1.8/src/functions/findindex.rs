@@ -18,11 +18,15 @@ use crate::macros::ttype::ttype;
 use crate::records::lua_node::LuaNode;
 
 #[allow(non_snake_case)]
-pub unsafe fn findindex(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32 {
+pub unsafe fn findindex(
+    L: *mut lua_State,
+    t: *mut LuaTable,
+    key: StkId,
+) -> crate::records::lua_exception::LuaResult<i32> {
     let mut i: i32;
 
     if ttisnil!(key) {
-        return -1; // first iteration
+        return Ok(-1); // first iteration
     }
 
     i = if ttisnumber!(key) {
@@ -32,7 +36,7 @@ pub unsafe fn findindex(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32 
     };
 
     if i > 0 && i <= (*t).sizearray {
-        return i - 1; // yes; that's the index (corrected to C)
+        return Ok(i - 1); // yes; that's the index (corrected to C)
     } else {
         let mut n: *mut LuaNode = mainposition(t, key as *const _);
 
@@ -46,7 +50,7 @@ pub unsafe fn findindex(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32 
             {
                 i = cast_int!(n.offset_from(gnode!(t, 0)) as i32);
                 // hash elements are numbered after array ones
-                return i + (*t).sizearray;
+                return Ok(i + (*t).sizearray);
             }
 
             // gnext(n) is defined as ((n)->key.next) in ltable.h
@@ -62,6 +66,6 @@ pub unsafe fn findindex(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32 
             L,
             core::ptr::null(),
             format_args!("invalid key to 'next'"),
-        );
+        )
     }
 }

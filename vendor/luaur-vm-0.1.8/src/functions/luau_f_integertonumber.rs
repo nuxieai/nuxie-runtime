@@ -15,14 +15,14 @@ pub unsafe fn luau_f_integertonumber(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // Keep lua_Type import live for macro expansions / symbol expectations.
     let _ = lua_Type::LUA_TINTEGER;
 
     if nparams >= 1 && nresults <= 1 && ttisinteger!(arg0) {
         setnvalue!(res, cast_num!(lvalue!(arg0)));
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

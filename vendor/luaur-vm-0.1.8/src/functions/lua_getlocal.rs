@@ -15,16 +15,16 @@ pub unsafe fn lua_getlocal(
     L: *mut lua_State,
     level: core::ffi::c_int,
     n: core::ffi::c_int,
-) -> *const core::ffi::c_char {
+) -> crate::records::lua_exception::LuaResult<*const core::ffi::c_char> {
     if (level as u32) >= ((*L).ci.offset_from((*L).base_ci) as u32) {
-        return core::ptr::null();
+        return Ok(core::ptr::null());
     }
 
     let ci: *mut CallInfo = (*L).ci.offset(-(level as isize));
 
     // changing tables in native functions externally may invalidate safety contracts wrt table state (metatable/size/readonly)
     if ((*ci).flags & LUA_CALLINFO_NATIVE as u32) != 0 {
-        return core::ptr::null();
+        return Ok(core::ptr::null());
     }
 
     let fp: *mut Proto = get_lua_proto(ci);
@@ -36,12 +36,12 @@ pub unsafe fn lua_getlocal(
 
     if !var.is_null() {
         luaC_threadbarrier!(L);
-        luaA_pushvalue(L, (*ci).base.offset((*var).reg as isize));
+        luaA_pushvalue(L, (*ci).base.offset((*var).reg as isize))?;
     }
 
     if !var.is_null() {
-        getstr((*var).varname)
+        Ok(getstr((*var).varname))
     } else {
-        core::ptr::null()
+        Ok(core::ptr::null())
     }
 }

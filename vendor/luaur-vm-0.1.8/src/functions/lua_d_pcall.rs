@@ -22,7 +22,7 @@ pub unsafe fn luaD_pcall(
     u: *mut core::ffi::c_void,
     old_top: isize,
     ef: isize,
-) -> i32 {
+) -> crate::records::lua_exception::LuaResult<i32> {
     let oldnCcalls: u16 = (*L).nCcalls;
     let oldbaseCcalls: u16 = (*L).baseCcalls;
     let old_ci: isize = saveci!(L, (*L).ci);
@@ -79,7 +79,7 @@ pub unsafe fn luaD_pcall(
 
                 // debug hook is only allowed to break
                 if (*L).status as i32 == lua_Status::LUA_BREAK as i32 {
-                    return 0;
+                    return Ok(0);
                 }
             }
         }
@@ -89,9 +89,9 @@ pub unsafe fn luaD_pcall(
         luaD_seterrorobj(L, errstatus, oldtop);
         (*L).ci = restoreci!(L, old_ci);
         (*L).base = (*(*L).ci).base;
-        restore_stack_limit(L);
+        restore_stack_limit(L)?;
     }
-    status
+    Ok(status)
 }
 
 #[allow(unused_imports)]

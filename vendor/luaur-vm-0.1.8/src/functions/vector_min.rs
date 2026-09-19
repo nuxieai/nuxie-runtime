@@ -6,9 +6,11 @@ use crate::macros::lua_vector_size::LUA_VECTOR_SIZE;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn vector_min(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn vector_min(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let n = lua_gettop(L);
-    let v = lua_l_checkvector(L, 1);
+    let v = lua_l_checkvector(L, 1)?;
 
     let mut result = [0.0 as crate::type_aliases::lua_vector_type::LuaVectorType; 4];
     if LUA_VECTOR_SIZE == 4 {
@@ -23,7 +25,7 @@ pub unsafe fn vector_min(L: *mut lua_State) -> core::ffi::c_int {
     }
 
     for i in 2..=n {
-        let b = lua_l_checkvector(L, i);
+        let b = lua_l_checkvector(L, i)?;
 
         if *b.offset(0) < result[0] {
             result[0] = *b.offset(0);
@@ -42,10 +44,10 @@ pub unsafe fn vector_min(L: *mut lua_State) -> core::ffi::c_int {
     }
 
     if LUA_VECTOR_SIZE == 4 {
-        lua_pushvector_lua_state_f32_f32_f32_f32(L, result[0], result[1], result[2], result[3]);
+        lua_pushvector_lua_state_f32_f32_f32_f32(L, result[0], result[1], result[2], result[3])?;
     } else {
-        lua_pushvector_lua_state_f32_f32_f32(L, result[0], result[1], result[2]);
+        lua_pushvector_lua_state_f32_f32_f32(L, result[0], result[1], result[2])?;
     }
 
-    1
+    Ok(1)
 }

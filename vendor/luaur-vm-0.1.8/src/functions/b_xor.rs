@@ -5,14 +5,14 @@ use crate::macros::trim::trim;
 use crate::type_aliases::b_uint::b_uint;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn b_xor(l: *mut lua_State) -> core::ffi::c_int {
+pub fn b_xor(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let n = unsafe { lua_gettop(l) };
     let mut r: b_uint = 0;
 
     for i in 1..=n {
-        r ^= lua_l_checkunsigned(l, i);
+        r ^= lua_l_checkunsigned(l, i)?;
     }
 
-    lua_pushunsigned(l, trim(r));
-    1
+    lua_pushunsigned(l, trim(r))?;
+    Ok(1)
 }

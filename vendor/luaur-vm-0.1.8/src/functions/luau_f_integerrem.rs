@@ -14,20 +14,20 @@ pub unsafe fn luau_f_integerrem(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
         let a: i64 = lvalue!(arg0);
         let b: i64 = lvalue!(args);
 
         if b == 0 {
-            return -1;
+            return Ok(-1);
         }
 
         let result = if a == i64::MIN && b == -1 { 0 } else { a % b };
         setlvalue!(res, result);
 
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

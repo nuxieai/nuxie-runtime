@@ -14,7 +14,7 @@ pub unsafe fn luau_f_clamp(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisnumber!(arg0)
@@ -30,9 +30,9 @@ pub unsafe fn luau_f_clamp(
             let r = if r > max { max } else { r };
 
             setnvalue!(res, r);
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

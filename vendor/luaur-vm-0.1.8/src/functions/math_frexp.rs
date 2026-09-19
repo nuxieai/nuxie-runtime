@@ -4,13 +4,13 @@ use crate::functions::lua_pushnumber::lua_pushnumber;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_math_frexp"]
-pub unsafe fn math_frexp(l: *mut lua_State) -> i32 {
+pub unsafe fn math_frexp(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
     let mut e: core::ffi::c_int = 0;
-    let x = lua_l_checknumber(l, 1);
+    let x = lua_l_checknumber(l, 1)?;
     let m = frexp(x, &mut e);
-    lua_pushnumber(l, m);
-    lua_pushinteger(l, e);
-    2
+    lua_pushnumber(l, m)?;
+    lua_pushinteger(l, e)?;
+    Ok(2)
 }
 
 fn frexp(x: f64, exp: &mut core::ffi::c_int) -> f64 {

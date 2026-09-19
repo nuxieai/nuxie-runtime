@@ -6,10 +6,14 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_resume(l: *mut lua_State, from: *mut lua_State, nargs: c_int) -> c_int {
-    let starterror = resume_start(l, from, nargs);
+pub unsafe fn lua_resume(
+    l: *mut lua_State,
+    from: *mut lua_State,
+    nargs: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
+    let starterror = resume_start(l, from, nargs)?;
     if starterror != 0 {
-        return starterror;
+        return Ok(starterror);
     }
 
     let oldnCcalls = (*l).nCcalls as c_int;
@@ -19,5 +23,5 @@ pub unsafe fn lua_resume(l: *mut lua_State, from: *mut lua_State, nargs: c_int) 
         (*l).top.offset(-(nargs as isize)) as *mut core::ffi::c_void,
     );
 
-    resume_finish(l, status, oldnCcalls)
+    Ok(resume_finish(l, status, oldnCcalls))
 }

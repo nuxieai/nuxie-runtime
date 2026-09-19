@@ -16,23 +16,23 @@ pub unsafe fn luau_f_char(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut buffer: [core::ffi::c_char; 8] = [0; 8];
 
     if nparams < 8 && nresults <= 1 {
         if luaC_needsGC!(L) {
-            return -1;
+            return Ok(-1);
         }
 
         if nparams >= 1 {
             if !ttisnumber!(arg0) {
-                return -1;
+                return Ok(-1);
             }
 
             let ch = nvalue!(arg0) as core::ffi::c_int;
 
             if (ch as u8 as core::ffi::c_int) != ch {
-                return -1;
+                return Ok(-1);
             }
 
             buffer[0] = ch as core::ffi::c_char;
@@ -42,13 +42,13 @@ pub unsafe fn luau_f_char(
             let arg_ptr = args.add((i - 2) as usize);
 
             if !ttisnumber!(arg_ptr) {
-                return -1;
+                return Ok(-1);
             }
 
             let ch = nvalue!(arg_ptr) as core::ffi::c_int;
 
             if (ch as u8 as core::ffi::c_int) != ch {
-                return -1;
+                return Ok(-1);
             }
 
             buffer[(i - 1) as usize] = ch as core::ffi::c_char;
@@ -56,9 +56,9 @@ pub unsafe fn luau_f_char(
 
         buffer[nparams as usize] = 0;
 
-        setsvalue!(L, res, luaS_newlstr(L, buffer.as_ptr(), nparams as usize));
-        1
+        setsvalue!(L, res, luaS_newlstr(L, buffer.as_ptr(), nparams as usize)?);
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

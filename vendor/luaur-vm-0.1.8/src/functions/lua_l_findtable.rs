@@ -19,13 +19,13 @@ pub unsafe fn luaL_findtable(
     idx: c_int,
     mut fname: *const c_char,
     szhint: c_int,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     extern "C" {
         fn strchr(s: *const c_char, c: c_int) -> *mut c_char;
         fn strlen(s: *const c_char) -> usize;
     }
 
-    lua_pushvalue(l, idx);
+    lua_pushvalue(l, idx)?;
     loop {
         let mut e = strchr(fname, '.' as c_int);
         if e.is_null() {
@@ -33,19 +33,19 @@ pub unsafe fn luaL_findtable(
         }
 
         let len = (e as *const c_char).offset_from(fname) as usize;
-        lua_pushlstring(l, fname, len);
+        lua_pushlstring(l, fname, len)?;
         lua_rawget(l, -2);
 
         if lua_type(l, -1) == (lua_Type::LUA_TNIL as i32) {
-            lua_pop(l, 1); // remove this nil
+            lua_pop(l, 1)?; // remove this nil
             let next_szhint = if *e == ('.' as c_char) { 1 } else { szhint };
-            lua_createtable(l, 0, next_szhint);
-            lua_pushlstring(l, fname, len);
-            lua_pushvalue(l, -2);
-            lua_settable(l, -4);
+            lua_createtable(l, 0, next_szhint)?;
+            lua_pushlstring(l, fname, len)?;
+            lua_pushvalue(l, -2)?;
+            lua_settable(l, -4)?;
         } else if lua_type(l, -1) != (lua_Type::LUA_TTABLE as i32) {
-            lua_pop(l, 2); // remove table and value
-            return fname;
+            lua_pop(l, 2)?; // remove table and value
+            return Ok(fname);
         }
 
         lua_remove(l, -2); // remove previous table
@@ -56,5 +56,5 @@ pub unsafe fn luaL_findtable(
         }
     }
 
-    core::ptr::null()
+    Ok(core::ptr::null())
 }

@@ -14,12 +14,12 @@ pub unsafe fn luaF_newLclosure(
     nelems: c_int,
     e: *mut LuaTable,
     p: *mut Proto,
-) -> *mut Closure {
+) -> crate::records::lua_exception::LuaResult<*mut Closure> {
     let c = crate::functions::lua_m_newgco::luaM_newgco_(
         l,
         size_lclosure(nelems as usize),
         (*l).activememcat,
-    ) as *mut Closure;
+    )? as *mut Closure;
 
     luaC_init!(l, c, lua_Type::LUA_TFUNCTION as c_int);
     (*c).isC = 0;
@@ -37,18 +37,18 @@ pub unsafe fn luaF_newLclosure(
         i += 1;
     }
 
-    c
+    Ok(c)
 }
 
 #[allow(unused_imports)]
 pub use luaF_newLclosure as lua_f_new_lclosure;
 
 #[export_name = "luaur_luaF_newLclosure"]
-pub unsafe extern "C" fn lua_f_new_lclosure_export(
+pub unsafe fn lua_f_new_lclosure_export(
     l: *mut lua_State,
     nelems: c_int,
     e: *mut core::ffi::c_void,
     p: *mut core::ffi::c_void,
-) -> *mut core::ffi::c_void {
-    luaF_newLclosure(l, nelems, e as *mut LuaTable, p as *mut Proto).cast()
+) -> crate::records::lua_exception::LuaResult<*mut core::ffi::c_void> {
+    Ok(luaF_newLclosure(l, nelems, e as *mut LuaTable, p as *mut Proto)?.cast())
 }

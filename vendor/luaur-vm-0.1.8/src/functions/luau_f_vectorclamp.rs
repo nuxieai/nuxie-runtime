@@ -15,7 +15,7 @@ pub unsafe fn luau_f_vectorclamp(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisvector!(arg0)
@@ -31,7 +31,8 @@ pub unsafe fn luau_f_vectorclamp(
             && (*min.offset(2) <= *max.offset(2))
         {
             if LUA_VECTOR_SIZE == 4 {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     res,
                     luaui_clampf(*v.offset(0), *min.offset(0), *max.offset(0)),
                     luaui_clampf(*v.offset(1), *min.offset(1), *max.offset(1)),
@@ -39,7 +40,8 @@ pub unsafe fn luau_f_vectorclamp(
                     luaui_clampf(*v.offset(3), *min.offset(3), *max.offset(3))
                 );
             } else {
-                setvvalue!(L,
+                setvvalue!(
+                    L,
                     res,
                     luaui_clampf(*v.offset(0), *min.offset(0), *max.offset(0)),
                     luaui_clampf(*v.offset(1), *min.offset(1), *max.offset(1)),
@@ -48,9 +50,9 @@ pub unsafe fn luau_f_vectorclamp(
                 );
             }
 
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

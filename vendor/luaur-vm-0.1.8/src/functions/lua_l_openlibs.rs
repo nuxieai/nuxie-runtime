@@ -20,7 +20,7 @@ use crate::macros::lua_pushcfunction::LUA_PUSHCFUNCTION;
 use crate::records::lua_l_reg::LuaLReg;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn lua_l_openlibs(l: *mut lua_State) {
+pub unsafe fn lua_l_openlibs(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<()> {
     let lualibs = [
         LuaLReg {
             name: c"".as_ptr(),
@@ -135,15 +135,16 @@ pub unsafe fn lua_l_openlibs(l: *mut lua_State) {
 
     let mut lib = libs;
     while (*lib).func.is_some() {
-        LUA_PUSHCFUNCTION(l, (*lib).func, core::ptr::null());
-        lua_pushstring(l, (*lib).name);
-        lua_call(l, 1, 0);
+        LUA_PUSHCFUNCTION(l, (*lib).func, core::ptr::null())?;
+        lua_pushstring(l, (*lib).name)?;
+        lua_call(l, 1, 0)?;
         lib = lib.add(1);
     }
 
     if luaur_common::FFlag::DebugLuauUserDefinedClassesRuntime.get() {
-        LUA_PUSHCFUNCTION(l, Some(luaopen_class), core::ptr::null());
-        lua_pushstring(l, c"class".as_ptr());
-        lua_call(l, 1, 0);
+        LUA_PUSHCFUNCTION(l, Some(luaopen_class), core::ptr::null())?;
+        lua_pushstring(l, c"class".as_ptr())?;
+        lua_call(l, 1, 0)?;
     }
+    Ok(())
 }

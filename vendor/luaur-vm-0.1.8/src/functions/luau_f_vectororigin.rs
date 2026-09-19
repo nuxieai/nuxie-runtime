@@ -11,11 +11,11 @@ pub unsafe fn luau_f_vectororigin(
     nresults: core::ffi::c_int,
     _args: StkId,
     _nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nresults <= 1 {
         setvvalue!(l, res, 0.0, 0.0, 0.0, 0.0);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

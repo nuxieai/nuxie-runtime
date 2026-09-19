@@ -9,12 +9,16 @@ use crate::type_aliases::t_value::TValue;
 use crate::macros::lua_o_nilobject::luaO_nilobject;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaH_set(L: *mut lua_State, t: *mut LuaTable, key: *const TValue) -> *mut TValue {
+pub unsafe fn luaH_set(
+    L: *mut lua_State,
+    t: *mut LuaTable,
+    key: *const TValue,
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     let p = lua_h_get(t, key);
     invalidateTMcache(t);
 
     if p != luaO_nilobject {
-        cast_to!(*mut TValue, p)
+        Ok(cast_to!(*mut TValue, p))
     } else {
         lua_h_newkey(L, t, key)
     }

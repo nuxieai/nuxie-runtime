@@ -7,6 +7,8 @@ pub fn lua_l_optvector(
     L: *mut lua_State,
     narg: core::ffi::c_int,
     def: *const crate::type_aliases::lua_vector_type::LuaVectorType,
-) -> *const crate::type_aliases::lua_vector_type::LuaVectorType {
-    unsafe { luaL_opt!(L, lua_l_checkvector, narg, def) }
+) -> crate::records::lua_exception::LuaResult<
+    *const crate::type_aliases::lua_vector_type::LuaVectorType,
+> {
+    unsafe { luaL_opt!(L, lua_l_checkvector, narg, Ok(def)) }
 }

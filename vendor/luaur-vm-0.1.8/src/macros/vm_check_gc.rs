@@ -5,7 +5,7 @@ macro_rules! VM_CHECK_GC {
         if $crate::macros::lua_c_needs_gc::luaC_needsGC!($L) {
             unsafe {
                 (*(*$L).ci).context.savedpc = $pc;
-                $crate::functions::lua_c_step::luaC_step($L, true);
+                $crate::functions::lua_c_step::luaC_step($L, true)?;
                 $base = (*$L).base;
             }
         }

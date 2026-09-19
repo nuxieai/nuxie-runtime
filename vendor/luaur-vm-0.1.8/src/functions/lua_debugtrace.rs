@@ -18,7 +18,9 @@ unsafe fn write_c_str(buf: &mut [core::ffi::c_char], s: &str) {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_debugtrace(L: *mut lua_State) -> *const core::ffi::c_char {
+pub unsafe fn lua_debugtrace(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<*const core::ffi::c_char> {
     const LIMIT1: core::ffi::c_int = 10;
     const LIMIT2: core::ffi::c_int = 10;
 
@@ -28,7 +30,7 @@ pub unsafe fn lua_debugtrace(L: *mut lua_State) -> *const core::ffi::c_char {
     let mut ar: LuaDebug = core::mem::zeroed();
 
     let mut level: core::ffi::c_int = 0;
-    while lua_getinfo(L, level, c"sln".as_ptr(), &mut ar as *mut LuaDebug) != 0 {
+    while lua_getinfo(L, level, c"sln".as_ptr(), &mut ar as *mut LuaDebug)? != 0 {
         if !ar.short_src.is_null() {
             offset = append(BUF.as_mut_ptr(), BUF.len(), offset, ar.short_src);
         }
@@ -65,5 +67,5 @@ pub unsafe fn lua_debugtrace(L: *mut lua_State) -> *const core::ffi::c_char {
     luaur_common::macros::luau_assert::LUAU_ASSERT!(offset < BUF.len());
     BUF[offset] = 0;
 
-    BUF.as_ptr()
+    Ok(BUF.as_ptr())
 }

@@ -22,30 +22,30 @@ pub unsafe fn luau_f_rawset(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3 && nresults <= 1 && ttistable!(arg0) {
         let key = args;
 
         if ttisnil!(key) {
-            return -1;
+            return Ok(-1);
         } else if ttisnumber!(key) && luai_numisnan(nvalue!(key) as f64) {
-            return -1;
+            return Ok(-1);
         } else if ttisvector!(key) && luai_vecisnan(vvalue!(key).as_ptr()) {
-            return -1;
+            return Ok(-1);
         }
 
         let t = hvalue!(arg0);
         if (*t).readonly != 0 {
-            return -1;
+            return Ok(-1);
         }
 
         setobj!(L, res, arg0);
-        let slot = luaH_set(L, t, args);
+        let slot = luaH_set(L, t, args)?;
         setobj!(L, slot, args.add(1));
         luaC_barriert!(L, t, args.add(1));
 
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

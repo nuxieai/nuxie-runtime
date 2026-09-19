@@ -13,12 +13,16 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 /// C++ `LUAU_NOINLINE void luaV_callTM(lua_State* L, int nparams, int res)`.
 #[allow(non_snake_case)]
-pub unsafe fn lua_v_call_tm(L: *mut lua_State, nparams: i32, res: i32) {
+pub unsafe fn lua_v_call_tm(
+    L: *mut lua_State,
+    nparams: i32,
+    res: i32,
+) -> crate::records::lua_exception::LuaResult<()> {
     // LUAU_NOINLINE is handled by the attribute on the function
     (*L).nCcalls += 1;
 
     if (*L).nCcalls >= LUAI_MAXCCALLS as u16 {
-        crate::functions::lua_d_check_cstack::luaD_checkCstack(L);
+        crate::functions::lua_d_check_cstack::luaD_checkCstack(L)?;
     }
 
     luaD_checkstack!(L, LUA_MINSTACK);
@@ -47,7 +51,7 @@ pub unsafe fn lua_v_call_tm(L: *mut lua_State, nparams: i32, res: i32) {
     let cl = clvalue!(fun);
     let c = core::ptr::addr_of!((*cl).inner.c).cast::<crate::records::closure::CClosure>();
     let func = (*c).f;
-    let n = func.unwrap()(L);
+    let n = func.unwrap()(L)?;
     LUAU_ASSERT!(n >= 0); // yields should have been blocked by nCcalls
 
     // ci is our callinfo, cip is our parent
@@ -72,4 +76,5 @@ pub unsafe fn lua_v_call_tm(L: *mut lua_State, nparams: i32, res: i32) {
     (*L).top = (*cip).top;
 
     (*L).nCcalls -= 1;
+    Ok(())
 }

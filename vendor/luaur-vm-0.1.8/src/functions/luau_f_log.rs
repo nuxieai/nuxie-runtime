@@ -14,30 +14,30 @@ pub unsafe fn luau_f_log(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
 
         if nparams == 1 {
             setnvalue!(res, a1.ln());
-            1
+            Ok(1)
         } else if ttisnumber!(args) {
             let a2 = nvalue!(args);
 
             if a2 == 2.0 {
                 setnvalue!(res, a1.log2());
-                1
+                Ok(1)
             } else if a2 == 10.0 {
                 setnvalue!(res, a1.log10());
-                1
+                Ok(1)
             } else {
                 setnvalue!(res, a1.ln() / a2.ln());
-                1
+                Ok(1)
             }
         } else {
-            -1
+            Ok(-1)
         }
     } else {
-        -1
+        Ok(-1)
     }
 }

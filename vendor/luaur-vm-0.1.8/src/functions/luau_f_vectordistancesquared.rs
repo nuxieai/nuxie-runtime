@@ -14,7 +14,7 @@ pub unsafe fn luau_f_vectordistancesquared(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisvector!(arg0) && ttisvector!(args) {
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
@@ -23,8 +23,8 @@ pub unsafe fn luau_f_vectordistancesquared(
         let dz = b.add(2).read() - a.add(2).read();
         let xy = dx.mul_add(dx, dy * dy);
         setnvalue!(res, dz.mul_add(dz, xy) as f64);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

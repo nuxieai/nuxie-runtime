@@ -13,7 +13,7 @@ use crate::macros::lua_minstack::LUA_MINSTACK;
 use crate::macros::setnilvalue::setnilvalue;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn lua_resetthread(L: *mut lua_State) {
+pub unsafe fn lua_resetthread(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(L, !(*L).isactive);
     api_check!(
         L,
@@ -31,7 +31,7 @@ pub unsafe fn lua_resetthread(L: *mut lua_State) {
     setnilvalue!((*ci).func);
     (*L).ci = ci;
     if (*L).size_ci != BASIC_CI_SIZE {
-        lua_d_realloc_ci(L, BASIC_CI_SIZE);
+        lua_d_realloc_ci(L, BASIC_CI_SIZE)?;
     }
     // clear thread state
     (*L).status = lua_Status::LUA_OK as u8;
@@ -41,9 +41,10 @@ pub unsafe fn lua_resetthread(L: *mut lua_State) {
     (*L).baseCcalls = 0;
     // clear thread stack
     if (*L).stacksize != BASIC_STACK_SIZE + EXTRA_STACK {
-        luaD_reallocstack(L, BASIC_STACK_SIZE, 0);
+        luaD_reallocstack(L, BASIC_STACK_SIZE, 0)?;
     }
     for i in 0..(*L).stacksize as usize {
         setnilvalue!((*L).stack.add(i));
     }
+    Ok(())
 }

@@ -10,7 +10,7 @@ pub unsafe fn lua_l_optlstring(
     narg: c_int,
     def: *const c_char,
     len: *mut usize,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     let is_none_or_nil = lua_type(L, narg) <= (crate::enums::lua_type::lua_Type::LUA_TNIL as c_int);
 
     if is_none_or_nil {
@@ -27,7 +27,7 @@ pub unsafe fn lua_l_optlstring(
                 *len = 0;
             }
         }
-        def
+        Ok(def)
     } else {
         lua_l_checklstring(L, narg, len)
     }

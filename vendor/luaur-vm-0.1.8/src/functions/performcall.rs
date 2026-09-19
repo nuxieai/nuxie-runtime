@@ -15,8 +15,8 @@ pub unsafe fn performcall(
     func: StkId,
     nresults: core::ffi::c_int,
     preparereentry: bool,
-) {
-    if luau_precall(l, func, nresults) == PCRLUA {
+) -> crate::records::lua_exception::LuaResult<()> {
+    if luau_precall(l, func, nresults)? == PCRLUA {
         (*(*l).ci).flags |= LUA_CALLINFO_RETURN as u32;
 
         let oldactive = (*l).isactive;
@@ -30,11 +30,12 @@ pub unsafe fn performcall(
         if preparereentry {
             (*l).status = SCHEDULED_REENTRY as u8;
         } else {
-            luau_execute(l);
+            luau_execute(l)?;
         }
 
         if !oldactive {
             (*l).isactive = false;
         }
     }
+    Ok(())
 }

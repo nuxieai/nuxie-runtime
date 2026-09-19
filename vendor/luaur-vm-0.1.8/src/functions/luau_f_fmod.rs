@@ -15,15 +15,15 @@ pub unsafe fn luau_f_fmod(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     LUAU_FASTMATH_END!();
 
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
         let a1 = nvalue!(arg0);
         let a2 = nvalue!(args);
         setnvalue!(res, a1 % a2);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

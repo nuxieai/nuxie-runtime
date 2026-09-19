@@ -12,7 +12,10 @@ use crate::type_aliases::lua_table::LuaTable;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_clonetable(L: *mut lua_State, idx: core::ffi::c_int) {
+pub unsafe fn lua_clonetable(
+    L: *mut lua_State,
+    idx: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
 
@@ -24,19 +27,13 @@ pub unsafe fn lua_clonetable(L: *mut lua_State, idx: core::ffi::c_int) {
     // sethvalue(L, L->top, tt);
     // api_incr_top(L);
 
-    // We must cast the stubbed function pointers to their real signatures to call them.
-    // Rust does not allow direct casting from fn item to fn pointer with different signature,
-    // so we cast through a usize.
-    let index2addr_fn: unsafe fn(*mut lua_State, core::ffi::c_int) -> StkId =
-        core::mem::transmute(index_2_addr as *const core::ffi::c_void);
-    let t: StkId = index2addr_fn(L, idx);
+    let t: StkId = index_2_addr(L, idx);
 
     api_check!(L, ttistable!(t));
 
-    let lua_h_clone_fn: unsafe fn(*mut lua_State, *mut LuaTable) -> *mut LuaTable =
-        core::mem::transmute(lua_h_clone as *const core::ffi::c_void);
-    let tt: *mut LuaTable = lua_h_clone_fn(L, hvalue!(t));
+    let tt: *mut LuaTable = lua_h_clone(L, hvalue!(t))?;
 
     sethvalue!(L, (*L).top, tt);
     api_incr_top!(L);
+    Ok(())
 }

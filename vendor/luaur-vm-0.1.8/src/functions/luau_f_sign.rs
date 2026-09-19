@@ -14,7 +14,7 @@ pub unsafe fn luau_f_sign(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let v = nvalue!(arg0);
         let sign = if v > 0.0 {
@@ -25,8 +25,8 @@ pub unsafe fn luau_f_sign(
             0.0
         };
         setnvalue!(res, sign);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

@@ -17,6 +17,5 @@ pub unsafe fn callerrfunc(
     setobj_2_s!(l, (*l).top.offset(-1), errfunc);
     incr_top!(l);
 
-    lua_d_callny(l, (*l).top.offset(-2), 1);
-    Ok(())
+    lua_d_callny(l, (*l).top.offset(-2), 1)
 }

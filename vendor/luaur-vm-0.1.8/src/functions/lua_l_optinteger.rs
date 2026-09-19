@@ -6,6 +6,6 @@ pub fn lua_l_optinteger(
     L: *mut lua_State,
     narg: core::ffi::c_int,
     def: core::ffi::c_int,
-) -> core::ffi::c_int {
-    unsafe { luaL_opt!(L, lua_l_checkinteger, narg, def) }
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    unsafe { luaL_opt!(L, lua_l_checkinteger, narg, Ok(def)) }
 }

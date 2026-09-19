@@ -14,12 +14,12 @@ pub unsafe fn luau_f_sinh(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         setnvalue!(res, a1.sinh());
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

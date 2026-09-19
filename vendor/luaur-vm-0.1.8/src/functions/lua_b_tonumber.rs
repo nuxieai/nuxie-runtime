@@ -32,20 +32,20 @@ unsafe fn strtoull(
     strtoull(s, endptr as *mut *mut core::ffi::c_char, base)
 }
 
-pub unsafe fn lua_b_tonumber(L: *mut lua_State) -> i32 {
-    let base = lua_l_optinteger(L, 2, 10);
+pub unsafe fn lua_b_tonumber(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    let base = lua_l_optinteger(L, 2, 10)?;
 
     if base == 10 {
         // standard conversion
         let mut isnum: core::ffi::c_int = 0;
         let n = lua_tonumberx(L, 1, &mut isnum);
         if isnum != 0 {
-            lua_pushnumber(L, n);
-            return 1;
+            lua_pushnumber(L, n)?;
+            return Ok(1);
         }
-        lua_l_checkany(L, 1); // error if we don't have any argument
+        lua_l_checkany(L, 1)?; // error if we don't have any argument
     } else {
-        let s1 = luaL_checkstring!(L, 1);
+        let s1 = luaL_checkstring!(L, 1)?;
         luaL_argcheck!(L, 2 <= base && base <= 36, 2, "base out of range");
 
         let mut s2: *mut core::ffi::c_char = core::ptr::null_mut();
@@ -59,12 +59,12 @@ pub unsafe fn lua_b_tonumber(L: *mut lua_State) -> i32 {
 
             if *s2 == b'\0' as core::ffi::c_char {
                 // no invalid trailing characters?
-                lua_pushnumber(L, n as f64);
-                return 1;
+                lua_pushnumber(L, n as f64)?;
+                return Ok(1);
             }
         }
     }
 
-    lua_pushnil(L); // else not a number
-    1
+    lua_pushnil(L)?; // else not a number
+    Ok(1)
 }

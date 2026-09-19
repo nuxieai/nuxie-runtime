@@ -13,7 +13,11 @@ use crate::records::lua_state::lua_State;
 type UserdataDtor = Option<unsafe extern "C" fn(*mut c_void)>;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: UserdataDtor) -> *mut c_void {
+pub unsafe fn lua_newuserdatadtor(
+    L: *mut lua_State,
+    sz: usize,
+    dtor: UserdataDtor,
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     api_check!(L, dtor.is_some());
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
@@ -26,7 +30,7 @@ pub unsafe fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: UserdataDt
         usize::MAX
     };
 
-    let u = lua_u_newudata(L, as_, UTAG_IDTOR);
+    let u = lua_u_newudata(L, as_, UTAG_IDTOR)?;
     core::ptr::copy_nonoverlapping(
         (&dtor as *const UserdataDtor).cast::<u8>(),
         (*u).data.as_mut_ptr().add(sz).cast::<u8>(),
@@ -38,5 +42,5 @@ pub unsafe fn lua_newuserdatadtor(L: *mut lua_State, sz: usize, dtor: UserdataDt
     crate::macros::checkliveness::checkliveness!((*L).global, (*L).top);
     api_incr_top!(L);
 
-    (*u).data.as_mut_ptr().cast()
+    Ok((*u).data.as_mut_ptr().cast())
 }

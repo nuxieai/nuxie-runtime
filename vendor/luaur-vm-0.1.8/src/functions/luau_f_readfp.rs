@@ -20,7 +20,7 @@ pub unsafe fn luau_f_readfp<T>(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int>
 where
     T: Copy + Into<f64>,
 {
@@ -31,7 +31,7 @@ where
 
             let buf = bufvalue!(arg0);
             if checkoutofbounds(offset, (*buf).len as usize, core::mem::size_of::<T>()) {
-                return -1;
+                return Ok(-1);
             }
 
             let val: T = {
@@ -40,9 +40,9 @@ where
             };
 
             setnvalue!(res, val.into());
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

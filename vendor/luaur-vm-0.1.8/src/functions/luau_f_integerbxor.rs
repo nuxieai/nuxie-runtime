@@ -14,21 +14,21 @@ pub unsafe fn luau_f_integerbxor(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisinteger!(arg0) {
         let mut r: u64 = lvalue!(arg0) as u64;
 
         for i in 2..=nparams {
             if !ttisinteger!(args.offset((i - 2) as isize)) {
-                return -1;
+                return Ok(-1);
             }
 
             r ^= lvalue!(args.offset((i - 2) as isize)) as u64;
         }
 
         setlvalue!(res, r as i64);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

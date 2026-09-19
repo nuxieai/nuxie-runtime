@@ -14,7 +14,7 @@ pub unsafe fn lua_g_breakpoint(
     p: *mut Proto,
     line: core::ffi::c_int,
     enable: bool,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let ondisable = (*(*L).global).ecb.disable;
 
     if !(*p).lineinfo.is_null() && (ondisable.is_some() || (*p).execdata.is_null()) {
@@ -56,6 +56,7 @@ pub unsafe fn lua_g_breakpoint(
     }
 
     for i in 0..(*p).sizep {
-        lua_g_breakpoint(L, *((*p).p.add(i as usize)), line, enable);
+        lua_g_breakpoint(L, *((*p).p.add(i as usize)), line, enable)?;
     }
+    Ok(())
 }

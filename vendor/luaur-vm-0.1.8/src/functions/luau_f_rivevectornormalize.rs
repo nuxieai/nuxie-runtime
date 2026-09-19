@@ -15,7 +15,7 @@ pub unsafe fn luau_f_rivevectornormalize(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
         let xy = v
@@ -36,8 +36,8 @@ pub unsafe fn luau_f_rivevectornormalize(
             v.add(2).read() * inv_len,
             0.0 as LuaVectorType
         );
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

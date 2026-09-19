@@ -8,7 +8,7 @@ pub unsafe fn lua_l_buffinitsize(
     L: *mut lua_State,
     B: *mut LuaLStrbuf,
     size: usize,
-) -> *mut c_char {
+) -> crate::records::lua_exception::LuaResult<*mut c_char> {
     lua_l_buffinit(L, B);
     lua_l_prepbuffsize(B, size)
 }

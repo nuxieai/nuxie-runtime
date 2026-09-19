@@ -100,17 +100,20 @@ pub(crate) fn clear_interrupt(state: *mut lua_State) {
 /// `gc` is non-negative only for GC interrupts; mlua ignores GC interrupts in
 /// the user callback path, and so do we (return immediately) so the user
 /// closure only sees real instruction safepoints.
-unsafe extern "C-unwind" fn interrupt_trampoline(state: *mut lua_State, gc: c_int) {
+unsafe fn interrupt_trampoline(
+    state: *mut lua_State,
+    gc: c_int,
+) -> luaur_vm::records::lua_exception::LuaResult<()> {
     if gc >= 0 {
         // GC step interrupt — not surfaced to the user callback.
-        return;
+        return Ok(());
     }
     let key = unsafe { vm_key(state) };
     // Take the closure out of the map for the duration of the call so a
     // re-entrant `set_interrupt` from inside the callback can't alias the
     // borrow. Put it back afterwards (unless the callback replaced it).
     let cb = INTERRUPTS.with(|m| m.borrow_mut().remove(&key));
-    let Some(cb) = cb else { return };
+    let Some(cb) = cb else { return Ok(()) };
 
     let lua = unsafe { Lua::from_borrowed(state) };
     let result = cb(&lua);
@@ -130,19 +133,21 @@ unsafe extern "C-unwind" fn interrupt_trampoline(state: *mut lua_State, gc: c_in
             // (and mlua) silently ignore the yield request there, so we gate it
             // on `lua_isyieldable` and otherwise just continue.
             if lua_isyieldable(state) != 0 {
-                let _ = luaur_vm::functions::lua_break::lua_break(state);
+                luaur_vm::functions::lua_break::lua_break(state)?;
             }
         },
         Err(e) => unsafe {
-            // Raise the error as a Lua error. Push the message and longjmp.
-            raise_error(state, &e);
+            return raise_error(state, &e);
         },
     }
+    Ok(())
 }
 
-/// Push `e`'s message as a string error object and `lua_error` it (does not
-/// return).
-unsafe fn raise_error(state: *mut lua_State, e: &Error) -> ! {
+/// Push `e`'s message and return its guest error to the protected VM boundary.
+unsafe fn raise_error(
+    state: *mut lua_State,
+    e: &Error,
+) -> luaur_vm::records::lua_exception::LuaResult<()> {
     // Use the bare message for a runtime error (so it round-trips back through
     // `pop_error` as `RuntimeError(msg)` without a doubled "runtime error: "
     // prefix); fall back to the full Display for other error kinds.
@@ -154,8 +159,8 @@ unsafe fn raise_error(state: *mut lua_State, e: &Error) -> ! {
         // The interrupt fires at an arbitrary VM safepoint where `L->top` may be
         // flush against the call-info top; make room before pushing so the
         // `api_incr_top` stack invariant in `lua_pushlstring` holds.
-        lua_rawcheckstack(state, 1);
-        lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len());
+        lua_rawcheckstack(state, 1)?;
+        lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len())?;
         lua_error(state)
     }
 }

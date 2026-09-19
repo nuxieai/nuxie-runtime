@@ -16,13 +16,13 @@ pub unsafe fn lua_newuserdatataggedwithmetatable(
     L: *mut lua_State,
     sz: usize,
     tag: c_int,
-) -> *mut c_void {
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     api_check!(L, (tag as u32) < LUA_UTAG_LIMIT as u32);
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
 
-    let u = lua_u_newudata(L, sz, tag);
+    let u = lua_u_newudata(L, sz, tag)?;
 
     luaur_common::LUAU_ASSERT!(!isblack!(u as *mut GCObject));
 
@@ -36,5 +36,5 @@ pub unsafe fn lua_newuserdatataggedwithmetatable(
     crate::macros::checkliveness::checkliveness!((*L).global, (*L).top);
     api_incr_top!(L);
 
-    (*u).data.as_mut_ptr().cast()
+    Ok((*u).data.as_mut_ptr().cast())
 }

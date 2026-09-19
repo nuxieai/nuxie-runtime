@@ -6,11 +6,13 @@ use crate::functions::lua_l_checknumber::lua_l_checknumber;
 use crate::macros::lua_l_error::luaL_error;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn buffer_readbits(L: *mut lua_State) -> core::ffi::c_int {
+pub fn buffer_readbits(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut len: usize = 0;
-    let buf = lua_l_checkbuffer(L, 1, &mut len) as *mut core::ffi::c_char;
-    let bitoffset = lua_l_checknumber(L, 2) as i64;
-    let bitcount = lua_l_checkinteger(L, 3);
+    let buf = lua_l_checkbuffer(L, 1, &mut len)? as *mut core::ffi::c_char;
+    let bitoffset = lua_l_checknumber(L, 2)? as i64;
+    let bitcount = lua_l_checkinteger(L, 3)?;
 
     if bitoffset < 0 {
         luaL_error!(L, "buffer access out of bounds");
@@ -45,7 +47,7 @@ pub fn buffer_readbits(L: *mut lua_State) -> core::ffi::c_int {
     let mask = (1u64 << bitcount as u64) - 1;
 
     let result = ((data >> subbyteoffset) & mask) as u32;
-    crate::functions::lua_pushunsigned::lua_pushunsigned(L, result);
+    crate::functions::lua_pushunsigned::lua_pushunsigned(L, result)?;
 
-    1
+    Ok(1)
 }

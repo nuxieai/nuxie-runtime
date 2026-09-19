@@ -19,7 +19,7 @@ pub unsafe fn lua_rawiter(
     L: *mut lua_State,
     idx: core::ffi::c_int,
     iter: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 2);
 
@@ -39,7 +39,7 @@ pub unsafe fn lua_rawiter(
             setnvalue!(top.add(0), (iter + 1) as f64);
             setobj2s!(L, top.add(1), e);
             api_update_top!(L, top.add(2));
-            return iter + 1;
+            return Ok(iter + 1);
         }
         iter += 1;
     }
@@ -55,11 +55,11 @@ pub unsafe fn lua_rawiter(
             getnodekey!(L, top.add(0), n);
             setobj2s!(L, top.add(1), val);
             api_update_top!(L, top.add(2));
-            return iter + 1;
+            return Ok(iter + 1);
         }
         iter += 1;
     }
 
     // traversal finished
-    -1
+    Ok(-1)
 }

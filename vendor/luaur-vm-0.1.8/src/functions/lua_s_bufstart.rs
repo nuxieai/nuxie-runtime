@@ -8,12 +8,15 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaS_bufstart(l: *mut lua_State, size: usize) -> *mut TString {
+pub unsafe fn luaS_bufstart(
+    l: *mut lua_State,
+    size: usize,
+) -> crate::records::lua_exception::LuaResult<*mut TString> {
     if size > MAXSSIZE as usize {
-        lua_m_toobig(l);
+        return lua_m_toobig(l);
     }
 
-    let ts = crate::functions::lua_m_newgco::luaM_newgco_(l, sizestring(size), (*l).activememcat)
+    let ts = crate::functions::lua_m_newgco::luaM_newgco_(l, sizestring(size), (*l).activememcat)?
         as *mut TString;
 
     luaC_init!(
@@ -26,7 +29,7 @@ pub unsafe fn luaS_bufstart(l: *mut lua_State, size: usize) -> *mut TString {
     (*ts).len = size as u32;
     (*ts).next = core::ptr::null_mut();
 
-    ts
+    Ok(ts)
 }
 
 #[allow(unused_imports)]

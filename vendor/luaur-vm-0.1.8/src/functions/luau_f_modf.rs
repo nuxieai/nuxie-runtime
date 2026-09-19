@@ -13,7 +13,7 @@ pub unsafe fn luauF_modf(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 2 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         let ip = a1.trunc();
@@ -25,8 +25,8 @@ pub unsafe fn luauF_modf(
 
         setnvalue!(res, ip);
         setnvalue!(res.add(1), fp);
-        2
+        Ok(2)
     } else {
-        -1
+        Ok(-1)
     }
 }

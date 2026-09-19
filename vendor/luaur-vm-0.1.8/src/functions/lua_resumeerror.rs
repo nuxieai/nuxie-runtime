@@ -8,10 +8,13 @@ use crate::macros::cast_byte::cast_byte;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_resumeerror"]
-pub unsafe fn lua_resumeerror(L: *mut lua_State, from: *mut lua_State) -> i32 {
-    let starterror = resume_start(L, from, 1);
+pub unsafe fn lua_resumeerror(
+    L: *mut lua_State,
+    from: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<i32> {
+    let starterror = resume_start(L, from, 1)?;
     if starterror != 0 {
-        return starterror;
+        return Ok(starterror);
     }
 
     let old_n_c_calls = (*L).nCcalls;
@@ -24,8 +27,8 @@ pub unsafe fn lua_resumeerror(L: *mut lua_State, from: *mut lua_State) -> i32 {
         (*L).status = cast_byte!(status);
         let status_result =
             lua_d_rawrunprotected(L, Some(resume_handle), ci as *mut core::ffi::c_void);
-        return resume_finish(L, status_result, old_n_c_calls_i32);
+        return Ok(resume_finish(L, status_result, old_n_c_calls_i32));
     }
 
-    resume_finish(L, status, old_n_c_calls_i32)
+    Ok(resume_finish(L, status, old_n_c_calls_i32))
 }

@@ -14,15 +14,15 @@ pub unsafe fn luau_f_frexp(
     nresults: c_int,
     _args: StkId,
     nparams: c_int,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     if nparams >= 1 && nresults <= 2 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         let (f, e) = frexp(a1);
         setnvalue!(res, f);
         setnvalue!(res.add(1), e as f64);
-        2
+        Ok(2)
     } else {
-        -1
+        Ok(-1)
     }
 }
 

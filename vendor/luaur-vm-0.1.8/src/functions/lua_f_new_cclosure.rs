@@ -8,9 +8,13 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaF_newCclosure(l: *mut lua_State, nelems: c_int, e: *mut LuaTable) -> *mut Closure {
+pub unsafe fn luaF_newCclosure(
+    l: *mut lua_State,
+    nelems: c_int,
+    e: *mut LuaTable,
+) -> crate::records::lua_exception::LuaResult<*mut Closure> {
     let c =
-        crate::functions::lua_m_newgco::luaM_newgco_(l, size_cclosure(nelems), (*l).activememcat)
+        crate::functions::lua_m_newgco::luaM_newgco_(l, size_cclosure(nelems), (*l).activememcat)?
             as *mut Closure;
 
     luaC_init!(l, c, lua_Type::LUA_TFUNCTION as c_int);
@@ -26,7 +30,7 @@ pub unsafe fn luaF_newCclosure(l: *mut lua_State, nelems: c_int, e: *mut LuaTabl
     (*cc).debugname = core::ptr::null_mut();
     (*cc).debugname_DEPRECATED = core::ptr::null();
 
-    c
+    Ok(c)
 }
 
 #[allow(unused_imports)]

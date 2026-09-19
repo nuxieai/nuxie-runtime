@@ -14,7 +14,7 @@ pub unsafe fn luau_f_len(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // The macros ttisstring, tsvalue, and setnvalue depend on lua_Type being in scope
     let _ = lua_Type::LUA_TNIL;
 
@@ -22,8 +22,8 @@ pub unsafe fn luau_f_len(
         let ts = tsvalue!(arg0);
 
         setnvalue!(res, (*ts).len as f64);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

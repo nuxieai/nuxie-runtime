@@ -14,7 +14,7 @@ pub(crate) unsafe fn resolve_import_safe(
     env: *mut LuaTable,
     k: *mut TValue,
     id: u32,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let mut ri = ResolveImport { k, id };
 
     if (*env).safeenv != 0 {
@@ -25,7 +25,7 @@ pub(crate) unsafe fn resolve_import_safe(
             &mut ri as *mut _ as *mut core::ffi::c_void,
             savestack!(L, (*L).top) as isize,
             0,
-        );
+        )?;
 
         LUAU_ASSERT!(old_top + 1 == lua_gettop(L));
 
@@ -36,4 +36,5 @@ pub(crate) unsafe fn resolve_import_safe(
         setnilvalue!((*L).top);
         (*L).top = (*L).top.add(1);
     }
+    Ok(())
 }

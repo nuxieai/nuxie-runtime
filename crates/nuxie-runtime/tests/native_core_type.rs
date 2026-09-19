@@ -3,7 +3,7 @@
 //! ShapeBase, NodeBase, and ArtboardBase headers, not a Rust predicate oracle.
 
 use nuxie_runtime::source::{
-    artboard::{Artboard, ArtboardInstance, RuntimeArtboardInstanceHandle},
+    artboard::{ArtboardInstance, RuntimeArtboardInstanceHandle},
     core::{CoreArena, CoreHandle},
     node::Node,
     shapes::shape::Shape,
@@ -89,9 +89,7 @@ fn dropping_the_arena_invalidates_retained_type_queries() {
 
 #[test]
 fn runtime_artboard_root_uses_the_same_predicate_without_reborrowing_instance() {
-    let instance = RuntimeArtboardInstanceHandle::new(ArtboardInstance {
-        base: Artboard::default(),
-    });
+    let instance = RuntimeArtboardInstanceHandle::new(ArtboardInstance::default());
     let root = instance.core_handle();
 
     assert_types_during_mutable_borrow(&root, 1, ARTBOARD_TYPES);

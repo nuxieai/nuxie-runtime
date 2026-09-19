@@ -295,7 +295,7 @@ impl HostCommandHost {
     /// behavior internally, but a result-based host must reject the whole
     /// effect batch rather than publishing commands queued before that error.
     pub fn callback_failure(&self) -> Option<String> {
-        self.state.resource_guard.callback_failure()
+        self.state.resource_guard.host_callback_failure()
     }
 
     fn truncate(&self, state: Weak<HostCommandState>, queued_commands: usize) {
@@ -364,6 +364,7 @@ impl HostCommandHost {
             ));
         }
         self.state.commands.borrow_mut().push_back(command);
+        self.state.resource_guard.note_host_command();
         self.state.commands_this_cycle.set(count + 1);
         self.state.nodes_this_cycle.set(nodes);
         self.state.bytes_this_cycle.set(total);

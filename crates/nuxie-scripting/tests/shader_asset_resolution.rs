@@ -426,6 +426,15 @@ impl Factory for ObservingFactory {
     ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
         Ok(recording_gpu::canvas(width, height))
     }
+    fn make_deferred_render_canvas(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<Box<dyn nuxie_render_api::RenderCanvas>, nuxie_render_api::RenderCanvasError> {
+        // Late-bound script contexts request the deferred allocation seam.
+        // This recorder creates no device resources in either path.
+        Ok(recording_gpu::canvas(width, height))
+    }
     fn make_render_buffer(
         &mut self,
         buffer_type: RenderBufferType,

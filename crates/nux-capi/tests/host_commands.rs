@@ -1713,6 +1713,110 @@ fn authored_failure_rolls_back_commands_and_poisons_the_occurrence() {
 }
 
 #[test]
+fn protected_converter_failure_keeps_native_player_usable() {
+    let mut payload = vec![0];
+    payload.extend(compile_luau(
+        br#"
+        local bridge = require("bridge")
+        return function()
+            return { convert = function(self, input)
+                if input.value < 0 then error("invalid converter input") end
+                bridge.command("converted", input.value)
+                return input
+            end }
+        end
+    "#,
+    ));
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 18_290, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "ViewModel", |b| {
+        push_string(b, "ViewModel", "name", "Root")
+    });
+    push_object(&mut bytes, "ViewModelPropertyNumber", |b| {
+        push_string(b, "ViewModelPropertyNumber", "name", "amount")
+    });
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ViewModelInstance", |b| {
+        push_uint(b, "ViewModelInstance", "viewModelId", 0)
+    });
+    push_object(&mut bytes, "ViewModelInstanceNumber", |b| {
+        push_uint(b, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        push_f32(b, "ViewModelInstanceNumber", "propertyValue", 90.0);
+    });
+    push_object(&mut bytes, "ScriptedDataConverter", |b| {
+        push_uint(b, "ScriptedDataConverter", "scriptAssetId", 0)
+    });
+    push_object(&mut bytes, "ScriptAsset", |b| {
+        push_uint(b, "ScriptAsset", "assetId", 0);
+        push_string(b, "ScriptAsset", "name", "RecoverableConverter");
+    });
+    push_object(&mut bytes, "FileAssetContents", |b| {
+        push_blob(b, "FileAssetContents", "bytes", &payload)
+    });
+    push_object(&mut bytes, "Artboard", |b| {
+        push_f32(b, "Artboard", "width", 100.0);
+        push_f32(b, "Artboard", "height", 100.0);
+        push_uint(b, "Artboard", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "Shape", |b| push_uint(b, "Node", "parentId", 0));
+    push_object(&mut bytes, "DataBindContext", |b| {
+        push_uint(
+            b,
+            "DataBindContext",
+            "propertyKey",
+            u64::from(property_key("Node", "x")),
+        );
+        push_blob(b, "DataBindContext", "sourcePathIds", &[0, 0]);
+        push_uint(b, "DataBindContext", "converterId", 0);
+    });
+    let config = NuxHostCommandImportConfig {
+        module_name: view("bridge"),
+        ..NuxHostCommandImportConfig::default()
+    };
+    let file = trusted_import(&bytes, &config);
+    let mut artboard = std::ptr::null_mut();
+    let mut model = std::ptr::null_mut();
+    let mut player = std::ptr::null_mut();
+    unsafe {
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_authored(file, 0, 0, &mut model),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(artboard, model),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+    }
+    for amount in [90.0, -1.0, 30.0] {
+        mutate_view_model_number(model, "amount", amount);
+        let result = step(player, &[]);
+        let mut info = NuxPlayerStepInfo::default();
+        assert_eq!(
+            unsafe { nux_player_step_result_info(result, &mut info) },
+            NuxStatus::Ok
+        );
+        assert_eq!(info.host_command_count, if amount < 0.0 { 0 } else { 1 });
+        assert_eq!(
+            unsafe { nux_player_step_result_free(result) },
+            NuxStatus::Ok
+        );
+    }
+    unsafe {
+        nux_player_free(player);
+        nux_view_model_instance_free(model);
+        nux_artboard_instance_free(artboard);
+        nux_file_free(file);
+    }
+}
+
+#[test]
 fn scripted_drawable_failure_rolls_back_commands_and_poisons_the_occurrence() {
     let bytes = scripted_drawable_fixture(
         br#"

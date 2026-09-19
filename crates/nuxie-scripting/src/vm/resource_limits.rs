@@ -59,6 +59,16 @@ impl ScriptResourceGuard {
     pub fn callback_failure(&self) -> Option<String> {
         self.tracker.callback_failure()
     }
+
+    pub(crate) fn note_host_command(&self) {
+        self.tracker
+            .host_commands
+            .set(self.tracker.host_commands.get().saturating_add(1));
+    }
+
+    pub(crate) fn host_callback_failure(&self) -> Option<String> {
+        self.tracker.host_callback_failure.borrow().clone()
+    }
 }
 
 /// Per-VM, per-cycle terminal resource state. Nuxie-owned limit sites trip this
@@ -70,6 +80,8 @@ pub(super) struct ResourceLimitTracker {
     tripped: Rc<Cell<Option<ScriptResourceLimit>>>,
     message: Rc<RefCell<Option<String>>>,
     callback_failure: Rc<RefCell<Option<String>>>,
+    host_callback_failure: Rc<RefCell<Option<String>>>,
+    host_commands: Rc<Cell<usize>>,
 }
 
 impl ResourceLimitTracker {
@@ -77,6 +89,12 @@ impl ResourceLimitTracker {
         self.tripped.set(None);
         self.message.borrow_mut().take();
         self.callback_failure.borrow_mut().take();
+        self.host_callback_failure.borrow_mut().take();
+        self.host_commands.set(0);
+    }
+
+    pub(super) fn host_command_count(&self) -> usize {
+        self.host_commands.get()
     }
 
     pub(super) fn terminal_limit(&self) -> Option<ScriptResourceLimit> {
@@ -122,6 +140,14 @@ impl ResourceLimitTracker {
     }
 
     pub(super) fn observe_callback_failure(&self, error: &Error) {
+        self.observe_callback_diagnostic(error);
+        let mut failure = self.host_callback_failure.borrow_mut();
+        if failure.is_none() {
+            *failure = Some(error.to_string());
+        }
+    }
+
+    pub(super) fn observe_callback_diagnostic(&self, error: &Error) {
         let mut failure = self.callback_failure.borrow_mut();
         if failure.is_none() {
             *failure = Some(error.to_string());

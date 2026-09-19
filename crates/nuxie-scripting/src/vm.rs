@@ -1337,12 +1337,28 @@ impl LuaScriptInstance {
         value: Option<ScriptValue>,
     ) -> std::result::Result<ScriptDataConverterOptionalCall, ScriptError> {
         self.reset_execution_budget();
+        let host_commands_before = self.resource_limits.host_command_count();
+        let conversion_error = |error: Error| {
+            // C++ ScriptedDataConverter::applyConversion consumes protected
+            // failures and keeps its cached value. Do not escalate a pure
+            // conversion failure into a fatal host transaction failure.
+            self.logging.log_error(&error);
+            self.resource_limits.observe_callback_diagnostic(&error);
+            let error_result = tracked_script_error(error.clone(), &self.resource_limits);
+            // Host effects are an embedding extension, not part of upstream
+            // conversion. Preserve atomic rollback if this failed call emitted
+            // any, and never recover from resource exhaustion.
+            if error_result.resource_code().is_some()
+                || self.resource_limits.host_command_count() != host_commands_before
+            {
+                self.resource_limits.observe_callback_failure(&error);
+            }
+            error_result
+        };
         let Some(table) = self.table.clone() else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };
-        let field: Value = table
-            .get(method.as_str())
-            .map_err(|error| self.script_error(error))?;
+        let field: Value = table.get(method.as_str()).map_err(&conversion_error)?;
         let Value::Function(function) = field else {
             return Ok(ScriptDataConverterOptionalCall::Missing);
         };
@@ -1350,14 +1366,13 @@ impl LuaScriptInstance {
             return Ok(ScriptDataConverterOptionalCall::UnsupportedInput);
         };
         let lua = table.lua();
-        let input = lua_data_value::create_data_value(&lua, value)
-            .map_err(|error| self.script_error(error))?;
+        let input = lua_data_value::create_data_value(&lua, value).map_err(&conversion_error)?;
         let output: AnyUserData = function
             .protected_call((table, input))
-            .map_err(|error| self.script_error(error))?;
+            .map_err(&conversion_error)?;
         let output = output
             .borrow::<lua_data_value::ScriptedDataValue>()
-            .map_err(|error| self.script_error(error))?;
+            .map_err(&conversion_error)?;
         Ok(ScriptDataConverterOptionalCall::Returned(
             output.value().clone(),
         ))
@@ -3868,6 +3883,103 @@ mod context_init_tests {
             0,
             "C++ resolves the function but does not call it when pushDataValue fails"
         );
+    }
+
+    #[test]
+    fn protected_converter_error_does_not_fail_host_commit_and_next_edit_recovers() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        let host = crate::host_commands::HostCommandHost::install(
+            &vm,
+            "bridge",
+            crate::host_commands::HostCommandLimits::default(),
+        )
+        .unwrap();
+        let table: Table = vm
+            .lua()
+            .load(
+                r#"
+            return { reverseConvert = function(self, value)
+                if value.value == "bad" then error("Enter minutes:seconds") end
+                return value
+            end }
+        "#,
+            )
+            .eval()
+            .unwrap();
+        let mut instance = vm.script_instance_from_table(table);
+        vm.begin_script_cycle();
+        let checkpoint = host.begin_cycle();
+        let method = ScriptDataConverterMethod::ReverseConvert;
+        assert!(
+            instance
+                .call_optional_data_converter(method, Some(ScriptValue::String("bad".into())))
+                .is_err()
+        );
+        assert_eq!(
+            host.callback_failure(),
+            None,
+            "C++ consumes converter errors inside applyConversion"
+        );
+        assert!(
+            vm.resource_guard()
+                .callback_failure()
+                .unwrap()
+                .contains("Enter minutes:seconds"),
+            "recoverable errors still reach editor diagnostics"
+        );
+        assert_eq!(
+            instance
+                .call_optional_data_converter(method, Some(ScriptValue::String("1:30".into())))
+                .unwrap(),
+            ScriptDataConverterOptionalCall::Returned(ScriptValue::String("1:30".into())),
+        );
+        assert!(host.drain(checkpoint).is_empty());
+        vm.end_script_cycle();
+    }
+
+    #[test]
+    fn failed_converter_with_host_effects_still_rejects_the_transaction() {
+        let vm = ScriptVm::new();
+        vm.install_rive_globals().unwrap();
+        let host = crate::host_commands::HostCommandHost::install(
+            &vm,
+            "bridge",
+            crate::host_commands::HostCommandLimits::default(),
+        )
+        .unwrap();
+        let table: Table = vm
+            .lua()
+            .load(
+                r#"
+            local bridge = require("bridge")
+            return { reverseConvert = function(self, value)
+                bridge.command("partial", { escaped = false })
+                error("failed conversion after effect")
+            end }
+        "#,
+            )
+            .eval()
+            .unwrap();
+        let mut instance = vm.script_instance_from_table(table);
+        vm.begin_script_cycle();
+        let checkpoint = host.begin_cycle();
+        assert!(
+            instance
+                .call_optional_data_converter(
+                    ScriptDataConverterMethod::ReverseConvert,
+                    Some(ScriptValue::String("bad".into())),
+                )
+                .is_err()
+        );
+        assert!(
+            host.callback_failure()
+                .unwrap()
+                .contains("failed conversion after effect")
+        );
+        host.rollback_cycle(checkpoint);
+        assert!(host.drain_effects().is_empty());
+        vm.end_script_cycle();
     }
 
     #[test]

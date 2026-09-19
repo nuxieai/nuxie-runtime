@@ -8,7 +8,10 @@ use crate::records::c_call_s::CCallS;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn f_ccall(L: *mut lua_State, ud: *mut core::ffi::c_void) {
+pub unsafe fn f_ccall(
+    L: *mut lua_State,
+    ud: *mut core::ffi::c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let c = cast_to!(*mut CCallS, ud);
 
     if lua_checkstack(L, 2) == 0 {
@@ -18,4 +21,5 @@ pub unsafe fn f_ccall(L: *mut lua_State, ud: *mut core::ffi::c_void) {
     lua_pushcclosurek(L, (*c).func, core::ptr::null(), 0, None);
     lua_pushlightuserdata(L as *mut core::ffi::c_void, (*c).ud);
     lua_d_call(L, (*L).top.sub(2), 0);
+    Ok(())
 }

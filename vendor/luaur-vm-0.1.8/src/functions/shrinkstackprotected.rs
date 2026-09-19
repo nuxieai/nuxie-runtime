@@ -9,8 +9,12 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 // C++ uses a local `struct CallContext { static void run(...) }`; a local fn is
 // the Rust equivalent of that protected-call trampoline.
-unsafe fn run(l: *mut lua_State, _ud: *mut core::ffi::c_void) {
+unsafe fn run(
+    l: *mut lua_State,
+    _ud: *mut core::ffi::c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     shrinkstack(l);
+    Ok(())
 }
 
 #[allow(non_snake_case)]

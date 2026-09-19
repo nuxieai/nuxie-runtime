@@ -913,6 +913,7 @@ version = "0.1.0"
 dependencies = [
  "luaur-common",
  "luaur-rt",
+ "luaur-vm",
 ]
 
 [[package]]

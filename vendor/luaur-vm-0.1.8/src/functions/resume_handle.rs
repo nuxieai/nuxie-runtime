@@ -15,7 +15,10 @@ use crate::type_aliases::lua_state::lua_State;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
+pub unsafe fn resume_handle(
+    l: *mut lua_State,
+    ud: *mut core::ffi::c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let mut ci = ud as *mut CallInfo;
     let cl = ci_func!(ci);
 
@@ -72,9 +75,10 @@ pub unsafe fn resume_handle(l: *mut lua_State, ud: *mut core::ffi::c_void) {
 
     let n = (*c).cont.unwrap()(l, status);
     if (*l).status != lua_Status::LUA_OK as u8 {
-        return;
+        return Ok(());
     }
     luau_poscall(l, (*l).top.offset(-(n as isize)));
 
     resume_continue(l);
+    Ok(())
 }

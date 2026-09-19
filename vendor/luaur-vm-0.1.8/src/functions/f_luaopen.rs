@@ -4,17 +4,17 @@
 use crate::functions::lua_h_new::lua_h_new;
 use crate::functions::lua_h_setstr::lua_h_setstr;
 use crate::functions::lua_s_resize::luaS_resize;
-use crate::macros::lua_s_new::luaS_new;
 use crate::functions::lua_t_init::lua_t_init;
 use crate::functions::stack_init::stack_init;
 use crate::macros::lua_minstrtabsize::LUA_MINSTRTABSIZE;
 use crate::macros::lua_s_fix::luaS_fix;
+use crate::macros::lua_s_new::luaS_new;
 use crate::macros::lua_s_newliteral::luaS_newliteral;
 use crate::macros::registry::registry;
 use crate::macros::sethvalue::sethvalue;
 use crate::macros::setsvalue::setsvalue;
-use crate::type_aliases::lua_table::LuaTable;
 use crate::type_aliases::lua_state::lua_State;
+use crate::type_aliases::lua_table::LuaTable;
 use crate::type_aliases::t_value::TValue;
 use crate::type_aliases::tms::TMS;
 
@@ -28,7 +28,10 @@ unsafe fn weakenvalues(L: *mut lua_State, wt: *mut LuaTable) -> *mut LuaTable {
 }
 
 /// open parts that may cause memory-allocation errors
-pub unsafe fn f_luaopen(L: *mut lua_State, _ud: *mut core::ffi::c_void) {
+pub unsafe fn f_luaopen(
+    L: *mut lua_State,
+    _ud: *mut core::ffi::c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let g = (*L).global;
     stack_init(L, L); // init stack
     (*L).gt = lua_h_new(L, 0, 2); // table of globals
@@ -46,4 +49,5 @@ pub unsafe fn f_luaopen(L: *mut lua_State, _ud: *mut core::ffi::c_void) {
     luaS_fix!(luaS_newliteral(L, c"not enough memory".as_ptr())); // LUA_MEMERRMSG // pin to make sure we can always throw this error
     luaS_fix!(luaS_newliteral(L, c"error in error handling".as_ptr())); // LUA_ERRERRMSG // pin to make sure we can always throw this error
     (*g).GCthreshold = 4 * (*g).totalbytes;
+    Ok(())
 }

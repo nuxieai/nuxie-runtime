@@ -541,7 +541,62 @@ fn component_list_state_machine_index(default_index: i32) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::component_list_state_machine_index;
+    use super::{ArtboardComponentList, Mat2D, component_list_state_machine_index};
+
+    #[test]
+    fn missing_row_transform_matches_upstream_draw_default() {
+        use crate::mechanical_port::source::{factory::RuntimeFactoryHandle, file::File};
+        use nuxie_render_api::{PersistentFactory, RecordingFactory};
+        use std::path::PathBuf;
+
+        let upstream = std::env::var_os("RIVE_RUNTIME_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"));
+        for (fixture, virtualized) in [
+            ("component_list_1.riv", false),
+            ("component_list_clipped_viewport.riv", true),
+        ] {
+            let bytes = std::fs::read(upstream.join("tests/unit_tests/assets").join(fixture))
+                .expect("upstream component-list fixture");
+            let mut factory = PersistentFactory::new(RecordingFactory::default());
+            let factory_handle = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+            let file = File::import(&bytes, factory_handle, None, None, None).unwrap();
+            let artboard = file.with_file(|file| file.artboard_named("Main")).unwrap();
+            let model = file
+                .with_file_mut(|file| {
+                    file.create_default_view_model_instance_for_artboard(artboard.core_handle())
+                })
+                .unwrap();
+            artboard.bind_view_model_instance(Some(model));
+            artboard.advance_default(0.0);
+            artboard.advance_default(0.0);
+            let list = artboard
+                .with_artboard(|artboard| artboard.find_handle::<ArtboardComponentList>("List"))
+                .unwrap();
+            list.with_downcast_mut::<ArtboardComponentList, _>(|list| {
+                assert_eq!(list.virtualization_enabled(), virtualized, "{fixture}");
+                let index = list.ordered_list_indices()[0];
+                assert!(list.artboard_instance(index).is_some());
+                let item = list.list_item(index).unwrap();
+                let settled = list.artboard_transforms.clone();
+                assert!(list.artboard_transforms.remove(&item).is_some());
+                // Model the interval after materialization but before placement.
+                // C++ unordered_map::operator[] inserts identity at this point.
+                let mut renderer = factory.borrow().make_renderer();
+                list.draw(&mut renderer);
+                assert_eq!(list.artboard_transforms[&item], Mat2D::identity());
+                for (other, transform) in &settled {
+                    if other != &item {
+                        assert_eq!(list.artboard_transforms[other], *transform);
+                    }
+                }
+                list.artboard_transforms = settled.clone();
+                list.draw(&mut renderer);
+                assert_eq!(list.artboard_transforms, settled);
+            })
+            .unwrap();
+        }
+    }
 
     #[test]
     fn state_machine_selection_matches_upstream_default_or_zero_rule() {
@@ -1233,7 +1288,9 @@ impl ArtboardComponentList {
                         (self.artboard_instance(index), self.list_item(index))
                     {
                         renderer.save();
-                        let transform = self.artboard_transforms[&item];
+                        // C++ map::operator[] inserts an identity Mat2D while
+                        // a newly realized row is waiting for layout.
+                        let transform = *self.artboard_transforms.entry(item).or_default();
                         renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
                         artboard.draw_internal(renderer);
                         renderer.restore();
@@ -1249,7 +1306,7 @@ impl ArtboardComponentList {
                     (self.artboard_instance(index), self.list_item(index))
                 {
                     renderer.save();
-                    let transform = self.artboard_transforms[&item];
+                    let transform = *self.artboard_transforms.entry(item).or_default();
                     renderer.transform(nuxie_render_api::Mat2D(*transform.values()));
                     artboard.draw_internal(renderer);
                     renderer.restore();

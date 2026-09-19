@@ -114,9 +114,9 @@ arithmetic_side_effects = "warn"
 [profile.release]
 lto = "fat"
 codegen-units = 1
-# luaur implements Luau's protected-error/longjmp boundary with
-# `panic_any`/`catch_unwind`. An aborting profile turns ordinary script errors
-# (including errors caught by authored `pcall`) into process termination.
+# Luau guest errors propagate as returned results, including authored pcall.
+# Keep host Rust panic containment at protected/FFI boundaries; qualifying
+# guest-error recovery under abort does not change the shipping host policy.
 panic = "unwind"
 
 # Dedicated size-optimized profile for the SDK cdylib. Does NOT affect the
@@ -132,7 +132,7 @@ strip = "symbols"
 
 # Customer Apple binaries must contain panics at the C boundary instead of
 # aborting the host process. Keep the release optimizer/LTO settings while
-# overriding the workspace release profile's panic strategy.
+# explicitly retaining the host-panic strategy.
 [profile.release-apple]
 inherits = "release"
 panic = "unwind"

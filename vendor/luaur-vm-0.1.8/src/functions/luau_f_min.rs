@@ -14,7 +14,7 @@ pub unsafe fn luau_f_min(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
         let a1 = nvalue!(arg0);
         let a2 = nvalue!(args);
@@ -24,7 +24,7 @@ pub unsafe fn luau_f_min(
         for i in 3..=nparams {
             let arg_ptr = args.add((i - 2) as usize);
             if !ttisnumber!(arg_ptr) {
-                return -1;
+                return Ok(-1);
             }
 
             let a = nvalue!(arg_ptr);
@@ -34,8 +34,8 @@ pub unsafe fn luau_f_min(
         }
 
         setnvalue!(res, r);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

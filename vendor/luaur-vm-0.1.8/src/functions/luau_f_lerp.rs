@@ -14,7 +14,7 @@ pub unsafe fn luau_f_lerp(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisnumber!(arg0)
@@ -28,8 +28,8 @@ pub unsafe fn luau_f_lerp(
         let r = if t == 1.0 { b } else { a + (b - a) * t };
 
         setnvalue!(res, r);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

@@ -154,7 +154,8 @@ fn userdata_metatable(lua: &Lua, userdata: AnyUserData) -> Result<Table> {
     // luaur's ordinary method table without replacing its typed userdata cell.
     unsafe {
         lua.exec_raw(userdata, |state| {
-            lua_getmetatable(state, 1);
+            lua_getmetatable(state, 1)?;
+            Ok(())
         })
     }
 }

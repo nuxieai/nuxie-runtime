@@ -157,6 +157,52 @@ impl serde::de::Error for Error {
 }
 
 impl Error {
+    /// Copy a returned VM failure into the embedding error type. This does
+    /// not pop: allocation failures need not have pushed an error object,
+    /// and the caller owns restoration of its stack boundary.
+    ///
+    /// # Safety
+    /// The failure must come from a call on a live VM, before its error
+    /// object has been removed or replaced.
+    pub(crate) unsafe fn from_vm(error: luaur_vm::records::lua_exception::lua_exception) -> Self {
+        use luaur_vm::enums::lua_status::lua_Status;
+        let status = error.getStatus();
+        if status == lua_Status::LUA_ERRMEM as i32 {
+            return Self::MemoryError("not enough memory".into());
+        }
+        if status != lua_Status::LUA_ERRRUN as i32 {
+            return Self::RuntimeError(if status == lua_Status::LUA_ERRERR as i32 {
+                "error in error handling".into()
+            } else {
+                format!("Lua VM failure (status {status})")
+            });
+        }
+        let state = error.getThread().cast_mut();
+        unsafe {
+            if let Some(cause) = crate::callback::recover_wrapped_error(state, -1) {
+                return Self::CallbackError {
+                    traceback: String::new(),
+                    cause: Arc::new(cause),
+                };
+            }
+            let mut len = 0;
+            match luaur_vm::functions::lua_tolstring::lua_tolstring(state, -1, &mut len) {
+                Ok(ptr) if !ptr.is_null() => Self::RuntimeError(
+                    String::from_utf8_lossy(std::slice::from_raw_parts(ptr.cast::<u8>(), len))
+                        .into_owned(),
+                ),
+                Ok(_) => Self::RuntimeError("<non-string error>".into()),
+                Err(format_error) if format_error.getStatus() == lua_Status::LUA_ERRMEM as i32 => {
+                    Self::MemoryError("not enough memory while reading Lua error".into())
+                }
+                Err(format_error) => Self::RuntimeError(format!(
+                    "could not read Lua error (status {})",
+                    format_error.getStatus()
+                )),
+            }
+        }
+    }
+
     /// Create a [`Error::RuntimeError`] from any displayable message.
     ///
     /// Mirrors `mlua::Error::runtime`.

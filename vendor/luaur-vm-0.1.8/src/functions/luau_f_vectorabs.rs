@@ -15,12 +15,13 @@ pub unsafe fn luau_f_vectorabs(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
 
         if LUA_VECTOR_SIZE == 4 {
-            setvvalue!(L,
+            setvvalue!(
+                L,
                 res,
                 (*v.offset(0)).abs(),
                 (*v.offset(1)).abs(),
@@ -28,7 +29,8 @@ pub unsafe fn luau_f_vectorabs(
                 (*v.offset(3)).abs()
             );
         } else {
-            setvvalue!(L,
+            setvvalue!(
+                L,
                 res,
                 (*v.offset(0)).abs(),
                 (*v.offset(1)).abs(),
@@ -37,8 +39,8 @@ pub unsafe fn luau_f_vectorabs(
             );
         }
 
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

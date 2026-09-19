@@ -11,7 +11,7 @@ pub unsafe fn lua_equal(
     L: *mut lua_State,
     index1: core::ffi::c_int,
     index2: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let o1: StkId = index2addr(L, index1);
     let o2: StkId = index2addr(L, index2);
 
@@ -27,5 +27,5 @@ pub unsafe fn lua_equal(
         }
     };
 
-    i as core::ffi::c_int
+    Ok(i as core::ffi::c_int)
 }

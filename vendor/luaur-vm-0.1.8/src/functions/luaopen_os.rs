@@ -7,7 +7,9 @@ use crate::functions::os_date::os_date;
 use crate::functions::os_difftime::os_difftime;
 use crate::functions::os_time::os_time;
 
-pub unsafe fn luaopen_os(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_os(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // Faithful port of syslib[] in loslib.cpp.
     let syslib: [LuaLReg; 5] = [
         LuaLReg {
@@ -32,6 +34,6 @@ pub unsafe fn luaopen_os(L: *mut lua_State) -> core::ffi::c_int {
         },
     ];
 
-    lua_l_register(L, c"os".as_ptr(), syslib.as_ptr());
-    1
+    lua_l_register(L, c"os".as_ptr(), syslib.as_ptr())?;
+    Ok(1)
 }

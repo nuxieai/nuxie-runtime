@@ -18,7 +18,12 @@ use crate::records::lua_table::LuaTable;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
-pub fn addfield(L: *mut lua_State, b: *mut LuaLStrbuf, i: i32, t: *mut LuaTable) {
+pub fn addfield(
+    L: *mut lua_State,
+    b: *mut LuaLStrbuf,
+    i: i32,
+    t: *mut LuaTable,
+) -> crate::records::lua_exception::LuaResult<()> {
     unsafe {
         // C++ does `cast_to(unsigned, i - 1)` here; for i = INT_MIN the `i - 1`
         // is signed-overflow UB upstream (ltablib.cpp:232). wrapping_sub matches
@@ -29,9 +34,9 @@ pub fn addfield(L: *mut lua_State, b: *mut LuaLStrbuf, i: i32, t: *mut LuaTable)
             && ttisstring!((*t).array.add(i.wrapping_sub(1) as usize))
         {
             let ts = tsvalue!((*t).array.add((i - 1) as usize));
-            lua_l_addlstring(b, getstr(ts), (*ts).len as usize);
+            lua_l_addlstring(b, getstr(ts), (*ts).len as usize)?;
         } else {
-            let tt = lua_rawgeti(L, 1, i);
+            let tt = lua_rawgeti(L, 1, i)?;
             if tt != lua_Type::LUA_TSTRING as c_int && tt != lua_Type::LUA_TNUMBER as c_int {
                 let tn = core::ffi::CStr::from_ptr(lua_l_typename(L, -1)).to_string_lossy();
                 luaL_error!(
@@ -41,7 +46,8 @@ pub fn addfield(L: *mut lua_State, b: *mut LuaLStrbuf, i: i32, t: *mut LuaTable)
                     i
                 );
             }
-            lua_l_addvalue(b);
+            lua_l_addvalue(b)?;
         }
     }
+    Ok(())
 }

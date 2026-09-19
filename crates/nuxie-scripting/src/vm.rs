@@ -195,7 +195,7 @@ const MODULE_CACHE_KEY: &str = "_MODULES";
 /// prefix.
 unsafe fn lua_require_registered_module(
     state: *mut luaur_vm::records::lua_state::lua_State,
-) -> core::ffi::c_int {
+) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut debug = std::mem::MaybeUninit::<luaur_vm::records::lua_debug::LuaDebug>::zeroed();
     let mut level = 1;
     let requiring = loop {
@@ -206,16 +206,16 @@ unsafe fn lua_require_registered_module(
                 c"s".as_ptr(),
                 debug.as_mut_ptr(),
             )
-        } == 0
+        }? == 0
         {
             unsafe {
-                lua_l_error_l(
+                lua_l_error_l::<()>(
                     state,
                     c"require is not supported in this context".as_ptr(),
                     format_args!("require is not supported in this context"),
                 )
-            };
-            return 0;
+            }?;
+            return Ok(0);
         }
         level += 1;
         let debug = unsafe { debug.assume_init_ref() };
@@ -223,10 +223,10 @@ unsafe fn lua_require_registered_module(
             break debug.source;
         }
     };
-    unsafe { lua_settop(state, 1) };
-    let path = luaL_checkstring!(state, 1);
-    unsafe { lua_getfield(state, LUA_REGISTRYINDEX, c"_MODULES".as_ptr()) };
-    unsafe { lua_getfield(state, -1, path) };
+    unsafe { lua_settop(state, 1) }?;
+    let path = luaL_checkstring!(state, 1)?;
+    unsafe { lua_getfield(state, LUA_REGISTRYINDEX, c"_MODULES".as_ptr()) }?;
+    unsafe { lua_getfield(state, -1, path) }?;
     if unsafe { lua_type(state, -1) }
         == luaur_vm::enums::lua_type::lua_Type::LUA_TNIL as core::ffi::c_int
     {
@@ -238,32 +238,32 @@ unsafe fn lua_require_registered_module(
                 LUA_REGISTRYINDEX,
                 c"_RIVE_REGISTRATION_DEPENDENCIES".as_ptr(),
             )
-        };
+        }?;
         if unsafe { lua_type(state, -1) }
             == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
         {
-            unsafe { lua_getfield(state, -1, requiring) };
+            unsafe { lua_getfield(state, -1, requiring) }?;
             if unsafe { lua_type(state, -1) }
                 == luaur_vm::enums::lua_type::lua_Type::LUA_TTABLE as core::ffi::c_int
             {
-                unsafe { luaur_vm::functions::lua_pushboolean::lua_pushboolean(state, 1) };
-                unsafe { luaur_vm::functions::lua_setfield::lua_setfield(state, -2, path) };
+                unsafe { luaur_vm::functions::lua_pushboolean::lua_pushboolean(state, 1) }?;
+                unsafe { luaur_vm::functions::lua_setfield::lua_setfield(state, -2, path) }?;
             }
         }
-        unsafe { lua_settop(state, 1) };
+        unsafe { lua_settop(state, 1) }?;
         let path = unsafe { std::ffi::CStr::from_ptr(path) }.to_string_lossy();
         unsafe {
-            lua_l_error_l(
+            lua_l_error_l::<()>(
                 state,
                 c"require could not find a script named %s".as_ptr(),
                 format_args!("require could not find a script named {path}"),
             )
-        };
-        return 0;
+        }?;
+        return Ok(0);
     }
 
     unsafe { lua_remove(state, -2) };
-    1
+    Ok(1)
 }
 const SCRIPT_VM_MEMORY_LIMIT_BYTES: usize = 16 * 1024 * 1024;
 const SCRIPT_SAFEPOINTS_PER_CYCLE: usize = 100_000;
@@ -2181,14 +2181,15 @@ impl ScriptVm {
                     bytecode.as_ptr() as *const core::ffi::c_char,
                     bytecode.len(),
                     0,
-                );
+                )?;
                 if rc != 0 {
                     // luau_load left its error message on the stack; raise it
                     // so exec_raw's protected call surfaces it as Error.
-                    lua_error(state);
+                    return lua_error(state);
                 }
                 // Success: the loaded closure is on the stack and becomes
                 // exec_raw's result.
+                Ok(())
             })
         };
         self.track_resource_result(result)
@@ -2302,7 +2303,7 @@ impl ScriptVm {
         // protected call and give subsequent raw table conversion enough room
         // for table, key, result, and the reference-value duplicate.
         let padding = MultiValue::from_vec(vec![Value::Nil; 8]);
-        let result = unsafe { self.lua.exec_raw::<(), _>(padding, |_| {}) };
+        let result = unsafe { self.lua.exec_raw::<(), _>(padding, |_| Ok(())) };
         self.track_resource_result(result)
     }
 

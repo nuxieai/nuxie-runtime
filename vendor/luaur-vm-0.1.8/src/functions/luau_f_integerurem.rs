@@ -14,19 +14,19 @@ pub unsafe fn luau_f_integerurem(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
         let a: u64 = lvalue!(arg0) as u64;
         let b: u64 = lvalue!(args) as u64;
 
         if b == 0 {
-            return -1;
+            return Ok(-1);
         }
 
         setlvalue!(res, (a % b) as i64);
         let _ = lua_Type::LUA_TINTEGER;
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

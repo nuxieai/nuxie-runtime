@@ -23,7 +23,7 @@ pub unsafe fn lua_r_addclassmember(
     classobject: *mut LuauClass,
     name: *mut TString,
     value: *mut TValue,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     LUAU_ASSERT!(!(*classobject).staticmembers.is_null());
 
     let offset = lua_h_getstr((*classobject).memberstooffset, name);
@@ -45,7 +45,7 @@ pub unsafe fn lua_r_addclassmember(
     luaC_barrier!(L, classobject, value);
 
     // Only metamethods in the parser's allowlist are supported (see ALLOWED_METAMETHODS in Parser.cpp)
-    let isMetamethod = (name == lua_s_newlstr(L, b"__tostring\0" as *const _ as *const _, 10));
+    let isMetamethod = (name == lua_s_newlstr(L, b"__tostring\0" as *const _ as *const _, 10)?);
     let mut isMetamethod = isMetamethod;
     let g: *mut global_State = (*L).global;
     for i in 0..TMS::TM_N as usize {
@@ -57,11 +57,12 @@ pub unsafe fn lua_r_addclassmember(
 
     if isMetamethod {
         if (*classobject).instancemetatable.is_null() {
-            (*classobject).instancemetatable = lua_h_new(L, 0, 1);
+            (*classobject).instancemetatable = lua_h_new(L, 0, 1)?;
             luaC_objbarrier!(L, classobject, (*classobject).instancemetatable);
         }
-        let dest = lua_h_setstr(L, (*classobject).instancemetatable, name);
+        let dest = lua_h_setstr(L, (*classobject).instancemetatable, name)?;
         setobj2t!(L, dest, value);
         luaC_barrier!(L, (*classobject).instancemetatable, value);
     }
+    Ok(())
 }

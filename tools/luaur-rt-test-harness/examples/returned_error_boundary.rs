@@ -36,8 +36,10 @@ fn main() {
             assert_eq!((*state).ci, original_ci);
             assert_eq!((*state).nCcalls, original_calls);
             assert_eq!(
-                std::ffi::CStr::from_ptr(lua_tolstring(state, -1, core::ptr::null_mut()).expect("error text"))
-                    .to_bytes(),
+                std::ffi::CStr::from_ptr(
+                    lua_tolstring(state, -1, core::ptr::null_mut()).expect("error text")
+                )
+                .to_bytes(),
                 b"returned failure",
             );
             lua_settop(state, 0).expect("clear error value");
@@ -48,8 +50,10 @@ fn main() {
                 0
             );
             assert_eq!(
-                std::ffi::CStr::from_ptr(lua_tolstring(state, -1, core::ptr::null_mut()).expect("recovered text"))
-                    .to_bytes(),
+                std::ffi::CStr::from_ptr(
+                    lua_tolstring(state, -1, core::ptr::null_mut()).expect("recovered text")
+                )
+                .to_bytes(),
                 b"recovered",
             );
             lua_settop(state, 0).expect("clear success value");

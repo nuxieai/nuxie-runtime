@@ -4,8 +4,12 @@ use crate::macros::setnvalue::setnvalue;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_pushnumber"]
-pub unsafe fn lua_pushnumber(L: *mut lua_State, n: f64) {
+pub unsafe fn lua_pushnumber(
+    L: *mut lua_State,
+    n: f64,
+) -> crate::records::lua_exception::LuaResult<()> {
     crate::ensure_stack!(L, 1);
     setnvalue!((*L).top, n);
     api_incr_top!(L);
+    Ok(())
 }

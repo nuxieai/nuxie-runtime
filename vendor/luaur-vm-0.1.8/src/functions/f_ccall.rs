@@ -15,11 +15,10 @@ pub unsafe fn f_ccall(
     let c = cast_to!(*mut CCallS, ud);
 
     if lua_checkstack(L, 2) == 0 {
-        lua_g_runerror!(L, "stack limit");
+        return lua_g_runerror!(L, "stack limit");
     }
 
-    lua_pushcclosurek(L, (*c).func, core::ptr::null(), 0, None);
-    lua_pushlightuserdata(L as *mut core::ffi::c_void, (*c).ud);
-    lua_d_call(L, (*L).top.sub(2), 0);
-    Ok(())
+    lua_pushcclosurek(L, (*c).func, core::ptr::null(), 0, None)?;
+    lua_pushlightuserdata(L, (*c).ud)?;
+    lua_d_call(L, (*L).top.sub(2), 0)
 }

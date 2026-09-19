@@ -1,7 +1,11 @@
 use crate::macros::lua_l_error::luaL_error;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn getnextbuffersize(L: *mut lua_State, currentsize: usize, desiredsize: usize) -> usize {
+pub fn getnextbuffersize(
+    L: *mut lua_State,
+    currentsize: usize,
+    desiredsize: usize,
+) -> crate::records::lua_exception::LuaResult<usize> {
     let mut newsize = currentsize + currentsize / 2;
 
     // check for size overflow
@@ -19,7 +23,7 @@ pub fn getnextbuffersize(L: *mut lua_State, currentsize: usize, desiredsize: usi
         // Given the conflict, I will use the idiomatic way to satisfy the specific
         // lua_l_error_l signature shown in the error:
         unsafe {
-            crate::functions::lua_l_error_l::lua_l_error_l(
+            return crate::functions::lua_l_error_l::lua_l_error_l(
                 L,
                 c"buffer too large".as_ptr(),
                 core::format_args!("buffer too large"),
@@ -32,5 +36,5 @@ pub fn getnextbuffersize(L: *mut lua_State, currentsize: usize, desiredsize: usi
         newsize = desiredsize;
     }
 
-    newsize
+    Ok(newsize)
 }

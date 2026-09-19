@@ -16,7 +16,7 @@ pub unsafe fn luau_f_round_sse_41(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if LUAU_TARGET_SSE41 {
         if luaur_common::FFlag::LuauMathRoundNegZero.get() {
             if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
@@ -35,7 +35,7 @@ pub unsafe fn luau_f_round_sse_41(
                     let sum = _mm_add_sd(va1, off);
                     let result = _mm_round_sd(sum, sum, 3 | 8);
                     setnvalue!(res, _mm_cvtsd_f64(result));
-                    return 1;
+                    return Ok(1);
                 }
             }
         } else if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
@@ -47,9 +47,9 @@ pub unsafe fn luau_f_round_sse_41(
                 res,
                 roundsd_sse41::<3>(a1 + if a1 < 0.0 { -OFFSET } else { OFFSET })
             );
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

@@ -9,12 +9,16 @@ use core::ffi::c_int;
 
 #[allow(non_snake_case)]
 #[inline]
-pub fn luaD_checkstackfornewci(L: *mut LuaState, n: c_int) {
+pub fn luaD_checkstackfornewci(
+    L: *mut LuaState,
+    n: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     unsafe {
         if stacklimitreached(L, n) {
-            lua_d_reallocstack(L, getgrownstacksize(L, n), 1);
+            lua_d_reallocstack(L, getgrownstacksize(L, n), 1)?;
         } else {
             condhardstacktests!(lua_d_reallocstack(L, (*L).stacksize - EXTRA_STACK, 1));
         }
     }
+    Ok(())
 }

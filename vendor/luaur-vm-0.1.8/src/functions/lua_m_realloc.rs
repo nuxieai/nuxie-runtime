@@ -21,7 +21,7 @@ pub unsafe fn lua_m_realloc_(
     osize: usize,
     nsize: usize,
     memcat: u8,
-) -> *mut c_void {
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     let g = (*l).global;
     LUAU_ASSERT!((osize == 0) == (block.is_null()));
 
@@ -32,13 +32,13 @@ pub unsafe fn lua_m_realloc_(
     // if either block needs to be allocated using a block allocator, we can't use realloc directly
     if nclass >= 0 || oclass >= 0 {
         result = if nclass >= 0 {
-            newblock(l, nclass)
+            newblock(l, nclass)?
         } else {
             ((*g).frealloc.expect("frealloc is null"))((*g).ud, core::ptr::null_mut(), 0, nsize)
         };
 
         if result.is_null() && nsize > 0 {
-            lua_d_throw(l, lua_Status::LUA_ERRMEM as i32);
+            return lua_d_throw(l, lua_Status::LUA_ERRMEM as i32);
         }
 
         if osize > 0 && nsize > 0 {
@@ -54,7 +54,7 @@ pub unsafe fn lua_m_realloc_(
     } else {
         result = ((*g).frealloc.expect("frealloc is null"))((*g).ud, block, osize, nsize);
         if result.is_null() && nsize > 0 {
-            lua_d_throw(l, lua_Status::LUA_ERRMEM as i32);
+            return lua_d_throw(l, lua_Status::LUA_ERRMEM as i32);
         }
     }
 
@@ -68,5 +68,5 @@ pub unsafe fn lua_m_realloc_(
         ((*g).cb.onallocate.unwrap_unchecked())(l, osize, nsize);
     }
 
-    result
+    Ok(result)
 }

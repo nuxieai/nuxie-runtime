@@ -11,7 +11,11 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_call(L: *mut lua_State, nargs: c_int, nresults: c_int) {
+pub unsafe fn lua_call(
+    L: *mut lua_State,
+    nargs: c_int,
+    nresults: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(L, nargs >= 0);
     api_check!(L, nresults >= LUA_MULTRET);
     api_checknelems!(L, nargs + 1);
@@ -22,9 +26,10 @@ pub unsafe fn lua_call(L: *mut lua_State, nargs: c_int, nresults: c_int) {
     }
 
     let func: StkId = (*L).top.sub((nargs + 1) as usize);
-    lua_d_call(L, func, nresults);
+    lua_d_call(L, func, nresults)?;
 
     if nresults == LUA_MULTRET && (*L).top >= (*(*L).ci).top {
         (*(*L).ci).top = (*L).top;
     }
+    Ok(())
 }

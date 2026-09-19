@@ -10,7 +10,7 @@ pub unsafe fn lua_pushvector_lua_state_f32_f32_f32_f32(
     y: crate::type_aliases::lua_vector_type::LuaVectorType,
     z: crate::type_aliases::lua_vector_type::LuaVectorType,
     w: crate::type_aliases::lua_vector_type::LuaVectorType,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     #[cfg(feature = "lua_vector_double")]
     {
         crate::macros::lua_c_check_gc::luaC_checkGC!(l);
@@ -19,4 +19,5 @@ pub unsafe fn lua_pushvector_lua_state_f32_f32_f32_f32(
     crate::ensure_stack!(l, 1);
     setvvalue!(l, (*l).top, x, y, z, w);
     api_incr_top!(l);
+    Ok(())
 }

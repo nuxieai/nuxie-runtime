@@ -57,12 +57,12 @@ unsafe fn os_gmtime_r(timep: *const time_t, result: *mut tm) -> *mut tm {
     }
 }
 
-pub unsafe fn os_date(L: *mut lua_State) -> c_int {
-    let mut s: *const c_char = luaL_optstring!(L, 1, b"%c\0".as_ptr() as *const c_char);
+pub unsafe fn os_date(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
+    let mut s: *const c_char = luaL_optstring!(L, 1, b"%c\0".as_ptr() as *const c_char)?;
     let t: time_t = if lua_isnoneornil!(L, 2) {
         time(core::ptr::null_mut())
     } else {
-        lua_l_checknumber(L, 2) as time_t
+        lua_l_checknumber(L, 2)? as time_t
     };
 
     let mut tmv: tm = core::mem::zeroed();
@@ -82,18 +82,18 @@ pub unsafe fn os_date(L: *mut lua_State) -> c_int {
 
     if stm.is_null() {
         // invalid date?
-        lua_pushnil(L);
+        lua_pushnil(L)?;
     } else if c_str_eq(s, b"*t\0") {
-        lua_createtable(L, 0, 9); // 9 = number of fields
-        setfield(L, "sec", (*stm).tm_sec);
-        setfield(L, "min", (*stm).tm_min);
-        setfield(L, "hour", (*stm).tm_hour);
-        setfield(L, "day", (*stm).tm_mday);
-        setfield(L, "month", (*stm).tm_mon + 1);
-        setfield(L, "year", (*stm).tm_year + 1900);
-        setfield(L, "wday", (*stm).tm_wday + 1);
-        setfield(L, "yday", (*stm).tm_yday + 1);
-        setboolfield(L, "isdst", (*stm).tm_isdst);
+        lua_createtable(L, 0, 9)?; // 9 = number of fields
+        setfield(L, "sec", (*stm).tm_sec)?;
+        setfield(L, "min", (*stm).tm_min)?;
+        setfield(L, "hour", (*stm).tm_hour)?;
+        setfield(L, "day", (*stm).tm_mday)?;
+        setfield(L, "month", (*stm).tm_mon + 1)?;
+        setfield(L, "year", (*stm).tm_year + 1900)?;
+        setfield(L, "wday", (*stm).tm_wday + 1)?;
+        setfield(L, "yday", (*stm).tm_yday + 1)?;
+        setboolfield(L, "isdst", (*stm).tm_isdst)?;
     } else {
         let mut b: LuaLStrbuf = LuaLStrbuf {
             p: core::ptr::null_mut(),
@@ -115,13 +115,13 @@ pub unsafe fn os_date(L: *mut lua_State) -> c_int {
             } else {
                 s = s.add(1);
                 let rendered = strftime_directive(&*stm, *s as u8);
-                lua_l_addlstring(&mut b, rendered.as_ptr() as *const c_char, rendered.len());
+                lua_l_addlstring(&mut b, rendered.as_ptr() as *const c_char, rendered.len())?;
             }
             s = s.add(1);
         }
-        lua_l_pushresult(&mut b);
+        lua_l_pushresult(&mut b)?;
     }
-    1
+    Ok(1)
 }
 
 /// `strcmp(s, lit) == 0` where `lit` is a NUL-terminated byte literal.

@@ -12,7 +12,7 @@
 
 use std::io;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::state::{Lua, LuaRef};
 use crate::sync::{NotSync, XRc, NOT_SYNC};
 use crate::sys::*;
@@ -114,7 +114,7 @@ impl Buffer {
         unsafe {
             self.reference.push();
             let p = lua_topointer(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             p
         }
     }
@@ -145,7 +145,7 @@ impl Buffer {
             self.reference.push();
             let mut size = 0usize;
             let buf = lua_tobuffer(state, -1, &mut size);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             assert!(!buf.is_null(), "invalid Luau buffer");
             (buf as *mut u8, size)
         }
@@ -239,12 +239,12 @@ impl io::Seek for BufferCursor {
 
 /// C trampoline: stack is `[size]` (a number). Allocates a buffer of that many
 /// bytes via `lua_newbuffer`, leaving the buffer object on top.
-unsafe fn c_newbuffer(state: *mut lua_State) -> c_int {
+unsafe fn c_newbuffer(state: *mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let size = lua_tonumberx(state, 1, core::ptr::null_mut()) as usize;
-        lua_settop(state, 0);
-        lua_newbuffer(state, size);
-        1
+        lua_settop(state, 0)?;
+        lua_newbuffer(state, size)?;
+        Ok(1)
     }
 }
 
@@ -253,18 +253,20 @@ unsafe fn c_newbuffer(state: *mut lua_State) -> c_int {
 pub(crate) fn create_buffer_with_capacity(lua: &Lua, size: usize) -> Result<Buffer> {
     let state = lua.state();
     unsafe {
+        let _stack = crate::stack_guard::StackGuard::new(state);
         lua_pushcclosurek(
             state,
             Some(c_newbuffer),
             c"luaur-rt-newbuffer".as_ptr(),
             0,
             None,
-        );
-        lua_pushnumber(state, size as f64);
-        let status = lua_pcall(state, 1, 1, 0);
+        )
+        .map_err(|error| Error::from_vm(error))?;
+        lua_pushnumber(state, size as f64).map_err(|error| Error::from_vm(error))?;
+        let status = lua_pcall(state, 1, 1, 0).map_err(|error| Error::from_vm(error))?;
         if status != 0 {
             return Err(lua.pop_error(status));
         }
-        Ok(Buffer::from_ref(lua.pop_ref()))
+        Ok(Buffer::from_ref(lua.try_pop_ref()?))
     }
 }

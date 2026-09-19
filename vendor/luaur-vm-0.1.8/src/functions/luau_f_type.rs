@@ -35,13 +35,13 @@ pub unsafe fn luau_f_type(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 {
         let tt = ttype!(arg0);
         let ttname = (*(*l).global).ttname[tt as usize];
         setsvalue!(l, res, ttname);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

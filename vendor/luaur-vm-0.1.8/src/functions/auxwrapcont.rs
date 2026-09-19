@@ -6,13 +6,16 @@ use crate::functions::lua_tothread::lua_tothread;
 use crate::macros::lua_upvalueindex::lua_upvalueindex;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn auxwrapcont(l: *mut lua_State, status: core::ffi::c_int) -> core::ffi::c_int {
+pub unsafe fn auxwrapcont(
+    l: *mut lua_State,
+    status: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let co = lua_tothread(l, lua_upvalueindex(1));
 
     if (*co).status == lua_Status::LUA_BREAK as u8 {
         return interrupt_thread(l, co);
     }
 
-    let r = auxresumecont(l, co);
+    let r = auxresumecont(l, co)?;
     auxwrapfinish(l, r)
 }

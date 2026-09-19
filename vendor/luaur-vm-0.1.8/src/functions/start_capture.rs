@@ -9,7 +9,7 @@ pub(crate) unsafe fn start_capture(
     s: *const c_char,
     p: *const c_char,
     what: core::ffi::c_int,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     let level = (*ms).level;
     if level >= LUA_MAXCAPTURES {
         luaL_error!((*ms).L, "too many captures");
@@ -17,9 +17,9 @@ pub(crate) unsafe fn start_capture(
     (*ms).capture[level as usize].init = s;
     (*ms).capture[level as usize].len = what as isize;
     (*ms).level = level + 1;
-    let res = match_item(ms, s, p);
+    let res = match_item(ms, s, p)?;
     if res.is_null() {
         (*ms).level -= 1;
     }
-    res
+    Ok(res)
 }

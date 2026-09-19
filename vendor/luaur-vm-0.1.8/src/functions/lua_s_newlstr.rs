@@ -15,7 +15,11 @@ unsafe fn same_bytes(a: *const c_char, b: *const c_char, len: usize) -> bool {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaS_newlstr(l: *mut lua_State, str_: *const c_char, len: usize) -> *mut TString {
+pub unsafe fn luaS_newlstr(
+    l: *mut lua_State,
+    str_: *const c_char,
+    len: usize,
+) -> crate::records::lua_exception::LuaResult<*mut TString> {
     let h = luaS_hash(str_, len);
     let bucket = lmod!(h, (*(*l).global).strt.size);
     let mut el = *(*(*l).global).strt.hash.add(bucket as usize);
@@ -25,7 +29,7 @@ pub unsafe fn luaS_newlstr(l: *mut lua_State, str_: *const c_char, len: usize) -
             if crate::isdead!((*l).global, el as *mut GCObject) {
                 (*el).hdr.marked ^= WHITEBITS as u8;
             }
-            return el;
+            return Ok(el);
         }
         el = (*el).next;
     }

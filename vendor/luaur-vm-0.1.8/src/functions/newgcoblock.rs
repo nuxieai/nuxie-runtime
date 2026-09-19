@@ -12,7 +12,10 @@ const K_GCO_LINK_OFFSET: usize =
         & !(core::mem::size_of::<*mut c_void>() - 1);
 
 #[allow(non_snake_case)]
-pub(crate) unsafe fn newgcoblock(l: *mut lua_State, size_class: c_int) -> *mut c_void {
+pub(crate) unsafe fn newgcoblock(
+    l: *mut lua_State,
+    size_class: c_int,
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     let g: *mut global_State = (*l).global;
     let freegcopages = core::ptr::addr_of_mut!((*g).freegcopages) as *mut *mut lua_Page;
     let mut page: *mut lua_Page = *freegcopages.add(size_class as usize);
@@ -25,7 +28,7 @@ pub(crate) unsafe fn newgcoblock(l: *mut lua_State, size_class: c_int) -> *mut c
             core::ptr::addr_of_mut!((*g).allgcopages),
             size_class as u8,
             false,
-        );
+        )?;
     }
 
     LUAU_ASSERT!((*page).prev.is_null());
@@ -65,5 +68,5 @@ pub(crate) unsafe fn newgcoblock(l: *mut lua_State, size_class: c_int) -> *mut c
         (*page).next = core::ptr::null_mut();
     }
 
-    block
+    Ok(block)
 }

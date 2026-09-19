@@ -5,7 +5,7 @@ use crate::macros::setthvalue::setthvalue;
 use crate::records::gc_object::GCObject;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn lua_pushthread(l: *mut lua_State) -> i32 {
+pub unsafe fn lua_pushthread(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
     // Inline luaC_threadbarrier(l) to avoid buggy macros in the crate
     let marked = (*l).hdr.marked as i32;
     if (marked & (1 << BLACKBIT)) != 0 {
@@ -19,5 +19,5 @@ pub unsafe fn lua_pushthread(l: *mut lua_State) -> i32 {
     crate::ensure_stack!(l, 1);
     setthvalue!(l, (*l).top, l);
     api_incr_top!(l);
-    ((*(*l).global).mainthread == l) as i32
+    Ok(((*(*l).global).mainthread == l) as i32)
 }

@@ -17,25 +17,27 @@ const PROMISE_ENGINE_REGISTRY_KEY: &str = "rive_scripting_promise_engine";
 #[derive(Debug, Clone, Copy)]
 struct ScriptedPromise;
 
-unsafe fn create_async_thread(state: *mut luaur_rt::lua_State) -> core::ffi::c_int {
+unsafe fn create_async_thread(
+    state: *mut luaur_rt::lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<core::ffi::c_int> {
     luaur_vm::functions::lua_l_checktype::lua_l_checktype(
         state,
         1,
         luaur_vm::enums::lua_type::lua_Type::LUA_TFUNCTION as core::ffi::c_int,
-    );
+    )?;
 
     // SAFETY: `state` is the live Luau state supplied to this C-function. The
     // new thread belongs to the same VM and is still suspended while its host
     // pointer and initial function are installed.
     unsafe {
-        let thread = luaur_vm::functions::lua_newthread::lua_newthread(state);
+        let thread = luaur_vm::functions::lua_newthread::lua_newthread(state)?;
         luaur_vm::functions::lua_setthreaddata::lua_setthreaddata(
             thread,
             luaur_vm::functions::lua_getthreaddata::lua_getthreaddata(state),
         );
-        luaur_vm::functions::lua_xpush::lua_xpush(state, thread, 1);
+        luaur_vm::functions::lua_xpush::lua_xpush(state, thread, 1)?;
     }
-    1
+    Ok(1)
 }
 
 fn dispatch(lua: &Lua, method: &str, args: MultiValue) -> Result<MultiValue> {

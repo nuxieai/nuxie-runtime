@@ -13,28 +13,28 @@ pub unsafe fn lua_d_performcally(
     L: *mut lua_State,
     func: StkId,
     nresults: core::ffi::c_int,
-) -> bool {
+) -> crate::records::lua_exception::LuaResult<bool> {
     use crate::macros::check_exp::check_exp;
 
     (*L).nCcalls = (*L).nCcalls.wrapping_add(1);
     if (*L).nCcalls >= LUAI_MAXCCALLS as u16 {
-        crate::functions::lua_d_check_cstack::luaD_checkCstack(L);
+        crate::functions::lua_d_check_cstack::luaD_checkCstack(L)?;
     }
 
     (*L).baseCcalls = (*L).baseCcalls.wrapping_add(1);
 
     let cioffset = saveci!(L, (*L).ci);
 
-    crate::functions::performcall::performcall(L, func, nresults, false);
+    crate::functions::performcall::performcall(L, func, nresults, false)?;
 
     if (*L).status != lua_Status::LUA_OK as u8 {
         let caller = restoreci!(L, cioffset);
         (*caller).flags |= LUA_CALLINFO_OPYIELD as u32;
-        return true;
+        return Ok(true);
     }
 
     (*L).baseCcalls = (*L).baseCcalls.wrapping_sub(1);
     (*L).nCcalls = (*L).nCcalls.wrapping_sub(1);
     luaC_checkGC!(L);
-    false
+    Ok(false)
 }

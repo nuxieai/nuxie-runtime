@@ -17,12 +17,15 @@ unsafe fn maybesetaboundary(t: *mut LuaTable, boundary: c_int) {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_h_clone(l: *mut lua_State, tt: *mut LuaTable) -> *mut LuaTable {
+pub unsafe fn lua_h_clone(
+    l: *mut lua_State,
+    tt: *mut LuaTable,
+) -> crate::records::lua_exception::LuaResult<*mut LuaTable> {
     let t = crate::functions::lua_m_newgco::luaM_newgco_(
         l,
         core::mem::size_of::<LuaTable>(),
         (*l).activememcat,
-    ) as *mut LuaTable;
+    )? as *mut LuaTable;
 
     luaC_init!(l, t, lua_Type::LUA_TTABLE as c_int);
     (*t).metatable = (*tt).metatable;
@@ -53,16 +56,16 @@ pub unsafe fn lua_h_clone(l: *mut lua_State, tt: *mut LuaTable) -> *mut LuaTable
         (*t).union.lastfree = (*tt).union.lastfree;
     }
 
-    t
+    Ok(t)
 }
 
 #[allow(unused_imports)]
 pub use lua_h_clone as luaH_clone;
 
 #[export_name = "luaur_luaH_clone"]
-pub unsafe extern "C" fn lua_h_clone_export(
+pub unsafe fn lua_h_clone_export(
     l: *mut lua_State,
     tt: *mut core::ffi::c_void,
-) -> *mut core::ffi::c_void {
-    lua_h_clone(l, tt as *mut LuaTable).cast()
+) -> crate::records::lua_exception::LuaResult<*mut core::ffi::c_void> {
+    Ok(lua_h_clone(l, tt as *mut LuaTable)?.cast())
 }

@@ -91,22 +91,24 @@ static VECTOR_FUNCS: VectorFuncs = VectorFuncs([
 ]);
 
 #[allow(non_snake_case)]
-pub unsafe fn luaopen_vector(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_register(L, c"vector".as_ptr(), VECTOR_FUNCS.0.as_ptr());
+pub unsafe fn luaopen_vector(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_register(L, c"vector".as_ptr(), VECTOR_FUNCS.0.as_ptr())?;
 
     if LUA_VECTOR_SIZE == 4 {
-        lua_pushvector_lua_state_f32_f32_f32_f32(L, 0.0, 0.0, 0.0, 0.0);
-        lua_setfield(L, -2, c"zero".as_ptr());
-        lua_pushvector_lua_state_f32_f32_f32_f32(L, 1.0, 1.0, 1.0, 1.0);
-        lua_setfield(L, -2, c"one".as_ptr());
+        lua_pushvector_lua_state_f32_f32_f32_f32(L, 0.0, 0.0, 0.0, 0.0)?;
+        lua_setfield(L, -2, c"zero".as_ptr())?;
+        lua_pushvector_lua_state_f32_f32_f32_f32(L, 1.0, 1.0, 1.0, 1.0)?;
+        lua_setfield(L, -2, c"one".as_ptr())?;
     } else {
-        lua_pushvector_lua_state_f32_f32_f32(L, 0.0, 0.0, 0.0);
-        lua_setfield(L, -2, c"zero".as_ptr());
-        lua_pushvector_lua_state_f32_f32_f32(L, 1.0, 1.0, 1.0);
-        lua_setfield(L, -2, c"one".as_ptr());
+        lua_pushvector_lua_state_f32_f32_f32(L, 0.0, 0.0, 0.0)?;
+        lua_setfield(L, -2, c"zero".as_ptr())?;
+        lua_pushvector_lua_state_f32_f32_f32(L, 1.0, 1.0, 1.0)?;
+        lua_setfield(L, -2, c"one".as_ptr())?;
     }
 
-    createmetatable(L);
+    createmetatable(L)?;
 
-    1
+    Ok(1)
 }

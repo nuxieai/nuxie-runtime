@@ -12,20 +12,20 @@ pub fn sort_rec(
     mut u: i32,
     mut limit: i32,
     pred: SortPredicate,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     // sort range [l..u] (inclusive, 0-based)
     while l < u {
         // if the limit has been reached, quick sort is going over the permitted nlogn complexity,
         // so we fall back to heap sort
         if limit == 0 {
-            sort_heap(L, t, l, u, pred);
-            return;
+            sort_heap(L, t, l, u, pred)?;
+            return Ok(());
         }
 
         // sort elements a[l], a[(l+u)/2] and a[u]
         // note: this simultaneously acts as a small sort and a median selector
         unsafe {
-            if sort_less(L, t, u, l, pred) != 0 {
+            if sort_less(L, t, u, l, pred)? != 0 {
                 sort_swap(L, t, u, l);
             }
         }
@@ -37,9 +37,9 @@ pub fn sort_rec(
         let m = l + ((u - l) >> 1); // midpoint
 
         unsafe {
-            if sort_less(L, t, m, l, pred) != 0 {
+            if sort_less(L, t, m, l, pred)? != 0 {
                 sort_swap(L, t, m, l);
-            } else if sort_less(L, t, u, m, pred) != 0 {
+            } else if sort_less(L, t, u, m, pred)? != 0 {
                 sort_swap(L, t, m, u);
             }
         }
@@ -64,9 +64,9 @@ pub fn sort_rec(
             loop {
                 i += 1;
                 unsafe {
-                    if sort_less(L, t, i, p, pred) != 0 {
+                    if sort_less(L, t, i, p, pred)? != 0 {
                         if i >= u {
-                            crate::functions::lua_l_error_l::lua_l_error_l(
+                            return crate::functions::lua_l_error_l::lua_l_error_l(
                                 L,
                                 c"invalid order function for sorting".as_ptr(),
                                 core::format_args!("invalid order function for sorting"),
@@ -82,9 +82,9 @@ pub fn sort_rec(
             loop {
                 j -= 1;
                 unsafe {
-                    if sort_less(L, t, p, j, pred) != 0 {
+                    if sort_less(L, t, p, j, pred)? != 0 {
                         if j <= l {
-                            crate::functions::lua_l_error_l::lua_l_error_l(
+                            return crate::functions::lua_l_error_l::lua_l_error_l(
                                 L,
                                 c"invalid order function for sorting".as_ptr(),
                                 core::format_args!("invalid order function for sorting"),
@@ -116,11 +116,12 @@ pub fn sort_rec(
         // a[l..i-1] <= a[i] == P <= a[i+1..u]
         // sort smaller half recursively; the larger half is sorted in the next loop iteration
         if i - l < u - i {
-            sort_rec(L, t, l, i - 1, limit, pred);
+            sort_rec(L, t, l, i - 1, limit, pred)?;
             l = i + 1;
         } else {
-            sort_rec(L, t, i + 1, u, limit, pred);
+            sort_rec(L, t, i + 1, u, limit, pred)?;
             u = i - 1;
         }
     }
+    Ok(())
 }

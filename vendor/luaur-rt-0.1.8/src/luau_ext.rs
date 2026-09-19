@@ -92,9 +92,9 @@ impl Lua {
                     let _ = self.set_named_registry_value(SANDBOX_SAVED_GLOBALS_NAME, original);
                 }
                 // Make libraries + base metatables read-only and set safeenv.
-                lua_l_sandbox(state);
+                lua_l_sandbox(state).map_err(|error| Error::from_vm(error))?;
                 // Install the proxy global table for script-level writes.
-                lua_l_sandboxthread(state);
+                lua_l_sandboxthread(state).map_err(|error| Error::from_vm(error))?;
             } else {
                 // Restore the original globals table (dropping the proxy and any
                 // globals written into it), then clear the saved slot.
@@ -200,13 +200,13 @@ impl Lua {
     /// [`LightUserData`](crate::LightUserData). Setting it installs a metatable
     /// in the VM's global per-type metatable slot, so e.g. `v.x`/`v:method`
     /// dispatch through it.
-    pub fn set_type_metatable<T: TypeMetatable>(&self, metatable: Option<Table>) {
-        T::set_type_metatable(self, metatable);
+    pub fn set_type_metatable<T: TypeMetatable>(&self, metatable: Option<Table>) -> Result<()> {
+        T::set_type_metatable(self, metatable)
     }
 
     /// The metatable shared by all values of a Luau built-in type `T`, if one
     /// has been installed. Mirrors `mlua::Lua::type_metatable`.
-    pub fn type_metatable<T: TypeMetatable>(&self) -> Option<Table> {
+    pub fn type_metatable<T: TypeMetatable>(&self) -> Result<Option<Table>> {
         T::type_metatable(self)
     }
 
@@ -230,7 +230,7 @@ impl Thread {
     pub fn sandbox(&self) -> Result<()> {
         let co = self.thread_state;
         unsafe {
-            lua_l_sandboxthread(co);
+            lua_l_sandboxthread(co).map_err(|error| Error::from_vm(error))?;
         }
         Ok(())
     }
@@ -242,40 +242,48 @@ pub trait TypeMetatable: private::Sealed {
     /// Push a representative value of this type onto the stack (so the VM's
     /// `lua_setmetatable`/`lua_getmetatable` operate on the type's global slot).
     #[doc(hidden)]
-    unsafe fn push_representative(state: *mut lua_State);
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()>;
 
     /// Install (or clear) the shared metatable for this type.
-    fn set_type_metatable(lua: &Lua, metatable: Option<Table>) {
+    fn set_type_metatable(lua: &Lua, metatable: Option<Table>) -> Result<()> {
         let state = lua.state();
         unsafe {
-            Self::push_representative(state);
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            Self::push_representative(state)
+                .map_err(|error| crate::error::Error::from_vm(error))?;
             match metatable {
                 Some(mt) => mt.push_to_stack(),
-                None => crate::sys::lua_pushnil(state),
+                None => crate::sys::lua_pushnil(state)
+                    .map_err(|error| crate::error::Error::from_vm(error))?,
             }
             // For a non-table/non-userdata value, `lua_setmetatable` stores the
             // metatable in the VM's global per-type slot (`g->mt[type]`).
-            crate::sys::lua_setmetatable(state, -2);
-            // Pop the representative value left on the stack.
-            crate::sys::lua_pop(state, 1);
+            crate::sys::lua_setmetatable(state, -2)
+                .map_err(|error| crate::error::Error::from_vm(error))?;
+            Ok(())
         }
     }
 
     /// The shared metatable for this type, if installed.
-    fn type_metatable(lua: &Lua) -> Option<Table> {
+    fn type_metatable(lua: &Lua) -> Result<Option<Table>> {
         let state = lua.state();
         unsafe {
-            Self::push_representative(state);
-            let has = crate::sys::lua_getmetatable(state, -1);
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            Self::push_representative(state)
+                .map_err(|error| crate::error::Error::from_vm(error))?;
+            let has = crate::sys::lua_getmetatable(state, -1)
+                .map_err(|error| crate::error::Error::from_vm(error))?;
             if has == 0 {
                 // No metatable: pop the representative value.
-                crate::sys::lua_pop(state, 1);
-                return None;
+                crate::sys::lua_pop(state, 1).expect("shrinking the stack cannot fail");
+                return Ok(None);
             }
             // stack: [value, metatable]
-            let mt = Table::from_ref(lua.pop_ref());
-            crate::sys::lua_pop(state, 1); // pop the representative value
-            Some(mt)
+            let mt = Table::from_ref(lua.try_pop_ref()?);
+            crate::sys::lua_pop(state, 1).expect("shrinking the stack cannot fail"); // pop the representative value
+            Ok(Some(mt))
         }
     }
 }
@@ -292,63 +300,74 @@ mod private {
 }
 
 impl TypeMetatable for crate::vector::Vector {
-    unsafe fn push_representative(state: *mut lua_State) {
-        unsafe {
-            crate::sys::lua_pushvector_lua_state_f32_f32_f32_f32(state, 0.0, 0.0, 0.0, 0.0);
-        }
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
+        unsafe { crate::sys::lua_pushvector_lua_state_f32_f32_f32_f32(state, 0.0, 0.0, 0.0, 0.0) }
     }
 }
 
 impl TypeMetatable for bool {
-    unsafe fn push_representative(state: *mut lua_State) {
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
         unsafe { crate::sys::lua_pushboolean(state, 0) }
     }
 }
 
 impl TypeMetatable for f64 {
-    unsafe fn push_representative(state: *mut lua_State) {
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
         unsafe { crate::sys::lua_pushnumber(state, 0.0) }
     }
 }
 
 impl TypeMetatable for crate::string::LuaString {
-    unsafe fn push_representative(state: *mut lua_State) {
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
         unsafe {
             let s = c"";
-            crate::sys::lua_pushlstring(state, s.as_ptr() as *const c_char, 0);
+            crate::sys::lua_pushlstring(state, s.as_ptr() as *const c_char, 0)
         }
     }
 }
 
 impl TypeMetatable for crate::function::Function {
-    unsafe fn push_representative(state: *mut lua_State) {
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
         // Push a throwaway C function so `lua_setmetatable` targets the global
         // function-type slot.
-        unsafe {
-            crate::sys::lua_pushcclosurek(state, Some(noop_cfn), c"".as_ptr(), 0, None);
-        }
+        unsafe { crate::sys::lua_pushcclosurek(state, Some(noop_cfn), c"".as_ptr(), 0, None) }
     }
 }
 
 impl TypeMetatable for crate::thread::Thread {
-    unsafe fn push_representative(state: *mut lua_State) {
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
         // A fresh thread targets the global thread-type slot.
         unsafe {
-            crate::sys::lua_newthread(state);
+            crate::sys::lua_newthread(state)?;
+            Ok(())
         }
     }
 }
 
 impl TypeMetatable for crate::light_userdata::LightUserData {
-    unsafe fn push_representative(state: *mut lua_State) {
-        crate::sys::lua_pushlightuserdatatagged(state, core::ptr::null_mut(), 0);
+    unsafe fn push_representative(
+        state: *mut lua_State,
+    ) -> luaur_vm::records::lua_exception::LuaResult<()> {
+        crate::sys::lua_pushlightuserdatatagged(state, core::ptr::null_mut(), 0)
     }
 }
 
 /// A do-nothing C function used as the representative value for the
 /// function-type metatable slot.
-unsafe fn noop_cfn(_state: *mut lua_State) -> c_int {
-    0
+unsafe fn noop_cfn(_state: *mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
+    Ok(0)
 }
 
 #[cfg(all(test, feature = "compiler"))]

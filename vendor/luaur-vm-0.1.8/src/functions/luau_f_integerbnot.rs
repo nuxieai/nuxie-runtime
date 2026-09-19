@@ -14,12 +14,12 @@ pub unsafe fn luau_f_integerbnot(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisinteger!(arg0) {
         setlvalue!(res, !(lvalue!(arg0) as u64) as i64);
         let _ = lua_Type::LUA_TINTEGER;
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

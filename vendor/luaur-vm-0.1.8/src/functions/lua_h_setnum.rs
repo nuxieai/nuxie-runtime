@@ -14,34 +14,29 @@ pub unsafe fn luaH_setnum(
     l: *mut lua_State,
     t: *mut LuaTable,
     key: core::ffi::c_int,
-) -> *mut TValue {
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     // (1 <= key && key <= t->sizearray)
     if (key as core::ffi::c_uint).wrapping_sub(1) < (*t).sizearray as core::ffi::c_uint {
-        return (*t).array.add((key - 1) as usize);
+        return Ok((*t).array.add((key - 1) as usize));
     }
 
     // hash fallback
     let p = lua_h_getnum(t, key);
     if p != luaO_nilobject {
-        cast_to!(*mut TValue, p)
+        Ok(cast_to!(*mut TValue, p))
     } else {
         let mut k: TValue = core::mem::zeroed();
         setnvalue!(&mut k, cast_num!(key));
 
-        // The skeleton for newkey is a stub with no arguments.
-        // We must cast the call to match the expected signature (L, t, key) -> TValue*.
-        core::mem::transmute::<
-            _,
-            unsafe fn(*mut lua_State, *mut LuaTable, *const TValue) -> *mut TValue,
-        >(newkey as *const core::ffi::c_void)(l, t, &k)
+        newkey(l, t, &k)
     }
 }
 
 #[export_name = "luaur_luaH_setnum"]
-pub unsafe extern "C" fn lua_h_setnum_export(
+pub unsafe fn lua_h_setnum_export(
     l: *mut lua_State,
     t: *mut core::ffi::c_void,
     key: core::ffi::c_int,
-) -> *mut TValue {
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     luaH_setnum(l, t as *mut LuaTable, key)
 }

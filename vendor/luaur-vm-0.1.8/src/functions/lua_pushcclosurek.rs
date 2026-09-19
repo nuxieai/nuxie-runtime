@@ -10,8 +10,8 @@ use crate::macros::api_check::api_check;
 use crate::macros::api_checknelems::api_checknelems;
 use crate::macros::api_incr_top::api_incr_top;
 use crate::macros::iswhite::iswhite;
-use crate::macros::lua_s_new::luaS_new;
 use crate::macros::lua_c_check_gc::luaC_checkGC;
+use crate::macros::lua_s_new::luaS_new;
 use crate::macros::setclvalue::setclvalue;
 use crate::macros::setobj_2_n::setobj2n;
 use crate::records::closure::CClosure;
@@ -28,7 +28,7 @@ pub unsafe fn lua_pushcclosurek(
     debugname: *const c_char,
     mut nup: c_int,
     cont: LuaContinuation,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(L, r#fn.is_some());
     api_check!(L, nup >= 0);
     luaC_checkGC!(L);
@@ -36,7 +36,7 @@ pub unsafe fn lua_pushcclosurek(
     crate::ensure_stack!(L, 1);
     api_checknelems!(L, nup);
 
-    let cl = luaF_newCclosure(L, nup, getcurrenv(L));
+    let cl = luaF_newCclosure(L, nup, getcurrenv(L))?;
     let cc = core::ptr::addr_of_mut!((*cl).inner.c) as *mut CClosure;
     (*cc).f = r#fn;
     (*cc).cont = cont;
@@ -44,7 +44,7 @@ pub unsafe fn lua_pushcclosurek(
         (*cc).debugname = if debugname.is_null() {
             core::ptr::null_mut()
         } else {
-            luaS_new(L, debugname)
+            luaS_new(L, debugname)?
         };
     } else {
         (*cc).debugname_DEPRECATED = debugname;
@@ -60,4 +60,5 @@ pub unsafe fn lua_pushcclosurek(
     setclvalue!(L, (*L).top, cl);
     luaur_common::LUAU_ASSERT!(iswhite!(cl as *mut GCObject));
     api_incr_top!(L);
+    Ok(())
 }

@@ -30,9 +30,13 @@ unsafe fn setnodekey_direct(node: *mut LuaNode, obj: *const TValue) {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn newkey(l: *mut lua_State, t: *mut LuaTable, key: *const TValue) -> *mut TValue {
+pub unsafe fn newkey(
+    l: *mut lua_State,
+    t: *mut LuaTable,
+    key: *const TValue,
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     if ttisnumber!(key) && nvalue!(key) == ((*t).sizearray + 1) as f64 {
-        rehash(l, t, key);
+        rehash(l, t, key)?;
         return arrayornewkey(l, t, key);
     }
 
@@ -40,7 +44,7 @@ pub unsafe fn newkey(l: *mut lua_State, t: *mut LuaTable, key: *const TValue) ->
     if !ttisnil!(gval!(mp)) || mp == dummynode as *mut LuaNode {
         let n = getfreepos(t);
         if n.is_null() {
-            rehash(l, t, key);
+            rehash(l, t, key)?;
             return arrayornewkey(l, t, key);
         }
 
@@ -81,5 +85,5 @@ pub unsafe fn newkey(l: *mut lua_State, t: *mut LuaTable, key: *const TValue) ->
     setnodekey_direct(mp, key);
     luaC_barriert!(l, t, key);
     LUAU_ASSERT!(ttisnil!(gval!(mp)));
-    gval!(mp)
+    Ok(gval!(mp))
 }

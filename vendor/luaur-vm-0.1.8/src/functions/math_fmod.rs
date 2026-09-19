@@ -3,12 +3,12 @@ use crate::functions::lua_pushnumber::lua_pushnumber;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_math_fmod"]
-pub unsafe fn math_fmod(L: *mut lua_State) -> i32 {
+pub unsafe fn math_fmod(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
     lua_pushnumber(
         L,
-        f64::from(fmod(lua_l_checknumber(L, 1), lua_l_checknumber(L, 2))),
-    );
-    1
+        f64::from(fmod(lua_l_checknumber(L, 1)?, lua_l_checknumber(L, 2)?)),
+    )?;
+    Ok(1)
 }
 
 #[inline]

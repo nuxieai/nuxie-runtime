@@ -4,11 +4,15 @@ use crate::records::header::Header;
 use core::ffi::{c_char, c_int};
 
 #[allow(non_snake_case)]
-pub fn getnum(h: *mut Header, fmt: *mut *const c_char, df: i32) -> i32 {
+pub fn getnum(
+    h: *mut Header,
+    fmt: *mut *const c_char,
+    df: i32,
+) -> crate::records::lua_exception::LuaResult<i32> {
     unsafe {
         if digit(**fmt as c_int) == 0 {
             // no number?
-            df // return default value
+            Ok(df) // return default value
         } else {
             let mut a: i32 = 0;
             let mut fmt_ptr = *fmt;
@@ -26,7 +30,7 @@ pub fn getnum(h: *mut Header, fmt: *mut *const c_char, df: i32) -> i32 {
             if a > 1073741824 || digit(*fmt_ptr as c_int) != 0 {
                 luaL_error!((*h).L, "size specifier is too large");
             }
-            a
+            Ok(a)
         }
     }
 }

@@ -11,13 +11,13 @@ use core::ffi::{c_char, c_int};
 const MAXSSIZE: usize = 1 << 30;
 
 #[allow(non_snake_case)]
-pub fn str_packsize(l: *mut lua_State) -> c_int {
+pub fn str_packsize(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut h = Header {
         L: core::ptr::null_mut(),
         islittle: 0,
         maxalign: 0,
     };
-    let fmt_ptr = unsafe { luaL_checkstring!(l, 1) };
+    let fmt_ptr = unsafe { luaL_checkstring!(l, 1)? };
     let mut fmt = fmt_ptr;
     let mut totalsize: usize = 0;
 
@@ -29,7 +29,7 @@ pub fn str_packsize(l: *mut lua_State) -> c_int {
         let mut fmt_cursor = fmt;
 
         let opt =
-            unsafe { getdetails(&mut h, totalsize, &mut fmt_cursor, &mut size, &mut ntoalign) };
+            unsafe { getdetails(&mut h, totalsize, &mut fmt_cursor, &mut size, &mut ntoalign)? };
         fmt = fmt_cursor;
 
         luaL_argcheck!(
@@ -50,6 +50,6 @@ pub fn str_packsize(l: *mut lua_State) -> c_int {
         totalsize += total_option_size;
     }
 
-    lua_pushinteger(l, totalsize as c_int);
-    1
+    lua_pushinteger(l, totalsize as c_int)?;
+    Ok(1)
 }

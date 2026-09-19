@@ -4,7 +4,9 @@ use crate::functions::lua_l_register::lua_l_register;
 use crate::records::lua_l_reg::LuaLReg;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn luaopen_class(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_class(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let class_lib: [LuaLReg; 3] = [
         LuaLReg {
             name: c"isinstance".as_ptr(),
@@ -20,6 +22,6 @@ pub unsafe fn luaopen_class(L: *mut lua_State) -> core::ffi::c_int {
         },
     ];
 
-    lua_l_register(L, c"class".as_ptr(), class_lib.as_ptr());
-    1
+    lua_l_register(L, c"class".as_ptr(), class_lib.as_ptr())?;
+    Ok(1)
 }

@@ -905,6 +905,7 @@ dependencies = [
  "luaur-common",
  "luaur-compiler",
  "luaur-vm",
+ "serde",
 ]
 
 [[package]]

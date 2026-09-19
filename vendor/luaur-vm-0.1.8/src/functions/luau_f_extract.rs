@@ -14,7 +14,7 @@ pub unsafe fn luauF_extract(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
         let a1 = nvalue!(arg0);
         let a2 = nvalue!(args);
@@ -29,7 +29,7 @@ pub unsafe fn luauF_extract(
                 let r: u32 = (n >> (f as u32)) & m;
 
                 setnvalue!(res, r as f64);
-                return 1;
+                return Ok(1);
             }
         } else if ttisnumber!(args.offset(1)) {
             let a3 = nvalue!(args.offset(1));
@@ -40,10 +40,10 @@ pub unsafe fn luauF_extract(
                 let r: u32 = (n >> (f as u32)) & m;
 
                 setnvalue!(res, r as f64);
-                return 1;
+                return Ok(1);
             }
         }
     }
 
-    -1
+    Ok(-1)
 }

@@ -9,10 +9,12 @@ use luaur_common::macros::luau_big_endian::LUAU_BIG_ENDIAN;
 use crate::functions::buffer_swapbe::buffer_swapbe;
 
 #[allow(non_snake_case)]
-pub unsafe fn buffer_readlong(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn buffer_readlong(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut len: usize = 0;
-    let buf = lua_l_checkbuffer(L, 1, &mut len);
-    let offset = lua_l_checkinteger(L, 2);
+    let buf = lua_l_checkbuffer(L, 1, &mut len)?;
+    let offset = lua_l_checkinteger(L, 2)?;
 
     if isoutofbounds(offset, len, core::mem::size_of::<u64>()) {
         luaL_error!(L, "buffer access out of bounds");
@@ -29,6 +31,6 @@ pub unsafe fn buffer_readlong(L: *mut lua_State) -> core::ffi::c_int {
         val = buffer_swapbe(val);
     }
 
-    lua_pushinteger_64(L, val as i64);
-    1
+    lua_pushinteger_64(L, val as i64)?;
+    Ok(1)
 }

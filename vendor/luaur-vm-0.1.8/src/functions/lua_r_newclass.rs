@@ -15,11 +15,11 @@ pub unsafe fn lua_r_newclass(
     offsettomember: *mut *mut TString,
     numberofinstancemembers: u32,
     numberofstaticmembers: u32,
-) -> *mut LuauClass {
+) -> crate::records::lua_exception::LuaResult<*mut LuauClass> {
     let global = (*L).global;
     LUAU_ASSERT!((*global).GCthreshold == usize::MAX);
 
-    let classobject = crate::functions::lua_r_newblankclass::lua_r_newblankclass(L, name);
+    let classobject = crate::functions::lua_r_newblankclass::lua_r_newblankclass(L, name)?;
 
     (*classobject).staticmembers =
         luaM_newarray!(L, numberofstaticmembers, TValue, (*classobject).memcat);
@@ -33,8 +33,8 @@ pub unsafe fn lua_r_newclass(
     (*classobject).numberofinstancemembers = numberofinstancemembers;
     (*classobject).numberofallmembers = numberofinstancemembers + numberofstaticmembers;
 
-    crate::functions::lua_r_addclassmetatable::lua_r_addclassmetatable(L, classobject);
+    crate::functions::lua_r_addclassmetatable::lua_r_addclassmetatable(L, classobject)?;
     (*classobject).instancemetatable = core::ptr::null_mut();
 
-    classobject
+    Ok(classobject)
 }

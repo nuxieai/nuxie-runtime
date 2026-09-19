@@ -15,7 +15,7 @@ pub unsafe fn luau_f_replace(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisnumber!(arg0)
@@ -39,7 +39,7 @@ pub unsafe fn luau_f_replace(
                 let m: u32 = 1;
                 let r: u32 = (n & !(m << (f as u32))) | ((v & m) << (f as u32));
                 setnvalue!(res, r as f64);
-                return 1;
+                return Ok(1);
             }
         } else if ttisnumber!(args.offset(2)) {
             let a4 = nvalue!(args.offset(2));
@@ -49,10 +49,10 @@ pub unsafe fn luau_f_replace(
                 let m: u32 = !(0xFFFF_FFFE_u32 << (w - 1));
                 let r: u32 = (n & !(m << (f as u32))) | ((v & m) << (f as u32));
                 setnvalue!(res, r as f64);
-                return 1;
+                return Ok(1);
             }
         }
     }
 
-    -1
+    Ok(-1)
 }

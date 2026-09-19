@@ -18,7 +18,10 @@ use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int {
+pub unsafe fn lua_ref(
+    L: *mut lua_State,
+    idx: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_check!(L, idx != LUA_REGISTRYINDEX);
 
     if luaur_common::FFlag::LuauGcTraceUdata.get() {
@@ -49,7 +52,7 @@ pub unsafe fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int {
             ref_ += 1;
         }
 
-        let slot: *mut TValue = luaH_setnum(L, reg, ref_);
+        let slot: *mut TValue = luaH_setnum(L, reg, ref_)?;
         if (*g).registryfree != 0 {
             (*g).registryfree = nvalue!(slot) as c_int;
         }
@@ -59,5 +62,5 @@ pub unsafe fn lua_ref(L: *mut lua_State, idx: c_int) -> c_int {
         luaC_barriert!(L, reg, p);
     }
 
-    ref_
+    Ok(ref_)
 }

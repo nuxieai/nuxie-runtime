@@ -9,13 +9,13 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[export_name = "luaur_utflen"]
-pub unsafe fn utflen(L: *mut lua_State) -> c_int {
+pub unsafe fn utflen(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut n: c_int = 0;
     let mut len: usize = 0;
-    let s = lua_l_checklstring(L, 1, &mut len);
+    let s = lua_l_checklstring(L, 1, &mut len)?;
 
-    let posi = u_posrelat(lua_l_optinteger(L, 2, 1), len);
-    let mut posj = u_posrelat(lua_l_optinteger(L, 3, -1), len);
+    let posi = u_posrelat(lua_l_optinteger(L, 2, 1)?, len);
+    let mut posj = u_posrelat(lua_l_optinteger(L, 3, -1)?, len);
 
     luaL_argcheck!(
         L,
@@ -31,14 +31,14 @@ pub unsafe fn utflen(L: *mut lua_State) -> c_int {
     while posi <= posj {
         let s1 = utf_8_decode(s.offset(posi as isize), core::ptr::null_mut());
         if s1.is_null() {
-            lua_pushnil(L);
-            lua_pushinteger(L, (posi + 1) as c_int);
-            return 2;
+            lua_pushnil(L)?;
+            lua_pushinteger(L, (posi + 1) as c_int)?;
+            return Ok(2);
         }
         posi = (s1 as isize - s as isize) as c_int;
         n += 1;
     }
 
-    lua_pushinteger(L, n);
-    1
+    lua_pushinteger(L, n)?;
+    Ok(1)
 }

@@ -21,7 +21,9 @@ use crate::functions::str_sub::str_sub;
 use crate::functions::str_unpack::str_unpack;
 use crate::functions::str_upper::str_upper;
 
-pub unsafe fn luaopen_string(l: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_string(
+    l: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // Faithful port of the `strlib[]` registration array in lstrlib.cpp:
     // {name, func} pairs ending in a {NULL, NULL} sentinel; lua_l_register
     // copies each into the `string` table.
@@ -100,8 +102,8 @@ pub unsafe fn luaopen_string(l: *mut lua_State) -> core::ffi::c_int {
         },
     ];
 
-    lua_l_register(l, c"string".as_ptr(), strlib.as_ptr());
-    createmetatable_mut(l);
+    lua_l_register(l, c"string".as_ptr(), strlib.as_ptr())?;
+    createmetatable_mut(l)?;
 
-    1
+    Ok(1)
 }

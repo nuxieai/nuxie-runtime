@@ -14,7 +14,7 @@ pub unsafe fn luau_f_integerarshift(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
         let n: i64 = lvalue!(arg0);
         let i: i64 = lvalue!(args);
@@ -34,8 +34,8 @@ pub unsafe fn luau_f_integerarshift(
             setlvalue!(res, if n < 0 { -1 } else { 0 });
         }
 
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

@@ -13,13 +13,20 @@ use core::ffi::c_int;
 
 const MAXBITS: c_int = 26;
 
-unsafe fn runerror(l: *mut lua_State, msg: *const core::ffi::c_char) -> ! {
-    lua_g_pusherror(l, msg);
-    luaD_throw(l, lua_Status::LUA_ERRRUN as c_int);
+unsafe fn runerror(
+    l: *mut lua_State,
+    msg: *const core::ffi::c_char,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_g_pusherror(l, msg)?;
+    luaD_throw(l, lua_Status::LUA_ERRRUN as c_int)
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn setnodevector(l: *mut lua_State, t: *mut LuaTable, mut size: c_int) {
+pub unsafe fn setnodevector(
+    l: *mut lua_State,
+    t: *mut LuaTable,
+    mut size: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     let lsize: c_int;
 
     if size == 0 {
@@ -28,7 +35,7 @@ pub unsafe fn setnodevector(l: *mut lua_State, t: *mut LuaTable, mut size: c_int
     } else {
         lsize = ceillog2(size as u32);
         if lsize > MAXBITS {
-            runerror(l, c"table overflow".as_ptr());
+            return runerror(l, c"table overflow".as_ptr());
         }
 
         size = 1 << lsize;
@@ -49,4 +56,5 @@ pub unsafe fn setnodevector(l: *mut lua_State, t: *mut LuaTable, mut size: c_int
     (*t).lsizenode = lsize as u8;
     (*t).nodemask8 = ((1 << lsize) - 1) as u8;
     (*t).union.lastfree = size;
+    Ok(())
 }

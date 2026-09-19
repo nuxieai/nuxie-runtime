@@ -11,7 +11,11 @@ extern "C" {
 }
 
 #[allow(non_snake_case)]
-pub fn lua_h_resizearray(L: *mut lua_State, t: *mut LuaTable, nasize: i32) {
+pub fn lua_h_resizearray(
+    L: *mut lua_State,
+    t: *mut LuaTable,
+    nasize: i32,
+) -> crate::records::lua_exception::LuaResult<()> {
     unsafe {
         let nsize = if (*t).node == &luaH_dummynode as *const _ as *mut _ {
             0
@@ -21,15 +25,15 @@ pub fn lua_h_resizearray(L: *mut lua_State, t: *mut LuaTable, nasize: i32) {
 
         let asize = adjustasize(t, nasize, core::ptr::null());
 
-        resize(L, t, asize, nsize);
+        resize(L, t, asize, nsize)
     }
 }
 
 #[export_name = "luaur_luaH_resizearray"]
-pub unsafe extern "C" fn lua_h_resizearray_export(
+pub unsafe fn lua_h_resizearray_export(
     L: *mut lua_State,
     t: *mut core::ffi::c_void,
     nasize: i32,
-) {
-    lua_h_resizearray(L, t as *mut LuaTable, nasize);
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_h_resizearray(L, t as *mut LuaTable, nasize)
 }

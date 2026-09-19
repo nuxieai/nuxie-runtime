@@ -10,7 +10,7 @@ pub type luau_FastFunction = Option<
         nresults: core::ffi::c_int,
         args: StkId,
         nparams: core::ffi::c_int,
-    ) -> core::ffi::c_int,
+    ) -> crate::records::lua_exception::LuaResult<core::ffi::c_int>,
 >;
 
 pub type LuauFastFunction = luau_FastFunction;

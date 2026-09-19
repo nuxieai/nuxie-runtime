@@ -25,11 +25,11 @@ pub unsafe fn resume(
             crate::functions::lua_g_pusherror::lua_g_pusherror(
                 l,
                 c"cannot resume dead coroutine".as_ptr(),
-            );
-            crate::functions::lua_d_throw_ldo::luaD_throw(l, lua_Status::LUA_ERRRUN as i32);
+            )?;
+            return crate::functions::lua_d_throw_ldo::luaD_throw(l, lua_Status::LUA_ERRRUN as i32);
         }
 
-        let precallresult = luau_precall(l, first_arg.offset(-1), LUA_MULTRET);
+        let precallresult = luau_precall(l, first_arg.offset(-1), LUA_MULTRET)?;
 
         if (*l).status == SCHEDULED_REENTRY as u8 {
             first_arg = (*l).base;
@@ -61,6 +61,5 @@ pub unsafe fn resume(
         }
     }
 
-    resume_continue(l);
-    Ok(())
+    resume_continue(l)
 }

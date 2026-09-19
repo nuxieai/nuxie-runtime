@@ -10,16 +10,18 @@ use crate::macros::setobj_2_s::setobj2s;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_tunpack"]
-pub unsafe fn tunpack(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
+pub unsafe fn tunpack(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
     let t = hvalue!((*L).base);
 
-    let i = lua_l_optinteger(L, 2, 1);
+    let i = lua_l_optinteger(L, 2, 1)?;
     let e = lua_objlen(L, 1);
-    let e = lua_l_optinteger(L, 3, e);
+    let e = lua_l_optinteger(L, 3, e)?;
 
     if i > e {
-        return 0; // empty range
+        return Ok(0); // empty range
     }
 
     // `n` here is the element count MINUS ONE. C++ guards on this value
@@ -31,7 +33,7 @@ pub unsafe fn tunpack(L: *mut lua_State) -> core::ffi::c_int {
     if n >= core::ffi::c_int::MAX as u32
         || lua_checkstack(L, n.wrapping_add(1) as core::ffi::c_int) == 0
     {
-        lua_l_error_l(
+        return lua_l_error_l(
             L,
             c"too many results to unpack".as_ptr(),
             core::format_args!("too many results to unpack"),
@@ -51,11 +53,11 @@ pub unsafe fn tunpack(L: *mut lua_State) -> core::ffi::c_int {
         // push arg[i..e - 1] (to avoid overflows)
         let mut current_i = i;
         while current_i < e {
-            lua_rawgeti(L, 1, current_i);
+            lua_rawgeti(L, 1, current_i)?;
             current_i += 1;
         }
-        lua_rawgeti(L, 1, e); // push last element
+        lua_rawgeti(L, 1, e)?; // push last element
     }
 
-    n as core::ffi::c_int
+    Ok(n as core::ffi::c_int)
 }

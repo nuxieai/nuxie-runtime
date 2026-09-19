@@ -10,15 +10,22 @@ use core::ffi::c_int;
 
 const MAXSIZE: c_int = 1 << 26;
 
-unsafe fn runerror(l: *mut lua_State, msg: *const core::ffi::c_char) -> ! {
-    lua_g_pusherror(l, msg);
-    luaD_throw(l, lua_Status::LUA_ERRRUN as c_int);
+unsafe fn runerror(
+    l: *mut lua_State,
+    msg: *const core::ffi::c_char,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_g_pusherror(l, msg)?;
+    luaD_throw(l, lua_Status::LUA_ERRRUN as c_int)
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn setarrayvector(l: *mut lua_State, t: *mut LuaTable, size: c_int) {
+pub unsafe fn setarrayvector(
+    l: *mut lua_State,
+    t: *mut LuaTable,
+    size: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     if size > MAXSIZE {
-        runerror(l, c"table overflow".as_ptr());
+        return runerror(l, c"table overflow".as_ptr());
     }
 
     let oldsize = (*t).sizearray;
@@ -28,7 +35,7 @@ pub unsafe fn setarrayvector(l: *mut lua_State, t: *mut LuaTable, size: c_int) {
         oldsize as usize * core::mem::size_of::<TValue>(),
         size as usize * core::mem::size_of::<TValue>(),
         (*t).memcat,
-    ) as *mut TValue;
+    )? as *mut TValue;
 
     (*t).array = newarray;
 
@@ -39,4 +46,5 @@ pub unsafe fn setarrayvector(l: *mut lua_State, t: *mut LuaTable, size: c_int) {
     }
 
     (*t).sizearray = size;
+    Ok(())
 }

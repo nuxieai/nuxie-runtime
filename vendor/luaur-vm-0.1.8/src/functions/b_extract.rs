@@ -5,11 +5,11 @@ use crate::macros::mask::mask;
 use crate::type_aliases::b_uint::b_uint;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn b_extract(l: *mut lua_State) -> core::ffi::c_int {
+pub fn b_extract(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut w: core::ffi::c_int = 0;
-    let r: b_uint = unsafe { lua_l_checkunsigned(l, 1) };
-    let f: core::ffi::c_int = unsafe { fieldargs(l, 2, &mut w) };
+    let r: b_uint = unsafe { lua_l_checkunsigned(l, 1)? };
+    let f: core::ffi::c_int = unsafe { fieldargs(l, 2, &mut w)? };
     let r = (r >> f) & mask(w);
-    lua_pushunsigned(l, r);
-    1
+    lua_pushunsigned(l, r)?;
+    Ok(1)
 }

@@ -7,20 +7,23 @@ use crate::macros::lua_pushliteral::LUA_PUSHLITERAL;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn createmetatable_mut(l: *mut lua_State) {
-    lua_createtable(l, 0, 1); // create metatable for strings
+pub unsafe fn createmetatable_mut(
+    l: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_createtable(l, 0, 1)?; // create metatable for strings
 
-    LUA_PUSHLITERAL(l as *mut core::ffi::c_void, c"".as_ptr()); // dummy string
+    LUA_PUSHLITERAL(l as *mut core::ffi::c_void, c"".as_ptr())?; // dummy string
 
-    lua_pushvalue(l, -2);
+    lua_pushvalue(l, -2)?;
 
-    lua_setmetatable(l, -2); // set string metatable
+    lua_setmetatable(l, -2)?; // set string metatable
 
-    lua_pop(l, 1); // pop dummy string
+    lua_pop(l, 1)?; // pop dummy string
 
-    lua_pushvalue(l, -2); // string library...
+    lua_pushvalue(l, -2)?; // string library...
 
-    lua_setfield(l, -2, c"__index".as_ptr()); // ...is the __index metamethod
+    lua_setfield(l, -2, c"__index".as_ptr())?; // ...is the __index metamethod
 
-    lua_pop(l, 1); // pop metatable
+    lua_pop(l, 1)?; // pop metatable
+    Ok(())
 }

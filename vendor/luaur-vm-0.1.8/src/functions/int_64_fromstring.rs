@@ -7,9 +7,11 @@ use crate::macros::lua_l_checkstring::luaL_checkstring;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_int64_fromstring"]
-pub unsafe fn int64_fromstring(L: *mut lua_State) -> core::ffi::c_int {
-    let s = luaL_checkstring!(L, 1);
-    let base = lua_l_optinteger(L, 2, 10);
+pub unsafe fn int64_fromstring(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    let s = luaL_checkstring!(L, 1)?;
+    let base = lua_l_optinteger(L, 2, 10)?;
     luaL_argcheck!(
         L,
         (2 <= base as i32) && (base as i32 <= 36),
@@ -19,10 +21,10 @@ pub unsafe fn int64_fromstring(L: *mut lua_State) -> core::ffi::c_int {
 
     let mut result: i64 = 0;
     if lua_o_str_2_l(s, &mut result, base as i32) != 0 {
-        lua_pushinteger_64(L, result);
+        lua_pushinteger_64(L, result)?;
     } else {
-        lua_pushnil(L);
+        lua_pushnil(L)?;
     }
 
-    1
+    Ok(1)
 }

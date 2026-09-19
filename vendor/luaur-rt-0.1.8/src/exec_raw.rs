@@ -2,29 +2,41 @@
 //! luaur stack machine. Mirror `mlua::Lua::exec_raw` / `create_c_function`.
 //!
 //! `exec_raw` runs a user closure that manipulates the raw stack **inside a
-//! protected call**, so a `lua_error` raised by the closure (which luaur
-//! implements as a `panic_any(lua_exception)`) is caught by the VM's own
-//! `lua_pcall` and surfaced as an [`Error`], exactly like a normal Lua error.
+//! protected call**, so a `lua_error` returned by the closure is handled by
+//! the VM's `lua_pcall` and surfaced as an [`Error`]. Raw closures return
+//! `LuaResult<()>` and propagate fallible VM operations with `?`.
 //! Unlike the [`create_function`](crate::Lua::create_function) trampoline, the
 //! `exec_raw` trampoline deliberately does **not** `catch_unwind`: the whole
-//! point is to let the VM's protected-call machinery handle the unwind.
+//! point is to return failures to the VM's protected-call machinery.
 
 use std::cell::Cell;
+use std::rc::Rc;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::function::Function;
 use crate::multi::MultiValue;
 use crate::state::Lua;
 use crate::sys::*;
 use crate::traits::{FromLuaMulti, IntoLuaMulti};
+use luaur_vm::records::lua_exception::LuaResult;
 
 /// The boxed, type-erased raw closure stored in the `exec_raw` trampoline's
 /// upvalue userdata. `FnMut`-once: it is taken out and run exactly once.
-type RawFn = Box<dyn FnOnce(*mut lua_State)>;
+type RawFn = Box<dyn FnOnce(*mut lua_State) -> LuaResult<()>>;
 
 /// Userdata storage for the `exec_raw` closure (a `Cell<Option<..>>` so the
 /// trampoline can `take` it).
-struct RawFnSlot(Cell<Option<RawFn>>);
+struct RawFnSlot(Rc<Cell<Option<RawFn>>>);
+
+/// A failed allocation/call may leave the VM-owned slot awaiting GC. End any
+/// borrowed captures before exec_raw returns, even if the callback never ran.
+struct RawFnGuard(Rc<Cell<Option<RawFn>>>);
+
+impl Drop for RawFnGuard {
+    fn drop(&mut self) {
+        self.0.take();
+    }
+}
 
 /// Destructor: drop the (possibly already-taken) closure box.
 unsafe extern "C" fn raw_fn_dtor(ptr: *mut c_void) {
@@ -36,21 +48,21 @@ unsafe extern "C" fn raw_fn_dtor(ptr: *mut c_void) {
 /// The trampoline for `exec_raw`: recover the boxed closure from upvalue 1 and
 /// run it on the calling state. Does NOT `catch_unwind` — a `lua_error` from the
 /// closure must propagate to the enclosing `lua_pcall`.
-unsafe fn exec_raw_trampoline(state: *mut lua_State) -> c_int {
+unsafe fn exec_raw_trampoline(state: *mut lua_State) -> LuaResult<c_int> {
     unsafe {
         let ud = lua_touserdata(state, lua_upvalueindex(1));
         if ud.is_null() {
-            return 0;
+            return Ok(0);
         }
         let slot = &*(ud as *const RawFnSlot);
         let f = slot.0.take();
         let base = lua_gettop(state);
         if let Some(f) = f {
-            f(state);
+            f(state)?;
         }
         // Everything the closure left above the stack base is a result.
         let top = lua_gettop(state);
-        (top - base).max(0)
+        Ok((top - base).max(0))
     }
 }
 
@@ -73,7 +85,7 @@ impl Lua {
     pub unsafe fn exec_raw<R, F>(&self, args: impl IntoLuaMulti, f: F) -> Result<R>
     where
         R: FromLuaMulti,
-        F: FnOnce(*mut lua_State),
+        F: FnOnce(*mut lua_State) -> LuaResult<()>,
     {
         let state = self.state();
         let args: MultiValue = args.into_lua_multi(self)?;
@@ -86,23 +98,31 @@ impl Lua {
             // the closure — and anything it borrows — outlives the box. The
             // transmute only widens the closure's (non-`'static`) lifetime to
             // `'static`; that `'static` box never escapes this function.
-            let f: Box<dyn FnOnce(*mut lua_State) + '_> = Box::new(f);
-            unsafe { core::mem::transmute::<Box<dyn FnOnce(*mut lua_State) + '_>, RawFn>(f) }
+            let f: Box<dyn FnOnce(*mut lua_State) -> LuaResult<()> + '_> = Box::new(f);
+            unsafe {
+                core::mem::transmute::<Box<dyn FnOnce(*mut lua_State) -> LuaResult<()> + '_>, RawFn>(
+                    f,
+                )
+            }
         };
+        let pending = Rc::new(Cell::new(Some(boxed)));
+        let _callback = RawFnGuard(pending.clone());
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(state);
             let nargs = args.len() as c_int;
             if lua_checkstack(state, nargs.saturating_add(2)) == 0 {
                 return Err(crate::error::Error::runtime("stack overflow in exec_raw"));
             }
             // Allocate the slot userdata and write the closure into it.
             let storage =
-                lua_newuserdatadtor(state, core::mem::size_of::<RawFnSlot>(), Some(raw_fn_dtor));
+                lua_newuserdatadtor(state, core::mem::size_of::<RawFnSlot>(), Some(raw_fn_dtor))
+                    .map_err(|error| Error::from_vm(error))?;
             if storage.is_null() {
                 return Err(crate::error::Error::runtime(
                     "exec_raw: failed to allocate closure userdata",
                 ));
             }
-            core::ptr::write(storage as *mut RawFnSlot, RawFnSlot(Cell::new(Some(boxed))));
+            core::ptr::write(storage as *mut RawFnSlot, RawFnSlot(pending));
             // Wrap it in a C closure (consumes the userdata as upvalue 1).
             lua_pushcclosurek(
                 state,
@@ -110,13 +130,14 @@ impl Lua {
                 c"luaur-rt-exec-raw".as_ptr(),
                 1,
                 None,
-            );
+            )
+            .map_err(|error| Error::from_vm(error))?;
             // Push the arguments after the function, then protected-call.
             let base = lua_gettop(state) - 1; // index just below the function
             for v in args.iter() {
                 self.push_value(v)?;
             }
-            let status = lua_pcall(state, nargs, -1, 0);
+            let status = lua_pcall(state, nargs, -1, 0).map_err(|error| Error::from_vm(error))?;
             if status != 0 {
                 return Err(self.pop_error(status));
             }
@@ -126,7 +147,6 @@ impl Lua {
             // push overruns (the `lua_pushvalue` api_incr_top assert). Same class
             // as the fix in `function.rs::call`.
             if lua_checkstack(state, 2) == 0 {
-                lua_settop(state, base);
                 return Err(crate::error::Error::RuntimeError(
                     "stack overflow: too many return values".to_string(),
                 ));
@@ -138,7 +158,6 @@ impl Lua {
             for i in 0..nresults {
                 results.push_back(self.value_from_stack(base + 1 + i)?);
             }
-            lua_settop(state, base);
             R::from_lua_multi(results, self)
         }
     }
@@ -147,7 +166,7 @@ impl Lua {
     /// `mlua::Lua::create_c_function`.
     ///
     /// **DEVIATION:** luaur's `lua_CFunction` is a plain Rust
-    /// `Option<unsafe fn(*mut lua_State) -> c_int>` (luaur is a pure-Rust VM with
+    /// `Option<unsafe fn(*mut lua_State) -> LuaResult<c_int>>` (luaur is a pure-Rust VM with
     /// no C ABI boundary), not an `extern "C-unwind" fn` as in mlua's FFI build.
     /// The function value is otherwise identical; callers pass a luaur-shaped
     /// `unsafe fn` (see [`ffi::lua_CFunction`](crate::sys::lua_CFunction)).
@@ -159,8 +178,10 @@ impl Lua {
     pub unsafe fn create_c_function(&self, func: lua_CFunction) -> Result<Function> {
         let state = self.state();
         unsafe {
-            lua_pushcclosurek(state, func, c"luaur-rt-c-function".as_ptr(), 0, None);
-            Ok(Function::from_ref(self.pop_ref()))
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            lua_pushcclosurek(state, func, c"luaur-rt-c-function".as_ptr(), 0, None)
+                .map_err(|error| Error::from_vm(error))?;
+            Ok(Function::from_ref(self.try_pop_ref()?))
         }
     }
 }

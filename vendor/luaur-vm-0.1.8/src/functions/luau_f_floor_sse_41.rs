@@ -16,13 +16,13 @@ pub unsafe fn luau_f_floor_sse_41(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if LUAU_TARGET_SSE41 && nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         const MM_FROUND_TO_NEG_INF: i32 = 1;
         setnvalue!(res, roundsd_sse41::<MM_FROUND_TO_NEG_INF>(a1));
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

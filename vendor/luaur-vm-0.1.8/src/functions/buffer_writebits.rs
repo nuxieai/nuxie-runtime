@@ -7,12 +7,14 @@ use crate::functions::lua_l_checkunsigned::lua_l_checkunsigned;
 use crate::macros::lua_l_error::luaL_error;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn buffer_writebits(L: *mut lua_State) -> core::ffi::c_int {
+pub fn buffer_writebits(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut len: usize = 0;
-    let buf = lua_l_checkbuffer(L, 1, &mut len) as *mut core::ffi::c_char;
-    let bitoffset = lua_l_checknumber(L, 2) as i64;
-    let bitcount = lua_l_checkinteger(L, 3);
-    let value = lua_l_checkunsigned(L, 4);
+    let buf = lua_l_checkbuffer(L, 1, &mut len)? as *mut core::ffi::c_char;
+    let bitoffset = lua_l_checknumber(L, 2)? as i64;
+    let bitcount = lua_l_checkinteger(L, 3)?;
+    let value = lua_l_checkunsigned(L, 4)?;
 
     if bitoffset < 0 {
         unsafe {
@@ -73,5 +75,5 @@ pub fn buffer_writebits(L: *mut lua_State) -> core::ffi::c_int {
         }
     }
 
-    0
+    Ok(0)
 }

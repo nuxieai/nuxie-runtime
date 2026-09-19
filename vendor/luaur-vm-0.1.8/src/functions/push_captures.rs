@@ -7,18 +7,18 @@ pub(crate) unsafe fn push_captures(
     ms: *mut MatchState,
     s: *const c_char,
     e: *const c_char,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     let nlevels = if (*ms).level == 0 && !s.is_null() {
         1
     } else {
         (*ms).level
     };
 
-    lua_l_checkstack((*ms).L, nlevels, "too many captures");
+    lua_l_checkstack((*ms).L, nlevels, "too many captures")?;
 
     for i in 0..nlevels {
-        push_onecapture(ms, i, s, e);
+        push_onecapture(ms, i, s, e)?;
     }
 
-    nlevels
+    Ok(nlevels)
 }

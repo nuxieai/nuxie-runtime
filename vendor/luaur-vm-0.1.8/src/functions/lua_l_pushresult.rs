@@ -8,7 +8,7 @@ use crate::records::t_string::TString;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_pushresult(B: *mut LuaLStrbuf) {
+pub unsafe fn lua_l_pushresult(B: *mut LuaLStrbuf) -> crate::records::lua_exception::LuaResult<()> {
     let L = (*B).L;
     let storage = (*B).storage;
 
@@ -19,16 +19,17 @@ pub unsafe fn lua_l_pushresult(B: *mut LuaLStrbuf) {
         let end = (*B).end;
 
         if p == end {
-            setsvalue!(L, (*L).top.offset(-1), lua_s_buffinish(L, storage));
+            setsvalue!(L, (*L).top.offset(-1), lua_s_buffinish(L, storage)?);
         } else {
             let storage_data = (*storage).data.as_ptr();
             let len = (p as usize).wrapping_sub(storage_data as usize);
-            setsvalue!(L, (*L).top.offset(-1), luaS_newlstr(L, storage_data, len));
+            setsvalue!(L, (*L).top.offset(-1), luaS_newlstr(L, storage_data, len)?);
         }
     } else {
         let p = (*B).p;
         let buffer = (*B).buffer.as_ptr();
         let len = (p as usize).wrapping_sub(buffer as usize);
-        lua_pushlstring(L, buffer, len);
+        lua_pushlstring(L, buffer, len)?;
     }
+    Ok(())
 }

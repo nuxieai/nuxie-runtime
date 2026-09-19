@@ -12,7 +12,10 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_clonefunction(L: *mut lua_State, idx: core::ffi::c_int) {
+pub unsafe fn lua_clonefunction(
+    L: *mut lua_State,
+    idx: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
@@ -24,7 +27,7 @@ pub unsafe fn lua_clonefunction(L: *mut lua_State, idx: core::ffi::c_int) {
     );
     let lc = core::ptr::addr_of!((*cl).inner.l) as *const crate::records::closure::LClosure;
     let newcl: *mut Closure =
-        luaF_newLclosure(L, (*cl).nupvalues as core::ffi::c_int, (*L).gt, (*lc).p);
+        luaF_newLclosure(L, (*cl).nupvalues as core::ffi::c_int, (*L).gt, (*lc).p)?;
     let newlc = core::ptr::addr_of_mut!((*newcl).inner.l) as *mut crate::records::closure::LClosure;
     for i in 0..(*cl).nupvalues as i32 {
         setobj2n!(
@@ -35,4 +38,5 @@ pub unsafe fn lua_clonefunction(L: *mut lua_State, idx: core::ffi::c_int) {
     }
     setclvalue!(L, (*L).top, newcl);
     api_incr_top!(L);
+    Ok(())
 }

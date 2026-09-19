@@ -6,13 +6,17 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::{c_char, c_int};
 
 #[export_name = "luaur_lua_l_callmeta"]
-pub unsafe fn lua_l_callmeta(L: *mut lua_State, obj: c_int, event: *const c_char) -> c_int {
+pub unsafe fn lua_l_callmeta(
+    L: *mut lua_State,
+    obj: c_int,
+    event: *const c_char,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     let obj = abs_index(L, obj);
-    if lua_l_getmetafield(L, obj, event) == 0 {
-        return 0;
+    if lua_l_getmetafield(L, obj, event)? == 0 {
+        return Ok(0);
     }
 
-    lua_pushvalue(L, obj);
-    lua_call(L, 1, 1);
-    1
+    lua_pushvalue(L, obj)?;
+    lua_call(L, 1, 1)?;
+    Ok(1)
 }

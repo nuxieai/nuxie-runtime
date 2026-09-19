@@ -10,14 +10,17 @@ use luaur_common::macros::luau_noinline::LUAU_NOINLINE;
 
 #[allow(non_snake_case)]
 #[export_name = "luaur_lua_v_tryfunc_tm"]
-pub unsafe fn lua_v_tryfunc_tm(L: *mut LuaState, func: StkId) {
+pub unsafe fn lua_v_tryfunc_tm(
+    L: *mut LuaState,
+    func: StkId,
+) -> crate::records::lua_exception::LuaResult<()> {
     let tm = lua_t_gettmbyobj(
         L as *mut lua_State,
         func,
         crate::type_aliases::tms::TMS::TM_CALL,
     );
     if !ttisfunction!(tm) {
-        luaG_typeerror!(L as *mut lua_State, func, c"call".as_ptr());
+        return luaG_typeerror!(L as *mut lua_State, func, c"call".as_ptr());
     }
 
     let mut p = (*L).top;
@@ -28,4 +31,5 @@ pub unsafe fn lua_v_tryfunc_tm(L: *mut LuaState, func: StkId) {
 
     (*L).top = (*L).top.wrapping_add(1);
     setobj2s!(L as *mut lua_State, func, tm);
+    Ok(())
 }

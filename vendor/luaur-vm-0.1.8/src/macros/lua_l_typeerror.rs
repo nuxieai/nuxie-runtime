@@ -4,7 +4,7 @@ use crate::functions::lua_l_typeerror_l::lua_l_typeerror_l;
 #[macro_export]
 macro_rules! luaL_typeerror {
     ($L:expr, $narg:expr, $tname:expr) => {
-        $crate::functions::lua_l_typeerror_l::lua_l_typeerror_l($L, $narg, $tname)
+        return $crate::functions::lua_l_typeerror_l::lua_l_typeerror_l($L, $narg, $tname)
     };
 }
 

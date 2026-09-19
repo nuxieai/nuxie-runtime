@@ -63,8 +63,8 @@ fn string_value(lua: &Lua, value: Value) -> Result<Option<String>> {
     // one rooted result without removing any of exec_raw's arguments.
     let value: luaur_rt::LuaString = unsafe {
         lua.exec_raw(value, |state| {
-            luaur_vm::functions::lua_tolstring::lua_tolstring(state, 1, std::ptr::null_mut());
-            luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 1);
+            luaur_vm::functions::lua_tolstring::lua_tolstring(state, 1, std::ptr::null_mut())?;
+            luaur_vm::functions::lua_pushvalue::lua_pushvalue(state, 1)
         })?
     };
     let bytes = value.as_bytes();

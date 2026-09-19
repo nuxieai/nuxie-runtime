@@ -11,7 +11,7 @@ pub unsafe fn lua_cpcall(
     L: *mut lua_State,
     func: lua_CFunction,
     ud: *mut core::ffi::c_void,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     api_check!(L, (*L).status == 0);
     api_check!(L, func.is_some());
 

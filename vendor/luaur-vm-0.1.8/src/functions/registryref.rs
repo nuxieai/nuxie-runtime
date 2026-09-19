@@ -16,7 +16,7 @@ pub unsafe fn registryref(
     idx: core::ffi::c_int,
     registry: *mut TValue,
     registryfree: *mut core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauGcTraceUdata.get());
     let mut reference = LUA_REFNIL;
     let p = index2addr(l, idx);
@@ -27,12 +27,12 @@ pub unsafe fn registryref(
         } else {
             reference = lua_h_getn(reg) + 1;
         }
-        let slot = luaH_setnum(l, reg, reference);
+        let slot = luaH_setnum(l, reg, reference)?;
         if *registryfree != 0 {
             *registryfree = nvalue!(slot) as core::ffi::c_int;
         }
         setobj2t!(l, slot, p);
         luaC_barriert!(l, reg, p);
     }
-    reference
+    Ok(reference)
 }

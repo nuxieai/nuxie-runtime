@@ -9,8 +9,10 @@ use crate::functions::moveelements::moveelements;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_tinsert"]
-pub unsafe fn tinsert(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
+pub unsafe fn tinsert(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
     let n = lua_objlen(L, 1);
     let top = lua_gettop(L);
     let pos: core::ffi::c_int;
@@ -22,23 +24,22 @@ pub unsafe fn tinsert(L: *mut lua_State) -> core::ffi::c_int {
         }
         3 => {
             // 2nd argument is the position
-            pos = lua_l_checkinteger(L, 2);
+            pos = lua_l_checkinteger(L, 2)?;
 
             // move up elements if necessary
             if 1 <= pos && pos <= n {
-                moveelements(L, 1, 1, pos, n, pos + 1, false);
+                moveelements(L, 1, 1, pos, n, pos + 1, false)?;
             }
         }
         _ => {
-            lua_l_error_l(
+            return lua_l_error_l(
                 L,
                 c"wrong number of arguments to 'insert'".as_ptr(),
                 core::format_args!("wrong number of arguments to 'insert'"),
             );
-            return 0;
         }
     }
 
-    lua_rawseti(L, 1, pos); // t[pos] = v
-    0
+    lua_rawseti(L, 1, pos)?; // t[pos] = v
+    Ok(0)
 }

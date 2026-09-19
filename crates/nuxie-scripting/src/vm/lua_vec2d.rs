@@ -190,7 +190,7 @@ pub(super) fn install_vector_global(lua: &Lua) -> Result<()> {
         })?,
     )?;
     value_metatable.set_readonly(true);
-    lua.set_type_metatable::<LuaVector>(Some(value_metatable));
+    lua.set_type_metatable::<LuaVector>(Some(value_metatable))?;
 
     vector.set_readonly(true);
     lua.globals().set("Vector", vector)

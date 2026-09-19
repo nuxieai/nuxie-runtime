@@ -12,7 +12,9 @@ pub struct LuaCallbacks {
     pub userdata: *mut c_void,
 
     /// gets called at safepoints (loop back edges, call/ret, gc) if set
-    pub interrupt: Option<unsafe extern "C-unwind" fn(l: *mut lua_State, gc: c_int)>,
+    pub interrupt: Option<
+        unsafe fn(l: *mut lua_State, gc: c_int) -> crate::records::lua_exception::LuaResult<()>,
+    >,
     /// gets called when an unprotected error is raised (if longjmp is used)
     pub panic: Option<unsafe extern "C" fn(l: *mut lua_State, errcode: c_int)>,
 

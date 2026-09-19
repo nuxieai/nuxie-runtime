@@ -16,7 +16,11 @@ use core::ffi::c_int;
 use luaur_common::FFlag;
 use luaur_common::LUAU_ASSERT;
 
-pub fn luau_setupcci(L: *mut lua_State, nresults: c_int, fun: StkId) {
+pub fn luau_setupcci(
+    L: *mut lua_State,
+    nresults: c_int,
+    fun: StkId,
+) -> crate::records::lua_exception::LuaResult<()> {
     unsafe {
         let ci = incr_ci!(L);
 
@@ -32,9 +36,10 @@ pub fn luau_setupcci(L: *mut lua_State, nresults: c_int, fun: StkId) {
 
         (*L).base = fun.add(1);
 
-        luaD_checkstackfornewci(L, LUA_MINSTACK);
+        luaD_checkstackfornewci(L, LUA_MINSTACK)?;
 
         LUAU_ASSERT!((*ci).top <= (*L).stack_last);
         LUAU_ASSERT!(ttisfunction!((*ci).func));
     }
+    Ok(())
 }

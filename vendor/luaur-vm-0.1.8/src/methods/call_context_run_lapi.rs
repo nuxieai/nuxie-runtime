@@ -4,8 +4,11 @@ use crate::type_aliases::lua_state::lua_State;
 
 impl CallContext {
     #[allow(non_snake_case)]
-    pub unsafe fn run_mut(l: *mut lua_State, ud: *mut core::ffi::c_void) {
+    pub unsafe fn run_mut(
+        l: *mut lua_State,
+        ud: *mut core::ffi::c_void,
+    ) -> crate::records::lua_exception::LuaResult<()> {
         let ctx = ud as *mut CallContext;
-        lua_d_growstack(l, (*ctx).size);
+        lua_d_growstack(l, (*ctx).size)
     }
 }

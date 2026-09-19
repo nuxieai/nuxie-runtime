@@ -9,10 +9,13 @@ use crate::type_aliases::stk_id::StkId;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub fn lua_v_tostring(L: *mut LuaState, obj: StkId) -> i32 {
+pub fn lua_v_tostring(
+    L: *mut LuaState,
+    obj: StkId,
+) -> crate::records::lua_exception::LuaResult<i32> {
     unsafe {
         if !ttisnumber!(obj) {
-            0
+            Ok(0)
         } else {
             let mut s = [0 as core::ffi::c_char; LUAI_MAXNUM2STR as usize];
             let n = nvalue!(obj);
@@ -21,9 +24,9 @@ pub fn lua_v_tostring(L: *mut LuaState, obj: StkId) -> i32 {
             setsvalue!(
                 L,
                 obj,
-                luaS_newlstr(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)
+                luaS_newlstr(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)?
             );
-            1
+            Ok(1)
         }
     }
 }

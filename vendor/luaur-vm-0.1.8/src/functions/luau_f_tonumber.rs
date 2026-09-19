@@ -17,21 +17,21 @@ pub unsafe fn luau_f_tonumber(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams == 1 && nresults <= 1 {
         let mut num: f64 = 0.0;
 
         if ttisnumber!(arg0) {
             setnvalue!(res, nvalue!(arg0));
-            1
+            Ok(1)
         } else if ttisstring!(arg0) && lua_o_str_2_d(svalue!(arg0), &mut num) != 0 {
             setnvalue!(res, num);
-            1
+            Ok(1)
         } else {
             setnilvalue!(res);
-            1
+            Ok(1)
         }
     } else {
-        -1
+        Ok(-1)
     }
 }

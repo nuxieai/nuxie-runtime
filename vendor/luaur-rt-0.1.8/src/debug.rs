@@ -98,7 +98,8 @@ impl Lua {
                 level as c_int,
                 opt.as_ptr() as *const c_char,
                 &mut ar,
-            );
+            )
+            .expect("debug metadata options do not push values or allocate");
             if ok == 0 {
                 return None;
             }

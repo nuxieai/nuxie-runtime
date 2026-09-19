@@ -8,10 +8,10 @@ pub fn fieldargs(
     l: *mut lua_State,
     farg: core::ffi::c_int,
     width: *mut core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     unsafe {
-        let f = lua_l_checkinteger(l, farg);
-        let w = lua_l_optinteger(l, farg + 1, 1);
+        let f = lua_l_checkinteger(l, farg)?;
+        let w = lua_l_optinteger(l, farg + 1, 1)?;
 
         luaL_argcheck!(l, 0 <= f, farg, "field cannot be negative");
         luaL_argcheck!(l, 0 < w, farg + 1, "width must be positive");
@@ -23,6 +23,6 @@ pub fn fieldargs(
         }
 
         *width = w;
-        f
+        Ok(f)
     }
 }

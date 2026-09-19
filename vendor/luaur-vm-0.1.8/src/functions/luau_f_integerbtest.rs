@@ -14,22 +14,22 @@ pub unsafe fn luau_f_integerbtest(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisinteger!(arg0) {
         let mut r: u64 = lvalue!(arg0) as u64;
 
         for i in 2..=nparams {
             let arg = args.add((i - 2) as usize);
             if !ttisinteger!(arg) {
-                return -1;
+                return Ok(-1);
             }
 
             r &= lvalue!(arg) as u64;
         }
 
         setbvalue!(res, r != 0);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

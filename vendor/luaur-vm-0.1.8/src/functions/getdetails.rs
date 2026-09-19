@@ -10,12 +10,14 @@ pub(crate) unsafe fn getdetails(
     fmt: *mut *const c_char,
     psize: *mut c_int,
     ntoalign: *mut c_int,
-) -> KOption {
-    let opt = getoption(h, fmt, psize);
+) -> crate::records::lua_exception::LuaResult<KOption> {
+    let opt = getoption(h, fmt, psize)?;
     let mut align = *psize;
 
     if opt == KOption::Kpaddalign {
-        if **fmt == b'\0' as c_char || getoption(h, fmt, &mut align) == KOption::Kchar || align == 0
+        if **fmt == b'\0' as c_char
+            || getoption(h, fmt, &mut align)? == KOption::Kchar
+            || align == 0
         {
             luaL_argerror!((*h).L, 1, "invalid next option for option 'X'");
         }
@@ -35,5 +37,5 @@ pub(crate) unsafe fn getdetails(
         *ntoalign = (align - (totalsize as c_int & (align - 1))) & (align - 1);
     }
 
-    opt
+    Ok(opt)
 }

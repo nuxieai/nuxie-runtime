@@ -11,10 +11,12 @@ use crate::macros::ttisnil::ttisnil;
 use crate::macros::ttisnumber::ttisnumber;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn maxn(l: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn maxn(
+    l: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut max: f64 = 0.0;
     unsafe {
-        lua_l_checktype(l, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
+        lua_l_checktype(l, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
 
         let t = hvalue!((*l).base);
 
@@ -37,7 +39,7 @@ pub unsafe fn maxn(l: *mut lua_State) -> core::ffi::c_int {
             }
         }
 
-        lua_pushnumber(l, max);
+        lua_pushnumber(l, max)?;
     }
-    1
+    Ok(1)
 }

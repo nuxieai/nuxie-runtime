@@ -9,22 +9,25 @@ use crate::macros::lua_newtable::lua_newtable;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_sandboxthread(L: *mut lua_State) {
+pub unsafe fn lua_l_sandboxthread(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<()> {
     // create new global table that proxies reads to original table
-    lua_newtable(L);
+    lua_newtable(L)?;
 
-    lua_newtable(L);
+    lua_newtable(L)?;
 
-    lua_pushvalue(L, LUA_GLOBALSINDEX);
+    lua_pushvalue(L, LUA_GLOBALSINDEX)?;
 
-    lua_setfield(L, -2, c"__index".as_ptr());
+    lua_setfield(L, -2, c"__index".as_ptr())?;
 
     lua_setreadonly(L, -1, 1);
 
-    lua_setmetatable(L, -2);
+    lua_setmetatable(L, -2)?;
 
     // we can set safeenv now although it's important to set it to false if code is loaded twice into the thread
     lua_replace(L, LUA_GLOBALSINDEX);
 
     lua_setsafeenv(L, LUA_GLOBALSINDEX, 1);
+    Ok(())
 }

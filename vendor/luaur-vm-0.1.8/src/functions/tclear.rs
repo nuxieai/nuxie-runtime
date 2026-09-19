@@ -6,15 +6,17 @@ use crate::macros::hvalue::hvalue;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_tclear"]
-pub unsafe fn tclear(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
+pub unsafe fn tclear(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
 
     let tt = hvalue!((*L).base);
 
     if (*tt).readonly != 0 {
-        lua_g_readonlyerror(L);
+        return lua_g_readonlyerror(L);
     }
 
     lua_h_clear(tt);
-    0
+    Ok(0)
 }

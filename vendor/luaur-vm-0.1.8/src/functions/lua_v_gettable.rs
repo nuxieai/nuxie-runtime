@@ -1,6 +1,8 @@
 //! Node: `cxx:Function:Luau.VM:VM/src/lvmutils.cpp:102:luaV_gettable`
 //! Source: `VM/src/lvmutils.cpp:102-180` (hand-ported)
 
+use crate::records::lua_exception::LuaResult;
+
 use crate::functions::call_t_mres::call_t_mres;
 use crate::functions::lua_g_indexerror::luaG_indexerror;
 use crate::functions::lua_g_missingmembererror::luaG_missingmembererror;
@@ -36,7 +38,7 @@ pub unsafe fn lua_v_gettable(
     mut t: *const TValue,
     key: *mut TValue,
     val: StkId,
-) {
+) -> LuaResult<()> {
     let mut loop_ = 0;
     while loop_ < MAXTAGLOOP {
         let mut tm: *const TValue;
@@ -51,38 +53,38 @@ pub unsafe fn lua_v_gettable(
 
             if !ttisnil!(res) {
                 setobj2s!(L, val, res);
-                return;
+                return Ok(());
             }
 
             tm = fasttm(L, (*h).metatable, TMS::TM_INDEX as i32);
             if tm.is_null() {
                 setobj2s!(L, val, res);
-                return;
+                return Ok(());
             }
         } else if luaur_common::FFlag::DebugLuauUserDefinedClassesRuntime.get() && ttisobject!(t) {
             let inst = &mut **objectvalue!(t) as *mut LuauObject;
             let offsettval = lua_h_get((*(*inst).lclass).memberstooffset, key as *const TValue);
 
             if ttisnil!(offsettval) {
-                luaG_missingmembererror(L, t, key as *const TValue);
+                return luaG_missingmembererror(L, t, key as *const TValue);
             }
 
             let offset = nvalue!(offsettval) as u32;
             setobj2s!(L, val, luaR_lookupmemberatoffset!(inst, offset));
-            return;
+            return Ok(());
         } else if luaur_common::FFlag::DebugLuauUserDefinedClassesRuntime.get() && ttisclass!(t) {
             let lco = &mut **classvalue!(t) as *mut LuauClass;
             let res = lua_h_get((*lco).memberstooffset, key as *const TValue);
 
             if ttisnil!(res) {
-                luaG_missingmembererror(L, t, key as *const TValue);
+                return luaG_missingmembererror(L, t, key as *const TValue);
             }
 
             let offset = nvalue!(res) as u32;
             LUAU_ASSERT!(offset < (*lco).numberofallmembers);
 
             if offset < (*lco).numberofinstancemembers {
-                luaG_missingmembererror(L, t, key as *const TValue);
+                return luaG_missingmembererror(L, t, key as *const TValue);
             }
 
             setobj2s!(
@@ -92,32 +94,32 @@ pub unsafe fn lua_v_gettable(
                     .staticmembers
                     .add((offset - (*lco).numberofinstancemembers) as usize)
             );
-            return;
+            return Ok(());
         } else {
             tm = lua_t_gettmbyobj(L, t, TMS::TM_INDEX);
             if ttisnil!(tm) {
-                luaG_indexerror(L, t, key as *const TValue);
+                return luaG_indexerror(L, t, key as *const TValue);
             }
         }
 
         if ttisfunction!(tm) {
-            call_t_mres(L, val, tm, t, key as *const TValue);
-            return;
+            call_t_mres(L, val, tm, t, key as *const TValue)?;
+            return Ok(());
         }
         t = tm;
         loop_ += 1;
     }
-    lua_g_runerror!(L, "'__index' chain too long; possible loop");
+    lua_g_runerror!(L, "'__index' chain too long; possible loop")
 }
 
 #[export_name = "luaur_luaV_gettable"]
-pub unsafe extern "C" fn lua_v_gettable_export(
+pub unsafe fn lua_v_gettable_export(
     L: *mut lua_State,
     t: *const TValue,
     key: *mut TValue,
     val: StkId,
-) {
-    lua_v_gettable(L, t, key, val);
+) -> LuaResult<()> {
+    lua_v_gettable(L, t, key, val)
 }
 
 #[allow(non_snake_case, unused_imports)]

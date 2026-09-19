@@ -9,11 +9,11 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaG_missingmembererror(
+pub unsafe fn luaG_missingmembererror<T>(
     L: *mut lua_State,
     p1: *const TValue,
     p2: *const TValue,
-) -> ! {
+) -> crate::records::lua_exception::LuaResult<T> {
     if !ttisstring!(p2) {
         let t1 = lua_t_objtypename(L, p1);
         let t2 = lua_t_objtypename(L, p2);
@@ -36,10 +36,10 @@ pub unsafe fn luaG_missingmembererror(
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_missingmembererror(
+pub unsafe fn lua_g_missingmembererror<T>(
     L: *mut lua_State,
     p1: *const TValue,
     p2: *const TValue,
-) -> ! {
+) -> crate::records::lua_exception::LuaResult<T> {
     luaG_missingmembererror(L, p1, p2)
 }

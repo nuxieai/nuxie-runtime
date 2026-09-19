@@ -14,7 +14,7 @@ pub unsafe fn luau_f_vector2cross(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisvector!(arg0) && ttisvector!(args) {
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
@@ -24,8 +24,8 @@ pub unsafe fn luau_f_vector2cross(
                 .read()
                 .mul_add(b.add(1).read(), -(a.add(1).read() * b.add(0).read())) as f64
         );
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

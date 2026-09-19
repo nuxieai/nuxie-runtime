@@ -5,12 +5,14 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaF_newproto(l: *mut lua_State) -> *mut Proto {
+pub unsafe fn luaF_newproto(
+    l: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<*mut Proto> {
     let f = crate::functions::lua_m_newgco::luaM_newgco_(
         l,
         core::mem::size_of::<Proto>(),
         (*l).activememcat,
-    ) as *mut Proto;
+    )? as *mut Proto;
 
     luaC_init!(l, f, lua_Type::LUA_TPROTO as c_int);
 
@@ -59,7 +61,7 @@ pub unsafe fn luaF_newproto(l: *mut lua_State) -> *mut Proto {
     (*f).deoptimized = core::ptr::null_mut();
     (*f).cost = 0;
 
-    f
+    Ok(f)
 }
 
 #[allow(unused_imports)]

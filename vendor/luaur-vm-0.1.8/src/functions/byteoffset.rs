@@ -11,12 +11,12 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[export_name = "luaur_byteoffset"]
-pub unsafe fn byteoffset(L: *mut lua_State) -> c_int {
+pub unsafe fn byteoffset(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut len: usize = 0;
-    let s = lua_l_checklstring(L, 1, &mut len);
-    let mut n = lua_l_checkinteger(L, 2);
+    let s = lua_l_checklstring(L, 1, &mut len)?;
+    let mut n = lua_l_checkinteger(L, 2)?;
     let mut posi = if n >= 0 { 1 } else { len as i32 + 1 };
-    posi = u_posrelat(lua_l_optinteger(L, 3, posi), len);
+    posi = u_posrelat(lua_l_optinteger(L, 3, posi)?, len);
     luaL_argcheck!(
         L,
         1 <= posi && posi <= len as i32 + 1,
@@ -32,7 +32,7 @@ pub unsafe fn byteoffset(L: *mut lua_State) -> c_int {
         }
     } else {
         if iscont(s.add(posi as usize)) {
-            lua_l_error_l(
+            return lua_l_error_l(
                 L,
                 c"initial position is a continuation byte".as_ptr(),
                 core::format_args!("initial position is a continuation byte"),
@@ -67,10 +67,10 @@ pub unsafe fn byteoffset(L: *mut lua_State) -> c_int {
 
     if n == 0 {
         // did it find given character?
-        lua_pushinteger(L, posi + 1);
+        lua_pushinteger(L, posi + 1)?;
     } else {
         // no such character
-        lua_pushnil(L);
+        lua_pushnil(L)?;
     }
-    1
+    Ok(1)
 }

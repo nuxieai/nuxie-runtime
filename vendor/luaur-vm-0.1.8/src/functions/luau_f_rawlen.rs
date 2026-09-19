@@ -16,18 +16,18 @@ pub unsafe fn luau_f_rawlen(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 {
         if ttistable!(arg0) {
             let h = hvalue!(arg0);
             setnvalue!(res, lua_h_getn(h) as f64);
-            return 1;
+            return Ok(1);
         } else if ttisstring!(arg0) {
             let ts = tsvalue!(arg0);
             setnvalue!(res, (*ts).len as f64);
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

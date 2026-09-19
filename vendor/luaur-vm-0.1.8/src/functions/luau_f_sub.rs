@@ -18,7 +18,7 @@ pub unsafe fn luau_f_sub(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3
         && nresults <= 1
         && ttisstring!(arg0)
@@ -30,16 +30,16 @@ pub unsafe fn luau_f_sub(
         let j = nvalue!(args.add(1)) as i32;
 
         if luaC_needsGC!(l) {
-            return -1;
+            return Ok(-1);
         }
 
         if i >= 1 && j >= i && ((j - 1) as u32) < (*ts).len {
             let str_ptr = getstr(ts);
-            let new_ts = luaS_newlstr(l, str_ptr.add((i - 1) as usize), (j - i + 1) as usize);
+            let new_ts = luaS_newlstr(l, str_ptr.add((i - 1) as usize), (j - i + 1) as usize)?;
             setsvalue!(l, res, new_ts);
-            return 1;
+            return Ok(1);
         }
     }
 
-    -1
+    Ok(-1)
 }

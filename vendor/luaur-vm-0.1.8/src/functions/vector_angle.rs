@@ -4,10 +4,10 @@ use crate::functions::lua_pushnumber::lua_pushnumber;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_vector_angle"]
-pub unsafe fn vector_angle(l: *mut lua_State) -> i32 {
-    let a = lua_l_checkvector(l, 1);
-    let b = lua_l_optvector(l, 2, core::ptr::null());
-    let axis = lua_l_optvector(l, 3, core::ptr::null());
+pub unsafe fn vector_angle(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    let a = lua_l_checkvector(l, 1)?;
+    let b = lua_l_optvector(l, 2, core::ptr::null())?;
+    let axis = lua_l_optvector(l, 3, core::ptr::null())?;
 
     let a_val = core::slice::from_raw_parts(a, 3);
     let b_val = core::slice::from_raw_parts(b, 3);
@@ -29,6 +29,6 @@ pub unsafe fn vector_angle(l: *mut lua_State) -> i32 {
         }
     }
 
-    lua_pushnumber(l, angle);
-    1
+    lua_pushnumber(l, angle)?;
+    Ok(1)
 }

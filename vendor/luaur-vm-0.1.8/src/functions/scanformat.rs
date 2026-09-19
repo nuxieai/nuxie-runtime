@@ -10,7 +10,7 @@ pub unsafe fn scanformat(
     strfrmt: *const c_char,
     mut form: *mut c_char,
     size: *mut usize,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     const FLAGS: &[u8] = b"-+ #0";
 
     let mut p = strfrmt;
@@ -50,5 +50,5 @@ pub unsafe fn scanformat(
     form = form.offset(*size as isize);
     ptr::write(form, 0);
 
-    p
+    Ok(p)
 }

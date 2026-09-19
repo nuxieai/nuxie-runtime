@@ -11,14 +11,14 @@ pub unsafe fn lua_lessthan(
     L: *mut lua_State,
     index1: core::ffi::c_int,
     index2: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let o1: StkId = index2addr(L, index1);
     let o2: StkId = index2addr(L, index2);
 
     let nil_ptr = luaO_nilobject as *const TValue;
 
     if (o1 as *const TValue) == nil_ptr || (o2 as *const TValue) == nil_ptr {
-        0
+        Ok(0)
     } else {
         lua_v_lessthan(L, o1 as *const TValue, o2 as *const TValue)
     }

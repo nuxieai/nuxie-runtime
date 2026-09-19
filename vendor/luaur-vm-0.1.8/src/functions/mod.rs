@@ -182,7 +182,6 @@ pub mod hashpointer;
 pub mod hashvec;
 pub mod index_2_addr;
 pub mod initheader;
-pub mod install_lua_exception_panic_hook;
 pub mod int_64_add;
 pub mod int_64_arshift;
 pub mod int_64_band;

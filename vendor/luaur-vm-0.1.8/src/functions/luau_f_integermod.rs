@@ -14,18 +14,18 @@ pub unsafe fn luau_f_integermod(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
         let a1: i64 = lvalue!(arg0);
         let a2: i64 = lvalue!(args);
 
         if a2 == 0 {
-            return -1;
+            return Ok(-1);
         }
 
         if a1 == i64::MIN && a2 == -1 {
             setlvalue!(res, 0);
-            return 1;
+            return Ok(1);
         }
 
         let mut remainder = a1 % a2;
@@ -34,8 +34,8 @@ pub unsafe fn luau_f_integermod(
         }
 
         setlvalue!(res, remainder);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

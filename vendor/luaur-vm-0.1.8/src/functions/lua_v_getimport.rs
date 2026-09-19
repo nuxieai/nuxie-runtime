@@ -17,7 +17,7 @@ pub unsafe fn lua_v_getimport(
     mut res: StkId,
     id: u32,
     propagatenil: bool,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let count = id >> 30;
     LUAU_ASSERT!(count > 0);
 
@@ -32,25 +32,26 @@ pub unsafe fn lua_v_getimport(
     // global lookup for id0
     let mut g: TValue = core::mem::zeroed();
     sethvalue!(L, &mut g as *mut TValue, env);
-    lua_v_gettable(L, &g as *const TValue, k.add(id0), res);
+    lua_v_gettable(L, &g as *const TValue, k.add(id0), res)?;
 
     // table lookup for id1
     if count < 2 {
-        return;
+        return Ok(());
     }
 
     res = restorestack!(L, resp);
     if !propagatenil || !ttisnil!(res) {
-        lua_v_gettable(L, res as *const TValue, k.add(id1), res);
+        lua_v_gettable(L, res as *const TValue, k.add(id1), res)?;
     }
 
     // table lookup for id2
     if count < 3 {
-        return;
+        return Ok(());
     }
 
     res = restorestack!(L, resp);
     if !propagatenil || !ttisnil!(res) {
-        lua_v_gettable(L, res as *const TValue, k.add(id2), res);
+        lua_v_gettable(L, res as *const TValue, k.add(id2), res)?;
     }
+    Ok(())
 }

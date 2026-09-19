@@ -11,16 +11,16 @@ pub unsafe fn lua_getargument(
     l: *mut lua_State,
     level: core::ffi::c_int,
     n: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if (level as u32) >= ((*l).ci.offset_from((*l).base_ci) as u32) {
-        return 0;
+        return Ok(0);
     }
 
     let ci: *mut CallInfo = (*l).ci.offset(-(level as isize));
 
     // changing tables in native functions externally may invalidate safety contracts wrt table state (metatable/size/readonly)
     if ((*ci).flags & LUA_CALLINFO_NATIVE as u32) != 0 {
-        return 0;
+        return Ok(0);
     }
 
     let fp: *mut Proto = get_lua_proto(ci);
@@ -31,16 +31,16 @@ pub unsafe fn lua_getargument(
             if ((*l).hdr.marked & 4) != 0 {
                 lua_c_barrierback(l, l as *mut _, &mut (*l).gclist);
             }
-            luaA_pushvalue(l, (*ci).base.offset((n - 1) as isize));
+            luaA_pushvalue(l, (*ci).base.offset((n - 1) as isize))?;
             res = 1;
         } else if (*fp).is_vararg != 0 && (n as isize) < (*ci).base.offset_from((*ci).func) {
             if ((*l).hdr.marked & 4) != 0 {
                 lua_c_barrierback(l, l as *mut _, &mut (*l).gclist);
             }
-            luaA_pushvalue(l, (*ci).func.offset(n as isize));
+            luaA_pushvalue(l, (*ci).func.offset(n as isize))?;
             res = 1;
         }
     }
 
-    res
+    Ok(res)
 }

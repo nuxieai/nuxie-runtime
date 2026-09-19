@@ -14,12 +14,12 @@ pub unsafe fn luau_f_isinf(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let x = nvalue!(arg0);
         setbvalue!(res, x.is_infinite());
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

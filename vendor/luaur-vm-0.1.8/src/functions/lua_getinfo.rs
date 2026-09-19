@@ -24,21 +24,21 @@ pub unsafe fn lua_getinfo(
     level: c_int,
     what: *const c_char,
     ar: *mut LuaDebug,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     let mut f: *mut Closure = core::ptr::null_mut();
     let mut ci: *mut CallInfo = core::ptr::null_mut();
 
     if level < 0 {
         // element has to be within stack
         if (-level) as isize > (*L).top.offset_from((*L).base) {
-            return 0;
+            return Ok(0);
         }
 
         let func = (*L).top.offset(level as isize);
 
         // and it has to be a function
         if !ttisfunction!(func) {
-            return 0;
+            return Ok(0);
         }
 
         f = clvalue!(func);
@@ -59,8 +59,8 @@ pub unsafe fn lua_getinfo(
     }
 
     if f.is_null() {
-        0
+        Ok(0)
     } else {
-        1
+        Ok(1)
     }
 }

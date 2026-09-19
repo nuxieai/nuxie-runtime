@@ -15,7 +15,7 @@ pub unsafe fn luau_f_byteswap(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         let mut n: u32 = 0;
@@ -24,8 +24,8 @@ pub unsafe fn luau_f_byteswap(
         n = (n << 24) | ((n << 8) & 0xff0000) | ((n >> 8) & 0xff00) | (n >> 24);
 
         setnvalue!(res, n as f64);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

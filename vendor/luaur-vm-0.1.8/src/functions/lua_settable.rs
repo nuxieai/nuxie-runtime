@@ -1,3 +1,4 @@
+use crate::records::lua_exception::LuaResult;
 use core::ffi::c_int;
 
 use crate::functions::index_2_addr::index2addr;
@@ -9,11 +10,12 @@ use crate::records::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_settable(L: *mut lua_State, idx: c_int) {
+pub unsafe fn lua_settable(L: *mut lua_State, idx: c_int) -> LuaResult<()> {
     api_checknelems!(L, 2);
 
     let t: StkId = index2addr(L, idx);
     api_check!(L, t != luaO_nilobject as StkId);
-    lua_v_settable(L, t, (*L).top.sub(2), (*L).top.sub(1));
+    lua_v_settable(L, t, (*L).top.sub(2), (*L).top.sub(1))?;
     (*L).top = (*L).top.sub(2);
+    Ok(())
 }

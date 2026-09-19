@@ -10,16 +10,21 @@ use crate::records::lua_l_strbuf::LuaLStrbuf;
 use crate::records::match_state::MatchState;
 use core::ffi::{c_char, c_int, c_void};
 
-pub unsafe fn add_s(ms: *mut MatchState, b: *mut LuaLStrbuf, s: *const c_char, e: *const c_char) {
+pub unsafe fn add_s(
+    ms: *mut MatchState,
+    b: *mut LuaLStrbuf,
+    s: *const c_char,
+    e: *const c_char,
+) -> crate::records::lua_exception::LuaResult<()> {
     let mut l: usize = 0;
-    let news = lua_tolstring((*ms).L, 3, &mut l);
+    let news = lua_tolstring((*ms).L, 3, &mut l)?;
 
-    crate::functions::lua_l_prepbuffsize::lua_l_prepbuffsize(b, l);
+    crate::functions::lua_l_prepbuffsize::lua_l_prepbuffsize(b, l)?;
 
     let mut i: usize = 0;
     while i < l {
         if *news.add(i) != L_ESC {
-            crate::functions::lua_l_addchar::lua_l_addchar(b, *news.add(i));
+            crate::functions::lua_l_addchar::lua_l_addchar(b, *news.add(i))?;
         } else {
             i += 1; // skip ESC
             let next = uchar(*news.add(i) as c_int) as u8;
@@ -31,14 +36,15 @@ pub unsafe fn add_s(ms: *mut MatchState, b: *mut LuaLStrbuf, s: *const c_char, e
                         L_ESC as u8 as char
                     );
                 }
-                crate::functions::lua_l_addchar::lua_l_addchar(b, *news.add(i));
+                crate::functions::lua_l_addchar::lua_l_addchar(b, *news.add(i))?;
             } else if next == b'0' {
-                lua_l_addlstring(b, s, (e as usize).wrapping_sub(s as usize));
+                lua_l_addlstring(b, s, (e as usize).wrapping_sub(s as usize))?;
             } else {
-                push_onecapture(ms, (next - b'1') as i32, s, e);
-                lua_l_addvalue(b); // add capture to accumulated result
+                push_onecapture(ms, (next - b'1') as i32, s, e)?;
+                lua_l_addvalue(b)?; // add capture to accumulated result
             }
         }
         i += 1;
     }
+    Ok(())
 }

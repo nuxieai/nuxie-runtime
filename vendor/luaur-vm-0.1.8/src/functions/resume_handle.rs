@@ -71,14 +71,13 @@ pub unsafe fn resume_handle(
     luaF_close(l, (*(*l).ci).base);
     (*l).base = (*ci).base;
     (*ci).top = (*l).top;
-    restore_stack_limit(l);
+    restore_stack_limit(l)?;
 
-    let n = (*c).cont.unwrap()(l, status);
+    let n = (*c).cont.unwrap()(l, status)?;
     if (*l).status != lua_Status::LUA_OK as u8 {
         return Ok(());
     }
     luau_poscall(l, (*l).top.offset(-(n as isize)));
 
-    resume_continue(l);
-    Ok(())
+    resume_continue(l)
 }

@@ -6,7 +6,7 @@ pub fn luaO_pushfstring(
     L: *mut lua_State,
     fmt: *const c_char,
     args: core::fmt::Arguments<'_>,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     // In the Luau Rust port, printf-style varargs are handled by passing core::fmt::Arguments.
     unsafe { luaO_pushvfstring(L, fmt, args) }
 }

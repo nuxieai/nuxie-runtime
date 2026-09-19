@@ -11,7 +11,7 @@ unsafe fn push_error_bytes(
     source: Option<*const c_char>,
     line: i32,
     msg: *const c_char,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     let msg = CStr::from_ptr(msg).to_bytes();
     let mut result = alloc::vec::Vec::new();
 
@@ -29,11 +29,14 @@ unsafe fn push_error_bytes(
     }
 
     result.extend_from_slice(msg);
-    lua_pushlstring(L, result.as_ptr().cast(), result.len());
+    lua_pushlstring(L, result.as_ptr().cast(), result.len())
 }
 
 #[export_name = "luaur_pusherror"]
-pub unsafe fn pusherror(L: *mut lua_State, msg: *const c_char) {
+pub unsafe fn pusherror(
+    L: *mut lua_State,
+    msg: *const c_char,
+) -> crate::records::lua_exception::LuaResult<()> {
     let ci = (*L).ci;
 
     // isLua! macro expects a pointer to CallInfo, not a dereferenced struct.
@@ -41,8 +44,8 @@ pub unsafe fn pusherror(L: *mut lua_State, msg: *const c_char) {
         let proto = get_lua_proto(ci);
         let source = (*proto).source;
         let line = currentline(L, ci);
-        push_error_bytes(L, Some(getstr(source)), line, msg);
+        push_error_bytes(L, Some(getstr(source)), line, msg)
     } else {
-        push_error_bytes(L, None, 0, msg);
+        push_error_bytes(L, None, 0, msg)
     }
 }

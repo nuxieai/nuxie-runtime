@@ -14,21 +14,22 @@ pub unsafe fn luau_f_vectorcross(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisvector!(arg0) && ttisvector!(args) {
         let a = vvalue!(arg0).as_ptr();
         let b = vvalue!(args).as_ptr();
 
         // same for 3- and 4- wide vectors
-        setvvalue!(L,
+        setvvalue!(
+            L,
             res,
             a.offset(1).read() * b.offset(2).read() - a.offset(2).read() * b.offset(1).read(),
             a.offset(2).read() * b.offset(0).read() - a.offset(0).read() * b.offset(2).read(),
             a.offset(0).read() * b.offset(1).read() - a.offset(1).read() * b.offset(0).read(),
             0.0 as crate::type_aliases::lua_vector_type::LuaVectorType
         );
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

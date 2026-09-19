@@ -4,19 +4,22 @@ use crate::records::match_state::MatchState;
 use crate::type_aliases::match_state::MatchState as MatchStateAlias;
 use core::ffi::c_char;
 
-pub fn classend(ms: *mut MatchState, p: *const c_char) -> *const c_char {
+pub fn classend(
+    ms: *mut MatchState,
+    p: *const c_char,
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     unsafe {
         let p = p.add(1);
         match *p.offset(-1) as u8 {
             x if x == L_ESC as u8 => {
                 if p == (*ms).p_end {
-                    lua_l_error_l(
+                    return lua_l_error_l(
                         (*ms).L,
                         c"malformed pattern (ends with '%%')".as_ptr(),
                         core::format_args!("malformed pattern (ends with '%%')"),
                     );
                 }
-                p.add(1)
+                Ok(p.add(1))
             }
             b'[' => {
                 let mut p = p;
@@ -25,7 +28,7 @@ pub fn classend(ms: *mut MatchState, p: *const c_char) -> *const c_char {
                 }
                 loop {
                     if p == (*ms).p_end {
-                        lua_l_error_l(
+                        return lua_l_error_l(
                             (*ms).L,
                             c"malformed pattern (missing ']')".as_ptr(),
                             core::format_args!("malformed pattern (missing ']')"),
@@ -39,9 +42,9 @@ pub fn classend(ms: *mut MatchState, p: *const c_char) -> *const c_char {
                         break;
                     }
                 }
-                p.add(1)
+                Ok(p.add(1))
             }
-            _ => p,
+            _ => Ok(p),
         }
     }
 }

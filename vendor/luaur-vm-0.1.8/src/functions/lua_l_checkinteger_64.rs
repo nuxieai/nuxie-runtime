@@ -6,12 +6,18 @@ use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_luaL_checkinteger64"]
 #[allow(non_snake_case)]
-pub unsafe fn luaL_checkinteger64(L: *mut lua_State, narg: core::ffi::c_int) -> i64 {
+pub unsafe fn luaL_checkinteger64(
+    L: *mut lua_State,
+    narg: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<i64> {
     lua_l_checkinteger_64(L, narg)
 }
 
 #[export_name = "luaur_lua_l_checkinteger_64"]
-pub unsafe fn lua_l_checkinteger_64(L: *mut lua_State, narg: core::ffi::c_int) -> i64 {
+pub unsafe fn lua_l_checkinteger_64(
+    L: *mut lua_State,
+    narg: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<i64> {
     // The macro lua_isinteger_64! expands to a call to lua_type(L, narg).
     // Since lua_type is currently a stub taking 0 arguments and returning (),
     // we must transmute it to the expected signature to allow the macro to compile.
@@ -20,7 +26,7 @@ pub unsafe fn lua_l_checkinteger_64(L: *mut lua_State, narg: core::ffi::c_int) -
         core::mem::transmute(lua_type_ptr);
 
     if lua_type_real(L, narg) != (lua_Type::LUA_TINTEGER as core::ffi::c_int) {
-        tag_error(L, narg, lua_Type::LUA_TINTEGER as core::ffi::c_int);
+        return tag_error(L, narg, lua_Type::LUA_TINTEGER as core::ffi::c_int);
     }
 
     // The C++ source calls lua_tointeger64(L, narg, nullptr).
@@ -30,5 +36,5 @@ pub unsafe fn lua_l_checkinteger_64(L: *mut lua_State, narg: core::ffi::c_int) -
     let func: unsafe extern "C" fn(*mut lua_State, core::ffi::c_int, *mut core::ffi::c_int) -> i64 =
         core::mem::transmute(lua_tointeger_64_ptr);
 
-    func(L, narg, core::ptr::null_mut())
+    Ok(func(L, narg, core::ptr::null_mut()))
 }

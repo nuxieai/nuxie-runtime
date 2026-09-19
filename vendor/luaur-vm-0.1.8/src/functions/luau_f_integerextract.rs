@@ -14,9 +14,9 @@ pub unsafe fn luau_f_integerextract(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 3 && !ttisinteger!(args.offset(1)) {
-        return -1;
+        return Ok(-1);
     }
 
     if nparams >= 2 && nresults <= 1 && ttisinteger!(arg0) && ttisinteger!(args) {
@@ -29,7 +29,7 @@ pub unsafe fn luau_f_integerextract(
         };
 
         if f < 0 || f > 63 || w < 1 || w > 64 || (f + w) > 64 {
-            return -1;
+            return Ok(-1);
         }
 
         // C++: (((uint64_t)n) >> f) & ((0xFFFFFFFFFFFFFFFFULL) >> (64 - w))
@@ -44,8 +44,8 @@ pub unsafe fn luau_f_integerextract(
         let val: u64 = (n as u64).wrapping_shr(f as u32) & mask;
 
         setlvalue!(res, val as i64);
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

@@ -15,13 +15,13 @@ pub unsafe fn luau_f_vector(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) && ttisnumber!(args) {
         let x = nvalue!(arg0) as crate::type_aliases::lua_vector_type::LuaVectorType;
         let y = nvalue!(args) as crate::type_aliases::lua_vector_type::LuaVectorType;
         let z: crate::type_aliases::lua_vector_type::LuaVectorType = if nparams >= 3 {
             if !ttisnumber!(args.add(1)) {
-                return -1;
+                return Ok(-1);
             }
             nvalue!(args.add(1)) as crate::type_aliases::lua_vector_type::LuaVectorType
         } else {
@@ -31,7 +31,7 @@ pub unsafe fn luau_f_vector(
         if LUA_VECTOR_SIZE == 4 {
             let w: crate::type_aliases::lua_vector_type::LuaVectorType = if nparams >= 4 {
                 if !ttisnumber!(args.add(2)) {
-                    return -1;
+                    return Ok(-1);
                 }
                 nvalue!(args.add(2)) as crate::type_aliases::lua_vector_type::LuaVectorType
             } else {
@@ -43,8 +43,8 @@ pub unsafe fn luau_f_vector(
             setvvalue!(L, res, x, y, z, 0.0);
         }
 
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

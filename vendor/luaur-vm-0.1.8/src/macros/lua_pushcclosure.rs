@@ -8,9 +8,8 @@ pub const lua_pushcclosure: unsafe fn(
     lua_CFunction,
     *const core::ffi::c_char,
     core::ffi::c_int,
-) = |l, f, debugname, nup| unsafe {
-    lua_pushcclosurek(l, f, debugname, nup, None);
-};
+) -> crate::records::lua_exception::LuaResult<()> =
+    |l, f, debugname, nup| unsafe { lua_pushcclosurek(l, f, debugname, nup, None) };
 
 #[allow(non_upper_case_globals)]
 pub const LUA_PUSHCCLOSURE: unsafe fn(
@@ -18,4 +17,4 @@ pub const LUA_PUSHCCLOSURE: unsafe fn(
     lua_CFunction,
     *const core::ffi::c_char,
     core::ffi::c_int,
-) = lua_pushcclosure;
+) -> crate::records::lua_exception::LuaResult<()> = lua_pushcclosure;

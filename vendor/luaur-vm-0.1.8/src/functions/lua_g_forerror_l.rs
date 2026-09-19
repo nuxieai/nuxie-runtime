@@ -9,7 +9,11 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaG_forerror_l(L: *mut lua_State, o: *const TValue, what: *const c_char) -> ! {
+pub unsafe fn luaG_forerror_l<T>(
+    L: *mut lua_State,
+    o: *const TValue,
+    what: *const c_char,
+) -> crate::records::lua_exception::LuaResult<T> {
     let t: *const c_char = lua_t_objtypename(L, o);
 
     lua_g_runerror!(
@@ -21,6 +25,10 @@ pub unsafe fn luaG_forerror_l(L: *mut lua_State, o: *const TValue, what: *const 
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_forerror_l(L: *mut lua_State, o: *const TValue, what: *const c_char) -> ! {
+pub unsafe fn lua_g_forerror_l<T>(
+    L: *mut lua_State,
+    o: *const TValue,
+    what: *const c_char,
+) -> crate::records::lua_exception::LuaResult<T> {
     luaG_forerror_l(L, o, what)
 }

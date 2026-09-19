@@ -9,7 +9,10 @@ use core::ffi::{c_char, c_void};
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub(crate) unsafe fn newblock(l: *mut lua_State, size_class: i32) -> *mut c_void {
+pub(crate) unsafe fn newblock(
+    l: *mut lua_State,
+    size_class: i32,
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     let g: *mut global_State = (*l).global;
     let mut page: *mut lua_Page = (*g).freepages[size_class as usize];
 
@@ -21,7 +24,7 @@ pub(crate) unsafe fn newblock(l: *mut lua_State, size_class: i32) -> *mut c_void
             debugpageset!(&mut (*g).allpages),
             size_class as u8,
             true,
-        );
+        )?;
     }
 
     LUAU_ASSERT!((*page).prev.is_null());
@@ -63,6 +66,8 @@ pub(crate) unsafe fn newblock(l: *mut lua_State, size_class: i32) -> *mut c_void
     }
 
     // the user data is right after the metadata
-    (block as *mut c_char).add(crate::functions::newclasspage::k_block_header as usize)
-        as *mut c_void
+    Ok(
+        (block as *mut c_char).add(crate::functions::newclasspage::k_block_header as usize)
+            as *mut c_void,
+    )
 }

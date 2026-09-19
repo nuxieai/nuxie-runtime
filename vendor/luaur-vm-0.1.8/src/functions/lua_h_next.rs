@@ -18,8 +18,12 @@ use crate::records::lua_t_value::lua_TValue;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_h_next(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32 {
-    let mut i = findindex(L, t, key);
+pub unsafe fn lua_h_next(
+    L: *mut lua_State,
+    t: *mut LuaTable,
+    key: StkId,
+) -> crate::records::lua_exception::LuaResult<i32> {
+    let mut i = findindex(L, t, key)?;
 
     i += 1;
 
@@ -29,7 +33,7 @@ pub unsafe fn lua_h_next(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32
         if !ttisnil!(e) {
             setnvalue!(key, cast_num!(i + 1));
             setobj_2_s!(L, key.add(1), e);
-            return 1;
+            return Ok(1);
         }
         i += 1;
     }
@@ -45,10 +49,10 @@ pub unsafe fn lua_h_next(L: *mut lua_State, t: *mut LuaTable, key: StkId) -> i32
         if !ttisnil!(val) {
             getnodekey!(L, key, n);
             setobj_2_s!(L, key.add(1), val);
-            return 1;
+            return Ok(1);
         }
         k += 1;
     }
 
-    0 // no more elements
+    Ok(0) // no more elements
 }

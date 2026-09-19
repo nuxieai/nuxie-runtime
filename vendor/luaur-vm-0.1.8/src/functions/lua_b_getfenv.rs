@@ -7,13 +7,13 @@ use crate::functions::lua_setsafeenv::lua_setsafeenv;
 use crate::macros::lua_globalsindex::LUA_GLOBALSINDEX;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn lua_b_getfenv(L: *mut lua_State) -> i32 {
-    getfunc(L, 1);
+pub unsafe fn lua_b_getfenv(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    getfunc(L, 1)?;
     if lua_iscfunction(L, -1) != 0 {
-        lua_pushvalue(L, LUA_GLOBALSINDEX);
+        lua_pushvalue(L, LUA_GLOBALSINDEX)?;
     } else {
-        lua_getfenv(L, -1);
+        lua_getfenv(L, -1)?;
     }
     lua_setsafeenv(L, -1, 0);
-    1
+    Ok(1)
 }

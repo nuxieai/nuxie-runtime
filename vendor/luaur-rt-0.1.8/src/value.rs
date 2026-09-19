@@ -366,18 +366,25 @@ pub(crate) fn push_value(lua: &Lua, value: &Value) -> Result<()> {
     let state = lua.state();
     unsafe {
         match value {
-            Value::Nil => lua_pushnil(state),
-            Value::Boolean(b) => lua_pushboolean(state, *b as c_int),
+            Value::Nil => {
+                lua_pushnil(state).map_err(|error| crate::error::Error::from_vm(error))?
+            }
+            Value::Boolean(b) => lua_pushboolean(state, *b as c_int)
+                .map_err(|error| crate::error::Error::from_vm(error))?,
             // Light userdata: push the raw pointer with tag 0.
-            Value::LightUserData(lud) => lua_pushlightuserdatatagged(state, lud.0, 0),
-            Value::Integer(i) => lua_pushnumber(state, *i as f64),
-            Value::Number(n) => lua_pushnumber(state, *n),
-            Value::String(s) => s.push_to_stack(),
-            Value::Table(t) => t.push_to_stack(),
-            Value::Function(f) => f.push_to_stack(),
-            Value::UserData(u) => u.push_to_stack(),
-            Value::Thread(t) => t.push_to_stack(),
-            Value::Buffer(b) => b.push_to_stack(),
+            Value::LightUserData(lud) => lua_pushlightuserdatatagged(state, lud.0, 0)
+                .map_err(|error| crate::error::Error::from_vm(error))?,
+            Value::Integer(i) => lua_pushnumber(state, *i as f64)
+                .map_err(|error| crate::error::Error::from_vm(error))?,
+            Value::Number(n) => {
+                lua_pushnumber(state, *n).map_err(|error| crate::error::Error::from_vm(error))?
+            }
+            Value::String(s) => s.reference.try_push()?,
+            Value::Table(t) => t.reference.try_push()?,
+            Value::Function(f) => f.reference.try_push()?,
+            Value::UserData(u) => u.reference.try_push()?,
+            Value::Thread(t) => t.reference.try_push()?,
+            Value::Buffer(b) => b.reference.try_push()?,
             // luaur is a 3-wide vector build; the 4th component is ignored by
             // the VM. Push x/y/z (w = 0).
             Value::Vector(v) => lua_pushvector_lua_state_f32_f32_f32_f32(
@@ -386,13 +393,15 @@ pub(crate) fn push_value(lua: &Lua, value: &Value) -> Result<()> {
                 v.y() as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
                 v.z() as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
                 0.0 as luaur_vm::type_aliases::lua_vector_type::LuaVectorType,
-            ),
+            )
+            .map_err(|error| crate::error::Error::from_vm(error))?,
             // An error value pushes as its message string (so Lua code that
             // receives it can `tostring(err)` it). This matches how a Rust
             // callback's `Err` surfaces to Lua as a string error object.
             Value::Error(e) => {
                 let msg = e.to_string();
-                lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len());
+                lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len())
+                    .map_err(|error| crate::error::Error::from_vm(error))?;
             }
         }
     }
@@ -421,24 +430,24 @@ pub(crate) fn value_from_stack(lua: &Lua, idx: c_int) -> Result<Value> {
                 }
             }
             x if x == ttype::STRING => {
-                lua_pushvalue(state, idx);
-                Value::String(LuaString::from_ref(lua.pop_ref()))
+                lua_pushvalue(state, idx).map_err(|error| crate::error::Error::from_vm(error))?;
+                Value::String(LuaString::from_ref(lua.try_pop_ref()?))
             }
             x if x == ttype::TABLE => {
-                lua_pushvalue(state, idx);
-                Value::Table(Table::from_ref(lua.pop_ref()))
+                lua_pushvalue(state, idx).map_err(|error| crate::error::Error::from_vm(error))?;
+                Value::Table(Table::from_ref(lua.try_pop_ref()?))
             }
             x if x == ttype::FUNCTION => {
-                lua_pushvalue(state, idx);
-                Value::Function(Function::from_ref(lua.pop_ref()))
+                lua_pushvalue(state, idx).map_err(|error| crate::error::Error::from_vm(error))?;
+                Value::Function(Function::from_ref(lua.try_pop_ref()?))
             }
             x if x == ttype::USERDATA => {
-                lua_pushvalue(state, idx);
-                Value::UserData(crate::userdata::AnyUserData::from_ref(lua.pop_ref()))
+                lua_pushvalue(state, idx).map_err(|error| crate::error::Error::from_vm(error))?;
+                Value::UserData(crate::userdata::AnyUserData::from_ref(lua.try_pop_ref()?))
             }
             x if x == ttype::THREAD => {
-                lua_pushvalue(state, idx);
-                Value::Thread(crate::thread::Thread::from_ref(lua.pop_ref()))
+                lua_pushvalue(state, idx).map_err(|error| crate::error::Error::from_vm(error))?;
+                Value::Thread(crate::thread::Thread::from_ref(lua.try_pop_ref()?))
             }
             x if x == ttype::VECTOR => {
                 // luaur is a 3-wide vector build: read the three components from
@@ -456,8 +465,8 @@ pub(crate) fn value_from_stack(lua: &Lua, idx: c_int) -> Result<Value> {
                 }
             }
             x if x == ttype::BUFFER => {
-                lua_pushvalue(state, idx);
-                Value::Buffer(crate::buffer::Buffer::from_ref(lua.pop_ref()))
+                lua_pushvalue(state, idx).map_err(|error| crate::error::Error::from_vm(error))?;
+                Value::Buffer(crate::buffer::Buffer::from_ref(lua.try_pop_ref()?))
             }
             // Any other exotic tags collapse to Nil.
             _ => Value::Nil,

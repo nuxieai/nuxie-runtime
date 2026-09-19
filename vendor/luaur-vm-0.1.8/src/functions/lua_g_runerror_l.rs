@@ -26,11 +26,11 @@ impl core::fmt::Write for BufWriter<'_> {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_runerror_l(
+pub unsafe fn lua_g_runerror_l<T>(
     L: *mut lua_State,
     _fmt: *const c_char,
     args: core::fmt::Arguments<'_>,
-) -> ! {
+) -> crate::records::lua_exception::LuaResult<T> {
     let mut result = [0u8; LUA_BUFFERSIZE as usize];
     let mut w = BufWriter {
         buf: &mut result,
@@ -40,8 +40,8 @@ pub unsafe fn lua_g_runerror_l(
     let len = w.pos;
     result[len] = 0;
 
-    lua_rawcheckstack(L, 1);
+    lua_rawcheckstack(L, 1)?;
 
-    pusherror(L, result.as_ptr() as *const c_char);
-    lua_d_throw(L, lua_Status::LUA_ERRRUN as i32);
+    pusherror(L, result.as_ptr() as *const c_char)?;
+    lua_d_throw(L, lua_Status::LUA_ERRRUN as i32)
 }

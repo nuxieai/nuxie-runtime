@@ -13,7 +13,11 @@ use crate::type_aliases::t_string::TString;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_indexerror(L: *mut lua_State, p1: *const TValue, p2: *const TValue) -> ! {
+pub unsafe fn lua_g_indexerror<T>(
+    L: *mut lua_State,
+    p1: *const TValue,
+    p2: *const TValue,
+) -> crate::records::lua_exception::LuaResult<T> {
     let t1: *const c_char = lua_t_objtypename(L, p1);
     let t2: *const c_char = lua_t_objtypename(L, p2);
     let key: *const TString = if ttisstring!(p2) {
@@ -41,6 +45,10 @@ pub unsafe fn lua_g_indexerror(L: *mut lua_State, p1: *const TValue, p2: *const 
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaG_indexerror(L: *mut lua_State, p1: *const TValue, p2: *const TValue) -> ! {
+pub unsafe fn luaG_indexerror<T>(
+    L: *mut lua_State,
+    p1: *const TValue,
+    p2: *const TValue,
+) -> crate::records::lua_exception::LuaResult<T> {
     lua_g_indexerror(L, p1, p2)
 }

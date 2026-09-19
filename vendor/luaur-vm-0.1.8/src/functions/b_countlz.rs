@@ -5,8 +5,8 @@ use crate::type_aliases::lua_state::lua_State;
 
 const NBITS: i32 = 32;
 
-pub fn b_countlz(l: *mut lua_State) -> core::ffi::c_int {
-    let v = unsafe { lua_l_checkunsigned(l, 1) } as b_uint;
+pub fn b_countlz(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    let v = unsafe { lua_l_checkunsigned(l, 1)? } as b_uint;
 
     let mut r: b_uint = NBITS as b_uint;
     for i in 0..NBITS {
@@ -17,7 +17,7 @@ pub fn b_countlz(l: *mut lua_State) -> core::ffi::c_int {
     }
 
     unsafe {
-        lua_pushunsigned(l, r);
+        lua_pushunsigned(l, r)?;
     }
-    1
+    Ok(1)
 }

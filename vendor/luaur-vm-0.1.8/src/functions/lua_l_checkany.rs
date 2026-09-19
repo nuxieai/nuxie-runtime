@@ -9,12 +9,16 @@ use crate::macros::lua_tnone::LUA_TNONE;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_checkany(L: *mut lua_State, narg: c_int) {
+pub unsafe fn lua_l_checkany(
+    L: *mut lua_State,
+    narg: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     if lua_type(L, narg) == LUA_TNONE {
-        lua_l_error_l(
+        return lua_l_error_l(
             L,
             c"missing argument #%d".as_ptr(),
             format_args!("missing argument #{}", narg),
         );
     }
+    Ok(())
 }

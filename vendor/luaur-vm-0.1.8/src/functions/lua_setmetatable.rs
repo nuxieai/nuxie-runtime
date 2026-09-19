@@ -18,7 +18,10 @@ use crate::records::udata::Udata;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_setmetatable(L: *mut lua_State, objindex: c_int) -> c_int {
+pub unsafe fn lua_setmetatable(
+    L: *mut lua_State,
+    objindex: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_checknelems!(L, 1);
 
     let obj: StkId = index2addr(L, objindex);
@@ -34,7 +37,7 @@ pub unsafe fn lua_setmetatable(L: *mut lua_State, objindex: c_int) -> c_int {
         x if x == lua_Type::LUA_TTABLE as c_int => {
             let h = hvalue!(obj);
             if (*h).readonly != 0 {
-                lua_g_readonlyerror(L);
+                return lua_g_readonlyerror(L);
             }
             (*h).metatable = mt;
             if !mt.is_null() {
@@ -54,5 +57,5 @@ pub unsafe fn lua_setmetatable(L: *mut lua_State, objindex: c_int) -> c_int {
     }
 
     (*L).top = (*L).top.sub(1);
-    1
+    Ok(1)
 }

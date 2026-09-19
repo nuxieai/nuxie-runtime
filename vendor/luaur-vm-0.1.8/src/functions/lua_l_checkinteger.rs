@@ -3,7 +3,10 @@ use crate::functions::lua_tointegerx::lua_tointegerx;
 use crate::functions::tag_error::tag_error;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn lua_l_checkinteger(L: *mut lua_State, narg: core::ffi::c_int) -> core::ffi::c_int {
+pub fn lua_l_checkinteger(
+    L: *mut lua_State,
+    narg: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut isnum: core::ffi::c_int = 0;
 
     // The dependency card for lua_tointegerx shows an empty signature in the snippet,
@@ -20,11 +23,11 @@ pub fn lua_l_checkinteger(L: *mut lua_State, narg: core::ffi::c_int) -> core::ff
 
     if isnum == 0 {
         unsafe {
-            tag_error(L, narg, lua_Type::LUA_TNUMBER as core::ffi::c_int);
+            return tag_error(L, narg, lua_Type::LUA_TNUMBER as core::ffi::c_int);
         }
     }
 
-    d
+    Ok(d)
 }
 
 // lualib.h name

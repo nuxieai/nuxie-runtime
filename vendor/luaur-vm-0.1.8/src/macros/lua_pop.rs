@@ -3,6 +3,6 @@ use crate::records::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[inline]
-pub unsafe fn lua_pop(l: *mut lua_State, n: c_int) {
-    lua_settop(l, -n - 1);
+pub unsafe fn lua_pop(l: *mut lua_State, n: c_int) -> crate::records::lua_exception::LuaResult<()> {
+    lua_settop(l, -n - 1)
 }

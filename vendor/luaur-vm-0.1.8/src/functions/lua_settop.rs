@@ -6,7 +6,10 @@ use crate::macros::setnilvalue::setnilvalue;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_settop"]
-pub unsafe fn lua_settop(L: *mut lua_State, idx: c_int) {
+pub unsafe fn lua_settop(
+    L: *mut lua_State,
+    idx: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     if idx >= 0 {
         crate::ensure_stack!(L, idx - (*L).top.offset_from((*L).base) as c_int);
         while unsafe { (*L).top < (*L).base.add(idx as usize) } {
@@ -27,4 +30,5 @@ pub unsafe fn lua_settop(L: *mut lua_State, idx: c_int) {
             (*L).top = (*L).top.offset((idx + 1) as isize); // `subtract' index (index is negative)
         }
     }
+    Ok(())
 }

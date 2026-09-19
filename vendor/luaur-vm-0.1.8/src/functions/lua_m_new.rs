@@ -20,12 +20,16 @@ fn sizeclass(size: usize) -> i32 {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaM_new_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut c_void {
+pub unsafe fn luaM_new_(
+    l: *mut lua_State,
+    nsize: usize,
+    memcat: u8,
+) -> crate::records::lua_exception::LuaResult<*mut c_void> {
     let g = (*l).global;
     let nclass = sizeclass(nsize);
 
     let block = if nclass >= 0 {
-        newblock(l, nclass)
+        newblock(l, nclass)?
     } else if let Some(frealloc) = (*g).frealloc {
         frealloc((*g).ud, core::ptr::null_mut(), 0, nsize)
     } else {
@@ -33,7 +37,7 @@ pub unsafe fn luaM_new_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut c_v
     };
 
     if block.is_null() && nsize > 0 {
-        luaD_throw(l, lua_Status::LUA_ERRMEM as i32);
+        return luaD_throw(l, lua_Status::LUA_ERRMEM as i32);
     }
 
     (*g).totalbytes = (*g).totalbytes.wrapping_add(nsize);
@@ -43,7 +47,7 @@ pub unsafe fn luaM_new_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut c_v
         onallocate(l, 0, nsize);
     }
 
-    block
+    Ok(block)
 }
 
 #[allow(unused_imports)]

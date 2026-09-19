@@ -18,13 +18,16 @@ use crate::type_aliases::lua_table::LuaTable;
 use crate::type_aliases::t_value::TValue;
 use crate::type_aliases::tms::TMS;
 
-unsafe fn weakenvalues(L: *mut lua_State, wt: *mut LuaTable) -> *mut LuaTable {
+unsafe fn weakenvalues(
+    L: *mut lua_State,
+    wt: *mut LuaTable,
+) -> crate::records::lua_exception::LuaResult<*mut LuaTable> {
     luaur_common::LUAU_ASSERT!(luaur_common::FFlag::LuauGcTraceUdata.get());
-    let mt = lua_h_new(L, 0, 1);
-    let slot = lua_h_setstr(L, mt, (*(*L).global).tmname[TMS::TM_MODE as usize]);
-    setsvalue!(L, slot, luaS_new(L, c"v".as_ptr()));
+    let mt = lua_h_new(L, 0, 1)?;
+    let slot = lua_h_setstr(L, mt, (*(*L).global).tmname[TMS::TM_MODE as usize])?;
+    setsvalue!(L, slot, luaS_new(L, c"v".as_ptr())?);
     (*wt).metatable = mt;
-    wt
+    Ok(wt)
 }
 
 /// open parts that may cause memory-allocation errors
@@ -33,21 +36,21 @@ pub unsafe fn f_luaopen(
     _ud: *mut core::ffi::c_void,
 ) -> Result<(), crate::records::lua_exception::lua_exception> {
     let g = (*L).global;
-    stack_init(L, L); // init stack
-    (*L).gt = lua_h_new(L, 0, 2); // table of globals
+    stack_init(L, L)?; // init stack
+    (*L).gt = lua_h_new(L, 0, 2)?; // table of globals
     sethvalue!(
         L,
         registry!(L) as *const TValue as *mut TValue,
-        lua_h_new(L, 0, 2)
+        lua_h_new(L, 0, 2)?
     ); // registry
-    luaS_resize(L, LUA_MINSTRTABSIZE); // initial size of string table
-    lua_t_init(L);
+    luaS_resize(L, LUA_MINSTRTABSIZE)?; // initial size of string table
+    lua_t_init(L)?;
     if luaur_common::FFlag::LuauGcTraceUdata.get() {
-        let wt = weakenvalues(L, lua_h_new(L, 0, 0));
+        let wt = weakenvalues(L, lua_h_new(L, 0, 0)?)?;
         sethvalue!(L, core::ptr::addr_of_mut!((*g).weakregistry), wt);
     }
-    luaS_fix!(luaS_newliteral(L, c"not enough memory".as_ptr())); // LUA_MEMERRMSG // pin to make sure we can always throw this error
-    luaS_fix!(luaS_newliteral(L, c"error in error handling".as_ptr())); // LUA_ERRERRMSG // pin to make sure we can always throw this error
+    luaS_fix!(luaS_newliteral(L, c"not enough memory".as_ptr())?); // LUA_MEMERRMSG // pin to make sure we can always throw this error
+    luaS_fix!(luaS_newliteral(L, c"error in error handling".as_ptr())?); // LUA_ERRERRMSG // pin to make sure we can always throw this error
     (*g).GCthreshold = 4 * (*g).totalbytes;
     Ok(())
 }

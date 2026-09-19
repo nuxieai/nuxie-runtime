@@ -8,12 +8,16 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_cleartable(L: *mut lua_State, idx: core::ffi::c_int) {
+pub unsafe fn lua_cleartable(
+    L: *mut lua_State,
+    idx: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     let t: StkId = index2addr(L, idx);
     api_check!(L, ttistable!(t));
     let tt = hvalue!(t);
     if (*tt).readonly != 0 {
-        lua_g_readonlyerror(L);
+        return lua_g_readonlyerror(L);
     }
     lua_h_clear(tt);
+    Ok(())
 }

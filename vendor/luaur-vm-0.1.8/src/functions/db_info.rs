@@ -18,7 +18,9 @@ use crate::records::lua_debug::LuaDebug;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn db_info(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut arg: core::ffi::c_int = 0;
     let L1 = getthread(L, &mut arg);
     let mut l1top: core::ffi::c_int = 0;
@@ -26,7 +28,7 @@ pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
     // if L1 != L, L1 can be in any state, and therefore there are no guarantees about its stack space
     if L != L1 {
         // for 'f' option, we reserve one slot and we also record the stack top
-        lua_rawcheckstack(L1, 1);
+        lua_rawcheckstack(L1, 1)?;
         l1top = lua_gettop(L1);
     }
 
@@ -41,11 +43,11 @@ pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
         luaL_argerror!(L, arg + 1, "function or level expected");
     }
 
-    let options = luaL_checkstring!(L, arg + 2);
+    let options = luaL_checkstring!(L, arg + 2)?;
 
     let mut ar: LuaDebug = core::mem::zeroed();
-    if lua_getinfo(L1, level, options, &mut ar) == 0 {
-        return 0;
+    if lua_getinfo(L1, level, options, &mut ar)? == 0 {
+        return Ok(0);
     }
 
     let mut results: core::ffi::c_int = 0;
@@ -59,7 +61,7 @@ pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
             if occurs[idx] {
                 // restore stack state of another thread as 'f' option might not have been visited yet
                 if L != L1 {
-                    lua_settop(L1, l1top);
+                    lua_settop(L1, l1top)?;
                 }
 
                 luaL_argerror!(L, arg + 2, "duplicate option");
@@ -69,11 +71,11 @@ pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
 
         match ch {
             b's' => {
-                lua_pushstring(L, ar.short_src);
+                lua_pushstring(L, ar.short_src)?;
                 results += 1;
             }
             b'l' => {
-                lua_pushinteger(L, ar.currentline);
+                lua_pushinteger(L, ar.currentline)?;
                 results += 1;
             }
             b'n' => {
@@ -84,26 +86,26 @@ pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
                     } else {
                         c"".as_ptr()
                     },
-                );
+                )?;
                 results += 1;
             }
             b'f' => {
                 if L1 == L {
-                    lua_pushvalue(L, -1 - results); // function is right before results
+                    lua_pushvalue(L, -1 - results)?; // function is right before results
                 } else {
-                    lua_xmove(L1, L, 1); // function is at top of L1
+                    lua_xmove(L1, L, 1)?; // function is at top of L1
                 }
                 results += 1;
             }
             b'a' => {
-                lua_pushinteger(L, ar.nparams as core::ffi::c_int);
-                lua_pushboolean(L, ar.isvararg as core::ffi::c_int);
+                lua_pushinteger(L, ar.nparams as core::ffi::c_int)?;
+                lua_pushboolean(L, ar.isvararg as core::ffi::c_int)?;
                 results += 2;
             }
             _ => {
                 // restore stack state of another thread as 'f' option might not have been visited yet
                 if L != L1 {
-                    lua_settop(L1, l1top);
+                    lua_settop(L1, l1top)?;
                 }
 
                 luaL_argerror!(L, arg + 2, "invalid option");
@@ -113,5 +115,5 @@ pub unsafe fn db_info(L: *mut lua_State) -> core::ffi::c_int {
         it = it.add(1);
     }
 
-    results
+    Ok(results)
 }

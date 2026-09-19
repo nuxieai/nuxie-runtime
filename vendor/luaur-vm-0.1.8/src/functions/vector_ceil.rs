@@ -5,8 +5,10 @@ use crate::macros::lua_vector_size::LUA_VECTOR_SIZE;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn vector_ceil(L: *mut lua_State) -> core::ffi::c_int {
-    let v = lua_l_checkvector(L, 1);
+pub unsafe fn vector_ceil(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    let v = lua_l_checkvector(L, 1)?;
 
     if LUA_VECTOR_SIZE == 4 {
         lua_pushvector_lua_state_f32_f32_f32_f32(
@@ -15,15 +17,15 @@ pub unsafe fn vector_ceil(L: *mut lua_State) -> core::ffi::c_int {
             (*v.offset(1)).ceil(),
             (*v.offset(2)).ceil(),
             (*v.offset(3)).ceil(),
-        );
+        )?;
     } else {
         lua_pushvector_lua_state_f32_f32_f32(
             L,
             (*v.offset(0)).ceil(),
             (*v.offset(1)).ceil(),
             (*v.offset(2)).ceil(),
-        );
+        )?;
     }
 
-    1
+    Ok(1)
 }

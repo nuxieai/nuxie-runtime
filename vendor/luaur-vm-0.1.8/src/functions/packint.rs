@@ -7,7 +7,13 @@ const NB: i32 = 8;
 const MC: i32 = 0xff;
 const SZINT: i32 = core::mem::size_of::<core::ffi::c_longlong>() as i32;
 
-pub fn packint(b: *mut LuaLStrbuf, mut n: u64, islittle: i32, size: i32, neg: i32) {
+pub fn packint(
+    b: *mut LuaLStrbuf,
+    mut n: u64,
+    islittle: i32,
+    size: i32,
+    neg: i32,
+) -> crate::records::lua_exception::LuaResult<()> {
     LUAU_ASSERT!(size <= MAXINTSIZE);
     let mut buff = [0 as core::ffi::c_char; MAXINTSIZE as usize];
     let mut i: i32 = 0;
@@ -30,7 +36,5 @@ pub fn packint(b: *mut LuaLStrbuf, mut n: u64, islittle: i32, size: i32, neg: i3
         }
     }
 
-    unsafe {
-        lua_l_addlstring(b, buff.as_ptr(), size as usize);
-    }
+    unsafe { lua_l_addlstring(b, buff.as_ptr(), size as usize) }
 }

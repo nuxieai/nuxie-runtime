@@ -19,7 +19,11 @@ use crate::type_aliases::t_value::TValue;
 use crate::type_aliases::tms::TMS;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_v_dolen(L: *mut LuaState, ra: StkId, rb: *const TValue) {
+pub unsafe fn lua_v_dolen(
+    L: *mut LuaState,
+    ra: StkId,
+    rb: *const TValue,
+) -> crate::records::lua_exception::LuaResult<()> {
     let mut tm: *const TValue = core::ptr::null();
 
     match ttype!(rb) {
@@ -34,13 +38,13 @@ pub unsafe fn lua_v_dolen(L: *mut LuaState, ra: StkId, rb: *const TValue) {
                     *mut crate::records::lua_table::LuaTable,
                 ) -> core::ffi::c_int = core::mem::transmute(lua_h_getn_ptr);
                 setnvalue!(ra, cast_num!(lua_h_getn_real(h)));
-                return;
+                return Ok(());
             }
         }
         x if x == lua_Type::LUA_TSTRING as i32 => {
             let ts = tsvalue!(rb);
             setnvalue!(ra, cast_num!((*ts).len));
-            return;
+            return Ok(());
         }
         _ => {
             tm = lua_t_gettmbyobj(L, rb, TMS::TM_LEN);
@@ -48,17 +52,22 @@ pub unsafe fn lua_v_dolen(L: *mut LuaState, ra: StkId, rb: *const TValue) {
     }
 
     if ttisnil!(tm) {
-        luaG_typeerror!(L, rb, c"get length of".as_ptr());
+        return luaG_typeerror!(L, rb, c"get length of".as_ptr());
     }
 
-    let res = call_t_mres(L, ra, tm, rb, luaO_nilobject);
+    let res = call_t_mres(L, ra, tm, rb, luaO_nilobject)?;
 
     if !ttisnumber!(res) {
-        lua_g_runerror!(L, "'__len' must return a number");
+        return lua_g_runerror!(L, "'__len' must return a number");
     }
+    Ok(())
 }
 
 #[export_name = "luaur_luaV_dolen"]
-pub unsafe extern "C" fn lua_v_dolen_export(L: *mut LuaState, ra: StkId, rb: *const TValue) {
-    lua_v_dolen(L, ra, rb);
+pub unsafe fn lua_v_dolen_export(
+    L: *mut LuaState,
+    ra: StkId,
+    rb: *const TValue,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_dolen(L, ra, rb)
 }

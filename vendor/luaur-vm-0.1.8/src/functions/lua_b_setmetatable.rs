@@ -12,23 +12,25 @@ use crate::macros::lua_l_argexpected::luaL_argexpected;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_b_setmetatable(L: *mut lua_State) -> i32 {
+pub unsafe fn lua_b_setmetatable(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<i32> {
     let t = lua_type(L, 2);
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as i32);
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as i32)?;
     luaL_argexpected!(
         L,
         t == lua_Type::LUA_TNIL as i32 || t == lua_Type::LUA_TTABLE as i32,
         2,
         "nil or table"
     );
-    if lua_l_getmetafield(L, 1, c"__metatable".as_ptr()) != 0 {
-        lua_l_error_l(
+    if lua_l_getmetafield(L, 1, c"__metatable".as_ptr())? != 0 {
+        return lua_l_error_l(
             L,
             c"cannot change a protected metatable".as_ptr(),
             format_args!("cannot change a protected metatable"),
         );
     }
-    lua_settop(L, 2);
-    lua_setmetatable(L, 1);
-    1
+    lua_settop(L, 2)?;
+    lua_setmetatable(L, 1)?;
+    Ok(1)
 }

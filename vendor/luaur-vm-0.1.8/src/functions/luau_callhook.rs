@@ -19,7 +19,11 @@ use luaur_common::FFlag;
 /// C++ `LUAU_NOINLINE void luau_callhook(lua_State* L, lua_Hook hook, void* userdata)`.
 #[allow(non_snake_case)]
 #[inline(never)]
-pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut core::ffi::c_void) {
+pub unsafe fn luau_callhook(
+    L: *mut lua_State,
+    hook: LuaHook,
+    userdata: *mut core::ffi::c_void,
+) -> crate::records::lua_exception::LuaResult<()> {
     let base = savestack!(L, (*L).base);
     let top = savestack!(L, (*L).top);
     let ci_top = savestack!(L, (*(*L).ci).top);
@@ -91,4 +95,5 @@ pub unsafe fn luau_callhook(L: *mut lua_State, hook: LuaHook, userdata: *mut cor
         (*L).status = lua_Status::LUA_BREAK as u8;
         (*L).base = restorestack!(L, base);
     }
+    Ok(())
 }

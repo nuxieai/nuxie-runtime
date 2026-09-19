@@ -83,15 +83,20 @@ fn cached_metatable(state: *mut lua_State, type_id: TypeId) -> Option<c_int> {
     })
 }
 
-fn retain_metatable(state: *mut lua_State, type_id: TypeId, metatable: &crate::Table) -> c_int {
+fn retain_metatable(
+    state: *mut lua_State,
+    type_id: TypeId,
+    metatable: &crate::Table,
+) -> Result<c_int> {
+    let _stack = unsafe { crate::stack_guard::StackGuard::new(state) };
     unsafe { metatable.push_to_stack() };
-    let reference = unsafe { lua_ref(state, -1) };
-    unsafe { lua_pop(state, 1) };
+    let reference = unsafe { lua_ref(state, -1).map_err(|error| Error::from_vm(error))? };
+    unsafe { lua_pop(state, 1).expect("shrinking the stack cannot fail") };
     let key = unsafe { vm_key(state) };
     metatable_store::with(|store| {
         store.entry(key).or_default().insert(type_id, reference);
     });
-    reference
+    Ok(reference)
 }
 
 /// Release the raw registry references retained for one VM's per-type
@@ -244,7 +249,7 @@ impl AnyUserData {
         unsafe {
             self.reference.push();
             let p = lua_topointer(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             p
         }
     }
@@ -253,13 +258,11 @@ impl AnyUserData {
     /// Mirrors `mlua::AnyUserData::equals`.
     pub fn equals(&self, other: &AnyUserData) -> Result<bool> {
         let lua = self.lua();
-        let state = lua.state();
         unsafe {
-            self.reference.push();
-            other.reference.push();
-            let eq = lua_equal(state, -2, -1);
-            lua_pop(state, 2);
-            Ok(eq != 0)
+            lua.exec_raw((self.clone(), other.clone()), |state| {
+                let eq = lua_equal(state, 1, 2)?;
+                lua_pushboolean(state, eq)
+            })
         }
     }
 
@@ -271,7 +274,7 @@ impl AnyUserData {
         unsafe {
             self.reference.push();
             let ptr = lua_touserdata(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             if ptr.is_null() {
                 return Err(Error::UserDataTypeMismatch);
             }
@@ -301,7 +304,7 @@ impl AnyUserData {
         unsafe {
             self.reference.push();
             let ptr = lua_touserdata(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             if ptr.is_null() {
                 return None;
             }
@@ -499,7 +502,7 @@ fn recover_cell<'a, T: 'static>(lua: &Lua, value: &Value) -> Result<&'a UserData
             unsafe {
                 ud.reference.push();
                 let ptr = lua_touserdata(state, -1);
-                lua_pop(state, 1);
+                lua_pop(state, 1).expect("shrinking the stack cannot fail");
                 if ptr.is_null() {
                     return Err(Error::UserDataTypeMismatch);
                 }
@@ -907,7 +910,7 @@ unsafe fn recover_scoped_cell<'a, T>(
             unsafe {
                 ud.reference.push();
                 let ptr = lua_touserdata(state, -1);
-                lua_pop(state, 1);
+                lua_pop(state, 1).expect("shrinking the stack cannot fail");
                 if ptr.is_null() {
                     return Err(Error::UserDataTypeMismatch);
                 }
@@ -1320,13 +1323,27 @@ pub(crate) fn create_scoped_userdata<T: UserData>(
         metatable.set("__index", method_table)?;
     }
 
+    // The stack roots the userdata until its registry handle exists. Cleanup
+    // runs before that stack root is removed on every early-error path.
+    let _stack = unsafe { crate::stack_guard::StackGuard::new(state) };
+    struct PendingScopedData<T>(*mut ScopedCell<T>);
+    impl<T> Drop for PendingScopedData<T> {
+        fn drop(&mut self) {
+            // No callback is executing during construction or scope teardown.
+            // The stack or captured AnyUserData keeps this allocation alive.
+            unsafe {
+                (*self.0).cell.borrow_mut().take();
+            }
+        }
+    }
     // 3. Allocate the scoped userdata holding ScopedCell<T> and move `data` in.
-    let ud = unsafe {
+    let (ud, pending) = unsafe {
         let storage = lua_newuserdatadtor(
             state,
             core::mem::size_of::<ScopedCell<T>>(),
             Some(scoped_userdata_dtor::<T>),
-        );
+        )
+        .map_err(|error| Error::from_vm(error))?;
         if storage.is_null() {
             return Err(Error::runtime(
                 "luaur-rt: failed to allocate scoped userdata",
@@ -1339,32 +1356,24 @@ pub(crate) fn create_scoped_userdata<T: UserData>(
                 cell: RefCell::new(Some(data)),
             },
         );
-        metatable.push_to_stack();
-        lua_setmetatable(state, -2);
-        AnyUserData::from_ref(lua.pop_ref())
+        let pending = PendingScopedData(storage as *mut ScopedCell<T>);
+        metatable.reference.try_push()?;
+        lua_setmetatable(state, -2).map_err(|error| Error::from_vm(error))?;
+        (AnyUserData::from_ref(lua.try_pop_ref()?), pending)
     };
 
     // 4. Build the neutraliser: on scope exit, take the data out of the cell,
     //    dropping the (possibly borrowing) `T` while the cell memory stays valid.
     let ud_for_dtor = ud.clone();
-    let neutralise: Box<dyn FnOnce()> = Box::new(move || {
-        let state = ud_for_dtor.reference.state();
-        unsafe {
-            ud_for_dtor.reference.push();
-            let ptr = lua_touserdata(state, -1);
-            lua_pop(state, 1);
-            if ptr.is_null() {
-                return;
-            }
-            let cell = &*(ptr as *const ScopedCell<T>);
-            // Drop the data (ends borrows). If currently borrowed (a method is
-            // somehow live), `try_borrow_mut` fails and we leave it — but scope
-            // exit only happens after `f` returns, so no method is in flight.
-            if let Ok(mut guard) = cell.cell.try_borrow_mut() {
-                let _ = guard.take();
-            }
-        }
+    let neutralise: Box<dyn FnOnce() + '_> = Box::new(move || {
+        // Invalidate without a fallible VM lookup, while the registry handle
+        // still roots the userdata. This also avoids skipping borrowed data.
+        drop(pending);
+        drop(ud_for_dtor);
     });
+    // The caller's Scope always invokes this destructor before T's borrowed
+    // lifetime ends, matching the lifetime erasure of scoped callback cleanup.
+    let neutralise: Box<dyn FnOnce()> = unsafe { core::mem::transmute(neutralise) };
 
     Ok((ud, neutralise))
 }
@@ -1430,7 +1439,7 @@ fn userdata_metatable<T: UserData + MaybeSend + MaybeSync + 'static>(lua: &Lua) 
         metatable.set("__index", method_table)?;
     }
 
-    Ok(retain_metatable(state, type_id, &metatable))
+    retain_metatable(state, type_id, &metatable)
 }
 
 /// Build a userdata value wrapping `data`, reusing the metatable assembled
@@ -1444,11 +1453,13 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
 
     // Allocate the userdata holding UserDataCell<T> and move `data` in.
     unsafe {
+        let _stack = crate::stack_guard::StackGuard::new(state);
         let storage = lua_newuserdatadtor(
             state,
             core::mem::size_of::<UserDataCell<T>>(),
             Some(userdata_dtor::<T>),
-        );
+        )
+        .map_err(|error| Error::from_vm(error))?;
         if storage.is_null() {
             return Err(Error::runtime("luaur-rt: failed to allocate userdata"));
         }
@@ -1464,10 +1475,11 @@ pub(crate) fn create_userdata<T: UserData + MaybeSend + MaybeSync + 'static>(
             state,
             luaur_vm::macros::lua_registryindex::LUA_REGISTRYINDEX,
             metatable,
-        );
-        lua_setmetatable(state, -2);
+        )
+        .map_err(|error| Error::from_vm(error))?;
+        lua_setmetatable(state, -2).map_err(|error| Error::from_vm(error))?;
 
         // Take a ref to the userdata and return.
-        Ok(AnyUserData::from_ref(lua.pop_ref()))
+        Ok(AnyUserData::from_ref(lua.try_pop_ref()?))
     }
 }

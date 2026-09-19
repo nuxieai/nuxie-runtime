@@ -5,18 +5,24 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[export_name = "luaur_lua_v_prepare_forn"]
-pub unsafe fn lua_v_prepare_forn(L: *mut lua_State, plimit: StkId, pstep: StkId, pinit: StkId) {
+pub unsafe fn lua_v_prepare_forn(
+    L: *mut lua_State,
+    plimit: StkId,
+    pstep: StkId,
+    pinit: StkId,
+) -> crate::records::lua_exception::LuaResult<()> {
     if !ttisnumber!(pinit) && lua_v_tonumber(pinit, pinit).is_null() {
-        lua_g_forerror_l(
+        return lua_g_forerror_l(
             L,
             pinit,
             b"initial value\0".as_ptr() as *const core::ffi::c_char,
         );
     }
     if !ttisnumber!(plimit) && lua_v_tonumber(plimit, plimit).is_null() {
-        lua_g_forerror_l(L, plimit, b"limit\0".as_ptr() as *const core::ffi::c_char);
+        return lua_g_forerror_l(L, plimit, b"limit\0".as_ptr() as *const core::ffi::c_char);
     }
     if !ttisnumber!(pstep) && lua_v_tonumber(pstep, pstep).is_null() {
-        lua_g_forerror_l(L, pstep, b"step\0".as_ptr() as *const core::ffi::c_char);
+        return lua_g_forerror_l(L, pstep, b"step\0".as_ptr() as *const core::ffi::c_char);
     }
+    Ok(())
 }

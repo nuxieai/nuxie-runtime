@@ -84,8 +84,8 @@ use crate::macros::nvalue::nvalue;
 use crate::macros::objectvalue::objectvalue;
 use crate::macros::pvalue::pvalue;
 use crate::macros::setbvalue::setbvalue;
-use crate::macros::setclvalue::setclvalue;
 use crate::macros::setclassvalue::setclassvalue;
+use crate::macros::setclvalue::setclvalue;
 use crate::macros::sethvalue::sethvalue;
 use crate::macros::setnilvalue::setnilvalue;
 use crate::macros::setnvalue::setnvalue;
@@ -130,9 +130,9 @@ use crate::records::luau_class::LuauClass;
 use crate::records::luau_object::LuauObject;
 use crate::records::up_val::UpVal;
 use crate::type_aliases::instruction::Instruction;
+use crate::type_aliases::lua_vector_type::LuaVectorType;
 use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
-use crate::type_aliases::lua_vector_type::LuaVectorType;
 use crate::type_aliases::tms::TMS;
 use luaur_common::enums::luau_capture_type::LuauCaptureType;
 use luaur_common::enums::luau_opcode::LuauOpcode;
@@ -156,7 +156,7 @@ use luaur_common::FFlag;
 /// C++ `void luau_execute(lua_State* L)` (lvmexecute.cpp:3716) — dispatches
 /// to the `template<bool SingleStep>` monomorphs.
 #[allow(non_snake_case)]
-pub unsafe fn luau_execute(L: *mut lua_State) {
+pub unsafe fn luau_execute(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<()> {
     if (*L).singlestep {
         luau_execute_impl::<true>(L)
     } else {
@@ -168,7 +168,9 @@ pub unsafe fn luau_execute(L: *mut lua_State) {
 /// (lvmexecute.cpp:228). The computed-goto dispatch table becomes the match
 /// below (both blindly index by the opcode byte).
 #[allow(non_snake_case, unused_assignments, unreachable_code, unused_variables)]
-unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
+unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<()> {
     // the critical interpreter state, stored in locals for performance
     let mut cl: *mut Closure;
     let mut base: StkId;
@@ -192,7 +194,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
         LUAU_ASSERT!(!(*p).execdata.is_null());
         if let Some(enter) = (*(*L).global).ecb.enter {
             if enter(L, p) == 0 {
-                return;
+                return Ok(());
             }
         }
     }
@@ -224,11 +226,11 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                 {
                     let debugstep = (*(*L).global).cb.debugstep;
                     vm_protect!(L, pc, base, {
-                        luau_callhook(L, debugstep, core::ptr::null_mut());
+                        luau_callhook(L, debugstep, core::ptr::null_mut())?;
                     });
                     // allow debugstep hook to put thread into error/yield state
                     if (*L).status != 0 {
-                        return; // goto exit
+                        return Ok(()); // goto exit
                     }
                 }
             }
@@ -330,7 +332,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         sethvalue!(L, &mut g as *mut TValue, h);
                         (*L).cachedslot = slot;
                         vm_protect!(L, pc, base, {
-                            lua_v_gettable(L, &g as *const TValue, kv as *mut TValue, ra);
+                            lua_v_gettable(L, &g as *const TValue, kv as *mut TValue, ra)?;
                         });
                         // save cachedslot to accelerate future lookups; patches
                         // currently executing instruction since pc-2 rolls back two pc++
@@ -368,7 +370,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         sethvalue!(L, &mut g as *mut TValue, h);
                         (*L).cachedslot = slot;
                         vm_protect!(L, pc, base, {
-                            lua_v_settable(L, &g as *const TValue, kv as *mut TValue, ra);
+                            lua_v_settable(L, &g as *const TValue, kv as *mut TValue, ra)?;
                         });
                         VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                         continue 'dispatch;
@@ -441,7 +443,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 ra,
                                 aux,
                                 /* propagatenil= */ false,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -493,7 +495,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             // slow-path, may invoke Lua calls via __index metamethod
                             (*L).cachedslot = slot;
                             vm_protect!(L, pc, base, {
-                                lua_v_gettable(L, rb as *const TValue, kv, ra);
+                                lua_v_gettable(L, rb as *const TValue, kv, ra)?;
                             });
                             VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                             continue 'dispatch;
@@ -534,10 +536,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                         *mut core::ffi::c_void,
                                     ) = core::mem::transmute(pvalue!(gval!(n) as *const TValue));
                                     let u = uvalue!(rb as *const TValue);
-                                    f(
-                                        u.data.as_ptr() as *mut core::ffi::c_void,
-                                        result_arg,
-                                    );
+                                    f(u.data.as_ptr() as *mut core::ffi::c_void, result_arg);
                                     continue 'dispatch;
                                 }
 
@@ -554,10 +553,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                         *mut core::ffi::c_void,
                                     ) = core::mem::transmute(pvalue!(fptr));
                                     let u = uvalue!(rb as *const TValue);
-                                    f(
-                                        u.data.as_ptr() as *mut core::ffi::c_void,
-                                        result_arg,
-                                    );
+                                    f(u.data.as_ptr() as *mut core::ffi::c_void, result_arg);
                                     continue 'dispatch;
                                 }
                             }
@@ -590,7 +586,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             (*L).cachedslot = LUAU_INSN_C!(insn) as i32;
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                             continue 'dispatch;
@@ -598,8 +594,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             // fast-path: quick case-insensitive comparison with "X"/"Y"/"Z"
                             let name = getstr(tsvalue!(kv as *const TValue));
                             let ic = ((*name.add(0)) as u8 | b' ') as i32 - b'x' as i32;
-                            if (ic as u32)
-                                < crate::macros::lua_vector_size::LUA_VECTOR_SIZE as u32
+                            if (ic as u32) < crate::macros::lua_vector_size::LUA_VECTOR_SIZE as u32
                                 && *name.add(1) == 0
                             {
                                 let v = vvalue!(rb as *const TValue).as_ptr(); // silences ubsan when indexing v[]
@@ -630,7 +625,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                                 (*L).cachedslot = LUAU_INSN_C!(insn) as i32;
                                 vm_protect!(L, pc, base, {
-                                    lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                    lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                                 });
                                 VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                                 continue 'dispatch;
@@ -659,7 +654,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                         as *mut crate::records::t_string::TString,
                                 );
                                 if ttisnil!(offset) {
-                                    luaG_missingmembererror(
+                                    return luaG_missingmembererror(
                                         L,
                                         rb as *const TValue,
                                         kv as *const TValue,
@@ -677,7 +672,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     // slow-path, may invoke Lua calls via __index metamethod
                     vm_protect!(L, pc, base, {
-                        lua_v_gettable(L, rb as *const TValue, kv, ra);
+                        lua_v_gettable(L, rb as *const TValue, kv, ra)?;
                     });
                     continue 'dispatch;
                 }
@@ -718,7 +713,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 h,
                                 tsvalue!(kv as *const TValue)
                                     as *mut crate::records::t_string::TString,
-                            );
+                            )?;
                             let cachedslot = gval2slot!(h, res as *const TValue);
                             // save cachedslot to accelerate future lookups; patches
                             // currently executing instruction since pc-2 rolls back two pc++
@@ -730,7 +725,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             // slow-path, may invoke Lua calls via __newindex metamethod
                             (*L).cachedslot = slot;
                             vm_protect!(L, pc, base, {
-                                lua_v_settable(L, rb as *const TValue, kv, ra);
+                                lua_v_settable(L, rb as *const TValue, kv, ra)?;
                             });
                             VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                             continue 'dispatch;
@@ -762,14 +757,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                             (*L).cachedslot = LUAU_INSN_C!(insn) as i32;
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 3, -1);
+                                lua_v_call_tm(L, 3, -1)?;
                             });
                             VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                             continue 'dispatch;
                         } else {
                             // slow-path, may invoke Lua calls via __newindex metamethod
                             vm_protect!(L, pc, base, {
-                                lua_v_settable(L, rb as *const TValue, kv, ra);
+                                lua_v_settable(L, rb as *const TValue, kv, ra)?;
                             });
                             continue 'dispatch;
                         }
@@ -809,7 +804,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     // slow-path: handles out of bounds array lookups, non-integer
                     // numeric keys, non-array table lookup, __index MT calls
                     vm_protect!(L, pc, base, {
-                        lua_v_gettable(L, rb as *const TValue, rc, ra);
+                        lua_v_gettable(L, rb as *const TValue, rc, ra)?;
                     });
                     continue 'dispatch;
                 }
@@ -849,7 +844,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     // slow-path: handles out of bounds array assignments, non-integer
                     // numeric keys, non-array table access, __newindex MT calls
                     vm_protect!(L, pc, base, {
-                        lua_v_settable(L, rb as *const TValue, rc, ra);
+                        lua_v_settable(L, rb as *const TValue, rc, ra)?;
                     });
                     continue 'dispatch;
                 }
@@ -877,7 +872,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let mut n: TValue = core::mem::zeroed();
                     setnvalue!(&mut n as *mut TValue, (c + 1) as f64);
                     vm_protect!(L, pc, base, {
-                        lua_v_gettable(L, rb as *const TValue, &mut n as *mut TValue, ra);
+                        lua_v_gettable(L, rb as *const TValue, &mut n as *mut TValue, ra)?;
                     });
                     continue 'dispatch;
                 }
@@ -909,7 +904,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     let mut n: TValue = core::mem::zeroed();
                     setnvalue!(&mut n as *mut TValue, (c + 1) as f64);
                     vm_protect!(L, pc, base, {
-                        lua_v_settable(L, rb as *const TValue, &mut n as *mut TValue, ra);
+                        lua_v_settable(L, rb as *const TValue, &mut n as *mut TValue, ra)?;
                     });
                     continue 'dispatch;
                 }
@@ -933,7 +928,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     // note: we save closure to stack early in case the code below
                     // wants to capture it by value
-                    let ncl = lua_f_new_lclosure(L, (*pv).nups as i32, (*cl).env, pv);
+                    let ncl = lua_f_new_lclosure(L, (*pv).nups as i32, (*cl).env, pv)?;
                     setclvalue!(L, ra, ncl);
 
                     for ui in 0..(*pv).nups as usize {
@@ -960,7 +955,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     lua_f_findupval(
                                         L,
                                         VM_REG!(LUAU_INSN_B!(uinsn), L, base) as *mut TValue
-                                    )
+                                    )?
                                 );
                             }
                             x if x == LuauCaptureType::LCT_UPVAL as u32 => {
@@ -1041,13 +1036,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 setobj_2_s!(L, ra.add(1), rb as *const TValue);
                                 (*L).cachedslot = LUAU_INSN_C!(insn) as i32;
                                 vm_protect!(L, pc, base, {
-                                    lua_v_gettable(L, rb as *const TValue, kv, ra);
+                                    lua_v_gettable(L, rb as *const TValue, kv, ra)?;
                                 });
                                 VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                                 // recompute ra since stack might have been reallocated
                                 ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                                 if ttisnil!(ra as *const TValue) {
-                                    luaG_methoderror(
+                                    return luaG_methoderror(
                                         L,
                                         ra.add(1) as *const TValue,
                                         tsvalue!(kv as *const TValue),
@@ -1092,13 +1087,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     setobj_2_s!(L, ra.add(1), rb as *const TValue);
                                     (*L).cachedslot = slot;
                                     vm_protect!(L, pc, base, {
-                                        lua_v_gettable(L, rb as *const TValue, kv, ra);
+                                        lua_v_gettable(L, rb as *const TValue, kv, ra)?;
                                     });
                                     VM_PATCH_C(pc.sub(2), (*L).cachedslot);
                                     // recompute ra since stack might have been reallocated
                                     ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                                     if ttisnil!(ra as *const TValue) {
-                                        luaG_methoderror(
+                                        return luaG_methoderror(
                                             L,
                                             ra.add(1) as *const TValue,
                                             tsvalue!(kv as *const TValue),
@@ -1130,7 +1125,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                             as *mut crate::records::t_string::TString,
                                     );
                                     if ttisnil!(offset) {
-                                        luaG_missingmembererror(
+                                        return luaG_missingmembererror(
                                             L,
                                             rb as *const TValue,
                                             kv as *const TValue,
@@ -1145,12 +1140,12 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 // slow-path: handles non-table __index
                                 setobj_2_s!(L, ra.add(1), rb as *const TValue);
                                 vm_protect!(L, pc, base, {
-                                    lua_v_gettable(L, rb as *const TValue, kv, ra);
+                                    lua_v_gettable(L, rb as *const TValue, kv, ra)?;
                                 });
                                 // recompute ra since stack might have been reallocated
                                 ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
                                 if ttisnil!(ra as *const TValue) {
-                                    luaG_methoderror(
+                                    return luaG_methoderror(
                                         L,
                                         ra.add(1) as *const TValue,
                                         tsvalue!(kv as *const TValue),
@@ -1192,7 +1187,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // slow-path: not a function call
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaV_tryfuncTM may fail
 
-                        lua_v_tryfunc_tm(L, ra);
+                        lua_v_tryfunc_tm(L, ra)?;
                         argtop = argtop.add(1); // __call adds an extra self
                     }
 
@@ -1218,7 +1213,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     // note: this reallocs stack, but we don't need to VM_PROTECT this
                     // this is because we're going to modify base/savedpc manually anyhow
                     // crucially, we can't use ra/argtop after this line
-                    luaD_checkstackfornewci(L, (*ccl).stacksize as i32);
+                    luaD_checkstackfornewci(L, (*ccl).stacksize as i32)?;
 
                     LUAU_ASSERT!((*ci).top <= (*L).stack_last);
 
@@ -1258,13 +1253,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             c.f
                         };
                         let n = match func {
-                            Some(f) => f(L),
+                            Some(f) => f(L)?,
                             None => 0,
                         };
 
                         // yield
                         if n < 0 {
-                            return; // goto exit
+                            return Ok(()); // goto exit
                         }
 
                         // ci is our callinfo, cip is our parent
@@ -1333,7 +1328,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaV_tryfuncTM may fail
 
-                        lua_v_tryfunc_tm(L, ra);
+                        lua_v_tryfunc_tm(L, ra)?;
                         argtop = argtop.add(1); // __call adds an extra self
                     }
 
@@ -1359,7 +1354,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     // note: this reallocs stack, but we don't need to VM_PROTECT this
                     // this is because we're going to modify base/savedpc manually anyhow
                     // crucially, we can't use ra/argtop after this line
-                    luaD_checkstackfornewci(L, (*ccl).stacksize as i32);
+                    luaD_checkstackfornewci(L, (*ccl).stacksize as i32)?;
 
                     LUAU_ASSERT!((*ci).top <= (*L).stack_last);
 
@@ -1404,13 +1399,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             c.f
                         };
                         let n = match func {
-                            Some(f) => f(L),
+                            Some(f) => f(L)?,
                             None => 0,
                         };
 
                         // yield
                         if n < 0 {
-                            return; // goto exit
+                            return Ok(()); // goto exit
                         }
 
                         // ci is our callinfo, cip is our parent
@@ -1506,7 +1501,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     // we're done!
                     if ((*ci).flags as i32 & LUA_CALLINFO_RETURN) != 0 {
-                        return; // goto exit
+                        return Ok(()); // goto exit
                     }
 
                     LUAU_ASSERT!(isLua!((*L).ci));
@@ -1526,7 +1521,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             if enter(L, nextproto) == 1 {
                                 continue 'reentry; // goto reentry
                             } else {
-                                return; // goto exit
+                                return Ok(()); // goto exit
                             }
                         }
                     }
@@ -1680,7 +1675,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     (*L).top = top.add(3);
 
                                     vm_protect!(L, pc, base, {
-                                        lua_v_call_tm(L, 2, res);
+                                        lua_v_call_tm(L, 2, res)?;
                                     });
                                     jump_and_next!(!l_isfalse!(
                                         base.add(res as usize) as *const TValue
@@ -1715,7 +1710,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // without metatables, since that's very rare
                         let mut res: i32 = 0;
                         vm_protect!(L, pc, base, {
-                            res = lua_v_equalval(L, ra as *const TValue, rb as *const TValue);
+                            res = lua_v_equalval(L, ra as *const TValue, rb as *const TValue)?;
                         });
 
                         jump_and_next!(res == 1);
@@ -1828,7 +1823,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     (*L).top = top.add(3);
 
                                     vm_protect!(L, pc, base, {
-                                        lua_v_call_tm(L, 2, res);
+                                        lua_v_call_tm(L, 2, res)?;
                                     });
                                     jump_and_next!(l_isfalse!(
                                         base.add(res as usize) as *const TValue
@@ -1863,7 +1858,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // without metatables, since that's very rare
                         let mut res: i32 = 0;
                         vm_protect!(L, pc, base, {
-                            res = lua_v_equalval(L, ra as *const TValue, rb as *const TValue);
+                            res = lua_v_equalval(L, ra as *const TValue, rb as *const TValue)?;
                         });
 
                         jump_and_next!(res == 0);
@@ -1911,7 +1906,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         let mut res: i32 = 0;
                         vm_protect!(L, pc, base, {
-                            res = lua_v_lessequal(L, ra as *const TValue, rb as *const TValue);
+                            res = lua_v_lessequal(L, ra as *const TValue, rb as *const TValue)?;
                         });
 
                         jump_and_next!(res == 1);
@@ -1955,7 +1950,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         let mut res: i32 = 0;
                         vm_protect!(L, pc, base, {
-                            res = lua_v_lessequal(L, ra as *const TValue, rb as *const TValue);
+                            res = lua_v_lessequal(L, ra as *const TValue, rb as *const TValue)?;
                         });
 
                         jump_and_next!(res == 0);
@@ -1997,7 +1992,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         let mut res: i32 = 0;
                         vm_protect!(L, pc, base, {
-                            res = lua_v_lessthan(L, ra as *const TValue, rb as *const TValue);
+                            res = lua_v_lessthan(L, ra as *const TValue, rb as *const TValue)?;
                         });
 
                         jump_and_next!(res == 1);
@@ -2041,7 +2036,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         let mut res: i32 = 0;
                         vm_protect!(L, pc, base, {
-                            res = lua_v_lessthan(L, ra as *const TValue, rb as *const TValue);
+                            res = lua_v_lessthan(L, ra as *const TValue, rb as *const TValue)?;
                         });
 
                         jump_and_next!(res == 0);
@@ -2065,7 +2060,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) + *vc.add(0),
                             *vb.add(1) + *vc.add(1),
@@ -2094,7 +2090,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2106,7 +2102,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     rc as *const TValue,
                                     TMS::TM_ADD,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2131,7 +2127,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) - *vc.add(0),
                             *vb.add(1) - *vc.add(1),
@@ -2160,7 +2157,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2172,7 +2169,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     rc as *const TValue,
                                     TMS::TM_SUB,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2196,7 +2193,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisnumber!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = nvalue!(rc as *const TValue) as LuaVectorType;
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) * vc,
                             *vb.add(1) * vc,
@@ -2207,7 +2205,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) * *vc.add(0),
                             *vb.add(1) * *vc.add(1),
@@ -2218,7 +2217,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisnumber!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = nvalue!(rb as *const TValue) as LuaVectorType;
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             vb * *vc.add(0),
                             vb * *vc.add(1),
@@ -2252,7 +2252,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2264,7 +2264,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     rc as *const TValue,
                                     TMS::TM_MUL,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2288,7 +2288,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisnumber!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = nvalue!(rc as *const TValue) as LuaVectorType;
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) / vc,
                             *vb.add(1) / vc,
@@ -2299,7 +2300,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) / *vc.add(0),
                             *vb.add(1) / *vc.add(1),
@@ -2310,7 +2312,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisnumber!(rb as *const TValue) && ttisvector!(rc as *const TValue) {
                         let vb = nvalue!(rb as *const TValue) as LuaVectorType;
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             vb / *vc.add(0),
                             vb / *vc.add(1),
@@ -2344,7 +2347,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2356,7 +2359,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     rc as *const TValue,
                                     TMS::TM_DIV,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2383,7 +2386,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) && ttisnumber!(rc as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = nvalue!(rc as *const TValue) as LuaVectorType;
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             luai_numidiv(*vb.add(0) as f64, vc as f64) as LuaVectorType,
                             luai_numidiv(*vb.add(1) as f64, vc as f64) as LuaVectorType,
@@ -2417,7 +2421,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2429,7 +2433,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     rc as *const TValue,
                                     TMS::TM_IDIV,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2458,7 +2462,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 rb as *const TValue,
                                 rc as *const TValue,
                                 TMS::TM_MOD,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -2487,7 +2491,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 rb as *const TValue,
                                 rc as *const TValue,
                                 TMS::TM_POW,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -2516,7 +2520,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 rb as *const TValue,
                                 kv as *const TValue,
                                 TMS::TM_ADD,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -2545,7 +2549,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 rb as *const TValue,
                                 kv as *const TValue,
                                 TMS::TM_SUB,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -2568,7 +2572,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = nvalue!(kv as *const TValue) as LuaVectorType;
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) * vc,
                             *vb.add(1) * vc,
@@ -2597,7 +2602,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2609,7 +2614,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     kv as *const TValue,
                                     TMS::TM_MUL,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2633,7 +2638,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = nvalue!(kv as *const TValue) as LuaVectorType;
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             *vb.add(0) / vc,
                             *vb.add(1) / vc,
@@ -2662,7 +2668,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2674,7 +2680,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     kv as *const TValue,
                                     TMS::TM_DIV,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2701,7 +2707,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rb as *const TValue) {
                         let vb = vvalue!(rb as *const TValue).as_ptr();
                         let vc = nvalue!(kv as *const TValue) as LuaVectorType;
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             luai_numidiv(*vb.add(0) as f64, vc as f64) as LuaVectorType,
                             luai_numidiv(*vb.add(1) as f64, vc as f64) as LuaVectorType,
@@ -2730,7 +2737,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(3);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 2, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2742,7 +2749,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     kv as *const TValue,
                                     TMS::TM_IDIV,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2772,7 +2779,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 rb as *const TValue,
                                 kv as *const TValue,
                                 TMS::TM_MOD,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -2812,7 +2819,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 rb as *const TValue,
                                 kv as *const TValue,
                                 TMS::TM_POW,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -2902,7 +2909,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     // This call may realloc the stack! So we need to query args further down
                     vm_protect!(L, pc, base, {
-                        lua_v_concat(L, c - b + 1, c);
+                        lua_v_concat(L, c - b + 1, c)?;
                     });
 
                     let ra = VM_REG!(LUAU_INSN_A!(insn), L, base) as *mut TValue;
@@ -2959,7 +2966,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             (*L).top = top.add(2);
 
                             vm_protect!(L, pc, base, {
-                                lua_v_call_tm(L, 1, LUAU_INSN_A!(insn) as i32);
+                                lua_v_call_tm(L, 1, LUAU_INSN_A!(insn) as i32)?;
                             });
                             continue 'dispatch;
                         } else {
@@ -2971,7 +2978,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     rb as *const TValue,
                                     rb as *const TValue,
                                     TMS::TM_UNM,
-                                );
+                                )?;
                             });
                             continue 'dispatch;
                         }
@@ -2994,7 +3001,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         } else {
                             // slow-path, may invoke C/Lua via metamethods
                             vm_protect!(L, pc, base, {
-                                lua_v_dolen(L, ra, rb as *const TValue);
+                                lua_v_dolen(L, ra, rb as *const TValue)?;
                             });
                             continue 'dispatch;
                         }
@@ -3007,7 +3014,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else {
                         // slow-path, may invoke C/Lua via metamethods
                         vm_protect!(L, pc, base, {
-                            lua_v_dolen(L, ra, rb as *const TValue);
+                            lua_v_dolen(L, ra, rb as *const TValue)?;
                         });
                         continue 'dispatch;
                     }
@@ -3026,7 +3033,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     sethvalue!(
                         L,
                         ra,
-                        lua_h_new(L, aux as i32, if b == 0 { 0 } else { 1 << (b - 1) })
+                        lua_h_new(L, aux as i32, if b == 0 { 0 } else { 1 << (b - 1) })?
                     );
                     vm_protect!(L, pc, base, {
                         luaC_checkGC!(L);
@@ -3042,7 +3049,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                     (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaH_clone may fail due to OOM
 
-                    sethvalue!(L, ra, lua_h_clone(L, hvalue!(kv as *const TValue)));
+                    sethvalue!(L, ra, lua_h_clone(L, hvalue!(kv as *const TValue))?);
                     vm_protect!(L, pc, base, {
                         luaC_checkGC!(L);
                     });
@@ -3070,14 +3077,14 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     if !ttistable!(ra as *const TValue) {
                         // temporary workaround to weaken a rather powerful exploitation
                         // primitive in case of a MITM attack on bytecode
-                        return;
+                        return Ok(());
                     }
 
                     let last = index as i32 + c - 1;
                     if last > (*h).sizearray {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): luaH_resizearray may fail due to OOM
 
-                        lua_h_resizearray(L, h, last);
+                        lua_h_resizearray(L, h, last)?;
                     }
 
                     let array = (*h).array;
@@ -3107,7 +3114,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         // Note: this doesn't reallocate stack so we don't need to recompute ra/base
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC()
 
-                        lua_v_prepare_forn(L, ra.add(0), ra.add(1), ra.add(2));
+                        lua_v_prepare_forn(L, ra.add(0), ra.add(1), ra.add(2))?;
                     }
 
                     let limit = nvalue!(ra.add(0) as *const TValue);
@@ -3189,7 +3196,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 // if the metamethod is not present, error.
                                 if ttisnil!(fn_tm) {
                                     (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                                    luaG_typeerrorL(
+                                    return luaG_typeerrorL(
                                         L,
                                         ra as *const TValue,
                                         b"iterate over\0".as_ptr() as *const core::ffi::c_char,
@@ -3205,7 +3212,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 LUAU_ASSERT!((*L).top <= (*L).stack_last);
 
                                 vm_protect!(L, pc, base, {
-                                    lua_d_call(L, ra, 3);
+                                    lua_d_call(L, ra, 3)?;
                                 });
                                 (*L).top = (*(*L).ci).top;
 
@@ -3216,7 +3223,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 // as a marker for builtin iteration in FORGLOOP
                                 if ttisnil!(ra as *const TValue) {
                                     (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                                    luaG_typeerrorL(
+                                    return luaG_typeerrorL(
                                         L,
                                         ra as *const TValue,
                                         b"call\0".as_ptr() as *const core::ffi::c_char,
@@ -3237,7 +3244,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 setnilvalue!(ra);
                             } else {
                                 (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                                luaG_typeerrorL(
+                                return luaG_typeerrorL(
                                     L,
                                     ra as *const TValue,
                                     b"iterate over\0".as_ptr() as *const core::ffi::c_char,
@@ -3265,7 +3272,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 LUAU_ASSERT!((*L).top <= (*L).stack_last);
 
                                 vm_protect!(L, pc, base, {
-                                    lua_d_call(L, ra, 3);
+                                    lua_d_call(L, ra, 3)?;
                                 });
                                 (*L).top = (*(*L).ci).top;
 
@@ -3276,7 +3283,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 // as a marker for builtin iteration in FORGLOOP
                                 if ttisnil!(ra as *const TValue) {
                                     (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                                    luaG_typeerrorL(
+                                    return luaG_typeerrorL(
                                         L,
                                         ra as *const TValue,
                                         b"call\0".as_ptr() as *const core::ffi::c_char,
@@ -3297,7 +3304,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 setnilvalue!(ra);
                             } else {
                                 (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                                luaG_typeerrorL(
+                                return luaG_typeerrorL(
                                     L,
                                     ra as *const TValue,
                                     b"iterate over\0".as_ptr() as *const core::ffi::c_char,
@@ -3409,15 +3416,15 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         if luaur_common::FFlag::LuauYieldIter2.get() {
                             let mut yielded = false;
                             vm_protect!(L, pc, base, {
-                                yielded = lua_d_performcally(L, ra.add(3), aux as u8 as i32);
+                                yielded = lua_d_performcally(L, ra.add(3), aux as u8 as i32)?;
                             });
 
                             if yielded {
-                                return; // goto exit
+                                return Ok(()); // goto exit
                             }
                         } else {
                             vm_protect!(L, pc, base, {
-                                lua_d_call(L, ra.add(3), aux as u8 as i32);
+                                lua_d_call(L, ra.add(3), aux as u8 as i32)?;
                             });
                         }
 
@@ -3457,7 +3464,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         setpvalue!(ra.add(2), 0usize as *mut core::ffi::c_void, LU_TAG_ITERATOR);
                     } else if !ttisfunction!(ra as *const TValue) {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                        luaG_typeerrorL(
+                        return luaG_typeerrorL(
                             L,
                             ra as *const TValue,
                             b"iterate over\0".as_ptr() as *const core::ffi::c_char,
@@ -3484,7 +3491,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         setpvalue!(ra.add(2), 0usize as *mut core::ffi::c_void, LU_TAG_ITERATOR);
                     } else if !ttisfunction!(ra as *const TValue) {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): next call always errors
-                        luaG_typeerrorL(
+                        return luaG_typeerrorL(
                             L,
                             ra as *const TValue,
                             b"iterate over\0".as_ptr() as *const core::ffi::c_char,
@@ -3514,11 +3521,11 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         if enter(L, p) == 1 {
                             continue 'reentry; // goto reentry
                         } else {
-                            return; // goto exit
+                            return Ok(()); // goto exit
                         }
                     }
                     // (no native entry callback installed)
-                    return;
+                    return Ok(());
                 }
                 LuauOpcode::LOP_GETVARARGS => {
                     // lvmexecute.cpp:2902
@@ -3593,7 +3600,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                             let l = &(*kcl).inner.l;
                             l.p
                         };
-                        lua_f_new_lclosure(L, (*kcl).nupvalues as i32, (*cl).env, kp)
+                        lua_f_new_lclosure(L, (*kcl).nupvalues as i32, (*cl).env, kp)?
                     };
                     setclvalue!(L, ra, ncl);
 
@@ -3641,7 +3648,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 let l = &(*kcl).inner.l;
                                 l.p
                             };
-                            ncl = lua_f_new_lclosure(L, (*kcl).nupvalues as i32, (*cl).env, kp);
+                            ncl = lua_f_new_lclosure(L, (*kcl).nupvalues as i32, (*cl).env, kp)?;
                             setclvalue!(L, ra, ncl);
 
                             ui = 0; // C++ `ui = -1; continue` — restart the loop to fill all upvalues
@@ -3771,7 +3778,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     if (*(*cl).env).safeenv != 0 {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
-                        let n = f.unwrap()(L, ra, ra.add(1), nresults, ra.add(2), nparams);
+                        let n = f.unwrap()(L, ra, ra.add(1), nresults, ra.add(2), nparams)?;
 
                         if n >= 0 {
                             // when nresults != MULTRET, L->top might be pointing to the middle
@@ -3840,7 +3847,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 kv as *const TValue,
                                 rc as *const TValue,
                                 TMS::TM_SUB,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -3863,7 +3870,8 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     } else if ttisvector!(rc as *const TValue) {
                         let nb = nvalue!(kv as *const TValue) as LuaVectorType;
                         let vc = vvalue!(rc as *const TValue).as_ptr();
-                        setvvalue!(L,
+                        setvvalue!(
+                            L,
                             ra,
                             nb / *vc.add(0),
                             nb / *vc.add(1),
@@ -3880,7 +3888,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                 kv as *const TValue,
                                 rc as *const TValue,
                                 TMS::TM_DIV,
-                            );
+                            )?;
                         });
                         continue 'dispatch;
                     }
@@ -3908,7 +3916,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     if (*(*cl).env).safeenv != 0 {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
-                        let n = f.unwrap()(L, ra, arg, nresults, core::ptr::null_mut(), nparams);
+                        let n = f.unwrap()(L, ra, arg, nresults, core::ptr::null_mut(), nparams)?;
 
                         if n >= 0 {
                             if nresults == LUA_MULTRET {
@@ -3954,7 +3962,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     if (*(*cl).env).safeenv != 0 {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
-                        let n = f.unwrap()(L, ra, arg1, nresults, arg2, nparams);
+                        let n = f.unwrap()(L, ra, arg1, nresults, arg2, nparams)?;
 
                         if n >= 0 {
                             if nresults == LUA_MULTRET {
@@ -4000,7 +4008,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     if (*(*cl).env).safeenv != 0 {
                         (*(*L).ci).context.savedpc = pc; // VM_PROTECT_PC(): f may fail due to OOM
 
-                        let n = f.unwrap()(L, ra, arg1, nresults, arg2, nparams);
+                        let n = f.unwrap()(L, ra, arg1, nresults, arg2, nparams)?;
 
                         if n >= 0 {
                             if nresults == LUA_MULTRET {
@@ -4053,7 +4061,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         setobj_2_s!(L, top, arg2 as *const TValue);
                         setobj_2_s!(L, top.add(1), arg3 as *const TValue);
 
-                        let n = f.unwrap()(L, ra, arg1, nresults, top, nparams);
+                        let n = f.unwrap()(L, ra, arg1, nresults, top, nparams)?;
 
                         if n >= 0 {
                             if nresults == LUA_MULTRET {
@@ -4091,12 +4099,12 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                     if (*(*L).global).cb.debugbreak.is_some() {
                         let debugbreak = (*(*L).global).cb.debugbreak;
                         vm_protect!(L, pc, base, {
-                            luau_callhook(L, debugbreak, core::ptr::null_mut());
+                            luau_callhook(L, debugbreak, core::ptr::null_mut())?;
                         });
 
                         // allow debugbreak hook to put thread into error/yield state
                         if (*L).status != 0 {
-                            return; // goto exit
+                            return Ok(()); // goto exit
                         }
                     }
 
@@ -4232,10 +4240,10 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     (*L).nCcalls += 1;
 
                                     if ((*L).nCcalls as i32) >= LUAI_MAXCCALLS {
-                                        luaD_checkCstack(L);
+                                        luaD_checkCstack(L)?;
                                     }
 
-                                    luau_setupcci(L, 1, top);
+                                    luau_setupcci(L, 1, top)?;
 
                                     let mut cachedslot: u16 = LUAU_INSN_AUX_SLOT!(aux) as u16;
                                     onudataindex(
@@ -4330,10 +4338,10 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                                     (*L).nCcalls += 1;
 
                                     if ((*L).nCcalls as i32) >= LUAI_MAXCCALLS {
-                                        luaD_checkCstack(L);
+                                        luaD_checkCstack(L)?;
                                     }
 
-                                    luau_setupcci(L, 0, top);
+                                    luau_setupcci(L, 0, top)?;
 
                                     let mut cachedslot: u16 = LUAU_INSN_AUX_SLOT!(aux) as u16;
                                     onudatanewindex(
@@ -4440,7 +4448,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                                     // note: namecalls do not increase C call number and allow yielding
 
-                                    luau_setupcci(L, nresults, ra);
+                                    luau_setupcci(L, nresults, ra)?;
 
                                     LUAU_ASSERT!((*tsvalue!(kv as *const TValue)).atom >= 0);
 
@@ -4463,7 +4471,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
 
                                     // yield
                                     if results < 0 {
-                                        return;
+                                        return Ok(());
                                     }
 
                                     // ci is our callinfo, cip is our parent
@@ -4531,7 +4539,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         tsvalue!(membername as *const TValue)
                             as *mut crate::records::t_string::TString,
                         rc,
-                    );
+                    )?;
                     continue 'dispatch;
                 }
                 LuauOpcode::LOP_CMPPROTO => {
@@ -4575,13 +4583,13 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
                         (*(*L).ci).context.savedpc = pc;
                         let rb = VM_REG!(super_ as u32, L, base) as *mut TValue;
                         if !ttisclass!(rb as *const TValue) {
-                            luaG_typeerrorL(L, rb as *const TValue, c"extend".as_ptr());
+                            return luaG_typeerrorL(L, rb as *const TValue, c"extend".as_ptr());
                         }
                         let inherited = lua_r_inheritclass(
                             L,
                             new_class,
                             &mut **classvalue!(rb as *const TValue) as *mut LuauClass,
-                        );
+                        )?;
                         setclassvalue!(L, ra, inherited);
                     }
 
@@ -4597,7 +4605,7 @@ unsafe fn luau_execute_impl<const SINGLE_STEP: bool>(L: *mut lua_State) {
         // explicit `continue 'reentry` (native-call return paths).
         #[allow(unreachable_code)]
         {
-            break 'reentry;
+            break 'reentry Ok(());
         }
     }
 }

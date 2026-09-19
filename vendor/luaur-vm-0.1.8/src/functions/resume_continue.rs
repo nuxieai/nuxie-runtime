@@ -10,7 +10,7 @@ use crate::type_aliases::lua_state::lua_State;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn resume_continue(L: *mut lua_State) {
+pub unsafe fn resume_continue(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<()> {
     // unroll Luau/C combined stack, processing continuations
     while ((*L).status == lua_Status::LUA_OK as u8 || (*L).status == SCHEDULED_REENTRY as u8)
         && (*L).ci > (*L).base_ci
@@ -30,7 +30,7 @@ pub unsafe fn resume_continue(L: *mut lua_State) {
             (*(*L).ci).flags &= !(LUA_CALLINFO_HANDLE as u32);
 
             if let Some(cont) = cont_opt {
-                let n = cont(L, 0);
+                let n = cont(L, 0)?;
 
                 // continuation can break or yield again
                 if (*L).status == lua_Status::LUA_BREAK as u8
@@ -53,7 +53,8 @@ pub unsafe fn resume_continue(L: *mut lua_State) {
             }
 
             // Luau continuation; it terminates at the end of the stack or at another C continuation
-            luau_execute(L);
+            luau_execute(L)?;
         }
     }
+    Ok(())
 }

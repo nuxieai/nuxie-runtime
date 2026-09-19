@@ -17,8 +17,7 @@ unsafe fn call_context_run(
     ud: *mut c_void,
 ) -> Result<(), crate::records::lua_exception::lua_exception> {
     let ctx = ud as *mut CallContext;
-    lua_d_growstack(L, (*ctx).size);
-    Ok(())
+    lua_d_growstack(L, (*ctx).size)
 }
 
 #[allow(non_snake_case)]

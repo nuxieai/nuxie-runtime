@@ -6,7 +6,7 @@ use crate::type_aliases::lua_state::lua_State;
 use luaur_common::FFlag::FixMathNoisePrecision;
 
 #[export_name = "luaur_math_noise"]
-pub unsafe fn math_noise(L: *mut lua_State) -> i32 {
+pub unsafe fn math_noise(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
     let mut nx = 0;
     let mut ny = 0;
     let mut nz = 0;
@@ -54,6 +54,6 @@ pub unsafe fn math_noise(L: *mut lua_State) -> i32 {
 
     let r = crate::functions::perlin::perlin(x as f32, y as f32, z as f32);
 
-    lua_pushnumber(L, r as f64);
-    1
+    lua_pushnumber(L, r as f64)?;
+    Ok(1)
 }

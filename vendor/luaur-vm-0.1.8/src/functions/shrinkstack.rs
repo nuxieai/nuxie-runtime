@@ -12,7 +12,7 @@ use crate::type_aliases::stk_id::StkId;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn shrinkstack(L: *mut lua_State) {
+pub unsafe fn shrinkstack(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<()> {
     // compute used stack - note that we can't use th->top if we're in the middle of vararg call
     let mut lim: StkId = (*L).top;
     let mut ci: *mut CallInfo = (*L).base_ci;
@@ -29,20 +29,21 @@ pub unsafe fn shrinkstack(L: *mut lua_State) {
     let s_used = cast_int!(lim.offset_from((*L).stack));
     if (*L).size_ci > LUAI_MAXCALLS {
         // handling overflow?
-        return;
+        return Ok(());
     }
 
     if 3 * (ci_used as usize) < (*L).size_ci as usize && 2 * BASIC_CI_SIZE < (*L).size_ci {
-        lua_d_realloc_ci(L, (*L).size_ci / 2); // still big enough...
+        lua_d_realloc_ci(L, (*L).size_ci / 2)?; // still big enough...
     }
 
-    condhardstacktests!(lua_d_realloc_ci(L, ci_used + 1));
+    condhardstacktests!(lua_d_realloc_ci(L, ci_used + 1)?);
 
     if 3 * (s_used as usize) < (*L).stacksize as usize
         && 2 * (BASIC_STACK_SIZE + EXTRA_STACK) < (*L).stacksize
     {
-        lua_d_reallocstack(L, (*L).stacksize / 2, 0); // still big enough...
+        lua_d_reallocstack(L, (*L).stacksize / 2, 0)?; // still big enough...
     }
 
-    condhardstacktests!(lua_d_reallocstack(L, s_used, 0));
+    condhardstacktests!(lua_d_reallocstack(L, s_used, 0)?);
+    Ok(())
 }

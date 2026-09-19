@@ -14,13 +14,13 @@ pub unsafe fn luau_f_rad(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         let rpd = 3.14159265358979323846 / 180.0;
         setnvalue!(res, a1 * rpd);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

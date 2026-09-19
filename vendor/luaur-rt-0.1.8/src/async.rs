@@ -321,7 +321,9 @@ unsafe extern "C" fn callback_upvalue_dtor(ptr: *mut c_void) {
 
 /// `get_future(...)`: invoke the user's async callback with the call args, box
 /// the future, and return it wrapped in an [`AsyncPollUpvalue`] userdata.
-unsafe fn get_future_c(state: *mut lua_State) -> c_int {
+unsafe fn get_future_c(
+    state: *mut lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         // Recover the callback from upvalue 1.
         let ud = lua_touserdata(state, lua_upvalueindex(1));
@@ -351,7 +353,7 @@ unsafe fn get_future_c(state: *mut lua_State) -> c_int {
             state,
             core::mem::size_of::<AsyncPollUpvalue>(),
             Some(poll_upvalue_dtor),
-        );
+        )?;
         if storage.is_null() {
             return raise(state, "luaur-rt: failed to allocate async future userdata");
         }
@@ -359,7 +361,7 @@ unsafe fn get_future_c(state: *mut lua_State) -> c_int {
             storage as *mut AsyncPollUpvalue,
             AsyncPollUpvalue { data: Some(fut) },
         );
-        1
+        Ok(1)
     }
 }
 
@@ -372,7 +374,7 @@ unsafe fn get_future_c(state: *mut lua_State) -> c_int {
 /// * `Pending` (value-carrying, via `yield_with`): returns
 ///   `nil, <values-table>, <count>` for the loop to forward through `yield`.
 /// * terminate signal received: returns `-1` so the loop parks forever.
-unsafe fn poll_c(state: *mut lua_State) -> c_int {
+unsafe fn poll_c(state: *mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         // The future userdata is always argument 1.
         let ud = lua_touserdata(state, 1);
@@ -386,8 +388,8 @@ unsafe fn poll_c(state: *mut lua_State) -> c_int {
         // Terminate signal: `poll(future, <terminate light-userdata>)`.
         if nargs == 2 && lua_tolightuserdata(state, -1) == poll_terminate() {
             future.data.take(); // drop the future
-            lua_pushinteger(state, -1);
-            return 1;
+            lua_pushinteger(state, -1)?;
+            return Ok(1);
         }
 
         let lua = Lua::from_borrowed(state);
@@ -408,14 +410,14 @@ unsafe fn poll_c(state: *mut lua_State) -> c_int {
                     // A value-carrying yield from `yield_with`: stack tail is
                     // [yield_marker, values_table, count]. Replace the marker
                     // (at -3) with nil so the loop forwards [nil, table, count].
-                    lua_pushnil(state);
+                    lua_pushnil(state)?;
                     lua_replace(state, -4);
-                    return 3;
+                    return Ok(3);
                 }
                 // Plain pending: return [nil, pending_marker].
-                lua_pushnil(state);
-                lua_pushlightuserdatatagged(state, poll_pending(), 0);
-                2
+                lua_pushnil(state)?;
+                lua_pushlightuserdatatagged(state, poll_pending(), 0)?;
+                Ok(2)
             }
             Poll::Ready(result) => {
                 let results = match result {
@@ -430,22 +432,24 @@ unsafe fn poll_c(state: *mut lua_State) -> c_int {
                 if nres < 3 {
                     // Fast path: push count then up to 2 results (the loop reads
                     // them as `res`, `res2`).
-                    lua_pushinteger(state, nres);
+                    lua_pushinteger(state, nres)?;
                     for v in results.iter() {
                         if let Err(e) = lua.push_value(v) {
                             return raise(state, &e.to_string());
                         }
                     }
-                    1 + nres
+                    Ok(1 + nres)
                 } else {
                     // Many results: pack into a sequence table; loop `unpack`s it.
-                    lua_pushinteger(state, nres);
+                    lua_pushinteger(state, nres)?;
                     let seq = match lua.create_sequence_from(results) {
                         Ok(t) => t,
                         Err(e) => return raise(state, &e.to_string()),
                     };
-                    seq.push_to_stack();
-                    2
+                    if let Err(error) = seq.reference.try_push() {
+                        return raise(state, &error.to_string());
+                    }
+                    Ok(2)
                 }
             }
         }
@@ -453,7 +457,7 @@ unsafe fn poll_c(state: *mut lua_State) -> c_int {
 }
 
 /// `unpack(t, n)`: push `t[1]..t[n]` onto the stack and return `n`.
-unsafe fn unpack_c(state: *mut lua_State) -> c_int {
+unsafe fn unpack_c(state: *mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let mut isnum: c_int = 0;
         let n = lua_tointegerx(state, 2, &mut isnum as *mut c_int);
@@ -461,9 +465,9 @@ unsafe fn unpack_c(state: *mut lua_State) -> c_int {
             return raise(state, "luaur-rt: stack overflow unpacking async results");
         }
         for i in 1..=n {
-            lua_rawgeti(state, 1, i);
+            lua_rawgeti(state, 1, i)?;
         }
-        n
+        Ok(n)
     }
 }
 
@@ -472,15 +476,20 @@ unsafe fn unpack_c(state: *mut lua_State) -> c_int {
 // ---------------------------------------------------------------------------
 
 /// Push `msg` and `lua_error` (diverges via the VM longjmp).
-unsafe fn raise(state: *mut lua_State, msg: &str) -> c_int {
+unsafe fn raise(
+    state: *mut lua_State,
+    msg: &str,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe {
-        lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len());
+        lua_pushlstring(state, msg.as_ptr() as *const c_char, msg.len())?;
         lua_error(state)
     }
 }
 
 /// Raise the structured `CallbackDestructed` error (future polled after drop).
-unsafe fn raise_destructed(state: *mut lua_State) -> c_int {
+unsafe fn raise_destructed(
+    state: *mut lua_State,
+) -> luaur_vm::records::lua_exception::LuaResult<c_int> {
     unsafe { crate::callback::raise_structured_error(state, Error::CallbackDestructed) }
 }
 
@@ -492,12 +501,10 @@ unsafe fn raise_destructed(state: *mut lua_State) -> c_int {
 /// the stack). Mirrors the callback trampoline construction.
 unsafe fn push_c_closure_with_upvalue(
     state: *mut lua_State,
-    f: unsafe fn(*mut lua_State) -> c_int,
+    f: unsafe fn(*mut lua_State) -> luaur_vm::records::lua_exception::LuaResult<c_int>,
     name: &core::ffi::CStr,
-) {
-    unsafe {
-        lua_pushcclosurek(state, Some(f), name.as_ptr(), 1, None);
-    }
+) -> luaur_vm::records::lua_exception::LuaResult<()> {
+    unsafe { lua_pushcclosurek(state, Some(f), name.as_ptr(), 1, None) }
 }
 
 /// Build a [`Function`] that, when called from Lua, drives the given async
@@ -505,6 +512,7 @@ unsafe fn push_c_closure_with_upvalue(
 /// [`Lua::create_async_function`].
 pub(crate) fn create_async_callback(lua: &Lua, callback: AsyncCallback) -> Result<Function> {
     let state = lua.state();
+    let _stack = unsafe { crate::stack_guard::StackGuard::new(state) };
 
     // 1. Build the `get_future` C closure with the callback as its upvalue.
     let get_future = unsafe {
@@ -512,7 +520,8 @@ pub(crate) fn create_async_callback(lua: &Lua, callback: AsyncCallback) -> Resul
             state,
             core::mem::size_of::<AsyncCallbackUpvalue>(),
             Some(callback_upvalue_dtor),
-        );
+        )
+        .map_err(|error| Error::from_vm(error))?;
         if storage.is_null() {
             return Err(Error::runtime(
                 "luaur-rt: failed to allocate async callback userdata",
@@ -522,18 +531,21 @@ pub(crate) fn create_async_callback(lua: &Lua, callback: AsyncCallback) -> Resul
             storage as *mut AsyncCallbackUpvalue,
             AsyncCallbackUpvalue { callback },
         );
-        push_c_closure_with_upvalue(state, get_future_c, c"luaur-rt-get-future");
-        Function::from_ref(lua.pop_ref())
+        push_c_closure_with_upvalue(state, get_future_c, c"luaur-rt-get-future")
+            .map_err(|error| Error::from_vm(error))?;
+        Function::from_ref(lua.try_pop_ref()?)
     };
 
     // 2. Build the `poll` and `unpack` C closures (no upvalues).
     let poll = unsafe {
-        lua_pushcclosurek(state, Some(poll_c), c"luaur-rt-poll".as_ptr(), 0, None);
-        Function::from_ref(lua.pop_ref())
+        lua_pushcclosurek(state, Some(poll_c), c"luaur-rt-poll".as_ptr(), 0, None)
+            .map_err(|error| Error::from_vm(error))?;
+        Function::from_ref(lua.try_pop_ref()?)
     };
     let unpack = unsafe {
-        lua_pushcclosurek(state, Some(unpack_c), c"luaur-rt-unpack".as_ptr(), 0, None);
-        Function::from_ref(lua.pop_ref())
+        lua_pushcclosurek(state, Some(unpack_c), c"luaur-rt-unpack".as_ptr(), 0, None)
+            .map_err(|error| Error::from_vm(error))?;
+        Function::from_ref(lua.try_pop_ref()?)
     };
 
     // 3. Fetch `coroutine.yield`.
@@ -541,7 +553,7 @@ pub(crate) fn create_async_callback(lua: &Lua, callback: AsyncCallback) -> Resul
     let yield_fn: Function = coroutine.get("yield")?;
 
     // 4. Assemble the poller's private environment.
-    let env = lua.create_table();
+    let env = lua.create_table_result()?;
     env.set("get_future", get_future)?;
     env.set("poll", poll)?;
     env.set("yield", yield_fn)?;
@@ -600,7 +612,10 @@ impl Lua {
                     Some(values) => {
                         let state = lua.state();
                         unsafe {
-                            lua_pushlightuserdatatagged(state, poll_yield(), 0);
+                            if let Err(error) = lua_pushlightuserdatatagged(state, poll_yield(), 0)
+                            {
+                                return Poll::Ready(Err(Error::from_vm(error)));
+                            }
                             let count = values.len() as c_int;
                             if count <= 1 {
                                 // Single value (or none): push it directly.
@@ -612,7 +627,11 @@ impl Lua {
                                             )));
                                         }
                                     }
-                                    None => lua_pushnil(state),
+                                    None => {
+                                        if let Err(error) = lua_pushnil(state) {
+                                            return Poll::Ready(Err(Error::from_vm(error)));
+                                        }
+                                    }
                                 }
                             } else {
                                 // Multiple: pack into a sequence table.
@@ -621,7 +640,9 @@ impl Lua {
                                     Err(e) => return Poll::Ready(Err(e)),
                                 }
                             }
-                            lua_pushinteger(state, count);
+                            if let Err(error) = lua_pushinteger(state, count) {
+                                return Poll::Ready(Err(Error::from_vm(error)));
+                            }
                         }
                         Poll::Pending
                     }
@@ -639,7 +660,11 @@ impl Lua {
                             // onto the stack before popping it; reserve headroom so
                             // a full stack doesn't overrun (same class as the
                             // `function.rs::call` fix).
-                            let _ = lua_checkstack(state, 2);
+                            if lua_checkstack(state, 2) == 0 {
+                                return Poll::Ready(Err(Error::runtime(
+                                    "stack overflow collecting async resume values",
+                                )));
+                            }
                             let mut results = MultiValue::with_capacity((top.max(1) - 1) as usize);
                             let mut err = None;
                             for i in 2..=top {
@@ -653,7 +678,7 @@ impl Lua {
                             }
                             // Drop the resume values, keeping the future at index 1.
                             if top > 1 {
-                                lua_settop(state, 1);
+                                lua_pop(state, top - 1).expect("shrinking the stack cannot fail");
                             }
                             match err {
                                 Some(e) => Err(e),

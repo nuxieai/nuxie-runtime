@@ -10,12 +10,16 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_h_new(l: *mut lua_State, narray: c_int, nhash: c_int) -> *mut LuaTable {
+pub unsafe fn lua_h_new(
+    l: *mut lua_State,
+    narray: c_int,
+    nhash: c_int,
+) -> crate::records::lua_exception::LuaResult<*mut LuaTable> {
     let t = crate::functions::lua_m_newgco::luaM_newgco_(
         l,
         core::mem::size_of::<LuaTable>(),
         (*l).activememcat,
-    ) as *mut LuaTable;
+    )? as *mut LuaTable;
 
     luaC_init!(l, t, lua_Type::LUA_TTABLE as c_int);
     (*t).metatable = core::ptr::null_mut();
@@ -30,23 +34,23 @@ pub unsafe fn lua_h_new(l: *mut lua_State, narray: c_int, nhash: c_int) -> *mut 
     (*t).node = dummynode as *mut LuaNode;
 
     if narray > 0 {
-        setarrayvector(l, t, narray);
+        setarrayvector(l, t, narray)?;
     }
 
     if nhash > 0 {
-        setnodevector(l, t, nhash);
+        setnodevector(l, t, nhash)?;
     }
 
-    t
+    Ok(t)
 }
 
 #[export_name = "luaur_luaH_new"]
-pub unsafe extern "C" fn lua_h_new_export(
+pub unsafe fn lua_h_new_export(
     l: *mut lua_State,
     narray: c_int,
     nhash: c_int,
-) -> *mut core::ffi::c_void {
-    lua_h_new(l, narray, nhash).cast()
+) -> crate::records::lua_exception::LuaResult<*mut core::ffi::c_void> {
+    Ok(lua_h_new(l, narray, nhash)?.cast())
 }
 
 #[allow(unused_imports)]

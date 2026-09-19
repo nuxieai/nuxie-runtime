@@ -11,7 +11,11 @@ use crate::records::lua_state::lua_State;
 use crate::records::lua_table::LuaTable;
 use crate::type_aliases::t_value::TValue;
 
-pub(crate) unsafe fn rehash(l: *mut lua_State, t: *mut LuaTable, ek: *const TValue) {
+pub(crate) unsafe fn rehash(
+    l: *mut lua_State,
+    t: *mut LuaTable,
+    ek: *const TValue,
+) -> crate::records::lua_exception::LuaResult<()> {
     let mut nums = [0i32; (MAXBITS + 1) as usize];
     let nasize = numusearray(t, nums.as_mut_ptr());
     let mut totaluse = nasize;
@@ -35,5 +39,5 @@ pub(crate) unsafe fn rehash(l: *mut lua_State, t: *mut LuaTable, ek: *const TVal
         nasize_mut = adjustasize(t, nasize_mut, ek);
     }
 
-    resize(l, t, nasize_mut, nh);
+    resize(l, t, nasize_mut, nh)
 }

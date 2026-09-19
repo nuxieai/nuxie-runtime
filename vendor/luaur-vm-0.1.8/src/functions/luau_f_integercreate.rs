@@ -15,7 +15,7 @@ pub unsafe fn luau_f_integercreate(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
 
@@ -23,13 +23,13 @@ pub unsafe fn luau_f_integercreate(
             let x = a1 as i64;
             if (x as f64) == a1 {
                 setlvalue!(res, x);
-                return 1;
+                return Ok(1);
             }
         }
 
         setnilvalue!(res);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

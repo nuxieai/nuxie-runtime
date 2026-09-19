@@ -252,13 +252,15 @@ static BUFFER_LIB_NO_INTEGER: SyncLuaLReg<27> = SyncLuaLReg([
     },
 ]);
 
-pub unsafe fn luaopen_buffer(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_buffer(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let buffer_lib = if FFlag::LuauIntegerLibrary.get() {
         BUFFER_LIB.0.as_ptr()
     } else {
         BUFFER_LIB_NO_INTEGER.0.as_ptr()
     };
 
-    lua_l_register(L, c"buffer".as_ptr(), buffer_lib);
-    1
+    lua_l_register(L, c"buffer".as_ptr(), buffer_lib)?;
+    Ok(1)
 }

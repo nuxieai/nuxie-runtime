@@ -15,7 +15,7 @@ pub unsafe fn luau_f_vectormagnitude(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
 
@@ -31,8 +31,8 @@ pub unsafe fn luau_f_vectormagnitude(
             setnvalue!(res, (m2.sqrt() as f64));
         }
 
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

@@ -9,7 +9,11 @@ use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_g_concaterror(L: *mut lua_State, p1: StkId, p2: StkId) -> ! {
+pub unsafe fn lua_g_concaterror<T>(
+    L: *mut lua_State,
+    p1: StkId,
+    p2: StkId,
+) -> crate::records::lua_exception::LuaResult<T> {
     let t1: *const c_char = lua_t_objtypename(L, p1);
     let t2: *const c_char = lua_t_objtypename(L, p2);
 
@@ -22,6 +26,10 @@ pub unsafe fn lua_g_concaterror(L: *mut lua_State, p1: StkId, p2: StkId) -> ! {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaG_concaterror(L: *mut lua_State, p1: StkId, p2: StkId) -> ! {
+pub unsafe fn luaG_concaterror<T>(
+    L: *mut lua_State,
+    p1: StkId,
+    p2: StkId,
+) -> crate::records::lua_exception::LuaResult<T> {
     lua_g_concaterror(L, p1, p2)
 }

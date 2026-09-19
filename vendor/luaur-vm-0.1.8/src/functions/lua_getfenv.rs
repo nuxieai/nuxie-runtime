@@ -15,7 +15,10 @@ use crate::records::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_getfenv(L: *mut lua_State, idx: c_int) {
+pub unsafe fn lua_getfenv(
+    L: *mut lua_State,
+    idx: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
 
@@ -35,4 +38,5 @@ pub unsafe fn lua_getfenv(L: *mut lua_State, idx: c_int) {
     }
 
     api_incr_top!(L);
+    Ok(())
 }

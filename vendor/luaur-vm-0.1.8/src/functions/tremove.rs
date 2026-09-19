@@ -9,21 +9,23 @@ use crate::functions::moveelements::moveelements;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_tremove"]
-pub unsafe fn tremove(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int);
+pub unsafe fn tremove(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_checktype(L, 1, lua_Type::LUA_TTABLE as core::ffi::c_int)?;
     let n = lua_objlen(L, 1);
-    let pos = lua_l_optinteger(L, 2, n);
+    let pos = lua_l_optinteger(L, 2, n)?;
 
     if !(1 <= pos && pos <= n) {
-        return 0;
+        return Ok(0);
     }
 
-    lua_rawgeti(L, 1, pos);
+    lua_rawgeti(L, 1, pos)?;
 
-    moveelements(L, 1, 1, pos + 1, n, pos, false);
+    moveelements(L, 1, 1, pos + 1, n, pos, false)?;
 
-    lua_pushnil(L);
-    lua_rawseti(L, 1, n);
+    lua_pushnil(L)?;
+    lua_rawseti(L, 1, n)?;
 
-    1
+    Ok(1)
 }

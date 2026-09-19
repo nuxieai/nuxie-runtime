@@ -115,16 +115,18 @@ static BASE_FUNCS: BaseFuncs = BaseFuncs([
 ]);
 
 #[allow(non_snake_case)]
-pub unsafe fn luaopen_base(L: *mut lua_State) -> i32 {
-    lua_pushvalue(L, LUA_GLOBALSINDEX);
-    lua_setglobal(L, c"_G".as_ptr());
+pub unsafe fn luaopen_base(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_pushvalue(L, LUA_GLOBALSINDEX)?;
+    lua_setglobal(L, c"_G".as_ptr())?;
 
-    lua_l_register(L, c"_G".as_ptr(), BASE_FUNCS.0.as_ptr());
-    lua_pushlstring(L, c"Luau".as_ptr(), 4);
-    lua_setglobal(L, c"_VERSION".as_ptr());
+    lua_l_register(L, c"_G".as_ptr(), BASE_FUNCS.0.as_ptr())?;
+    lua_pushlstring(L, c"Luau".as_ptr(), 4)?;
+    lua_setglobal(L, c"_VERSION".as_ptr())?;
 
-    auxopen(L, c"ipairs".as_ptr(), Some(lua_b_ipairs), Some(lua_b_inext));
-    auxopen(L, c"pairs".as_ptr(), Some(lua_b_pairs), Some(lua_b_next));
+    auxopen(L, c"ipairs".as_ptr(), Some(lua_b_ipairs), Some(lua_b_inext))?;
+    auxopen(L, c"pairs".as_ptr(), Some(lua_b_pairs), Some(lua_b_next))?;
 
     lua_pushcclosurek(
         L,
@@ -132,8 +134,8 @@ pub unsafe fn luaopen_base(L: *mut lua_State) -> i32 {
         c"pcall".as_ptr(),
         0,
         Some(lua_b_pcallcont),
-    );
-    lua_setfield(L, -2, c"pcall".as_ptr());
+    )?;
+    lua_setfield(L, -2, c"pcall".as_ptr())?;
 
     lua_pushcclosurek(
         L,
@@ -141,8 +143,8 @@ pub unsafe fn luaopen_base(L: *mut lua_State) -> i32 {
         c"xpcall".as_ptr(),
         0,
         Some(lua_b_xpcallcont),
-    );
-    lua_setfield(L, -2, c"xpcall".as_ptr());
+    )?;
+    lua_setfield(L, -2, c"xpcall".as_ptr())?;
 
-    1
+    Ok(1)
 }

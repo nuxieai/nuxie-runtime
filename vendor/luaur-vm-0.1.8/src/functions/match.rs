@@ -19,7 +19,7 @@ pub(crate) unsafe fn match_item(
     ms: *mut MatchState,
     mut s: *const c_char,
     mut p: *const c_char,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     if (*ms).matchdepth == 0 {
         luaL_error!((*ms).L, "pattern too complex");
     }
@@ -28,7 +28,7 @@ pub(crate) unsafe fn match_item(
     let L = (*ms).L;
     if let Some(interrupt) = (*(*L).global).cb.interrupt {
         (*L).nCcalls = (*L).nCcalls.wrapping_add(1);
-        interrupt(L, -1);
+        interrupt(L, -1)?;
         (*L).nCcalls = (*L).nCcalls.wrapping_sub(1);
     }
 
@@ -37,14 +37,14 @@ pub(crate) unsafe fn match_item(
             match *p as u8 {
                 b'(' => {
                     if *p.add(1) == b')' as c_char {
-                        s = start_capture(ms, s, p.add(2), CAP_POSITION);
+                        s = start_capture(ms, s, p.add(2), CAP_POSITION)?;
                     } else {
-                        s = start_capture(ms, s, p.add(1), CAP_UNFINISHED);
+                        s = start_capture(ms, s, p.add(1), CAP_UNFINISHED)?;
                     }
                     break 'init; // C++ outer-switch `break`: do not fall into dflt
                 }
                 b')' => {
-                    s = end_capture(ms, s, p.add(1));
+                    s = end_capture(ms, s, p.add(1))?;
                     break 'init; // C++ outer-switch `break`: do not fall into dflt
                 }
                 b'$' => {
@@ -61,7 +61,7 @@ pub(crate) unsafe fn match_item(
                 }
                 x if x == L_ESC as u8 => match *p.add(1) as u8 {
                     b'b' => {
-                        s = matchbalance(ms, s, p.add(2));
+                        s = matchbalance(ms, s, p.add(2))?;
                         if !s.is_null() {
                             p = p.add(4);
                             continue 'init;
@@ -73,7 +73,7 @@ pub(crate) unsafe fn match_item(
                         if *p != b'[' as c_char {
                             luaL_error!((*ms).L, "missing '[' after '%%f' in pattern");
                         }
-                        let ep = classend(ms, p);
+                        let ep = classend(ms, p)?;
                         let previous = if s == (*ms).src_init {
                             0
                         } else {
@@ -90,7 +90,7 @@ pub(crate) unsafe fn match_item(
                         break 'init;
                     }
                     b'0'..=b'9' => {
-                        s = match_capture(ms, s, uchar(*p.add(1) as c_int) as c_int);
+                        s = match_capture(ms, s, uchar(*p.add(1) as c_int) as c_int)?;
                         if !s.is_null() {
                             p = p.add(2);
                             continue 'init;
@@ -103,7 +103,7 @@ pub(crate) unsafe fn match_item(
             }
 
             if !s.is_null() {
-                let ep = classend(ms, p);
+                let ep = classend(ms, p)?;
                 if singlematch(ms, s, p, ep) == 0 {
                     if *ep == b'*' as c_char || *ep == b'?' as c_char || *ep == b'-' as c_char {
                         p = ep.add(1);
@@ -113,7 +113,7 @@ pub(crate) unsafe fn match_item(
                 } else {
                     match *ep as u8 {
                         b'?' => {
-                            let res = match_item(ms, s.add(1), ep.add(1));
+                            let res = match_item(ms, s.add(1), ep.add(1))?;
                             if !res.is_null() {
                                 s = res;
                             } else {
@@ -123,13 +123,13 @@ pub(crate) unsafe fn match_item(
                         }
                         b'+' => {
                             s = s.add(1);
-                            s = max_expand(ms, s, p, ep);
+                            s = max_expand(ms, s, p, ep)?;
                         }
                         b'*' => {
-                            s = max_expand(ms, s, p, ep);
+                            s = max_expand(ms, s, p, ep)?;
                         }
                         b'-' => {
-                            s = min_expand(ms, s, p, ep);
+                            s = min_expand(ms, s, p, ep)?;
                         }
                         _ => {
                             s = s.add(1);
@@ -145,5 +145,5 @@ pub(crate) unsafe fn match_item(
     }
 
     (*ms).matchdepth += 1;
-    s
+    Ok(s)
 }

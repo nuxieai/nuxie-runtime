@@ -30,14 +30,18 @@ fn sizeclass(size: usize) -> i32 {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaM_newgco_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut GCObject {
+pub unsafe fn luaM_newgco_(
+    l: *mut lua_State,
+    nsize: usize,
+    memcat: u8,
+) -> crate::records::lua_exception::LuaResult<*mut GCObject> {
     LUAU_ASSERT!(nsize >= K_GCO_LINK_OFFSET + core::mem::size_of::<*mut c_void>());
 
     let g = (*l).global;
     let nclass = sizeclass(nsize);
 
     let block = if nclass >= 0 {
-        newgcoblock(l, nclass)
+        newgcoblock(l, nclass)?
     } else {
         let page = newpage(
             l,
@@ -45,7 +49,7 @@ pub unsafe fn luaM_newgco_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut 
             (core::mem::offset_of!(lua_Page, data) + nsize) as i32,
             nsize as i32,
             1,
-        );
+        )?;
 
         let block = (*page).data.as_mut_ptr() as *mut c_void;
         ASAN_UNPOISON_MEMORY_REGION!(block, (*page).blockSize as usize);
@@ -56,7 +60,7 @@ pub unsafe fn luaM_newgco_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut 
     };
 
     if block.is_null() && nsize > 0 {
-        luaD_throw(l, lua_Status::LUA_ERRMEM as i32);
+        return luaD_throw(l, lua_Status::LUA_ERRMEM as i32);
     }
 
     (*g).totalbytes = (*g).totalbytes.wrapping_add(nsize);
@@ -66,7 +70,7 @@ pub unsafe fn luaM_newgco_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut 
         onallocate(l, 0, nsize);
     }
 
-    block as *mut GCObject
+    Ok(block as *mut GCObject)
 }
 
 #[allow(unused_imports)]

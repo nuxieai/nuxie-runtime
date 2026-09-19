@@ -78,7 +78,7 @@ impl Thread {
         let thread_state = unsafe {
             reference.push();
             let ts = lua_tothread(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             ts
         };
         Thread {
@@ -120,6 +120,7 @@ impl Thread {
         let parent = lua.state();
         let co = self.thread_state;
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(parent);
             let nargs = args.len() as c_int;
             if lua_checkstack(co, nargs.saturating_add(2)) == 0 {
                 return Err(Error::RuntimeError(
@@ -131,7 +132,7 @@ impl Thread {
                 lua.push_value(v)?;
             }
             if nargs > 0 {
-                lua_xmove(parent, co, nargs);
+                lua_xmove(parent, co, nargs).map_err(|error| Error::from_vm(error))?;
             }
 
             self.resume_inner::<R>(&lua, nargs)
@@ -151,13 +152,14 @@ impl Thread {
         let parent = lua.state();
         let co = self.thread_state;
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(parent);
             if lua_checkstack(co, 2) == 0 {
                 return Err(Error::RuntimeError("stack overflow".to_string()));
             }
             lua.push_value(&err_value)?;
-            lua_xmove(parent, co, 1);
+            lua_xmove(parent, co, 1).map_err(|error| Error::from_vm(error))?;
             // lua_resumeerror does the resume-with-error and returns the status.
-            let status = lua_resumeerror(co, parent);
+            let status = lua_resumeerror(co, parent).map_err(|error| Error::from_vm(error))?;
             self.finish_resume::<R>(&lua, status)
         }
     }
@@ -167,7 +169,8 @@ impl Thread {
     unsafe fn resume_inner<R: FromLuaMulti>(&self, lua: &Lua, nargs: c_int) -> Result<R> {
         let parent = lua.state();
         let co = self.thread_state;
-        let status = unsafe { lua_resume(co, parent, nargs) };
+        let status =
+            unsafe { lua_resume(co, parent, nargs).map_err(|error| Error::from_vm(error))? };
         unsafe { self.finish_resume::<R>(lua, status) }
     }
 
@@ -177,11 +180,12 @@ impl Thread {
         let parent = lua.state();
         let co = self.thread_state;
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(parent);
             if status != status::OK && status != status::YIELD && status != status::BREAK {
                 // Error: the coroutine left the error object on its own stack.
                 let nres = lua_gettop(co);
                 if nres > 0 {
-                    lua_xmove(co, parent, nres);
+                    lua_xmove(co, parent, nres).map_err(|error| Error::from_vm(error))?;
                 }
                 let err = lua.pop_error(status);
                 // Clear any extra values the coroutine left on the parent.
@@ -202,13 +206,12 @@ impl Thread {
             }
             let base = lua_gettop(parent);
             if nres > 0 {
-                lua_xmove(co, parent, nres);
+                lua_xmove(co, parent, nres).map_err(|error| Error::from_vm(error))?;
             }
             let mut results = MultiValue::with_capacity(nres.max(0) as usize);
             for i in 0..nres {
                 results.push_back(lua.value_from_stack(base + 1 + i)?);
             }
-            lua_settop(parent, base);
             R::from_lua_multi(results, lua)
         }
     }
@@ -232,6 +235,7 @@ impl Thread {
         let parent = lua.state();
         let co = self.thread_state;
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(parent);
             let nargs = args.len() as c_int;
             if lua_checkstack(co, nargs.saturating_add(2)) == 0 {
                 return Err(Error::RuntimeError(
@@ -242,14 +246,14 @@ impl Thread {
                 lua.push_value(v)?;
             }
             if nargs > 0 {
-                lua_xmove(parent, co, nargs);
+                lua_xmove(parent, co, nargs).map_err(|error| Error::from_vm(error))?;
             }
-            let status = lua_resume(co, parent, nargs);
+            let status = lua_resume(co, parent, nargs).map_err(|error| Error::from_vm(error))?;
 
             if status != status::OK && status != status::YIELD {
                 let nres = lua_gettop(co);
                 if nres > 0 {
-                    lua_xmove(co, parent, nres);
+                    lua_xmove(co, parent, nres).map_err(|error| Error::from_vm(error))?;
                 }
                 return Err(lua.pop_error(status));
             }
@@ -263,7 +267,7 @@ impl Thread {
                 && nres == 1
                 && crate::sys::lua_tolightuserdata(co, -1) == crate::async_support::poll_pending()
             {
-                lua_settop(co, 0);
+                lua_settop(co, 0).expect("clearing the stack cannot allocate");
                 return Ok(AsyncResume::Pending);
             }
 
@@ -273,14 +277,14 @@ impl Thread {
             }
             let base = lua_gettop(parent);
             if nres > 0 {
-                lua_xmove(co, parent, nres);
+                lua_xmove(co, parent, nres).map_err(|error| Error::from_vm(error))?;
             }
             let mut results = MultiValue::with_capacity(nres.max(0) as usize);
             for i in 0..nres {
                 results.push_back(lua.value_from_stack(base + 1 + i)?);
             }
-            lua_settop(parent, base);
-            lua_settop(co, 0);
+
+            lua_settop(co, 0).expect("clearing the stack cannot allocate");
 
             if yielded {
                 Ok(AsyncResume::Yielded(results))
@@ -302,17 +306,24 @@ impl Thread {
         let parent = lua.state();
         let co = self.thread_state;
         unsafe {
+            let _stack = crate::stack_guard::StackGuard::new(parent);
             if lua_checkstack(co, 2) == 0 {
                 return;
             }
-            crate::sys::lua_pushlightuserdatatagged(
+            if crate::sys::lua_pushlightuserdatatagged(
                 parent,
                 crate::async_support::poll_terminate(),
                 0,
-            );
-            lua_xmove(parent, co, 1);
+            )
+            .is_err()
+            {
+                return;
+            }
+            if lua_xmove(parent, co, 1).is_err() {
+                return;
+            }
             let _ = lua_resume(co, parent, 1);
-            lua_settop(co, 0);
+            lua_pop(co, lua_gettop(co)).expect("clearing the stack cannot fail");
         }
     }
 
@@ -405,15 +416,16 @@ impl Thread {
         let parent = lua.state();
         let co = self.thread_state;
         unsafe {
-            lua_resetthread(co);
+            let _stack = crate::stack_guard::StackGuard::new(parent);
+            lua_resetthread(co).map_err(|error| Error::from_vm(error))?;
             // Push the new body function onto the coroutine stack.
-            func.push_to_stack();
-            lua_xmove(parent, co, 1);
+            func.reference.try_push()?;
+            lua_xmove(parent, co, 1).map_err(|error| Error::from_vm(error))?;
             // Re-inherit the *main* globals table into the coroutine, dropping
             // any sandbox proxy global a prior `Thread::sandbox` had installed
             // (matches mlua's Luau `reset`: a reset thread sees the main env).
-            lua_pushvalue(parent, LUA_GLOBALSINDEX);
-            lua_xmove(parent, co, 1);
+            lua_pushvalue(parent, LUA_GLOBALSINDEX).map_err(|error| Error::from_vm(error))?;
+            lua_xmove(parent, co, 1).map_err(|error| Error::from_vm(error))?;
             lua_replace(co, LUA_GLOBALSINDEX);
         }
         Ok(())
@@ -425,7 +437,7 @@ impl Thread {
         unsafe {
             self.reference.push();
             let p = lua_topointer(state, -1);
-            lua_pop(state, 1);
+            lua_pop(state, 1).expect("shrinking the stack cannot fail");
             p
         }
     }
@@ -506,16 +518,17 @@ impl Lua {
         let state = self.state();
         unsafe {
             // Create a new thread; it is pushed on the parent stack.
-            let co = lua_newthread(state);
+            let _stack = crate::stack_guard::StackGuard::new(state);
+            let co = lua_newthread(state).map_err(|error| Error::from_vm(error))?;
             if co.is_null() {
                 return Err(Error::runtime("luaur-rt: failed to create thread"));
             }
             // Take a ref to the thread value (still on the parent stack top).
-            let thread = Thread::from_ref(self.pop_ref());
+            let thread = Thread::from_ref(self.try_pop_ref()?);
             // Move the body function onto the coroutine's stack so the first
             // resume invokes it.
             func.push_to_stack(); // pushes onto parent stack
-            lua_xmove(state, co, 1);
+            lua_xmove(state, co, 1).map_err(|error| Error::from_vm(error))?;
             Ok(thread)
         }
     }
@@ -534,17 +547,19 @@ impl Lua {
         #[cfg(feature = "async")]
         if let Some(owner) = crate::async_support::implicit_thread_owner(state) {
             unsafe {
-                lua_pushthread(owner);
+                lua_pushthread(owner)
+                    .expect("allocation failed in an infallible Lua handle operation");
                 // The owner-thread value is on the owner's stack; move it to this
                 // state so we can take a ref to it from here.
                 if owner != state {
-                    lua_xmove(owner, state, 1);
+                    lua_xmove(owner, state, 1)
+                        .expect("allocation failed in an infallible Lua handle operation");
                 }
                 return Thread::from_ref(self.pop_ref());
             }
         }
         unsafe {
-            lua_pushthread(state);
+            lua_pushthread(state).expect("allocation failed in an infallible Lua handle operation");
             Thread::from_ref(self.pop_ref())
         }
     }

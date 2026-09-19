@@ -10,7 +10,7 @@ pub unsafe fn lua_pushvfstring(
     L: *mut lua_State,
     fmt: *const c_char,
     argp: core::fmt::Arguments<'_>,
-) -> *const c_char {
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
     luaC_checkGC!(L);
     lua_c_threadbarrier_lapi(L);
     luaO_pushvfstring(L, fmt, argp)

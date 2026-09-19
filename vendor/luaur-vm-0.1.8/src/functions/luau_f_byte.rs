@@ -16,7 +16,7 @@ pub unsafe fn luauF_byte(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && ttisstring!(arg0) && ttisnumber!(args) {
         let ts = tsvalue!(arg0);
         let i = nvalue!(args) as i32;
@@ -42,10 +42,10 @@ pub unsafe fn luauF_byte(
                     );
                 }
 
-                return c;
+                return Ok(c);
             }
         }
     }
 
-    -1
+    Ok(-1)
 }

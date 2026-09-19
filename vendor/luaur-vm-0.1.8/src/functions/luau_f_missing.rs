@@ -10,6 +10,6 @@ pub unsafe fn luau_f_missing(
     _nresults: core::ffi::c_int,
     _args: StkId,
     _nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
-    -1
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    Ok(-1)
 }

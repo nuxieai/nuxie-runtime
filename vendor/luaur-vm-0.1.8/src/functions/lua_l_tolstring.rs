@@ -27,22 +27,26 @@ use crate::macros::luai_maxnum_2_str::LUAI_MAXNUM2STR;
 use crate::type_aliases::lua_state::lua_State;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_l_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) -> *const c_char {
-    if lua_l_callmeta(L, idx, c"__tostring".as_ptr()) != 0 {
-        let s = lua_tolstring(L, -1, len);
+pub unsafe fn lua_l_tolstring(
+    L: *mut lua_State,
+    idx: c_int,
+    len: *mut usize,
+) -> crate::records::lua_exception::LuaResult<*const c_char> {
+    if lua_l_callmeta(L, idx, c"__tostring".as_ptr())? != 0 {
+        let s = lua_tolstring(L, -1, len)?;
         if s.is_null() {
-            lua_l_error_l(
+            return lua_l_error_l(
                 L,
                 c"'__tostring' must return a string".as_ptr(),
                 format_args!("'__tostring' must return a string"),
             );
         }
-        return s;
+        return Ok(s);
     }
 
     match lua_type(L, idx) {
         x if x == lua_Type::LUA_TNIL as c_int => {
-            lua_pushlstring(L, c"nil".as_ptr(), 3);
+            lua_pushlstring(L, c"nil".as_ptr(), 3)?;
         }
         x if x == lua_Type::LUA_TBOOLEAN as c_int => {
             lua_pushstring(
@@ -52,14 +56,14 @@ pub unsafe fn lua_l_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) ->
                 } else {
                     c"false".as_ptr()
                 },
-            );
+            )?;
         }
         x if x == lua_Type::LUA_TNUMBER as c_int => {
             let mut isnum = 0;
             let n = lua_tonumberx(L, idx, &mut isnum);
             let mut s = [0 as c_char; LUAI_MAXNUM2STR as usize];
             let e = luai_num2str(s.as_mut_ptr(), n);
-            lua_pushlstring(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize);
+            lua_pushlstring(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)?;
         }
         x if x == lua_Type::LUA_TVECTOR as c_int => {
             let v = lua_tovector(L, idx);
@@ -76,16 +80,16 @@ pub unsafe fn lua_l_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) ->
                 e = luai_num2str(e, *v.add(i as usize) as f64);
                 i += 1;
             }
-            lua_pushlstring(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize);
+            lua_pushlstring(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)?;
         }
         x if x == lua_Type::LUA_TSTRING as c_int => {
-            lua_pushvalue(L, idx);
+            lua_pushvalue(L, idx)?;
         }
         x if x == lua_Type::LUA_TINTEGER as c_int => {
             let l = lua_tointeger_64(L, idx, core::ptr::null_mut());
             let mut s = [0 as c_char; LUAI_MAXINT2STR as usize];
             let e = luai_int2str(s.as_mut_ptr(), l);
-            lua_pushlstring(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize);
+            lua_pushlstring(L, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)?;
         }
         _ => {
             let ptr = lua_topointer(L, idx);
@@ -95,7 +99,7 @@ pub unsafe fn lua_l_tolstring(L: *mut lua_State, idx: c_int, len: *mut usize) ->
                 L,
                 c"%s: 0x%016llx".as_ptr(),
                 format_args!("{}: 0x{:016x}", name, enc),
-            );
+            )?;
         }
     }
 

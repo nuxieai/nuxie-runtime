@@ -13,18 +13,18 @@ pub unsafe fn luaL_checkoption(
     narg: c_int,
     def: *const c_char,
     lst: *const *const c_char,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     let name: *const c_char = if !def.is_null() {
-        lua_l_optlstring(L, narg, def, core::ptr::null_mut())
+        lua_l_optlstring(L, narg, def, core::ptr::null_mut())?
     } else {
-        lua_l_checklstring(L, narg, core::ptr::null_mut())
+        lua_l_checklstring(L, narg, core::ptr::null_mut())?
     };
 
     let mut i: c_int = 0;
     while !(*lst.add(i as usize)).is_null() {
         let opt = *lst.add(i as usize);
         if libc_strcmp(opt, name) == 0 {
-            return i;
+            return Ok(i);
         }
         i += 1;
     }
@@ -34,7 +34,7 @@ pub unsafe fn luaL_checkoption(
         L,
         c"invalid option '%s'".as_ptr(),
         format_args!("invalid option '{}'", name_str),
-    );
+    )?;
     let msg_str = CStr::from_ptr(msg).to_string_lossy();
     lua_l_argerror_l(L, narg, msg_str.as_ref())
 }
@@ -45,7 +45,7 @@ pub fn lua_l_checkoption(
     narg: c_int,
     def: Option<&str>,
     lst: *const *const c_char,
-) -> c_int {
+) -> crate::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let def_cstring =
             def.map(|s| std::ffi::CString::new(s).expect("option default contains nul"));

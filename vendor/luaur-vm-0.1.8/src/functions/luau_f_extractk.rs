@@ -15,7 +15,7 @@ pub unsafe fn luau_f_extractk(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 2 && nresults <= 1 && ttisnumber!(arg0) {
         let a1 = nvalue!(arg0);
         let a2 = nvalue!(args);
@@ -31,8 +31,8 @@ pub unsafe fn luau_f_extractk(
         let r = (n >> f) & m;
 
         setnvalue!(res, r as f64);
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

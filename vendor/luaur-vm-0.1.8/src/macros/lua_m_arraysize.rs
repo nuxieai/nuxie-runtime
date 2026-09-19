@@ -8,8 +8,7 @@ macro_rules! lua_m_arraysize {
         if $crate::macros::cast_to::cast_to!(usize, $n) <= usize::MAX / $crate::macros::cast_to::cast_to!(usize, $e) {
             $n * $e
         } else {
-            $crate::functions::lua_m_toobig::lua_m_toobig($l);
-            usize::MAX
+            return $crate::functions::lua_m_toobig::lua_m_toobig($l)
         }
     };
 }

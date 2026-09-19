@@ -26,7 +26,7 @@ LUAU_NOINLINE! {
         pageset: *mut *mut lua_Page,
         size_class: u8,
         store_metadata: bool,
-    ) -> *mut lua_Page {
+    ) -> crate::records::lua_exception::LuaResult<*mut lua_Page> {
         let size_of_class = crate::records::size_class_config::kSizeClassConfig.sizeOfClass[size_class as usize];
         let page_size = if size_of_class > k_large_page_threshold {
             k_large_page_size
@@ -36,11 +36,11 @@ LUAU_NOINLINE! {
         let block_size = size_of_class + if store_metadata { k_block_header } else { 0 };
         let block_count = (page_size - core::mem::offset_of!(lua_Page, data) as c_int) / block_size;
 
-        let page = newpage(l, pageset, page_size, block_size, block_count);
+        let page = newpage(l, pageset, page_size, block_size, block_count)?;
 
         LUAU_ASSERT!((*freepageset.add(size_class as usize)).is_null());
         *freepageset.add(size_class as usize) = page;
 
-        page
+        Ok(page)
     }
 }

@@ -22,13 +22,17 @@ use crate::type_aliases::tms::TMS;
 use core::ffi::c_char;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_v_concat(L: *mut lua_State, mut total: i32, mut last: i32) {
+pub unsafe fn lua_v_concat(
+    L: *mut lua_State,
+    mut total: i32,
+    mut last: i32,
+) -> crate::records::lua_exception::LuaResult<()> {
     loop {
         let top: StkId = (*L).base.add((last + 1) as usize);
         let mut n = 2; // number of elements handled in this pass (at least 2)
         if !(ttisstring!(top.sub(2)) || ttisnumber!(top.sub(2))) || !tostring!(L, top.sub(1)) {
-            if call_bin_tm(L, top.sub(2), top.sub(1), top.sub(2), TMS::TM_CONCAT) == 0 {
-                lua_g_concaterror(L, top.sub(2), top.sub(1));
+            if call_bin_tm(L, top.sub(2), top.sub(1), top.sub(2), TMS::TM_CONCAT)? == 0 {
+                return lua_g_concaterror(L, top.sub(2), top.sub(1));
             }
         } else if (*tsvalue!(top.sub(1))).len == 0 {
             // second op is empty? result is first op (as string)
@@ -41,7 +45,7 @@ pub unsafe fn lua_v_concat(L: *mut lua_State, mut total: i32, mut last: i32) {
             while n < total && tostring!(L, top.sub((n + 1) as usize)) {
                 let l = (*tsvalue!(top.sub((n + 1) as usize))).len as usize;
                 if l > MAXSSIZE as usize - tl {
-                    lua_g_runerror!(L, "string length overflow");
+                    return lua_g_runerror!(L, "string length overflow");
                 }
                 tl += l;
                 n += 1;
@@ -53,7 +57,7 @@ pub unsafe fn lua_v_concat(L: *mut lua_State, mut total: i32, mut last: i32) {
             let buffer: *mut c_char = if tl < LUA_BUFFERSIZE as usize {
                 buf.as_mut_ptr()
             } else {
-                ts = luaS_bufstart(L, tl);
+                ts = luaS_bufstart(L, tl)?;
                 (*ts).data.as_mut_ptr()
             };
 
@@ -68,9 +72,9 @@ pub unsafe fn lua_v_concat(L: *mut lua_State, mut total: i32, mut last: i32) {
             }
 
             if tl < LUA_BUFFERSIZE as usize {
-                setsvalue!(L, top.sub(n as usize), luaS_newlstr(L, buffer, tl));
+                setsvalue!(L, top.sub(n as usize), luaS_newlstr(L, buffer, tl)?);
             } else {
-                setsvalue!(L, top.sub(n as usize), luaS_buffinish(L, ts));
+                setsvalue!(L, top.sub(n as usize), luaS_buffinish(L, ts)?);
             }
         }
         total -= n - 1; // got `n` strings to create 1 new
@@ -79,11 +83,16 @@ pub unsafe fn lua_v_concat(L: *mut lua_State, mut total: i32, mut last: i32) {
             break; // repeat until only 1 result left
         }
     }
+    Ok(())
 }
 
 #[export_name = "luaur_luaV_concat"]
-pub unsafe extern "C" fn lua_v_concat_export(L: *mut lua_State, total: i32, last: i32) {
-    lua_v_concat(L, total, last);
+pub unsafe fn lua_v_concat_export(
+    L: *mut lua_State,
+    total: i32,
+    last: i32,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_v_concat(L, total, last)
 }
 
 #[allow(non_snake_case, unused_imports)]

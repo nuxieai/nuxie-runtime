@@ -4,7 +4,7 @@ use crate::functions::lua_l_error_l::lua_l_error_l;
 #[macro_export]
 macro_rules! luaL_error {
     ($l:expr, $fmt:expr $(, $($arg:expr),+ )? $(,)? ) => {{
-        unsafe { $crate::functions::lua_l_error_l::lua_l_error_l(
+        return unsafe { $crate::functions::lua_l_error_l::lua_l_error_l(
             $l,
             core::ptr::null(),
             core::format_args!($fmt $(, $($arg),* )?),

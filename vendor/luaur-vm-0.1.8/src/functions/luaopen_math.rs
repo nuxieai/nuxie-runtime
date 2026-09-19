@@ -216,27 +216,29 @@ static MATH_FUNCS: MathFuncs = MathFuncs([
 ]);
 
 #[allow(non_snake_case)]
-pub unsafe fn luaopen_math(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_math(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let mut seed = lua_encodepointer(L, L as usize) as u64;
     seed ^= 0;
     pcg_32_seed(&mut (*(*L).global).rngstate, seed);
 
-    lua_l_register(L, c"math".as_ptr(), MATH_FUNCS.0.as_ptr());
+    lua_l_register(L, c"math".as_ptr(), MATH_FUNCS.0.as_ptr())?;
 
-    lua_pushnumber(L, LUAU_PI);
-    lua_setfield(L, -2, c"pi".as_ptr());
-    lua_pushnumber(L, f64::INFINITY);
-    lua_setfield(L, -2, c"huge".as_ptr());
-    lua_pushnumber(L, LUAU_NAN);
-    lua_setfield(L, -2, c"nan".as_ptr());
-    lua_pushnumber(L, LUAU_E);
-    lua_setfield(L, -2, c"e".as_ptr());
-    lua_pushnumber(L, LUAU_PHI);
-    lua_setfield(L, -2, c"phi".as_ptr());
-    lua_pushnumber(L, LUAU_SQRT2);
-    lua_setfield(L, -2, c"sqrt2".as_ptr());
-    lua_pushnumber(L, LUAU_TAU);
-    lua_setfield(L, -2, c"tau".as_ptr());
+    lua_pushnumber(L, LUAU_PI)?;
+    lua_setfield(L, -2, c"pi".as_ptr())?;
+    lua_pushnumber(L, f64::INFINITY)?;
+    lua_setfield(L, -2, c"huge".as_ptr())?;
+    lua_pushnumber(L, LUAU_NAN)?;
+    lua_setfield(L, -2, c"nan".as_ptr())?;
+    lua_pushnumber(L, LUAU_E)?;
+    lua_setfield(L, -2, c"e".as_ptr())?;
+    lua_pushnumber(L, LUAU_PHI)?;
+    lua_setfield(L, -2, c"phi".as_ptr())?;
+    lua_pushnumber(L, LUAU_SQRT2)?;
+    lua_setfield(L, -2, c"sqrt2".as_ptr())?;
+    lua_pushnumber(L, LUAU_TAU)?;
+    lua_setfield(L, -2, c"tau".as_ptr())?;
 
-    1
+    Ok(1)
 }

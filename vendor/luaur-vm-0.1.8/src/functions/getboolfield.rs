@@ -4,7 +4,7 @@ use crate::macros::lua_pop::lua_pop;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::{c_char, c_int};
 
-pub fn getboolfield(L: *mut lua_State, key: &str) -> i32 {
+pub fn getboolfield(L: *mut lua_State, key: &str) -> crate::records::lua_exception::LuaResult<i32> {
     let key_bytes = key.as_bytes();
 
     // lua_rawgetfield expects a null-terminated C string key.
@@ -13,7 +13,7 @@ pub fn getboolfield(L: *mut lua_State, key: &str) -> i32 {
     let key_c: *const c_char = buf.as_ptr() as *const c_char;
 
     unsafe {
-        lua_rawgetfield(L, -1, key_c);
+        lua_rawgetfield(L, -1, key_c)?;
 
         // We cannot use the lua_isnil! macro because it calls the 0-arity lua_type stub directly,
         // which causes a compilation error. We manually implement the logic here.
@@ -22,7 +22,7 @@ pub fn getboolfield(L: *mut lua_State, key: &str) -> i32 {
 
         let res: c_int = if is_nil { -1 } else { lua_toboolean(L, -1) };
 
-        lua_pop(L, 1);
-        res
+        lua_pop(L, 1)?;
+        Ok(res)
     }
 }

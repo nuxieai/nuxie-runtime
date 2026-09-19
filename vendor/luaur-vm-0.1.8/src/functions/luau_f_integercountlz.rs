@@ -14,7 +14,7 @@ pub unsafe fn luau_f_integercountlz(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisinteger!(arg0) {
         let n = lvalue!(arg0) as u64;
 
@@ -24,8 +24,8 @@ pub unsafe fn luau_f_integercountlz(
 
         setlvalue!(res, result);
 
-        1
+        Ok(1)
     } else {
-        -1
+        Ok(-1)
     }
 }

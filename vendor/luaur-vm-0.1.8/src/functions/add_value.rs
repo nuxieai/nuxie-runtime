@@ -29,30 +29,30 @@ pub fn add_value(
     s: *const c_char,
     e: *const c_char,
     tr: i32,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     unsafe {
         let L = (*ms).L;
         if tr == lua_Type::LUA_TFUNCTION as i32 {
-            lua_pushvalue(L, 3);
-            let n = push_captures(ms, s, e);
-            lua_call(L, n, 1);
+            lua_pushvalue(L, 3)?;
+            let n = push_captures(ms, s, e)?;
+            lua_call(L, n, 1)?;
         } else if tr == lua_Type::LUA_TTABLE as i32 {
-            push_onecapture(ms, 0, s, e);
-            lua_gettable(L, 3);
+            push_onecapture(ms, 0, s, e)?;
+            lua_gettable(L, 3)?;
         } else {
             // LUA_TNUMBER or LUA_TSTRING
-            add_s(ms, b, s, e);
-            return;
+            return add_s(ms, b, s, e);
         }
 
         if lua_toboolean(L, -1) == 0 {
             // nil or false?
-            lua_pop(L, 1);
-            lua_pushlstring(L, s, e.offset_from(s) as usize); // keep original text
+            lua_pop(L, 1)?;
+            lua_pushlstring(L, s, e.offset_from(s) as usize)?; // keep original text
         } else if lua_isstring(L, -1) == 0 {
             let tn = core::ffi::CStr::from_ptr(lua_l_typename(L, -1)).to_string_lossy();
             luaL_error!(L, "invalid replacement value (a {})", tn);
         }
-        lua_l_addvalue(b); // add result to accumulator
+        lua_l_addvalue(b)?; // add result to accumulator
     }
+    Ok(())
 }

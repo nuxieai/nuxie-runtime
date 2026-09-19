@@ -19,7 +19,7 @@ pub unsafe fn luauF_writeinteger<T: Copy>(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if !LUAU_BIG_ENDIAN
         && nparams >= 3
         && nresults <= 0
@@ -33,7 +33,7 @@ pub unsafe fn luauF_writeinteger<T: Copy>(
         let len = (*bufvalue!(arg0)).len as usize;
         let access_size = core::mem::size_of::<T>() as usize;
         if checkoutofbounds(offset, len, access_size) {
-            return -1;
+            return Ok(-1);
         }
 
         let mut value: u32 = 0;
@@ -48,8 +48,8 @@ pub unsafe fn luauF_writeinteger<T: Copy>(
             dst,
             core::mem::size_of::<T>(),
         );
-        return 0;
+        return Ok(0);
     }
 
-    -1
+    Ok(-1)
 }

@@ -12,7 +12,7 @@ pub fn sort_siftheap(
     u: i32,
     pred: SortPredicate,
     root: i32,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     LUAU_ASSERT!(l <= u);
     let count = u - l + 1;
 
@@ -23,19 +23,12 @@ pub fn sort_siftheap(
         let right = root * 2 + 2;
         let mut next = root;
 
-        // The dependency card for sort_less is currently a stub with 0 arguments.
-        // To satisfy the compiler while preserving the logic required by the C++ source,
-        // we must cast the function to the correct signature.
-        type SortLessFn = fn(*mut lua_State, *mut LuaTable, i32, i32, SortPredicate) -> i32;
-        let sort_less_ptr = sort_less as *const ();
-        let sort_less_typed: SortLessFn = unsafe { core::mem::transmute(sort_less_ptr) };
-
-        next = if sort_less_typed(L, t, l + next, l + left, pred) != 0 {
+        next = if unsafe { sort_less(L, t, l + next, l + left, pred)? } != 0 {
             left
         } else {
             next
         };
-        next = if sort_less_typed(L, t, l + next, l + right, pred) != 0 {
+        next = if unsafe { sort_less(L, t, l + next, l + right, pred)? } != 0 {
             right
         } else {
             next
@@ -54,14 +47,11 @@ pub fn sort_siftheap(
     // process last element if it has just one child
     let lastleft = root * 2 + 1;
     if lastleft == count - 1 {
-        type SortLessFn = fn(*mut lua_State, *mut LuaTable, i32, i32, SortPredicate) -> i32;
-        let sort_less_ptr = sort_less as *const ();
-        let sort_less_typed: SortLessFn = unsafe { core::mem::transmute(sort_less_ptr) };
-
-        if sort_less_typed(L, t, l + root, l + lastleft, pred) != 0 {
+        if unsafe { sort_less(L, t, l + root, l + lastleft, pred)? } != 0 {
             unsafe {
                 sort_swap(L, t, l + root, l + lastleft);
             }
         }
     }
+    Ok(())
 }

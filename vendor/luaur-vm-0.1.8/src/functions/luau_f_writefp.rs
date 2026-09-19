@@ -34,7 +34,7 @@ pub unsafe fn luau_f_writefp<T>(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int>
 where
     T: FastcallFloat,
 {
@@ -50,7 +50,7 @@ where
 
             let buf = bufvalue!(arg0);
             if checkoutofbounds(offset, (*buf).len as usize, core::mem::size_of::<T>()) {
-                return -1;
+                return Ok(-1);
             }
 
             let val = T::from_lua_number(nvalue!(args.add(1)));
@@ -58,9 +58,9 @@ where
             let dest = ((*buf).data.as_ptr() as *mut u8).add(offset as usize);
             core::ptr::write_unaligned(dest as *mut T, val);
 
-            return 0;
+            return Ok(0);
         }
     }
 
-    -1
+    Ok(-1)
 }

@@ -1,17 +1,20 @@
+// A discarded fallible VM operation would resume execution after a guest error.
+#![deny(unused_must_use)]
+
 extern crate alloc;
 
+#[cfg(test)]
+mod builtin_bounds_tests;
 pub mod enums;
 pub mod functions;
 pub mod macros;
 pub mod methods;
 pub mod records;
-pub mod type_aliases;
-#[cfg(test)]
-mod builtin_bounds_tests;
 #[cfg(test)]
 mod rung8_tests;
 #[cfg(test)]
 mod rung9_tests;
+pub mod type_aliases;
 #[cfg(test)]
 mod upstream_734_gc_tests;
 

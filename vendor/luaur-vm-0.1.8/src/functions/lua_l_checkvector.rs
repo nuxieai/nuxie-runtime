@@ -8,10 +8,12 @@ use core::ffi::c_int;
 pub fn lua_l_checkvector(
     L: *mut lua_State,
     narg: c_int,
-) -> *const crate::type_aliases::lua_vector_type::LuaVectorType {
+) -> crate::records::lua_exception::LuaResult<
+    *const crate::type_aliases::lua_vector_type::LuaVectorType,
+> {
     let v = unsafe { lua_tovector(L, narg) };
     if v.is_null() {
-        tag_error(L, narg, lua_Type::LUA_TVECTOR as c_int);
+        return tag_error(L, narg, lua_Type::LUA_TVECTOR as c_int);
     }
-    v
+    Ok(v)
 }

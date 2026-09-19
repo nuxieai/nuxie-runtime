@@ -21,19 +21,23 @@ pub(crate) unsafe fn lua_c_threadbarrier_lapi(L: *mut lua_State) {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_concat(L: *mut lua_State, n: c_int) {
+pub unsafe fn lua_concat(
+    L: *mut lua_State,
+    n: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(L, n >= 0);
     api_checknelems!(L, n);
 
     if n >= 2 {
         luaC_checkGC!(L);
         lua_c_threadbarrier_lapi(L);
-        lua_v_concat(L, n, cast_int!((*L).top.offset_from((*L).base)) - 1);
+        lua_v_concat(L, n, cast_int!((*L).top.offset_from((*L).base)) - 1)?;
         (*L).top = (*L).top.sub((n - 1) as usize);
     } else if n == 0 {
         lua_c_threadbarrier_lapi(L);
         crate::ensure_stack!(L, 1);
-        setsvalue!(L, (*L).top, luaS_newlstr(L, c"".as_ptr(), 0));
+        setsvalue!(L, (*L).top, luaS_newlstr(L, c"".as_ptr(), 0)?);
         api_incr_top!(L);
     }
+    Ok(())
 }

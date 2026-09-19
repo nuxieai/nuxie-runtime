@@ -8,10 +8,12 @@ use crate::macros::lua_upvalueindex::lua_upvalueindex;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_auxwrapy"]
-pub unsafe fn auxwrapy(L: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn auxwrapy(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     let co = lua_tothread(L, lua_upvalueindex(1));
     let narg = cast_int!((*L).top.offset_from((*L).base));
-    let r = auxresume(L, co, narg);
+    let r = auxresume(L, co, narg)?;
     if r == CO_STATUS_BREAK {
         interrupt_thread(L, co)
     } else {

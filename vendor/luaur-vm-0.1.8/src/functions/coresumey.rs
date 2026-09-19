@@ -8,11 +8,11 @@ use crate::macros::lua_l_argexpected::luaL_argexpected;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
-pub unsafe fn coresumey(L: *mut lua_State) -> c_int {
+pub unsafe fn coresumey(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let co = lua_tothread(L, 1);
     luaL_argexpected!(L, !co.is_null(), 1, "thread");
     let narg = cast_int!((*L).top.offset_from((*L).base)) - 1;
-    let r = auxresume(L, co, narg);
+    let r = auxresume(L, co, narg)?;
 
     if r == CO_STATUS_BREAK {
         return interrupt_thread(L, co);

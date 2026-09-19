@@ -20,11 +20,14 @@ pub unsafe fn lua_l_traceback(
     L1: *mut lua_State,
     msg: Option<&str>,
     level: c_int,
-) {
+) -> crate::records::lua_exception::LuaResult<()> {
     debug_assert!(level >= 0);
 
     // Helper: manually convert an int to decimal and append to the buffer.
-    unsafe fn addsignednum(buf: *mut LuaLStrbuf, n: i32) {
+    unsafe fn addsignednum(
+        buf: *mut LuaLStrbuf,
+        n: i32,
+    ) -> crate::records::lua_exception::LuaResult<()> {
         let mut line = [0 as c_char; 32];
         let lineend = line.len();
         let mut lineptr = lineend;
@@ -35,7 +38,7 @@ pub unsafe fn lua_l_traceback(
             r /= 10;
         }
 
-        lua_l_addlstring(buf, line.as_ptr().add(lineptr), lineend - lineptr);
+        lua_l_addlstring(buf, line.as_ptr().add(lineptr), lineend - lineptr)
     }
 
     let mut buf = LuaLStrbuf {
@@ -49,37 +52,37 @@ pub unsafe fn lua_l_traceback(
 
     if let Some(msg_str) = msg {
         let c_msg = CString::new(msg_str).unwrap_or_default();
-        lua_l_addstring(&mut buf, c_msg.as_ptr());
-        lua_l_addstring(&mut buf, c"\n".as_ptr());
+        lua_l_addstring(&mut buf, c_msg.as_ptr())?;
+        lua_l_addstring(&mut buf, c"\n".as_ptr())?;
     }
 
     let mut ar: LuaDebug = core::mem::zeroed();
     let mut i: c_int = level;
 
-    while lua_getinfo(L1, i, c"sln".as_ptr(), &mut ar) != 0 {
+    while lua_getinfo(L1, i, c"sln".as_ptr(), &mut ar)? != 0 {
         if CStr::from_ptr(ar.what).to_bytes() == b"C" {
             i += 1;
             continue;
         }
 
         if !ar.source.is_null() {
-            lua_l_addstring(&mut buf, ar.short_src);
+            lua_l_addstring(&mut buf, ar.short_src)?;
         }
 
         if ar.currentline > 0 {
-            lua_l_addchar(&mut buf, b':' as c_char);
-            addsignednum(&mut buf, ar.currentline);
+            lua_l_addchar(&mut buf, b':' as c_char)?;
+            addsignednum(&mut buf, ar.currentline)?;
         }
 
         if !ar.name.is_null() {
-            lua_l_addstring(&mut buf, c" function ".as_ptr());
-            lua_l_addstring(&mut buf, ar.name);
+            lua_l_addstring(&mut buf, c" function ".as_ptr())?;
+            lua_l_addstring(&mut buf, ar.name)?;
         }
 
-        lua_l_addchar(&mut buf, b'\n' as c_char);
+        lua_l_addchar(&mut buf, b'\n' as c_char)?;
 
         i += 1;
     }
 
-    lua_l_pushresult(&mut buf);
+    lua_l_pushresult(&mut buf)
 }

@@ -4,7 +4,7 @@ use crate::macros::radians_per_degree::RADIANS_PER_DEGREE;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_math_deg"]
-pub unsafe fn math_deg(L: *mut lua_State) -> i32 {
-    lua_pushnumber(L, lua_l_checknumber(L, 1) / RADIANS_PER_DEGREE);
-    1
+pub unsafe fn math_deg(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<i32> {
+    lua_pushnumber(L, lua_l_checknumber(L, 1)? / RADIANS_PER_DEGREE)?;
+    Ok(1)
 }

@@ -8,22 +8,22 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::{c_char, c_int};
 
 #[export_name = "luaur_str_split"]
-pub unsafe fn str_split(l: *mut lua_State) -> c_int {
+pub unsafe fn str_split(l: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     extern "C" {
         fn memcmp(s1: *const core::ffi::c_void, s2: *const core::ffi::c_void, n: usize) -> c_int;
     }
 
     let mut haystack_len: usize = 0;
-    let haystack = lua_l_checklstring(l, 1, &mut haystack_len);
+    let haystack = lua_l_checklstring(l, 1, &mut haystack_len)?;
     let mut needle_len: usize = 0;
-    let needle = lua_l_optlstring(l, 2, c",".as_ptr() as *const c_char, &mut needle_len);
+    let needle = lua_l_optlstring(l, 2, c",".as_ptr() as *const c_char, &mut needle_len)?;
 
     let begin = haystack;
     let end = haystack.add(haystack_len);
     let mut span_start = begin;
     let mut num_matches = 0;
 
-    lua_createtable(l, 0, 0);
+    lua_createtable(l, 0, 0)?;
 
     let mut iter = begin;
     if needle_len == 0 {
@@ -43,9 +43,9 @@ pub unsafe fn str_split(l: *mut lua_State) -> c_int {
         ) == 0
         {
             num_matches += 1;
-            lua_pushinteger(l, num_matches);
-            lua_pushlstring(l, span_start, iter.offset_from(span_start) as usize);
-            lua_settable(l, -3);
+            lua_pushinteger(l, num_matches)?;
+            lua_pushlstring(l, span_start, iter.offset_from(span_start) as usize)?;
+            lua_settable(l, -3)?;
 
             span_start = iter.add(needle_len);
             if needle_len > 0 {
@@ -57,10 +57,10 @@ pub unsafe fn str_split(l: *mut lua_State) -> c_int {
 
     if needle_len > 0 {
         num_matches += 1;
-        lua_pushinteger(l, num_matches);
-        lua_pushlstring(l, span_start, end.offset_from(span_start) as usize);
-        lua_settable(l, -3);
+        lua_pushinteger(l, num_matches)?;
+        lua_pushlstring(l, span_start, end.offset_from(span_start) as usize)?;
+        lua_settable(l, -3)?;
     }
 
-    1
+    Ok(1)
 }

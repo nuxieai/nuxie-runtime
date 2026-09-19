@@ -4,9 +4,12 @@ use core::ffi::c_char;
 use core::ffi::CStr;
 
 #[inline]
-pub fn lua_l_addstring(b: *mut LuaLStrbuf, s: *const c_char) {
+pub fn lua_l_addstring(
+    b: *mut LuaLStrbuf,
+    s: *const c_char,
+) -> crate::records::lua_exception::LuaResult<()> {
     unsafe {
         let len = CStr::from_ptr(s).to_bytes().len();
-        lua_l_addlstring(b, s, len);
+        lua_l_addlstring(b, s, len)
     }
 }

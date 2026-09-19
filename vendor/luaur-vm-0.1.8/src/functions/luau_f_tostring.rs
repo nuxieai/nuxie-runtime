@@ -24,56 +24,56 @@ pub unsafe fn luau_f_tostring(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 {
         match ttype!(arg0) {
             t if t == lua_Type::LUA_TNIL as i32 => {
                 let s = (*(*l).global).ttname[lua_Type::LUA_TNIL as usize];
                 setsvalue!(l, res, s);
-                return 1;
+                return Ok(1);
             }
             t if t == lua_Type::LUA_TBOOLEAN as i32 => {
                 // bvalue returns i32 (0 or 1) in Luau VM; compare to 0 for boolean check
                 let s = if bvalue!(arg0) != 0 {
-                    luaS_newliteral(l, c"true".as_ptr())
+                    luaS_newliteral(l, c"true".as_ptr())?
                 } else {
-                    luaS_newliteral(l, c"false".as_ptr())
+                    luaS_newliteral(l, c"false".as_ptr())?
                 };
                 setsvalue!(l, res, s);
-                return 1;
+                return Ok(1);
             }
             t if t == lua_Type::LUA_TNUMBER as i32 => {
                 if luaC_needsGC!(l) {
-                    return -1;
+                    return Ok(-1);
                 }
                 let mut s = [0 as core::ffi::c_char; LUAI_MAXNUM2STR as usize];
                 let e = luai_num2str(s.as_mut_ptr(), nvalue!(arg0));
                 setsvalue!(
                     l,
                     res,
-                    luaS_newlstr(l, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)
+                    luaS_newlstr(l, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)?
                 );
-                return 1;
+                return Ok(1);
             }
             t if t == lua_Type::LUA_TSTRING as i32 => {
                 setsvalue!(l, res, tsvalue!(arg0));
-                return 1;
+                return Ok(1);
             }
             t if t == lua_Type::LUA_TINTEGER as i32 => {
                 if luaC_needsGC!(l) {
-                    return -1;
+                    return Ok(-1);
                 }
                 let mut s = [0 as core::ffi::c_char; LUAI_MAXINT2STR as usize];
                 let e = luai_int2str(s.as_mut_ptr(), lvalue!(arg0));
                 setsvalue!(
                     l,
                     res,
-                    luaS_newlstr(l, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)
+                    luaS_newlstr(l, s.as_ptr(), e.offset_from(s.as_ptr()) as usize)?
                 );
-                return 1;
+                return Ok(1);
             }
             _ => {}
         }
     }
-    -1
+    Ok(-1)
 }

@@ -4,20 +4,22 @@ use crate::functions::lua_setfield::lua_setfield;
 use crate::records::lua_l_reg::LuaLReg;
 use crate::type_aliases::lua_state::lua_State;
 
-pub unsafe fn luaopen_integer(l: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn luaopen_integer(
+    l: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // Register the integer library functions
     // Note: int64lib is defined in lintlib.cpp; in this translation context we use the local static.
-    lua_l_register(l, c"int64".as_ptr(), INT64LIB.as_ptr());
+    lua_l_register(l, c"int64".as_ptr(), INT64LIB.as_ptr())?;
 
     // Push LLONG_MAX and set it as "maxsigned"
-    lua_pushinteger_64(l, i64::MAX);
-    lua_setfield(l, -2, c"maxsigned".as_ptr());
+    lua_pushinteger_64(l, i64::MAX)?;
+    lua_setfield(l, -2, c"maxsigned".as_ptr())?;
 
     // Push LLONG_MIN and set it as "minsigned"
-    lua_pushinteger_64(l, i64::MIN);
-    lua_setfield(l, -2, c"minsigned".as_ptr());
+    lua_pushinteger_64(l, i64::MIN)?;
+    lua_setfield(l, -2, c"minsigned".as_ptr())?;
 
-    1
+    Ok(1)
 }
 
 // Define the int64lib luaL_Reg table locally as in the C++ source.

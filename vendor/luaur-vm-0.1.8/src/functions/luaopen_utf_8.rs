@@ -39,8 +39,10 @@ static FUNCS: SyncLuaLReg = SyncLuaLReg([
     },
 ]);
 
-pub unsafe fn luaopen_utf_8(L: *mut lua_State) -> core::ffi::c_int {
-    lua_l_register(L, c"utf8".as_ptr(), FUNCS.0.as_ptr());
+pub unsafe fn luaopen_utf_8(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    lua_l_register(L, c"utf8".as_ptr(), FUNCS.0.as_ptr())?;
 
     // UTF8PATT = "[\0-\x7F\xC2-\xF4][\x80-\xBF]*" — contains an embedded NUL, so a
     // byte slice (not a C string literal). 14 bytes, pushed via lua_pushlstring.
@@ -51,8 +53,8 @@ pub unsafe fn luaopen_utf_8(L: *mut lua_State) -> core::ffi::c_int {
         L,
         UTF8_PATT.as_ptr() as *const core::ffi::c_char,
         UTF8_PATT.len(),
-    );
-    lua_setfield(L, -2, c"charpattern".as_ptr());
+    )?;
+    lua_setfield(L, -2, c"charpattern".as_ptr())?;
 
-    1
+    Ok(1)
 }

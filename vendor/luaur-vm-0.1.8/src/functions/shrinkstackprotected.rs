@@ -13,8 +13,7 @@ unsafe fn run(
     l: *mut lua_State,
     _ud: *mut core::ffi::c_void,
 ) -> Result<(), crate::records::lua_exception::lua_exception> {
-    shrinkstack(l);
-    Ok(())
+    shrinkstack(l)
 }
 
 #[allow(non_snake_case)]

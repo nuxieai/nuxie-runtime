@@ -21,7 +21,7 @@ pub unsafe fn luau_f_bufferwritelong(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if !LUAU_BIG_ENDIAN
         && nparams >= 3
         && nresults <= 0
@@ -34,14 +34,14 @@ pub unsafe fn luau_f_bufferwritelong(
 
         let len = (*bufvalue!(arg0)).len as usize;
         if checkoutofbounds(offset, len, core::mem::size_of::<i64>()) {
-            return -1;
+            return Ok(-1);
         }
 
         let val: i64 = lvalue!(args.wrapping_add(1));
         let dst = (*bufvalue!(arg0)).data.as_mut_ptr().add(offset as usize) as *mut i64;
         core::ptr::write_unaligned(dst, val);
-        return 0;
+        return Ok(0);
     }
 
-    -1
+    Ok(-1)
 }

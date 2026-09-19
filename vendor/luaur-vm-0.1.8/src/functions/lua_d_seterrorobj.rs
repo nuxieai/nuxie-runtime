@@ -8,12 +8,17 @@ use crate::type_aliases::stk_id::StkId;
 #[export_name = "luaur_luaD_seterrorobj"]
 pub unsafe fn luaD_seterrorobj(l: *mut lua_State, errcode: core::ffi::c_int, oldtop: StkId) {
     if errcode == lua_Status::LUA_ERRMEM as core::ffi::c_int {
-        setsvalue!(l, oldtop, luaS_newliteral(l, c"not enough memory".as_ptr()));
+        // As in upstream ldo.cpp, this is an intern lookup, not an allocation:
+        // f_luaopen pins both recovery strings before the state becomes usable.
+        let message = luaS_newliteral(l, c"not enough memory".as_ptr())
+            .expect("initialized VM must retain its pinned memory-error string");
+        setsvalue!(l, oldtop, message);
     } else if errcode == lua_Status::LUA_ERRERR as core::ffi::c_int {
         setsvalue!(
             l,
             oldtop,
             luaS_newliteral(l, c"error in error handling".as_ptr())
+                .expect("initialized VM must retain its pinned error-handler string")
         );
     } else if errcode == lua_Status::LUA_ERRSYNTAX as core::ffi::c_int
         || errcode == lua_Status::LUA_ERRRUN as core::ffi::c_int

@@ -9,7 +9,11 @@ use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
 #[allow(non_snake_case)]
-pub unsafe fn resume_start(l: *mut lua_State, from: *mut lua_State, nargs: c_int) -> c_int {
+pub unsafe fn resume_start(
+    l: *mut lua_State,
+    from: *mut lua_State,
+    nargs: c_int,
+) -> crate::records::lua_exception::LuaResult<c_int> {
     api_check!(l, nargs >= 0);
     api_check!(l, (*l).top.offset_from((*l).base) >= nargs as isize);
 
@@ -34,5 +38,5 @@ pub unsafe fn resume_start(l: *mut lua_State, from: *mut lua_State, nargs: c_int
         lua_c_barrierback(l, o, core::ptr::addr_of_mut!((*l).gclist));
     }
 
-    lua_Status::LUA_OK as c_int
+    Ok(lua_Status::LUA_OK as c_int)
 }

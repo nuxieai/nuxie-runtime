@@ -5,12 +5,15 @@ use crate::records::luau_class::LuauClass;
 use crate::records::t_string::TString;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_r_newblankclass(L: *mut lua_State, name: *mut TString) -> *mut LuauClass {
+pub unsafe fn lua_r_newblankclass(
+    L: *mut lua_State,
+    name: *mut TString,
+) -> crate::records::lua_exception::LuaResult<*mut LuauClass> {
     let classobject = crate::functions::lua_m_newgco::luaM_newgco_(
         L,
         core::mem::size_of::<LuauClass>(),
         (*L).activememcat,
-    ) as *mut LuauClass;
+    )? as *mut LuauClass;
     luaC_init!(L, classobject, lua_Type::LUA_TCLASS as core::ffi::c_int);
     (*classobject).name = name;
     (*classobject).staticmembers = core::ptr::null_mut();
@@ -20,5 +23,5 @@ pub unsafe fn lua_r_newblankclass(L: *mut lua_State, name: *mut TString) -> *mut
     (*classobject).instancemetatable = core::ptr::null_mut();
     (*classobject).numberofinstancemembers = 0;
     (*classobject).numberofallmembers = 0;
-    classobject
+    Ok(classobject)
 }

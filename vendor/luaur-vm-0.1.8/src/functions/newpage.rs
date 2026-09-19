@@ -14,7 +14,7 @@ pub(crate) unsafe fn newpage(
     pageSize: core::ffi::c_int,
     blockSize: core::ffi::c_int,
     blockCount: core::ffi::c_int,
-) -> *mut lua_Page {
+) -> crate::records::lua_exception::LuaResult<*mut lua_Page> {
     let g: *mut global_State = (*L).global;
 
     LUAU_ASSERT!(
@@ -29,7 +29,7 @@ pub(crate) unsafe fn newpage(
     };
 
     if page.is_null() {
-        lua_d_throw(L, crate::enums::lua_status::lua_Status::LUA_ERRMEM as i32);
+        return lua_d_throw(L, crate::enums::lua_status::lua_Status::LUA_ERRMEM as i32);
     }
 
     ASAN_POISON_MEMORY_REGION!((*page).data.as_ptr(), (blockSize * blockCount) as usize);
@@ -59,5 +59,5 @@ pub(crate) unsafe fn newpage(
         *pageset = page;
     }
 
-    page
+    Ok(page)
 }

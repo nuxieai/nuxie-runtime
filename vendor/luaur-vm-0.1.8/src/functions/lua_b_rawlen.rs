@@ -8,7 +8,7 @@ use crate::macros::lua_l_argcheck::luaL_argcheck;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_b_rawlen"]
-pub unsafe fn lua_b_rawlen(L: *mut lua_State) -> c_int {
+pub unsafe fn lua_b_rawlen(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     let tt = lua_type(L, 1);
 
     luaL_argcheck!(
@@ -19,7 +19,7 @@ pub unsafe fn lua_b_rawlen(L: *mut lua_State) -> c_int {
     );
 
     let len = lua_objlen(L, 1);
-    lua_pushinteger(L, len);
+    lua_pushinteger(L, len)?;
 
-    1
+    Ok(1)
 }

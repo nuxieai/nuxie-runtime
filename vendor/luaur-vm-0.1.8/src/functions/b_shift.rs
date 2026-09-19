@@ -4,7 +4,11 @@ use crate::macros::trim::trim;
 use crate::type_aliases::b_uint::b_uint;
 use crate::type_aliases::lua_state::lua_State;
 
-pub fn b_shift(l: *mut lua_State, mut r: b_uint, mut i: core::ffi::c_int) -> core::ffi::c_int {
+pub fn b_shift(
+    l: *mut lua_State,
+    mut r: b_uint,
+    mut i: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     // Mirrors VM/src/lbitlib.cpp:b_shift
     if i < 0 {
         // Magnitude of the (right) shift. `i.unsigned_abs()` is defined for
@@ -26,6 +30,6 @@ pub fn b_shift(l: *mut lua_State, mut r: b_uint, mut i: core::ffi::c_int) -> cor
         r = trim(r);
     }
 
-    lua_pushunsigned(l, r);
-    1
+    lua_pushunsigned(l, r)?;
+    Ok(1)
 }

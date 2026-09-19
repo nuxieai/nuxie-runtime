@@ -15,8 +15,8 @@ pub fn buffutfchar(
     arg: c_int,
     buff: *mut c_char,
     charstr: *mut *const c_char,
-) -> c_int {
-    let code = luaL_checkinteger(l, arg);
+) -> crate::records::lua_exception::LuaResult<c_int> {
+    let code = luaL_checkinteger(l, arg)?;
     luaL_argcheck!(
         l,
         0 <= code && code <= MAXUNICODE,
@@ -34,5 +34,5 @@ pub fn buffutfchar(
         *charstr = buff.add(UTF8BUFFSZ).wrapping_sub(lval as usize) as *const c_char;
     }
 
-    lval
+    Ok(lval)
 }

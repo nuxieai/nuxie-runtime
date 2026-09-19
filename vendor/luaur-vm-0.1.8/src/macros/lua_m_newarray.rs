@@ -13,7 +13,7 @@ macro_rules! luaM_newarray {
                 core::mem::size_of::<$t>()
             ),
             $memcat,
-        ) as *mut $t
+        )? as *mut $t
     };
 }
 

@@ -9,14 +9,16 @@ use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 
 #[export_name = "luaur_tcreate"]
-pub unsafe fn tcreate(L: *mut lua_State) -> core::ffi::c_int {
-    let size = lua_l_checkinteger(L, 1);
+pub unsafe fn tcreate(
+    L: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
+    let size = lua_l_checkinteger(L, 1)?;
     if size < 0 {
         luaL_argerror!(L, 1, "size out of range");
     }
 
     if !lua_isnoneornil!(L, 2) {
-        lua_createtable(L, size as core::ffi::c_int, 0);
+        lua_createtable(L, size as core::ffi::c_int, 0)?;
         let t = hvalue!((*L).top.offset(-1));
 
         let v: StkId = (*L).base.add(1);
@@ -26,8 +28,8 @@ pub unsafe fn tcreate(L: *mut lua_State) -> core::ffi::c_int {
             setobj2t!(L, e, v);
         }
     } else {
-        lua_createtable(L, size as core::ffi::c_int, 0);
+        lua_createtable(L, size as core::ffi::c_int, 0)?;
     }
 
-    1
+    Ok(1)
 }

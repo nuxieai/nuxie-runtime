@@ -1,6 +1,8 @@
 //! Node: `cxx:Function:Luau.VM:VM/src/lvmutils.cpp:182:luaV_settable`
 //! Source: `VM/src/lvmutils.cpp:182-240` (hand-ported)
 
+use crate::records::lua_exception::LuaResult;
+
 use crate::functions::call_tm::call_tm;
 use crate::functions::lua_g_indexerror::luaG_indexerror;
 use crate::functions::lua_g_missingmembererror::luaG_missingmembererror;
@@ -38,7 +40,7 @@ pub unsafe fn lua_v_settable(
     mut t: *const TValue,
     key: *mut TValue,
     val: StkId,
-) {
+) -> LuaResult<()> {
     let mut temp: TValue = core::mem::zeroed();
     let mut loop_ = 0;
     while loop_ < MAXTAGLOOP {
@@ -54,7 +56,7 @@ pub unsafe fn lua_v_settable(
 
             if !ttisnil!(oldval) || tm.is_null() {
                 if (*h).readonly != 0 {
-                    luaG_readonlyerror(L);
+                    return luaG_readonlyerror(L);
                 }
 
                 let newval = luaH_setslot!(L, h, oldval, key as *const TValue);
@@ -63,18 +65,18 @@ pub unsafe fn lua_v_settable(
 
                 setobj2t!(L, newval, val as *const TValue);
                 luaC_barriert!(L, h, val as *const TValue);
-                return;
+                return Ok(());
             }
         } else if luaur_common::FFlag::DebugLuauUserDefinedClassesRuntime.get() && ttisobject!(t) {
             let inst = &mut **objectvalue!(t) as *mut LuauObject;
             let offset = lua_h_get((*(*inst).lclass).memberstooffset, key as *const TValue);
             if ttisnil!(offset) {
-                luaG_missingmembererror(L, t, key as *const TValue);
+                return luaG_missingmembererror(L, t, key as *const TValue);
             }
             let offsetnum = nvalue!(offset) as u32;
             LUAU_ASSERT!(offsetnum < (*(*inst).lclass).numberofallmembers);
             if offsetnum >= (*(*inst).lclass).numberofinstancemembers {
-                luaG_indexerror(L, t, key as *const TValue);
+                return luaG_indexerror(L, t, key as *const TValue);
             }
             setobj2class!(
                 L,
@@ -82,33 +84,33 @@ pub unsafe fn lua_v_settable(
                 val as *const TValue
             );
             luaC_barrier!(L, inst, val as *const TValue);
-            return;
+            return Ok(());
         } else {
             tm = lua_t_gettmbyobj(L, t, TMS::TM_NEWINDEX);
             if ttisnil!(tm) {
-                luaG_indexerror(L, t, key as *const TValue);
+                return luaG_indexerror(L, t, key as *const TValue);
             }
         }
 
         if ttisfunction!(tm) {
-            call_tm(L, tm, t, key as *const TValue, val as *const TValue);
-            return;
+            call_tm(L, tm, t, key as *const TValue, val as *const TValue)?;
+            return Ok(());
         }
         setobj!(L, &mut temp as *mut TValue, tm);
         t = &temp as *const TValue;
         loop_ += 1;
     }
-    lua_g_runerror!(L, "'__newindex' chain too long; possible loop");
+    lua_g_runerror!(L, "'__newindex' chain too long; possible loop")
 }
 
 #[export_name = "luaur_luaV_settable"]
-pub unsafe extern "C" fn lua_v_settable_export(
+pub unsafe fn lua_v_settable_export(
     L: *mut lua_State,
     t: *const TValue,
     key: *mut TValue,
     val: StkId,
-) {
-    lua_v_settable(L, t, key, val);
+) -> LuaResult<()> {
+    lua_v_settable(L, t, key, val)
 }
 
 #[allow(non_snake_case, unused_imports)]

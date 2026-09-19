@@ -15,7 +15,7 @@ pub unsafe fn luau_f_vectornormalize(
     nresults: core::ffi::c_int,
     _args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults <= 1 && ttisvector!(arg0) {
         let v = vvalue!(arg0).as_ptr();
 
@@ -27,7 +27,8 @@ pub unsafe fn luau_f_vectornormalize(
                     + (*v.offset(3)) * (*v.offset(3)))
                 .sqrt();
 
-            setvvalue!(L,
+            setvvalue!(
+                L,
                 res,
                 (*v.offset(0)) * inv_sqrt,
                 (*v.offset(1)) * inv_sqrt,
@@ -41,7 +42,8 @@ pub unsafe fn luau_f_vectornormalize(
                     + (*v.offset(2)) * (*v.offset(2)))
                 .sqrt();
 
-            setvvalue!(L,
+            setvvalue!(
+                L,
                 res,
                 (*v.offset(0)) * inv_sqrt,
                 (*v.offset(1)) * inv_sqrt,
@@ -50,8 +52,8 @@ pub unsafe fn luau_f_vectornormalize(
             );
         }
 
-        return 1;
+        return Ok(1);
     }
 
-    -1
+    Ok(-1)
 }

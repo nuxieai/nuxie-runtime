@@ -27,22 +27,26 @@ fn sizeclass(size: usize) -> i32 {
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn luaM_newgcofixed_(l: *mut lua_State, nsize: usize, memcat: u8) -> *mut GCObject {
+pub unsafe fn luaM_newgcofixed_(
+    l: *mut lua_State,
+    nsize: usize,
+    memcat: u8,
+) -> crate::records::lua_exception::LuaResult<*mut GCObject> {
     LUAU_ASSERT!(nsize >= K_GCO_LINK_OFFSET + core::mem::size_of::<*mut c_void>());
 
     let g = (*l).global;
     let nclass = sizeclass(nsize);
     LUAU_ASSERT!(nclass >= 0);
 
-    let block = newgcoblock(l, nclass);
+    let block = newgcoblock(l, nclass)?;
     if block.is_null() {
-        luaD_throw(l, lua_Status::LUA_ERRMEM as i32);
+        return luaD_throw(l, lua_Status::LUA_ERRMEM as i32);
     }
 
     (*g).totalbytes = (*g).totalbytes.wrapping_add(nsize);
     (*g).memcatbytes[memcat as usize] = (*g).memcatbytes[memcat as usize].wrapping_add(nsize);
 
-    block as *mut GCObject
+    Ok(block as *mut GCObject)
 }
 
 #[allow(unused_imports)]

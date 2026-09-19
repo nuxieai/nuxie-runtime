@@ -19,7 +19,7 @@ pub unsafe fn luau_f_tunpack(
     nresults: core::ffi::c_int,
     args: StkId,
     nparams: core::ffi::c_int,
-) -> core::ffi::c_int {
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if nparams >= 1 && nresults < 0 && ttistable!(arg0) {
         let t = hvalue!(arg0);
         let mut n: core::ffi::c_int = -1;
@@ -44,9 +44,9 @@ pub unsafe fn luau_f_tunpack(
                 setobj_2_s!(L, res.add(i as usize), array.add(i as usize));
             }
             expandstacklimit!(L, res.add(n as usize));
-            return n;
+            return Ok(n);
         }
     }
 
-    -1
+    Ok(-1)
 }

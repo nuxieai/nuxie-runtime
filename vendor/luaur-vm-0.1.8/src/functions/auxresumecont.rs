@@ -8,21 +8,24 @@ use crate::macros::co_status_error::CO_STATUS_ERROR;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_auxresumecont"]
-pub unsafe fn auxresumecont(L: *mut lua_State, co: *mut lua_State) -> core::ffi::c_int {
+pub unsafe fn auxresumecont(
+    L: *mut lua_State,
+    co: *mut lua_State,
+) -> crate::records::lua_exception::LuaResult<core::ffi::c_int> {
     if (*co).status == lua_Status::LUA_OK as u8 || (*co).status == lua_Status::LUA_YIELD as u8 {
         let nres = cast_int!((*co).top.offset_from((*co).base));
         if lua_checkstack(L, nres + 1) == 0 {
-            lua_l_error_l(
+            return lua_l_error_l(
                 L,
                 c"too many results to resume".as_ptr(),
                 format_args!("too many results to resume"),
             );
         }
-        lua_xmove(co, L, nres);
-        nres
+        lua_xmove(co, L, nres)?;
+        Ok(nres)
     } else {
-        lua_rawcheckstack(L, 2);
-        lua_xmove(co, L, 1);
-        CO_STATUS_ERROR
+        lua_rawcheckstack(L, 2)?;
+        lua_xmove(co, L, 1)?;
+        Ok(CO_STATUS_ERROR)
     }
 }

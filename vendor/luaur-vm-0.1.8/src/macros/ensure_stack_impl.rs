@@ -11,8 +11,8 @@ macro_rules! ensure_stack_impl {
                     $errorL,
                     c"stack overflow".as_ptr(),
                     format_args!("stack overflow"),
-                );
-                $crate::functions::lua_error::lua_error($errorL);
+                )?;
+                return $crate::functions::lua_error::lua_error($errorL);
             }
         }
     }};

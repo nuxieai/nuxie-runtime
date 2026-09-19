@@ -12,7 +12,7 @@ pub fn unpackint(
     islittle: i32,
     size: i32,
     issigned: i32,
-) -> i64 {
+) -> crate::records::lua_exception::LuaResult<i64> {
     let mut res: u64 = 0;
     let mut i: i32 = 0;
     let limit = if size <= SZINT { size } else { SZINT };
@@ -51,5 +51,5 @@ pub fn unpackint(
         }
     }
 
-    res as i64
+    Ok(res as i64)
 }

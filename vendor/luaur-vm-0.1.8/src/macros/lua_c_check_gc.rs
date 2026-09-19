@@ -8,7 +8,7 @@
 macro_rules! luaC_checkGC {
     ($L:expr) => {
         if $crate::macros::lua_c_needs_gc::luaC_needsGC!($L) {
-            $crate::functions::lua_c_step::luaC_step($L, true);
+            $crate::functions::lua_c_step::luaC_step($L, true)?;
         }
     };
 }

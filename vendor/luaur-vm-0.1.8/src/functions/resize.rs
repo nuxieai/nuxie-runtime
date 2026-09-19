@@ -22,15 +22,23 @@ use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 const MAXSIZE: c_int = 1 << 26;
 
-unsafe fn runerror(l: *mut lua_State, msg: *const core::ffi::c_char) -> ! {
-    lua_g_pusherror(l, msg);
-    luaD_throw(l, lua_Status::LUA_ERRRUN as c_int);
+unsafe fn runerror(
+    l: *mut lua_State,
+    msg: *const core::ffi::c_char,
+) -> crate::records::lua_exception::LuaResult<()> {
+    lua_g_pusherror(l, msg)?;
+    luaD_throw(l, lua_Status::LUA_ERRRUN as c_int)
 }
 
 #[allow(non_snake_case)]
-pub unsafe fn resize(l: *mut lua_State, t: *mut LuaTable, nasize: c_int, nhsize: c_int) {
+pub unsafe fn resize(
+    l: *mut lua_State,
+    t: *mut LuaTable,
+    nasize: c_int,
+    nhsize: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     if nasize > MAXSIZE || nhsize > MAXSIZE {
-        runerror(l, c"table overflow".as_ptr());
+        return runerror(l, c"table overflow".as_ptr());
     }
 
     let oldasize = (*t).sizearray;
@@ -38,10 +46,10 @@ pub unsafe fn resize(l: *mut lua_State, t: *mut LuaTable, nasize: c_int, nhsize:
     let nold = (*t).node;
 
     if nasize > oldasize {
-        setarrayvector(l, t, nasize);
+        setarrayvector(l, t, nasize)?;
     }
 
-    setnodevector(l, t, nhsize);
+    setnodevector(l, t, nhsize)?;
     let nnew = (*t).node;
 
     if nasize < oldasize {
@@ -53,7 +61,7 @@ pub unsafe fn resize(l: *mut lua_State, t: *mut LuaTable, nasize: c_int, nhsize:
             if !ttisnil!(e) {
                 let mut ok = TValue::default();
                 setnvalue!(core::ptr::addr_of_mut!(ok), cast_num!(i + 1));
-                setobjt2t!(l, newkey(l, t, core::ptr::addr_of!(ok)), e);
+                setobjt2t!(l, newkey(l, t, core::ptr::addr_of!(ok))?, e);
             }
             i += 1;
         }
@@ -64,7 +72,7 @@ pub unsafe fn resize(l: *mut lua_State, t: *mut LuaTable, nasize: c_int, nhsize:
             oldasize as usize * core::mem::size_of::<TValue>(),
             nasize as usize * core::mem::size_of::<TValue>(),
             (*t).memcat,
-        ) as *mut TValue;
+        )? as *mut TValue;
         (*t).array = newarray;
     }
 
@@ -77,7 +85,7 @@ pub unsafe fn resize(l: *mut lua_State, t: *mut LuaTable, nasize: c_int, nhsize:
         if !ttisnil!(gval!(old)) {
             let mut ok = TValue::default();
             getnodekey!(l, core::ptr::addr_of_mut!(ok), old);
-            setobjt2t!(l, arrayornewkey(l, t, core::ptr::addr_of!(ok)), gval!(old));
+            setobjt2t!(l, arrayornewkey(l, t, core::ptr::addr_of!(ok))?, gval!(old));
         }
 
         if i == 0 {
@@ -97,4 +105,5 @@ pub unsafe fn resize(l: *mut lua_State, t: *mut LuaTable, nasize: c_int, nhsize:
             (*t).memcat,
         );
     }
+    Ok(())
 }

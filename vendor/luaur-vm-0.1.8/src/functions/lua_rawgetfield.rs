@@ -1,3 +1,4 @@
+use crate::records::lua_exception::LuaResult;
 use core::ffi::{c_char, c_int};
 
 use crate::functions::index_2_addr::index2addr;
@@ -17,7 +18,7 @@ use crate::type_aliases::stk_id::StkId;
 use crate::type_aliases::t_value::TValue;
 
 #[allow(non_snake_case)]
-pub unsafe fn lua_rawgetfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> c_int {
+pub unsafe fn lua_rawgetfield(L: *mut lua_State, idx: c_int, k: *const c_char) -> LuaResult<c_int> {
     lua_c_threadbarrier_lapi(L);
     crate::ensure_stack!(L, 1);
 
@@ -25,7 +26,7 @@ pub unsafe fn lua_rawgetfield(L: *mut lua_State, idx: c_int, k: *const c_char) -
     api_check!(L, ttistable!(t));
 
     let mut key = TValue::default();
-    setsvalue!(L, &mut key, luaS_new(L, k));
+    setsvalue!(L, &mut key, luaS_new(L, k)?);
     setobj2s!(
         L,
         (*L).top,
@@ -33,5 +34,5 @@ pub unsafe fn lua_rawgetfield(L: *mut lua_State, idx: c_int, k: *const c_char) -
     );
     api_incr_top!(L);
 
-    ttype!((*L).top.sub(1))
+    Ok(ttype!((*L).top.sub(1)))
 }

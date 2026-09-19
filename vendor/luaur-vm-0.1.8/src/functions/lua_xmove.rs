@@ -5,11 +5,15 @@ use crate::macros::setobj_2_s::setobj_2_s;
 use crate::type_aliases::lua_state::lua_State;
 
 #[export_name = "luaur_lua_xmove"]
-pub unsafe fn lua_xmove(from: *mut lua_State, to: *mut lua_State, n: core::ffi::c_int) {
+pub unsafe fn lua_xmove(
+    from: *mut lua_State,
+    to: *mut lua_State,
+    n: core::ffi::c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     api_check!(from, n >= 0);
 
     if from == to {
-        return;
+        return Ok(());
     }
 
     api_checknelems!(from, n);
@@ -31,4 +35,5 @@ pub unsafe fn lua_xmove(from: *mut lua_State, to: *mut lua_State, n: core::ffi::
 
     (*from).top = ftop;
     (*to).top = ttop.offset(n as isize);
+    Ok(())
 }

@@ -8,7 +8,10 @@ use core::ffi::c_int;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn luaS_resize(l: *mut lua_State, newsize: c_int) {
+pub unsafe fn luaS_resize(
+    l: *mut lua_State,
+    newsize: c_int,
+) -> crate::records::lua_exception::LuaResult<()> {
     let newhash = luaM_newarray!(l, newsize as usize, *mut TString, 0);
     let tb: *mut stringtable = core::ptr::addr_of_mut!((*(*l).global).strt);
 
@@ -36,6 +39,7 @@ pub unsafe fn luaS_resize(l: *mut lua_State, newsize: c_int) {
     luaM_freearray!(l, (*tb).hash, (*tb).size as usize, *mut TString, 0);
     (*tb).size = newsize;
     (*tb).hash = newhash;
+    Ok(())
 }
 
 #[allow(unused_imports)]

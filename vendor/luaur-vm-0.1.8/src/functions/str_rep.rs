@@ -15,15 +15,15 @@ use crate::records::lua_l_strbuf::LuaLStrbuf;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::c_int;
 
-pub fn str_rep(L: *mut lua_State) -> c_int {
+pub fn str_rep(L: *mut lua_State) -> crate::records::lua_exception::LuaResult<c_int> {
     unsafe {
         let mut l: usize = 0;
-        let s = lua_l_checklstring(L, 1, &mut l);
-        let n = lua_l_checkinteger(L, 2);
+        let s = lua_l_checklstring(L, 1, &mut l)?;
+        let n = lua_l_checkinteger(L, 2)?;
 
         if n <= 0 {
-            lua_pushlstring(L, c"".as_ptr(), 0);
-            return 1;
+            lua_pushlstring(L, c"".as_ptr(), 0)?;
+            return Ok(1);
         }
 
         if l > (MAXSSIZE as usize) / (n as usize) {
@@ -39,7 +39,7 @@ pub fn str_rep(L: *mut lua_State) -> c_int {
             storage: core::ptr::null_mut(),
             buffer: [0; 512],
         };
-        let mut ptr = lua_l_buffinitsize(L, &mut b, total);
+        let mut ptr = lua_l_buffinitsize(L, &mut b, total)?;
 
         let start = ptr;
         let mut left = total;
@@ -60,8 +60,8 @@ pub fn str_rep(L: *mut lua_State) -> c_int {
         // fill tail
         core::ptr::copy_nonoverlapping(start, ptr, left);
 
-        lua_l_pushresultsize(&mut b, total);
+        lua_l_pushresultsize(&mut b, total)?;
 
-        1
+        Ok(1)
     }
 }

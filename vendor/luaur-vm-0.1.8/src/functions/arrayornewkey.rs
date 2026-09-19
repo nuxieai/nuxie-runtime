@@ -13,7 +13,7 @@ pub unsafe fn arrayornewkey(
     l: *mut lua_State,
     t: *mut LuaTable,
     key: *const TValue,
-) -> *mut TValue {
+) -> crate::records::lua_exception::LuaResult<*mut TValue> {
     if ttisnumber!(key) {
         let mut k: core::ffi::c_int = 0;
         let n = nvalue!(key);
@@ -22,7 +22,7 @@ pub unsafe fn arrayornewkey(
         if luai_numeq(cast_num!(k), n)
             && (k as core::ffi::c_uint).wrapping_sub(1) < (*t).sizearray as core::ffi::c_uint
         {
-            return (*t).array.add((k - 1) as usize);
+            return Ok((*t).array.add((k - 1) as usize));
         }
     }
 

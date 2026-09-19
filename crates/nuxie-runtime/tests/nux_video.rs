@@ -1335,3 +1335,22 @@ fn video_visibility_uses_curved_host_clip_before_decoding() {
         );
     }
 }
+
+#[test]
+fn preview_duration_tracks_only_current_source_metadata() {
+    let mut playback = Playback::default();
+    assert_eq!(playback.duration(), None);
+    playback.opened(1, 9.0); // Stale decoder observation.
+    playback.opened(0, f64::NAN);
+    assert_eq!(playback.duration(), None);
+    playback.opened(0, 2.5);
+    assert_eq!(playback.duration(), Some(2.5));
+    let generation = playback
+        .replace_source(PlaybackSettings::default())
+        .unwrap();
+    assert_eq!(playback.duration(), None);
+    playback.opened(0, 2.5);
+    assert_eq!(playback.duration(), None);
+    playback.opened(generation, 7.0);
+    assert_eq!(playback.duration(), Some(7.0));
+}

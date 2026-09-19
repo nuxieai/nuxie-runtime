@@ -92,46 +92,50 @@ impl BrowserPlayer {
         let max_bytes = self.max_frame_bytes;
         let capture = self.capture.clone();
         let pending = self.capture_pending.clone();
-        let callback = Closure::wrap(Box::new(move |_now: f64, metadata: JsValue| {
-            pending.set(false);
-            if video.seeking() || video.ready_state() < 2 {
-                return;
-            }
-            let frame = (|| {
-                let pts = js_sys::Reflect::get(&metadata, &JsValue::from_str("mediaTime"))?
-                    .as_f64()
-                    .filter(|n| n.is_finite() && *n >= 0.0)
-                    .ok_or_else(|| JsValue::from_str("invalid video frame timestamp"))?;
-                let (width, height) = (video.video_width(), video.video_height());
-                let bytes = (width as usize)
-                    .checked_mul(height as usize)
-                    .and_then(|n| n.checked_mul(4));
-                if bytes.is_none_or(|n| n == 0 || n > max_bytes) {
-                    return Err(JsValue::from_str("video frame exceeds budget"));
+        // Unwinding releases local buffers/borrows before this callback can run
+        // again. No capture borrow crosses a JS call; the completed frame is
+        // committed only at the end, and pending is cleared before fallible work.
+        let callback =
+            Closure::wrap_assert_unwind_safe(Box::new(move |_now: f64, metadata: JsValue| {
+                pending.set(false);
+                if video.seeking() || video.ready_state() < 2 {
+                    return;
                 }
-                if canvas.width() != width {
-                    canvas.set_width(width);
-                }
-                if canvas.height() != height {
-                    canvas.set_height(height);
-                }
-                // Copy in the frame callback: currentTime is the media clock,
-                // not the timestamp of pixels returned by drawImage.
-                context.draw_image_with_html_video_element(&video, 0.0, 0.0)?;
-                let rgba = context
-                    .get_image_data(0.0, 0.0, width.into(), height.into())?
-                    .data()
-                    .0;
-                Ok(Frame {
-                    generation,
-                    pts,
-                    width,
-                    height,
-                    rgba,
-                })
-            })();
-            *capture.borrow_mut() = Some(frame);
-        }) as Box<dyn FnMut(f64, JsValue)>);
+                let frame = (|| {
+                    let pts = js_sys::Reflect::get(&metadata, &JsValue::from_str("mediaTime"))?
+                        .as_f64()
+                        .filter(|n| n.is_finite() && *n >= 0.0)
+                        .ok_or_else(|| JsValue::from_str("invalid video frame timestamp"))?;
+                    let (width, height) = (video.video_width(), video.video_height());
+                    let bytes = (width as usize)
+                        .checked_mul(height as usize)
+                        .and_then(|n| n.checked_mul(4));
+                    if bytes.is_none_or(|n| n == 0 || n > max_bytes) {
+                        return Err(JsValue::from_str("video frame exceeds budget"));
+                    }
+                    if canvas.width() != width {
+                        canvas.set_width(width);
+                    }
+                    if canvas.height() != height {
+                        canvas.set_height(height);
+                    }
+                    // Copy in the frame callback: currentTime is the media clock,
+                    // not the timestamp of pixels returned by drawImage.
+                    context.draw_image_with_html_video_element(&video, 0.0, 0.0)?;
+                    let rgba = context
+                        .get_image_data(0.0, 0.0, width.into(), height.into())?
+                        .data()
+                        .0;
+                    Ok(Frame {
+                        generation,
+                        pts,
+                        width,
+                        height,
+                        rgba,
+                    })
+                })();
+                *capture.borrow_mut() = Some(frame);
+            }) as Box<dyn FnMut(f64, JsValue)>);
         let id = request
             .call1(&self.video, callback.as_ref())?
             .as_f64()

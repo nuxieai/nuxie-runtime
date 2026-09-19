@@ -313,7 +313,12 @@ impl BrowserWebGl2Provider {
 impl GLExecutionProvider for BrowserWebGl2Provider {
     fn installContextLifecycleIngress(&mut self, ingress: GLContextLifecycleIngress) {
         let lost_ingress = ingress.clone();
-        let lost = Closure::<dyn FnMut(Event)>::new(move |event: Event| {
+        // These browser lifecycle callbacks do not execute guest Luau. Keep
+        // invariant failures fatal: a partially transitioned GL domain must
+        // not resume after wasm-bindgen catches a panic. This preserves the
+        // callback's previous abort behavior when the host enables unwinding
+        // for protected language errors elsewhere.
+        let lost = Closure::<dyn FnMut(Event)>::own_aborting(move |event: Event| {
             event.prevent_default();
             lost_ingress.contextLost();
         });
@@ -321,7 +326,7 @@ impl GLExecutionProvider for BrowserWebGl2Provider {
             .add_event_listener_with_callback("webglcontextlost", lost.as_ref().unchecked_ref())
             .expect("install WebGL context-loss listener");
 
-        let restored = Closure::<dyn FnMut(Event)>::new(move |_event: Event| {
+        let restored = Closure::<dyn FnMut(Event)>::own_aborting(move |_event: Event| {
             let _ = ingress.contextRestored();
         });
         self.canvas

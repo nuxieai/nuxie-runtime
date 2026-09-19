@@ -230,6 +230,11 @@ impl Playback {
     pub fn position(&self) -> f64 {
         self.position
     }
+    /// Duration reported by the current source's decoder, in seconds.
+    /// Unknown until metadata arrives; source replacement clears this value.
+    pub fn duration(&self) -> Option<f64> {
+        self.duration
+    }
     pub fn wants_play(&self) -> bool {
         self.wants_play
     }

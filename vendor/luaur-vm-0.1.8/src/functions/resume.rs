@@ -13,7 +13,10 @@ use crate::type_aliases::stk_id::StkId;
 use luaur_common::macros::luau_assert::LUAU_ASSERT;
 
 #[allow(non_snake_case)]
-pub unsafe fn resume(l: *mut lua_State, ud: *mut core::ffi::c_void) {
+pub unsafe fn resume(
+    l: *mut lua_State,
+    ud: *mut core::ffi::c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let mut first_arg = ud as StkId;
 
     if (*l).status == lua_Status::LUA_OK as u8 {
@@ -32,7 +35,7 @@ pub unsafe fn resume(l: *mut lua_State, ud: *mut core::ffi::c_void) {
             first_arg = (*l).base;
         } else {
             if precallresult != PCRLUA {
-                return;
+                return Ok(());
             }
 
             (*(*l).ci).flags |= LUA_CALLINFO_RETURN as u32;
@@ -59,4 +62,5 @@ pub unsafe fn resume(l: *mut lua_State, ud: *mut core::ffi::c_void) {
     }
 
     resume_continue(l);
+    Ok(())
 }

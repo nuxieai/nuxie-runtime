@@ -22,9 +22,16 @@ pub unsafe fn lua_d_rawrunprotected_mut(
     // Note: This requires the 'std' library.
     let result = std::panic::catch_unwind(move || {
         if let Some(f_fn) = f {
-            f_fn(L, ud);
+            f_fn(L, ud)
+        } else {
+            Ok(())
         }
     });
+
+    if let Ok(Err(error)) = &result {
+        LUAU_ASSERT!(error.getThread() == L);
+        return error.getStatus();
+    }
 
     if let Err(payload) = result {
         // Check if the panic payload is a lua_exception.

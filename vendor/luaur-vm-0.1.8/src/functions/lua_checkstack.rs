@@ -12,9 +12,13 @@ use crate::records::call_context_lapi::CallContext;
 use crate::type_aliases::lua_state::lua_State;
 use core::ffi::{c_int, c_void};
 
-unsafe fn call_context_run(L: *mut lua_State, ud: *mut c_void) {
+unsafe fn call_context_run(
+    L: *mut lua_State,
+    ud: *mut c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let ctx = ud as *mut CallContext;
     lua_d_growstack(L, (*ctx).size);
+    Ok(())
 }
 
 #[allow(non_snake_case)]

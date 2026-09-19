@@ -24,9 +24,16 @@ pub unsafe fn luaD_rawrunprotected(
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         if let Some(f) = f {
-            f(L, ud);
+            f(L, ud)
+        } else {
+            Ok(())
         }
     }));
+
+    if let Ok(Err(error)) = &result {
+        LUAU_ASSERT!(error.getThread() == L as *const lua_State);
+        return error.getStatus();
+    }
 
     if let Err(payload) = result {
         if let Some(e) = payload.downcast_ref::<lua_exception>() {

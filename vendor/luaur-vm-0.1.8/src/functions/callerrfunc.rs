@@ -7,7 +7,10 @@ use crate::macros::setobj_2_s::setobj_2_s;
 use crate::type_aliases::lua_state::lua_State;
 use crate::type_aliases::stk_id::StkId;
 
-pub unsafe fn callerrfunc(l: *mut lua_State, ud: *mut core::ffi::c_void) {
+pub unsafe fn callerrfunc(
+    l: *mut lua_State,
+    ud: *mut core::ffi::c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let errfunc = ud as StkId;
 
     setobj_2_s!(l, (*l).top, (*l).top.offset(-1));
@@ -15,4 +18,5 @@ pub unsafe fn callerrfunc(l: *mut lua_State, ud: *mut core::ffi::c_void) {
     incr_top!(l);
 
     lua_d_callny(l, (*l).top.offset(-2), 1);
+    Ok(())
 }

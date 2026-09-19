@@ -21,9 +21,13 @@ struct CallContext {
     nresults: c_int,
 }
 
-unsafe fn call_context_run(L: *mut lua_State, ud: *mut c_void) {
+unsafe fn call_context_run(
+    L: *mut lua_State,
+    ud: *mut c_void,
+) -> Result<(), crate::records::lua_exception::lua_exception> {
     let ctx = ud as *mut CallContext;
     lua_d_callint(L, (*ctx).func, (*ctx).nresults, lua_isyieldable(L) != 0);
+    Ok(())
 }
 
 #[allow(non_snake_case)]

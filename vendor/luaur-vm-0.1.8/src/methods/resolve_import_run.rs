@@ -5,7 +5,10 @@ use crate::records::resolve_import::ResolveImport;
 use crate::type_aliases::lua_state::lua_State;
 
 impl ResolveImport {
-    pub unsafe fn run(L: *mut lua_State, ud: *mut core::ffi::c_void) {
+    pub unsafe fn run(
+        L: *mut lua_State,
+        ud: *mut core::ffi::c_void,
+    ) -> Result<(), crate::records::lua_exception::lua_exception> {
         let self_ = ud as *mut ResolveImport;
 
         // note: we call getimport with nil propagation which means that accesses to table chains like A.B.C will resolve in nil
@@ -24,5 +27,6 @@ impl ResolveImport {
             (*self_).id,
             true, /* propagatenil= */
         );
+        Ok(())
     }
 }

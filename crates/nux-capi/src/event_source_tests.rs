@@ -3,7 +3,7 @@ use nuxie_render_api::RecordingFactory;
 
 #[test]
 fn nested_event_source_survives_owned_c_projection() {
-    let bytes = include_bytes!("../../nuxie-runtime/tests/fixtures/purchase-scopes/screen.riv");
+    let bytes = include_bytes!("../../../fixtures/purchase-scopes/screen.riv");
     let mut factory = PersistentFactory::new(RecordingFactory::default());
     let retained = nuxie_runtime::RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
     let file = nuxie_runtime::File::import(bytes, retained, None, None, None).unwrap();
@@ -99,8 +99,7 @@ fn unscoped_events_do_not_invent_a_source_or_overwrite_output() {
 fn scalar_mutation_before_player_keeps_nested_event_on_bound_graph() {
     for host_write in [false, true] {
         unsafe {
-            let bytes =
-                include_bytes!("../../nuxie-runtime/tests/fixtures/purchase-scopes/screen.riv");
+            let bytes = include_bytes!("../../../fixtures/purchase-scopes/screen.riv");
             let mut file = ptr::null_mut();
             assert_eq!(
                 nux_file_import(

@@ -48,15 +48,11 @@ impl BrowserVideoProof {
         };
         let mut factory = PersistentFactory::new(backend);
         let embedded = source == "embedded" || source == "embedded-sync";
-        let bytes: Option<&[u8]> =
-            embedded.then_some(if source == "embedded-sync" {
-                &include_bytes!("../../../crates/nuxie-video-host/tests/fixtures/red-blue-sync.mp4")
-                    [..]
-            } else {
-                &include_bytes!(
-                    "../../../crates/nuxie-video-host/tests/fixtures/red-blue-audio.mp4"
-                )[..]
-            });
+        let bytes: Option<&[u8]> = embedded.then_some(if source == "embedded-sync" {
+            &include_bytes!("../../../fixtures/video/red-blue-sync.mp4")[..]
+        } else {
+            &include_bytes!("../../../fixtures/video/red-blue-audio.mp4")[..]
+        });
         let file = File::import(
             &super::video_scene_with_media(bytes),
             RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),

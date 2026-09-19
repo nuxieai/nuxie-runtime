@@ -20,8 +20,8 @@ cp "$repo_dir/tools/webgpu-renderer-replay/webgpu-host.js" "$video_output/"
 python3 "$repo_dir/tools/webgpu-renderer-replay/inject_webgpu_imports.py" "$video_output/video_qualification.js" ./webgpu-host.js
 cp "$proof_dir/webgpu.html" "$video_output/index.html"
 cp "$proof_dir/sync.html" "$video_output/sync.html"
-cp "$repo_dir/crates/nuxie-video-host/tests/fixtures/red-blue-sync.mp4" "$video_output/"
-cp "$repo_dir/crates/nuxie-video-host/tests/fixtures/red-blue-audio.mp4" "$video_output/"
+cp "$repo_dir/fixtures/video/red-blue-sync.mp4" "$video_output/"
+cp "$repo_dir/fixtures/video/red-blue-audio.mp4" "$video_output/"
 
 cp "$proof_dir/benchmark.html" "$video_output/benchmark.html"
-cp "$repo_dir/crates/nuxie-video-host/tests/fixtures/red-blue-720p.mp4" "$video_output/"
+cp "$repo_dir/fixtures/video/red-blue-720p.mp4" "$video_output/"

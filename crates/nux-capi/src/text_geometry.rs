@@ -185,10 +185,7 @@ mod tests {
     use nuxie::runtime::text::text_value_run::TextValueRun;
     #[allow(dead_code)]
     mod fixture {
-        include!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/support/semantic_text.rs"
-        ));
+        include!("../tests/support/semantic_text.rs");
     }
 
     fn name(value: &str) -> NuxStringView {

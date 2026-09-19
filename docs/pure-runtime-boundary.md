@@ -120,6 +120,14 @@ constructors, nested imports, and owning files are each enumerated, while
 aliases, globs, unknown features and symbols, and product lifecycle vocabulary
 remain rejected.
 
+Semantic snapshots, editable-text geometry, ViewModel observer tests, and video
+playback C adapters use exact baseline paths scoped to their owning source
+files. Nested use trees are checked leaf by leaf; importing a containing module
+does not grant access to its other symbols. The AVFoundation/Metal video example
+is a platform consumer, not a portable implementation: its exact file may own a
+layer while production video code may only name the existing `apple-metal`
+feature guard. Product lifecycle vocabulary remains forbidden in both.
+
 ## Current compatibility debt
 
 The repository is not yet physically split at every ownership boundary, but
@@ -180,7 +188,8 @@ The source check scans every Rust source in each package, including build
 scripts and custom-target module trees outside conventional folders. It
 rejects product paths and cross-package compiler source edges, including
 conditional `path` attributes and `include!` forms it cannot prove local. The
-runtime's exact generated-object include is the sole audited dynamic exception.
+runtime's generated-object include and the renderer's exact generated shader
+includes (including its Metal qualification test) are audited dynamic exceptions.
 Literal `include_bytes!` and `include_str!` data paths may use neutral
 repository fixtures but may not reach into another Cargo package's ownership.
 `include_bytes!(concat!(env!("OUT_DIR"), "/literal"))` may consume a

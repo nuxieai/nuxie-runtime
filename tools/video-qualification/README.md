@@ -247,7 +247,7 @@ transition, and pool removal to retain decoder ownership until successful retry.
 ### Sustained 720p Metal benchmark
 
 Build `cargo build -p video-qualification --bin video-qualification --profile release-apple`,
-then run `/usr/bin/time -l target/release-apple/video-qualification "$PWD/crates/nuxie-video-host/tests/fixtures/red-blue-720p.mp4"`.
+then run `/usr/bin/time -l target/release-apple/video-qualification "$PWD/fixtures/video/red-blue-720p.mp4"`.
 The optional CLI argument selects this fixture-specific benchmark; no argument
 continues to run the existing qualification suite. It loops the self-made
 720p/30 fixture for 32 seconds, uploads every delivered frame, draws into a

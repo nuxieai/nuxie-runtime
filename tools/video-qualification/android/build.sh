@@ -28,9 +28,9 @@ javac -source 17 -target 17 -classpath "$video_android_jar" -d "$video_output/cl
   "$proof_dir/ai/nuxie/videoqualification/MainActivity.java"
 jar cf "$video_output/classes.jar" -C "$video_output/classes" .
 "$video_buildtools/d8" --lib "$video_android_jar" --min-api 23 --output "$video_output/dex" "$video_output/classes.jar"
-cp "$repo_dir/crates/nuxie-video-host/tests/fixtures/red-blue-720p.mp4" "$video_output/assets/"
-cp "$repo_dir/crates/nuxie-video-host/tests/fixtures/red-blue-sync.mp4" "$video_output/assets/"
-cp "$repo_dir/crates/nuxie-video-host/tests/fixtures/red-blue-audio.mp4" "$video_output/assets/"
+cp "$repo_dir/fixtures/video/red-blue-720p.mp4" "$video_output/assets/"
+cp "$repo_dir/fixtures/video/red-blue-sync.mp4" "$video_output/assets/"
+cp "$repo_dir/fixtures/video/red-blue-audio.mp4" "$video_output/assets/"
 cp "$repo_dir/target/aarch64-linux-android/$video_profile_dir/libvideo_qualification.so" "$video_output/lib/arm64-v8a/"
 cp "$video_toolchain/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$video_output/lib/arm64-v8a/"
 "$video_toolchain/bin/llvm-strip" --strip-debug "$video_output/lib/arm64-v8a/libvideo_qualification.so"

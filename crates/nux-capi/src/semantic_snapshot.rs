@@ -492,10 +492,7 @@ pub unsafe extern "C" fn nux_semantic_snapshot_node(
 mod tests {
     use super::*;
     mod fixture {
-        include!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/support/semantic_text.rs"
-        ));
+        include!("../tests/support/semantic_text.rs");
     }
 
     #[test]

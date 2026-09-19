@@ -47,12 +47,9 @@ impl Proof {
         let mut factory = PersistentFactory::new(NativeVulkanFactory::new(64, 32).unwrap());
         let file = File::import(
             &super::video_scene_with_media(embedded.then_some(if sync {
-                &include_bytes!("../../../crates/nuxie-video-host/tests/fixtures/red-blue-sync.mp4")
-                    [..]
+                &include_bytes!("../../../fixtures/video/red-blue-sync.mp4")[..]
             } else {
-                &include_bytes!(
-                    "../../../crates/nuxie-video-host/tests/fixtures/red-blue-audio.mp4"
-                )[..]
+                &include_bytes!("../../../fixtures/video/red-blue-audio.mp4")[..]
             })),
             RuntimeFactoryHandle::from_factory(&mut factory).unwrap(),
             None,

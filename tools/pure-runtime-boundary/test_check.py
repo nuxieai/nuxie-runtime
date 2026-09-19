@@ -21,6 +21,63 @@ TOOL_SPEC.loader.exec_module(BOUNDARY_TOOL)
 
 
 class PureRuntimeBoundaryCliTest(unittest.TestCase):
+    def test_video_feature_does_not_allow_platform_types_in_portable_source(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        source = package / "src/video.rs"
+        source.write_text('#[cfg(feature = "apple-metal")] fn upload() {}\n')
+        self.assertEqual(self.run_check().returncode, 0)
+        source.write_text('fn upload(layer: CAMetalLayer) {}\n')
+        result = self.run_check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("product/Apple vocabulary", result.stderr)
+
+    def test_video_example_is_not_an_exemption_for_product_policy(self) -> None:
+        package = self.create_package("crates/nux-capi", "nux-capi", "")
+        source = package / "examples/video_apple.rs"
+        source.parent.mkdir()
+        source.write_text('fn main() { let layer: CAMetalLayer; }\n')
+        result = self.run_check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        source.write_text('fn main() { let session: AppleProductSession; }\n')
+        self.assertNotEqual(self.run_check().returncode, 0)
+
+    def test_shader_test_include_is_exact_and_owner_scoped(self) -> None:
+        package = self.create_package("crates/nuxie-renderer", "nuxie-renderer", "")
+        source = package / "tests/native_metal_resource_shaders.rs"
+        source.parent.mkdir()
+        accepted = 'include!(concat!(env!("OUT_DIR"), "/mechanical_shader_generated/runtime_shader_exports.rs"));\n'
+        source.write_text(accepted)
+        self.assertEqual(self.run_check().returncode, 0)
+        source.write_text(accepted.replace("runtime_shader_exports", "other"))
+        self.assertNotEqual(self.run_check().returncode, 0)
+        source.unlink()
+        (package / "src/lib.rs").write_text(accepted)
+        self.assertNotEqual(self.run_check().returncode, 0)
+
+    def test_semantic_facade_paths_are_scoped_and_fail_closed(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        owner = "crates/nux-capi/src/semantic_snapshot.rs"
+        accepted = "use nuxie::runtime::semantic::{semantic_node::{SemanticNode, SemanticNodeRef}, semantic_state::SemanticState};"
+        self.assertEqual(check(owner, accepted), [])
+        for source in (
+            accepted.replace("SemanticNodeRef", "UnknownNode"),
+            "use nuxie::runtime::semantic::semantic_node::*;",
+            "use nuxie::runtime::semantic::semantic_node::SemanticNode as Other;",
+            "let x = nuxie::runtime::product::Session::new();",
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(check(owner, source))
+        self.assertTrue(check("crates/nux-capi/src/other.rs", accepted))
+
+    def test_video_facade_paths_are_scoped_and_fail_closed(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        owner = "crates/nux-capi/src/video_sync.rs"
+        self.assertEqual(check(owner, "use nuxie::video::{playback::Command, sync::{MediaClock, SyncError, SynchronizationGroup}};"), [])
+        self.assertEqual(check(owner, "let x = nuxie::video::playback::PlaybackError::QueueFull;"), [])
+        self.assertTrue(check(owner, "use nuxie::video::playback::*;"))
+        self.assertTrue(check(owner, "let x = nuxie::video::playback::Unknown::new();"))
+        self.assertTrue(check("crates/nux-capi/src/other.rs", "use nuxie::video::sync::MediaClock;"))
+
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)

@@ -151,12 +151,46 @@ pub fn shaped_native_input(obscured: bool, text: &str) -> Vec<u8> {
 }
 
 fn repeated_fields(native_input: Option<bool>, transformed: bool, field_count: u64) -> Vec<u8> {
+    repeated_fields_with_owner(native_input, transformed, field_count, false)
+}
+
+pub fn repeated_owned_native_input_fields() -> Vec<u8> {
+    repeated_fields_with_owner(Some(false), false, 2, true)
+}
+
+fn repeated_fields_with_owner(
+    native_input: Option<bool>,
+    transformed: bool,
+    field_count: u64,
+    owned: bool,
+) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_641, 0] {
         push_var_uint(&mut bytes, value);
     }
+    if owned {
+        push_object(&mut bytes, "ViewModel", |bytes| {
+            push_string(bytes, "ViewModel", "name", "FieldOwner");
+        });
+        push_object(&mut bytes, "ViewModelPropertyString", |bytes| {
+            push_string(bytes, "ViewModelPropertyString", "name", "answer");
+        });
+    }
     push_object(&mut bytes, "Backboard", |_| {});
+    if owned {
+        push_object(&mut bytes, "ViewModelInstance", |bytes| {
+            push_uint(bytes, "ViewModelInstance", "viewModelId", 0);
+            push_string(bytes, "ViewModelInstance", "name", "default");
+        });
+        push_object(&mut bytes, "ViewModelInstanceString", |bytes| {
+            push_uint(bytes, "ViewModelInstanceString", "viewModelPropertyId", 0);
+            push_string(bytes, "ViewModelInstanceString", "propertyValue", "answer");
+        });
+    }
     push_object(&mut bytes, "Artboard", |bytes| {
+        if owned {
+            push_uint(bytes, "Artboard", "viewModelId", 0);
+        }
         push_f32(bytes, "Artboard", "width", 120.0);
         push_f32(bytes, "Artboard", "height", 60.0);
     });
@@ -348,14 +382,18 @@ fn nested_layout_artboard(native: bool) -> Vec<u8> {
         push_uint(bytes, "LayoutComponent", "styleId", 5);
     });
     push_object(&mut bytes, "LayoutComponentStyle", |_| {});
-    push_object(&mut bytes, if native { "TextInput" } else { "Text" }, |bytes| {
-        push_uint(bytes, "Component", "parentId", 4);
-        push_f32(bytes, "Node", "x", 7.0);
-        push_f32(bytes, "Node", "y", 11.0);
-        if native {
-            push_string(bytes, "Component", "name", "editable");
-        }
-    });
+    push_object(
+        &mut bytes,
+        if native { "TextInput" } else { "Text" },
+        |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_f32(bytes, "Node", "x", 7.0);
+            push_f32(bytes, "Node", "y", 11.0);
+            if native {
+                push_string(bytes, "Component", "name", "editable");
+            }
+        },
+    );
     if native {
         push_object(&mut bytes, "SemanticData", |bytes| {
             push_uint(bytes, "Component", "parentId", 4);

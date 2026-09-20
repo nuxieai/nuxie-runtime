@@ -2048,6 +2048,17 @@ NuxStatus nux_player_field_string_set(struct NuxPlayer *player,
                                       struct NuxStringView name,
                                       struct NuxStringView value);
 
+/**
+ * Resolve a presented field's owning ViewModel in the same identity space as
+ * player ViewModel snapshots. Missing ownership fails rather than using root.
+ * This read does not invalidate the presented capture.
+ */
+NuxStatus nux_player_field_view_model_instance(const struct NuxPlayer *player,
+                                               const struct NuxSemanticSnapshot *snapshot,
+                                               uint32_t node_id,
+                                               struct NuxStringView name,
+                                               uint64_t *out_instance_id);
+
 NuxStatus nux_player_free(struct NuxPlayer *player);
 
 /**

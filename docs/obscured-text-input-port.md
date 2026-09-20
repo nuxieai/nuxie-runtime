@@ -63,3 +63,10 @@ inputs include rotation, nonuniform scale, child offsets, unchanged sibling
 values, and stale-capture rejection. These fontless fixtures do not qualify
 baseline placement or actual native editing sessions. The root text-run
 geometry API remains unchanged for existing SDK consumers during qualification.
+
+The stronger four-field fixture (two separately owned inputs named `editable`
+inside one template, instantiated twice) initially failed with ambiguous lookup.
+Native TextInput lookup now checks the semantic owner's subtree, not just its
+artboard. All four field geometries resolve independently and editing the first
+preserves the other three. Existing CustomPropertyString lookup remains unchanged
+during qualification. All 36 C API unit tests pass after this correction.

@@ -34,13 +34,37 @@ fn editable_string_key(object: &nuxie::runtime::core::CoreHandle) -> Option<i32>
     }
 }
 
+fn is_within_field(
+    input: &nuxie::runtime::core::CoreHandle,
+    field: &nuxie::runtime::core::CoreHandle,
+) -> bool {
+    let mut current = Some(input.clone());
+    let mut visited = std::collections::HashSet::new();
+    while let Some(object) = current {
+        if object.identity_key() == field.identity_key() {
+            return true;
+        }
+        if !visited.insert(object.identity_key()) || visited.len() > MAX_NODES {
+            return false;
+        }
+        current = object
+            .with(|object| {
+                object
+                    .as_component()
+                    .and_then(|component| component.parent_handle())
+            })
+            .flatten();
+    }
+    false
+}
+
 /// Resolve an editable value in the field's own occurrence.
 /// The caller must first validate its presented snapshot and field node id.
 fn field_string_property(
     node: &SemanticNodeRef,
     name: &str,
 ) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
-    use nuxie::runtime::artboard::Artboard;
+    use nuxie::runtime::{artboard::Artboard, core::CoreType, text::text_input::TextInput};
     if name.is_empty() {
         return Err(NuxStatus::InvalidArgument);
     }
@@ -75,6 +99,8 @@ fn field_string_property(
                 .flatten()
                 .filter(|object| {
                     editable_string_key(object).is_some()
+                        && (!object.is_type_of(TextInput::TYPE_KEY)
+                            || is_within_field(object, &owner))
                         && object
                             .with(|object| {
                                 object
@@ -736,7 +762,7 @@ mod tests {
 
     #[test]
     fn field_string_edits_are_local_to_repeated_occurrences() {
-        check_repeated_field_edits(fixture::repeated_nonvisual_fields(), None, false);
+        check_repeated_field_edits(fixture::repeated_nonvisual_fields(), None, false, 1);
     }
 
     #[test]
@@ -746,16 +772,35 @@ mod tests {
                 fixture::repeated_native_input_fields(obscured),
                 Some(obscured),
                 false,
+                1,
             );
             check_repeated_field_edits(
                 fixture::transformed_native_input_fields(obscured),
                 Some(obscured),
                 true,
+                1,
             );
         }
     }
 
-    fn check_repeated_field_edits(bytes: Vec<u8>, native_input: Option<bool>, transformed: bool) {
+    #[test]
+    fn native_inputs_with_same_name_resolve_within_their_field_owner() {
+        for obscured in [false, true] {
+            check_repeated_field_edits(
+                fixture::repeated_pair_native_input_fields(obscured),
+                Some(obscured),
+                false,
+                2,
+            );
+        }
+    }
+
+    fn check_repeated_field_edits(
+        bytes: Vec<u8>,
+        native_input: Option<bool>,
+        transformed: bool,
+        fields_per_instance: usize,
+    ) {
         unsafe {
             let mut file = ptr::null_mut();
             assert_eq!(
@@ -807,15 +852,29 @@ mod tests {
                 .iter()
                 .filter(|node| node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD)
                 .collect::<Vec<_>>();
-            fields.sort_by(|a, b| a.min_x.total_cmp(&b.min_x));
-            assert_eq!(fields.len(), 2, "both nested fields are presented");
-            let ids = [fields[0].id, fields[1].id];
+            fields.sort_by(|a, b| {
+                a.min_x
+                    .total_cmp(&b.min_x)
+                    .then(a.min_y.total_cmp(&b.min_y))
+            });
+            assert_eq!(
+                fields.len(),
+                2 * fields_per_instance,
+                "all nested fields are presented"
+            );
+            let ids = fields.iter().map(|field| field.id).collect::<Vec<_>>();
             assert_ne!(ids[0], ids[1]);
             let view = |text: &str| NuxStringView {
                 data: text.as_ptr().cast(),
                 len: text.len(),
             };
-            for (id, x) in [(ids[0], 60.0), (ids[1], 240.0)] {
+            for (index, &id) in ids.iter().enumerate() {
+                let x = if index < fields_per_instance {
+                    60.0
+                } else {
+                    240.0
+                };
+                let y = 30.0 + (index % fields_per_instance) as f32 * 50.0;
                 let mut geometry = NuxTextInputGeometry {
                     struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
                     ..Default::default()
@@ -832,7 +891,7 @@ mod tests {
                     let expected = if transformed {
                         [0.0, 2.0, -3.0, 0.0, x - 33.0, 44.0]
                     } else {
-                        [1.0, 0.0, 0.0, 1.0, x, 30.0]
+                        [1.0, 0.0, 0.0, 1.0, x, y]
                     };
                     for (actual, expected) in geometry.world_transform.into_iter().zip(expected) {
                         assert!(
@@ -876,7 +935,8 @@ mod tests {
                 );
                 assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
                 snapshot = capture();
-                for (id, expected) in [(ids[0], edit), (ids[1], "editable value")] {
+                for (index, &id) in ids.iter().enumerate() {
+                    let expected = if index == 0 { edit } else { "editable value" };
                     let mut bytes = [0u8; 64];
                     let mut length = 0;
                     assert_eq!(

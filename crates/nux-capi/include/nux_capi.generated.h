@@ -1991,6 +1991,31 @@ NuxStatus nux_player_acknowledge_presented(struct NuxPlayer *player, uint64_t re
  */
 NuxStatus nux_player_enable_semantics(struct NuxPlayer *player);
 
+/**
+ * Copy a field's non-rendering UTF-8 value into caller-owned memory, without
+ * a terminator. A null buffer with zero capacity queries the required length.
+ * Insufficient capacity returns LIMIT_EXCEEDED without copying partial text.
+ * This explicit execution read is not included in semantic/diagnostic captures.
+ */
+NuxStatus nux_player_field_string_copy(const struct NuxPlayer *player,
+                                       const struct NuxSemanticSnapshot *snapshot,
+                                       uint32_t node_id,
+                                       struct NuxStringView name,
+                                       uint8_t *buffer,
+                                       size_t capacity,
+                                       size_t *out_length);
+
+/**
+ * Edit a presented field's non-rendering value through its native callback.
+ * A changed value invalidates the capture; step/present before another edit.
+ * Native bindings perform reverse conversion on their normal settlement path.
+ */
+NuxStatus nux_player_field_string_set(struct NuxPlayer *player,
+                                      const struct NuxSemanticSnapshot *snapshot,
+                                      uint32_t node_id,
+                                      struct NuxStringView name,
+                                      struct NuxStringView value);
+
 NuxStatus nux_player_free(struct NuxPlayer *player);
 
 /**

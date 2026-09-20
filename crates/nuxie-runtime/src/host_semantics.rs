@@ -575,6 +575,48 @@ impl ArtboardInstance {
         output
     }
 
+    /// Resolve an observed nested/list hit path into a weak, mount-fenced
+    /// occurrence. An empty path denotes the root, not a nested occurrence.
+    pub fn nested_artboard_occurrence(
+        &self,
+        path: &[RuntimeArtboardOccurrenceSegment],
+    ) -> Option<RuntimeNestedArtboardOccurrence> {
+        if path.is_empty() {
+            return None;
+        }
+        let mut parent = self.native_handle();
+        let mut mounts = Vec::with_capacity(path.len());
+        for segment in path {
+            let child = resolve_occurrence_artboard(&parent, std::slice::from_ref(segment))?;
+            let host_local_id = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id }
+                | RuntimeArtboardOccurrenceSegment::ComponentListItem { host_local_id, .. } => {
+                    host_local_id
+                }
+            };
+            let host = parent.with_artboard(|root| {
+                root.base.resolve_handle(u32::try_from(host_local_id).ok()?)
+            })?;
+            let list_item = match *segment {
+                RuntimeArtboardOccurrenceSegment::NestedArtboard { .. } => None,
+                RuntimeArtboardOccurrenceSegment::ComponentListItem { item_index, .. } => {
+                    let index = i32::try_from(item_index).ok()?;
+                    Some(host.with_downcast::<ArtboardComponentList, _>(|list| {
+                        list.list_item(index)
+                    })??)
+                }
+            };
+            mounts.push(RuntimeNestedArtboardMount {
+                parent: parent.downgrade(),
+                host,
+                list_item,
+                child: child.downgrade(),
+            });
+            parent = child;
+        }
+        Some(RuntimeNestedArtboardOccurrence::from_native(parent, mounts))
+    }
+
     pub fn scroll_constraint_occurrences(&self) -> Vec<RuntimeScrollConstraintSnapshot> {
         scroll_snapshots(&self.native_handle())
     }

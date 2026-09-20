@@ -1096,6 +1096,28 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
         .expect("nested occurrence has an exact source Artboard");
     let child_identity = occurrence_identity(&child.core_handle());
     let outgoing_child = child.downgrade();
+    let host_local_id = artboard
+        .native_handle()
+        .with_artboard(|root| {
+            root.base
+                .objects()
+                .iter()
+                .position(|object| object.as_ref() == Some(&nested_host))
+        })
+        .unwrap();
+    let path = [RuntimeArtboardOccurrenceSegment::NestedArtboard { host_local_id }];
+    let direct = artboard
+        .nested_artboard_occurrence(&path)
+        .expect("exact hit path resolves");
+    assert_eq!(direct.instance_identity(), child_identity);
+    assert!(artboard.nested_artboard_occurrence(&[]).is_none());
+    assert!(
+        artboard
+            .nested_artboard_occurrence(&[RuntimeArtboardOccurrenceSegment::NestedArtboard {
+                host_local_id: usize::MAX
+            }])
+            .is_none()
+    );
 
     let mut occurrences = artboard.nested_artboard_occurrences_named(&source_name);
     let occurrence = occurrences
@@ -1326,6 +1348,8 @@ fn component_list_occurrence_identity_fences_input_writes() {
         item_index,
         occurrence_identity: occurrence_identity.wrapping_add(1),
     }];
+    assert!(artboard.nested_artboard_occurrence(&occurrence).is_some());
+    assert!(artboard.nested_artboard_occurrence(&stale).is_none());
     assert_eq!(
         artboard.set_occurrence_state_machine_bool(&stale, machine_index, input_index, initial,),
         None

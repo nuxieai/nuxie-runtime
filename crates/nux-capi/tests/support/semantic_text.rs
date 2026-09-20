@@ -288,6 +288,31 @@ fn text_artboard_with_transform(compound: bool, transform: Option<[f32; 7]>) -> 
 }
 
 pub fn nested_layout_text_artboard() -> Vec<u8> {
+    nested_layout_artboard(false)
+}
+
+pub fn nested_layout_native_input_artboard() -> Vec<u8> {
+    nested_layout_artboard(true)
+}
+
+pub fn nested_layout_native_input_occurrence() -> Vec<u8> {
+    let mut bytes = nested_layout_artboard(true);
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 1000.0);
+        push_f32(bytes, "Artboard", "height", 1000.0);
+    });
+    push_object(&mut bytes, "NestedArtboard", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+        push_uint(bytes, "NestedArtboard", "artboardId", 0);
+        push_f32(bytes, "Node", "x", 200.0);
+        push_f32(bytes, "Node", "y", 150.0);
+        push_f32(bytes, "Node", "scaleX", 0.5);
+        push_f32(bytes, "Node", "scaleY", 0.5);
+    });
+    bytes
+}
+
+fn nested_layout_artboard(native: bool) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_641, 0] {
         push_var_uint(&mut bytes, value);
@@ -323,11 +348,21 @@ pub fn nested_layout_text_artboard() -> Vec<u8> {
         push_uint(bytes, "LayoutComponent", "styleId", 5);
     });
     push_object(&mut bytes, "LayoutComponentStyle", |_| {});
-    push_object(&mut bytes, "Text", |bytes| {
+    push_object(&mut bytes, if native { "TextInput" } else { "Text" }, |bytes| {
         push_uint(bytes, "Component", "parentId", 4);
         push_f32(bytes, "Node", "x", 7.0);
         push_f32(bytes, "Node", "y", 11.0);
+        if native {
+            push_string(bytes, "Component", "name", "editable");
+        }
     });
+    if native {
+        push_object(&mut bytes, "SemanticData", |bytes| {
+            push_uint(bytes, "Component", "parentId", 4);
+            push_uint(bytes, "SemanticData", "role", 6);
+        });
+        return bytes;
+    }
     push_object(&mut bytes, "TextStyle", |bytes| {
         push_uint(bytes, "Component", "parentId", 6);
     });

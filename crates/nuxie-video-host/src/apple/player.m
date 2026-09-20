@@ -15,6 +15,7 @@
 @property AVPlayerItemVideoOutput *output;
 @property uint64_t generation;
 @property BOOL seeking;
+@property BOOL frameRequestedAfterSeek;
 @property BOOL opened;
 @property BOOL ended;
 @property BOOL playing;
@@ -192,7 +193,7 @@ void nux_video_apple_action(void *handle, int action, double value, uint64_t gen
             case 1: p.wantsPlay = NO; [p.player pause]; p.playing = NO; [p releaseAudio]; break;
             case 2: {
                 p.generation = generation;
-                p.seeking = YES; p.ended = NO;
+                p.seeking = YES; p.ended = NO; p.frameRequestedAfterSeek = NO;
                 if (p.pendingFrame) { CVPixelBufferRelease(p.pendingFrame); p.pendingFrame = NULL; }
                 __weak NuxVideoPlayer *weak = p;
                 [p.player seekToTime:CMTimeMakeWithSeconds(value, 60000)
@@ -202,6 +203,7 @@ void nux_video_apple_action(void *handle, int action, double value, uint64_t gen
                             NuxVideoPlayer *owner = weak;
                             if (owner && owner.generation == generation) {
                                 owner.seeking = NO;
+                                owner.frameRequestedAfterSeek = finished;
                                 if (!finished) owner.failed = YES;
                             }
                         });
@@ -241,10 +243,16 @@ int nux_video_apple_poll(void *handle, uint64_t *generation, double *time,
             p.playing = YES; return 2;
         }
         CMTime position = p.player.currentTime;
-        if (![p.output hasNewPixelBufferForItemTime:position]) return 0;
+        // A completed seek can select the same decoded image as the previous
+        // generation. AVPlayerItemVideoOutput then reports no *new* buffer, but
+        // copyPixelBufferForItemTime still returns the selected frame and its
+        // actual timestamp. Request it once for this seek owner, without keeping
+        // another cached surface or treating the requested time as decoded PTS.
+        if (!p.frameRequestedAfterSeek && ![p.output hasNewPixelBufferForItemTime:position]) return 0;
         CMTime actual;
         CVPixelBufferRef frame = [p.output copyPixelBufferForItemTime:position itemTimeForDisplay:&actual];
         if (!frame) return 0;
+        p.frameRequestedAfterSeek = NO;
         if (p.pendingFrame) CVPixelBufferRelease(p.pendingFrame);
         p.pendingFrame = frame; p.frameTime = CMTimeGetSeconds(actual);
         *width = (uint32_t)CVPixelBufferGetWidth(frame);

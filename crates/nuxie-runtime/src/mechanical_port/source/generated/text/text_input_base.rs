@@ -9,6 +9,7 @@ pub trait TextInputBaseCallbacks:
     fn text_changed(&mut self) {}
     fn selection_radius_changed(&mut self) {}
     fn multiline_changed(&mut self) {}
+    fn obscured_changed(&mut self) {}
 }
 
 pub struct TextInputBase {
@@ -16,6 +17,7 @@ pub struct TextInputBase {
     text: String,
     selection_radius: f32,
     multiline: bool,
+    obscured: bool,
 }
 
 impl Default for TextInputBase {
@@ -25,6 +27,7 @@ impl Default for TextInputBase {
             text: "".to_owned(),
             selection_radius: 5.0,
             multiline: true,
+            obscured: false,
         }
     }
 }
@@ -34,6 +37,7 @@ impl TextInputBase {
     pub const TEXT_PROPERTY_KEY: u16 = 817;
     pub const SELECTION_RADIUS_PROPERTY_KEY: u16 = 818;
     pub const MULTILINE_PROPERTY_KEY: u16 = 979;
+    pub const OBSCURED_PROPERTY_KEY: u16 = 1095;
 
     pub fn is_type_of(type_key: u16) -> bool {
         matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
@@ -107,10 +111,27 @@ impl TextInputBase {
         cloned.base.copy(self, callbacks);
         cloned
     }
+    pub fn obscured(&self) -> bool {
+        self.obscured
+    }
+    pub fn set_obscured(&mut self, value: bool, callbacks: &mut impl TextInputBaseCallbacks) {
+        if self.set_obscured_value(value) {
+            callbacks.obscured_changed();
+            TextInputBaseCallbacks::notify_property_changed(callbacks, Self::OBSCURED_PROPERTY_KEY);
+        }
+    }
+    pub(crate) fn set_obscured_value(&mut self, value: bool) -> bool {
+        if self.obscured == value {
+            return false;
+        }
+        self.obscured = value;
+        true
+    }
     pub fn copy(&mut self, object: &Self, callbacks: &mut impl TextInputBaseCallbacks) {
         self.text.clone_from(&object.text);
         self.selection_radius = object.selection_radius;
         self.multiline = object.multiline;
+        self.obscured = object.obscured;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -120,6 +141,10 @@ impl TextInputBase {
         callbacks: &mut impl TextInputBaseCallbacks,
     ) -> bool {
         match property_key {
+            Self::OBSCURED_PROPERTY_KEY => {
+                self.obscured = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
+                true
+            }
             Self::TEXT_PROPERTY_KEY => {
                 self.text = crate::mechanical_port::source::core::field_types::core_string_type::CoreStringType::deserialize(reader);
                 true

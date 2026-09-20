@@ -340,7 +340,7 @@ impl Focusable for FocusDataFocusable {
         self.owner.clone()
     }
 
-    fn selected_text(&self) -> String {
+    fn selected_text(&self) -> Option<String> {
         self.owner
             .as_ref()
             .and_then(|owner| owner.with_downcast::<FocusData, _>(FocusData::selected_text))
@@ -591,18 +591,18 @@ impl FocusData {
         false
     }
 
-    pub fn selected_text(&self) -> String {
+    pub fn selected_text(&self) -> Option<String> {
         self.component()
             .parent_handle()
             .and_then(|parent| {
                 parent.with(|parent| {
-                    parent
-                        .as_text_input()
-                        .map(|text_input| text_input.selected_text())
-                        .unwrap_or_default()
+                    parent.as_text_input().and_then(|text_input| {
+                        let text = text_input.selected_text();
+                        (text_input.base.obscured() || !text.is_empty()).then_some(text)
+                    })
                 })
             })
-            .unwrap_or_default()
+            .flatten()
     }
 
     pub fn text_input_occurrence(owner: &CoreHandle, text: &str) -> bool {

@@ -1080,8 +1080,7 @@ impl FocusManager {
         while let Some(current) = node {
             let focusable = current.borrow().focusable();
             if let Some(focusable) = focusable {
-                let text = focusable.borrow().selected_text();
-                if !text.is_empty() {
+                if let Some(text) = focusable.borrow().selected_text() {
                     return text;
                 }
             }
@@ -1128,8 +1127,8 @@ mod selected_text_tests {
         fn text_input(&mut self, _: &str) -> bool {
             false
         }
-        fn selected_text(&self) -> String {
-            self.0.to_owned()
+        fn selected_text(&self) -> Option<String> {
+            (!self.0.is_empty()).then(|| self.0.to_owned())
         }
         fn focused(&mut self) {}
         fn blurred(&mut self) {}
@@ -1152,6 +1151,32 @@ mod selected_text_tests {
         root.borrow_mut().clear_focusable();
         leaf.borrow_mut().clear_focusable();
         assert_eq!(manager.selected_text(), "");
+    }
+
+    #[test]
+    fn secure_selection_consumes_lookup_instead_of_revealing_ancestor() {
+        struct Secure;
+        impl Focusable for Secure {
+            fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+                false
+            }
+            fn text_input(&mut self, _: &str) -> bool {
+                false
+            }
+            fn selected_text(&self) -> Option<String> {
+                Some(String::new())
+            }
+            fn focused(&mut self) {}
+            fn blurred(&mut self) {}
+        }
+        let root = FocusNode::new(Some(Rc::new(RefCell::new(Selection("ancestor")))));
+        let secure = FocusNode::new(Some(Rc::new(RefCell::new(Secure))));
+        FocusNode::add_child(&root, secure.clone());
+        let mut manager = FocusManager::new();
+        manager.primary_focus = Some(secure.clone());
+        assert_eq!(manager.selected_text(), "");
+        secure.borrow_mut().clear_focusable();
+        assert_eq!(manager.selected_text(), "ancestor");
     }
 
     #[test]

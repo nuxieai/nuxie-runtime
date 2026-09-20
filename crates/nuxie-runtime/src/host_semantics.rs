@@ -20,7 +20,7 @@ use crate::{
         artboard_component_list::ArtboardComponentList,
         assets::image_asset::ImageAsset,
         constraints::scrolling::{scroll_constraint::ScrollConstraint, scroll_physics},
-        core::CoreHandle,
+        core::{CoreHandle, field_types::core_string_type::CoreStringType},
         drawable::{Drawable, RuntimeDrawableOccurrence},
         generated::{
             assets::drawable_asset_base::DrawableAssetBase,
@@ -201,6 +201,52 @@ impl RuntimeNestedArtboardOccurrence {
         // this same owner.
         native.set_size(width, height);
         width_changed || height_changed
+    }
+
+    /// Read a string from this exact, still-mounted occurrence.
+    pub fn string_property(&self, local_id: usize, key: u16) -> Option<String> {
+        if CoreRegistry::property_field_id(i32::from(key)) != CoreStringType::ID {
+            return None;
+        }
+        let object = self.object_handle(local_id)?;
+        let supported = object
+            .with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))
+            .unwrap_or(false);
+        if !supported {
+            return None;
+        }
+        CoreRegistry::get_string_handle(&object, i32::from(key))
+    }
+
+    /// Change a string through its generated callback without changing the
+    /// source Artboard or another mounted occurrence. Returns whether it changed.
+    pub fn set_string_property(
+        &mut self,
+        local_id: usize,
+        key: u16,
+        value: impl Into<String>,
+    ) -> bool {
+        if CoreRegistry::property_field_id(i32::from(key)) != CoreStringType::ID {
+            return false;
+        }
+        let Some(object) = self.object_handle(local_id) else {
+            return false;
+        };
+        let supported = object
+            .with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))
+            .unwrap_or(false);
+        if !supported {
+            return false;
+        }
+        let Some(before) = CoreRegistry::get_string_handle(&object, i32::from(key)) else {
+            return false;
+        };
+        let value = value.into();
+        if before == value || !CoreRegistry::set_string_handle(&object, i32::from(key), value) {
+            return false;
+        }
+        CoreRegistry::get_string_handle(&object, i32::from(key))
+            .is_some_and(|after| after != before)
     }
 
     pub fn set_double_property(&mut self, local_id: usize, key: u16, value: f32) -> bool {

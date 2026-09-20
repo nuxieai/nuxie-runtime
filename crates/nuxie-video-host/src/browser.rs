@@ -14,6 +14,8 @@ pub struct BrowserPlayer {
     canvas: HtmlCanvasElement,
     context: CanvasRenderingContext2d,
     generation: u64,
+    capture_generation: Rc<Cell<u64>>,
+    last_capture_pts: Rc<Cell<Option<f64>>>,
     opened: bool,
     disposed: bool,
     ended: bool,
@@ -26,6 +28,41 @@ pub struct BrowserPlayer {
     play_blocked: Rc<Cell<bool>>,
     play_attempt: Rc<Cell<u64>>,
 }
+fn capture_frame(
+    video: &HtmlVideoElement,
+    canvas: &HtmlCanvasElement,
+    context: &CanvasRenderingContext2d,
+    generation: u64,
+    pts: f64,
+    max_bytes: usize,
+) -> Result<Frame, JsValue> {
+    let (width, height) = (video.video_width(), video.video_height());
+    let bytes = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4));
+    if bytes.is_none_or(|n| n == 0 || n > max_bytes) {
+        return Err(JsValue::from_str("video frame exceeds budget"));
+    }
+    if canvas.width() != width {
+        canvas.set_width(width);
+    }
+    if canvas.height() != height {
+        canvas.set_height(height);
+    }
+    context.draw_image_with_html_video_element(video, 0.0, 0.0)?;
+    let rgba = context
+        .get_image_data(0.0, 0.0, width.into(), height.into())?
+        .data()
+        .0;
+    Ok(Frame {
+        generation,
+        pts,
+        width,
+        height,
+        rgba,
+    })
+}
+
 impl BrowserPlayer {
     pub fn open(source: &str, generation: u64, max_frame_bytes: usize) -> Result<Self, JsValue> {
         let document = web_sys::window()
@@ -48,6 +85,8 @@ impl BrowserPlayer {
             canvas,
             context,
             generation,
+            capture_generation: Rc::new(Cell::new(generation)),
+            last_capture_pts: Rc::new(Cell::new(None)),
             opened: false,
             disposed: false,
             ended: false,
@@ -88,7 +127,8 @@ impl BrowserPlayer {
         let video = self.video.clone();
         let canvas = self.canvas.clone();
         let context = self.context.clone();
-        let generation = self.generation;
+        let generation = self.capture_generation.clone();
+        let last_capture_pts = self.last_capture_pts.clone();
         let max_bytes = self.max_frame_bytes;
         let capture = self.capture.clone();
         let pending = self.capture_pending.clone();
@@ -106,33 +146,10 @@ impl BrowserPlayer {
                         .as_f64()
                         .filter(|n| n.is_finite() && *n >= 0.0)
                         .ok_or_else(|| JsValue::from_str("invalid video frame timestamp"))?;
-                    let (width, height) = (video.video_width(), video.video_height());
-                    let bytes = (width as usize)
-                        .checked_mul(height as usize)
-                        .and_then(|n| n.checked_mul(4));
-                    if bytes.is_none_or(|n| n == 0 || n > max_bytes) {
-                        return Err(JsValue::from_str("video frame exceeds budget"));
-                    }
-                    if canvas.width() != width {
-                        canvas.set_width(width);
-                    }
-                    if canvas.height() != height {
-                        canvas.set_height(height);
-                    }
-                    // Copy in the frame callback: currentTime is the media clock,
-                    // not the timestamp of pixels returned by drawImage.
-                    context.draw_image_with_html_video_element(&video, 0.0, 0.0)?;
-                    let rgba = context
-                        .get_image_data(0.0, 0.0, width.into(), height.into())?
-                        .data()
-                        .0;
-                    Ok(Frame {
-                        generation,
-                        pts,
-                        width,
-                        height,
-                        rgba,
-                    })
+                    let frame =
+                        capture_frame(&video, &canvas, &context, generation.get(), pts, max_bytes)?;
+                    last_capture_pts.set(Some(pts));
+                    Ok(frame)
                 })();
                 *capture.borrow_mut() = Some(frame);
             }) as Box<dyn FnMut(f64, JsValue)>);
@@ -206,7 +223,43 @@ impl BrowserPlayer {
                     .set(self.play_attempt.get().wrapping_add(1));
                 self.play_blocked.set(false);
                 self.generation = generation;
+                self.capture_generation.set(generation);
                 self.ended = false;
+                // A paused seek to the same media clock need not produce a new
+                // compositor frame. Preserve the first callback while opening;
+                // after presentation, recapture only its known pixel timestamp.
+                if self.video.paused()
+                    && !self.video.seeking()
+                    && (self.video.current_time() - seconds).abs() < f64::EPSILON
+                    && self
+                        .last_capture_pts
+                        .get()
+                        .is_none_or(|pts| (pts - seconds).abs() <= 0.05)
+                {
+                    if let Some(pts) = self
+                        .last_capture_pts
+                        .get()
+                        .filter(|pts| (pts - seconds).abs() <= 0.05)
+                    {
+                        if self.video.ready_state() >= 2 {
+                            self.cancel_capture();
+                            let frame = capture_frame(
+                                &self.video,
+                                &self.canvas,
+                                &self.context,
+                                generation,
+                                pts,
+                                self.max_frame_bytes,
+                            );
+                            *self.capture.borrow_mut() = Some(frame);
+                        }
+                    } else if let Some(Ok(frame)) = self.capture.borrow_mut().as_mut() {
+                        frame.generation = generation;
+                    }
+                    self.arm_capture()?;
+                    return Ok(());
+                }
+                self.last_capture_pts.set(None);
                 self.cancel_capture();
                 self.video.set_current_time(seconds);
                 self.arm_capture()?;

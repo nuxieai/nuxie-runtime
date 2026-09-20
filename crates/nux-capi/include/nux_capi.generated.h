@@ -1124,6 +1124,27 @@ typedef struct NuxViewModelChangeView {
 } NuxViewModelChangeView;
 
 /**
+ * Native TextInput geometry for an exact presented semantic occurrence.
+ * The transform maps input-local coordinates into the root artboard, including
+ * nested placement. Bounds describe shaped text, NOT the field container;
+ * use the semantic node's bounds for the field's interaction/container box.
+ * Contains no editable text, glyph identifiers, or native selection state.
+ */
+typedef struct NuxTextInputGeometry {
+  uint32_t struct_size;
+  uint64_t render_revision;
+  float world_transform[6];
+  float min_x;
+  float min_y;
+  float max_x;
+  float max_y;
+  uint32_t has_first_baseline;
+  float first_baseline;
+  uint32_t obscured;
+  uint32_t multiline;
+} NuxTextInputGeometry;
+
+/**
  * Copied geometry; never contains text, glyphs, or pointers into the scene.
  * Matrices use [a, b, c, d, tx, ty]: x' = a*x + c*y + tx.
  * `world_transform` maps the text's local layout box into artboard space.
@@ -2192,6 +2213,18 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t change_index,
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
+
+/**
+ * Read settled native TextInput geometry for the same presented field used by
+ * field_string_copy/set. Stale/foreign snapshots are rejected. Does not focus,
+ * advance, edit, or start a runtime selection session. Output changes only on
+ * success. CustomPropertyString endpoints have no native input geometry.
+ */
+NuxStatus nux_player_text_input_geometry(const struct NuxPlayer *player,
+                                         const struct NuxSemanticSnapshot *snapshot,
+                                         uint32_t node_id,
+                                         struct NuxStringView name,
+                                         struct NuxTextInputGeometry *out_geometry);
 
 /**
  * Read a root text run's settled geometry from the state named by `step`.

@@ -40,6 +40,130 @@ pub struct NuxTextRunGeometry {
 pub const NUX_TEXT_RUN_GEOMETRY_MIN_SIZE: usize =
     std::mem::offset_of!(NuxTextRunGeometry, first_baseline) + std::mem::size_of::<f32>();
 
+/// Native TextInput geometry for an exact presented semantic occurrence.
+/// The transform maps input-local coordinates into the root artboard, including
+/// nested placement. Bounds describe shaped text, NOT the field container;
+/// use the semantic node's bounds for the field's interaction/container box.
+/// Contains no editable text, glyph identifiers, or native selection state.
+#[repr(C)]
+#[derive(Clone, Copy, Default)]
+pub struct NuxTextInputGeometry {
+    pub struct_size: u32,
+    pub render_revision: u64,
+    pub world_transform: [f32; 6],
+    pub min_x: f32,
+    pub min_y: f32,
+    pub max_x: f32,
+    pub max_y: f32,
+    pub has_first_baseline: u32,
+    pub first_baseline: f32,
+    pub obscured: u32,
+    pub multiline: u32,
+}
+
+pub const NUX_TEXT_INPUT_GEOMETRY_MIN_SIZE: usize =
+    std::mem::offset_of!(NuxTextInputGeometry, multiline) + std::mem::size_of::<u32>();
+
+/// Read settled native TextInput geometry for the same presented field used by
+/// field_string_copy/set. Stale/foreign snapshots are rejected. Does not focus,
+/// advance, edit, or start a runtime selection session. Output changes only on
+/// success. CustomPropertyString endpoints have no native input geometry.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_text_input_geometry(
+    player: *const NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    name: NuxStringView,
+    out_geometry: *mut NuxTextInputGeometry,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || unsafe {
+        semantic_snapshot::with_presented_field_property(
+            player,
+            snapshot,
+            node_id,
+            name,
+            false,
+            |occurrence, input| {
+                use nuxie::runtime::{
+                    math::vec2d::Vec2D, semantic::semantic_provider::root_transform_point,
+                    text::text_input::TextInput,
+                };
+                let Some((mut value, world, artboard)) =
+                    input.with_downcast_mut::<TextInput, _>(|input| {
+                        let world = *input.base.world_transform();
+                        let artboard = input.base.artboard_handle();
+                        let bounds = input.local_bounds();
+                        let baseline = input
+                            .raw_text_input()
+                            .shape()
+                            .ordered_lines()
+                            .first()
+                            .map(|line| line.y());
+                        (
+                            NuxTextInputGeometry {
+                                struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                                render_revision: occurrence.render_revision.get(),
+                                min_x: bounds.min_x,
+                                min_y: bounds.min_y,
+                                max_x: bounds.max_x,
+                                max_y: bounds.max_y,
+                                has_first_baseline: u32::from(baseline.is_some()),
+                                first_baseline: baseline.unwrap_or(0.0),
+                                obscured: u32::from(input.base.obscured()),
+                                multiline: u32::from(input.base.multiline()),
+                                ..Default::default()
+                            },
+                            world,
+                            artboard,
+                        )
+                    })
+                else {
+                    return NuxStatus::NotFound;
+                };
+                let Some(artboard) = artboard else {
+                    return NuxStatus::NotFound;
+                };
+                let points = [
+                    Vec2D::new(0.0, 0.0),
+                    Vec2D::new(1.0, 0.0),
+                    Vec2D::new(0.0, 1.0),
+                ]
+                .map(|point| root_transform_point(&artboard, world * point));
+                let [Some(origin), Some(x), Some(y)] = points else {
+                    return NuxStatus::NotFound;
+                };
+                value.world_transform = [
+                    x.x - origin.x,
+                    x.y - origin.y,
+                    y.x - origin.x,
+                    y.y - origin.y,
+                    origin.x,
+                    origin.y,
+                ];
+                if !value
+                    .world_transform
+                    .iter()
+                    .chain(
+                        [
+                            value.min_x,
+                            value.min_y,
+                            value.max_x,
+                            value.max_y,
+                            value.first_baseline,
+                        ]
+                        .iter(),
+                    )
+                    .all(|value| value.is_finite())
+                {
+                    return NuxStatus::RuntimeError;
+                }
+                write_caller_struct(out_geometry, &value, NUX_TEXT_INPUT_GEOMETRY_MIN_SIZE)
+                    .map_or_else(|status| status, |()| NuxStatus::Ok)
+            },
+        )
+    })
+}
+
 /// Read a root text run's settled geometry from the state named by `step`.
 /// The successful step must belong to this player's artboard occurrence and
 /// still name its current render revision. A mutation requires another step;

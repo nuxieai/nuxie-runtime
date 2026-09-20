@@ -49,3 +49,17 @@ inputs in two repeated nested occurrences. It covers edits, Unicode, clearing,
 preserving the other occurrence, and absence of editable values from semantic
 captures. This fixture has no font and makes no claim about glyph rendering,
 geometry, platform IME, or SDK integration.
+
+`nux_player_text_input_geometry` adds the approved host-adapter geometry access.
+It shares presented-field resolution with the value functions, returns native
+text bounds separately from the semantic field's container bounds, and exposes
+the complete input-to-root affine transform. A small `root_transform_point`
+accessor exposes the existing semantic drawing transform; it does not add new
+layout or nested-artboard traversal semantics. The geometry includes masking,
+multiline, and first-baseline metadata, never editable text or glyph ids.
+
+All 35 C API unit tests still pass after this addition. Repeated plain/secure
+inputs include rotation, nonuniform scale, child offsets, unchanged sibling
+values, and stale-capture rejection. These fontless fixtures do not qualify
+baseline placement or actual native editing sessions. The root text-run
+geometry API remains unchanged for existing SDK consumers during qualification.

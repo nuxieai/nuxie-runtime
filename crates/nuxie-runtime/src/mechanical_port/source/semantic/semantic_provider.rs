@@ -57,6 +57,13 @@ impl Bounds {
     }
 }
 
+/// Map occurrence-local geometry using the same transforms as semantic drawing.
+/// Exposes the existing mapping for native host overlays without duplicating
+/// nested-artboard, origin, or list-layout traversal in each platform adapter.
+pub fn root_transform_point(artboard: &CoreHandle, point: Vec2D) -> Option<Vec2D> {
+    artboard.with_downcast_mut::<Artboard, _>(|artboard| artboard.semantic_root_transform(point))
+}
+
 pub fn root_transform_aabb(artboard: &CoreHandle, bounds: Bounds) -> Bounds {
     let mut transformed = Bounds::for_expansion();
     let points = [

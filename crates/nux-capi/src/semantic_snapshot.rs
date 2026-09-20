@@ -187,22 +187,22 @@ pub(super) unsafe fn with_presented_field_property(
     use_property(&player.artboard, &property)
 }
 
-/// Resolve a presented field's owning ViewModel in the same identity space as
-/// player ViewModel snapshots. Missing ownership fails rather than using root.
-/// This read does not invalidate the presented capture.
+/// Acquire the presented field's existing ViewModel, without cloning its state.
+/// Missing ownership fails rather than using root. This read does not invalidate
+/// the capture. The caller must free the handle with nux_view_model_instance_free.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn nux_player_field_view_model_instance(
     player: *const NuxPlayer,
     snapshot: *const NuxSemanticSnapshot,
     node_id: u32,
     name: NuxStringView,
-    out_instance_id: *mut u64,
+    out_instance: *mut *mut NuxViewModelInstance,
 ) -> NuxStatus {
     ffi_guard(NuxStatus::RuntimeError, || {
-        if out_instance_id.is_null() {
+        if out_instance.is_null() {
             return NuxStatus::NullArgument;
         }
-        unsafe { *out_instance_id = 0 };
+        unsafe { *out_instance = ptr::null_mut() };
         unsafe {
             with_presented_field_property(
                 player,
@@ -234,11 +234,25 @@ pub unsafe extern "C" fn nux_player_field_view_model_instance(
                         return NuxStatus::NotFound;
                     };
                     let file = occurrence.instance.borrow().native_file();
-                    let Some(owner) = RuntimeOwnedViewModelInstance::from_native(file, owner)
+                    let Some(owner) =
+                        RuntimeOwnedViewModelInstance::from_native(file.clone(), owner)
                     else {
                         return NuxStatus::NotFound;
                     };
-                    *out_instance_id = owner.instance_identity();
+                    let player = &*player;
+                    let handle = Box::into_raw(Box::new(NuxViewModelInstance {
+                        schema_index: owner.view_model_index(),
+                        identity: owner.instance_identity(),
+                        instance: RuntimeOwnedViewModelHandle::new(owner),
+                        file,
+                        view_model_catalog: Arc::clone(&player.view_model_catalog),
+                        owner_thread: player.owner_thread,
+                        file_provenance: Arc::clone(&player.file_provenance),
+                        binding_provenance: Some(Arc::clone(&player.provenance)),
+                        provenance: Arc::new(()),
+                    }));
+                    register_handle(handle, HandleKind::ViewModel, player.owner_thread);
+                    *out_instance = handle;
                     NuxStatus::Ok
                 },
             )
@@ -904,6 +918,7 @@ mod tests {
                 NuxStatus::Ok
             );
             let mut expected_owners = Vec::new();
+            let mut expected_models = Vec::new();
             if owned {
                 // Static players do not auto-bind authored defaults. Bind each
                 // nested occurrence exactly as a host does before presentation.
@@ -920,6 +935,7 @@ mod tests {
                         RuntimeOwnedViewModelInstance::new(artboard.native_file(), 0).unwrap();
                     expected_owners.push(model.instance_identity());
                     child.bind_view_model_instance(Some(model.native_handle()));
+                    expected_models.push(model);
                 }
             }
             let mut player = ptr::null_mut();
@@ -975,14 +991,14 @@ mod tests {
             };
             let mut owners = Vec::new();
             for (index, &id) in ids.iter().enumerate() {
-                let mut owner_id = u64::MAX;
+                let mut owner_handle = ptr::null_mut();
                 assert_eq!(
                     nux_player_field_view_model_instance(
                         player,
                         snapshot,
                         id,
                         view("editable"),
-                        &mut owner_id
+                        &mut owner_handle
                     ),
                     if owned {
                         NuxStatus::Ok
@@ -991,10 +1007,16 @@ mod tests {
                     },
                     "only fields with an actual context have an owner"
                 );
+                let mut owner_id = 0;
                 if owned {
+                    assert_eq!(
+                        nux_view_model_instance_identity(owner_handle, &mut owner_id),
+                        NuxStatus::Ok
+                    );
                     assert_ne!(owner_id, 0);
+                    assert_eq!(nux_view_model_instance_free(owner_handle), NuxStatus::Ok);
                 } else {
-                    assert_eq!(owner_id, 0);
+                    assert!(owner_handle.is_null());
                 }
                 owners.push(owner_id);
                 let x = if index < fields_per_instance {
@@ -1048,6 +1070,51 @@ mod tests {
                     owners[0], owners[2],
                     "repeated occurrences have distinct owners"
                 );
+                let other_before = expected_models[1].string_value_by_property_name("answer");
+                let mut handle = ptr::null_mut();
+                assert_eq!(
+                    nux_player_field_view_model_instance(
+                        player,
+                        snapshot,
+                        ids[0],
+                        view("editable"),
+                        &mut handle
+                    ),
+                    NuxStatus::Ok
+                );
+                let value = b"changed in place";
+                let mutation = NuxViewModelMutation {
+                    kind: NUX_VIEW_MODEL_MUTATION_KIND_SET_STRING,
+                    instance: handle,
+                    path: view("answer"),
+                    bytes_value: NuxByteView {
+                        data: value.as_ptr(),
+                        len: value.len(),
+                    },
+                    ..NuxViewModelMutation::default()
+                };
+                let batch = NuxViewModelMutationBatch {
+                    mutations: &mutation,
+                    mutation_count: 1,
+                    ..NuxViewModelMutationBatch::default()
+                };
+                let mut result = ptr::null_mut();
+                assert_eq!(nux_view_model_mutate(&batch, &mut result), NuxStatus::Ok);
+                assert_eq!(nux_view_model_mutation_result_free(result), NuxStatus::Ok);
+                assert_eq!(nux_view_model_instance_free(handle), NuxStatus::Ok);
+                assert_eq!(
+                    expected_models[0]
+                        .string_value_by_property_name("answer")
+                        .as_deref(),
+                    Some(value.as_slice()),
+                    "the acquired handle edits the existing occurrence, not a copy"
+                );
+                assert_eq!(
+                    expected_models[1].string_value_by_property_name("answer"),
+                    other_before
+                );
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+                snapshot = capture();
             }
             for edit in ["first edit", "日本語 e\u{301}🙂", ""] {
                 assert_eq!(
@@ -1064,7 +1131,7 @@ mod tests {
                     struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
                     ..Default::default()
                 };
-                let mut stale_owner = u64::MAX;
+                let mut stale_owner = ptr::null_mut();
                 assert_eq!(
                     nux_player_field_view_model_instance(
                         player,
@@ -1075,7 +1142,7 @@ mod tests {
                     ),
                     NuxStatus::HandleMismatch
                 );
-                assert_eq!(stale_owner, 0);
+                assert!(stale_owner.is_null());
                 assert_eq!(
                     nux_player_text_input_geometry(
                         player,
@@ -1090,17 +1157,23 @@ mod tests {
                 snapshot = capture();
                 for (index, &id) in ids.iter().enumerate() {
                     if owned {
-                        let mut owner = 0;
+                        let mut handle = ptr::null_mut();
                         assert_eq!(
                             nux_player_field_view_model_instance(
                                 player,
                                 snapshot,
                                 id,
                                 view("editable"),
-                                &mut owner
+                                &mut handle
                             ),
                             NuxStatus::Ok
                         );
+                        let mut owner = 0;
+                        assert_eq!(
+                            nux_view_model_instance_identity(handle, &mut owner),
+                            NuxStatus::Ok
+                        );
+                        assert_eq!(nux_view_model_instance_free(handle), NuxStatus::Ok);
                         assert_eq!(
                             owner, owners[index],
                             "settling a value does not replace its owning instance"

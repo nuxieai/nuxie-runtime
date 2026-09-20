@@ -33,3 +33,19 @@ authoring's native endpoint probe also passes with the property present.
 
 This does not qualify native OS editing, converter propagation, published inputs,
 or SDK integration. Those require the separate authoring/host-adapter proof.
+
+## Host value adapter qualification
+
+The existing occurrence-scoped `nux_player_field_string_copy/set` adapter now
+accepts native TextInput's generated `text` property as well as the existing
+CustomPropertyString endpoint. Both use CoreRegistry's existing callback path;
+there is no new ABI function, converter evaluator, or runtime editing session.
+Explicit reads still return the editable value, including for secure fields;
+they are execution APIs, not diagnostic capture APIs.
+
+`cargo test -p nux-capi --lib` passes all 35 tests. The added native-input case
+was first observed failing with `NotFound`, then passes for plain and obscured
+inputs in two repeated nested occurrences. It covers edits, Unicode, clearing,
+preserving the other occurrence, and absence of editable values from semantic
+captures. This fixture has no font and makes no claim about glyph rendering,
+geometry, platform IME, or SDK integration.

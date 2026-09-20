@@ -81,6 +81,14 @@ pub fn with_string_properties(mut bytes: Vec<u8>, names: &[&str]) -> Vec<u8> {
 }
 
 pub fn repeated_nonvisual_fields() -> Vec<u8> {
+    repeated_fields(None)
+}
+
+pub fn repeated_native_input_fields(obscured: bool) -> Vec<u8> {
+    repeated_fields(Some(obscured))
+}
+
+fn repeated_fields(native_input: Option<bool>) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_641, 0] { push_var_uint(&mut bytes, value); }
     push_object(&mut bytes, "Backboard", |_| {});
@@ -101,7 +109,16 @@ pub fn repeated_nonvisual_fields() -> Vec<u8> {
         push_uint(bytes, "SemanticData", "role", 6);
         push_string(bytes, "SemanticData", "label", "Field");
     });
-    bytes = with_string_properties(bytes, &["editable"]);
+    if let Some(obscured) = native_input {
+        push_object(&mut bytes, "TextInput", |bytes| {
+            push_uint(bytes, "Component", "parentId", 1);
+            push_string(bytes, "Component", "name", "editable");
+            push_string(bytes, "TextInput", "text", "editable value");
+            push_uint(bytes, "TextInput", "obscured", u64::from(obscured));
+        });
+    } else {
+        bytes = with_string_properties(bytes, &["editable"]);
+    }
     push_object(&mut bytes, "Artboard", |bytes| {
         push_f32(bytes, "Artboard", "width", 400.0);
         push_f32(bytes, "Artboard", "height", 100.0);

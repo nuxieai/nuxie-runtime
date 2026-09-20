@@ -1127,7 +1127,8 @@ typedef struct NuxViewModelChangeView {
  * Native TextInput geometry for an exact presented semantic occurrence.
  * The transform maps input-local coordinates into the root artboard, including
  * nested placement. Bounds describe shaped text, NOT the field container;
- * use the semantic node's bounds for the field's interaction/container box.
+ * When present, layout_ancestor_* supplies the affine field layout box.
+ * Semantic bounds describe an axis-aligned interaction box, not local layout.
  * Contains no editable text, glyph identifiers, or native selection state.
  */
 typedef struct NuxTextInputGeometry {
@@ -1142,6 +1143,16 @@ typedef struct NuxTextInputGeometry {
   float first_baseline;
   uint32_t obscured;
   uint32_t multiline;
+  /**
+   * Nearest layout ancestor, in its own local coordinates. The transform
+   * includes nested occurrence placement; semantic bounds are only an AABB.
+   */
+  uint32_t has_layout_ancestor;
+  float layout_ancestor_transform[6];
+  float layout_ancestor_min_x;
+  float layout_ancestor_min_y;
+  float layout_ancestor_max_x;
+  float layout_ancestor_max_y;
 } NuxTextInputGeometry;
 
 /**

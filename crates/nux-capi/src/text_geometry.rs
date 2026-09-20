@@ -1,4 +1,4 @@
-//! Frame-qualified geometry for native editors over exact-name root text runs.
+//! Frame-qualified geometry for native editors over text runs and input occurrences.
 
 use super::*;
 use nuxie::runtime::{layout_component::LayoutComponent, text::text::Text};
@@ -43,7 +43,8 @@ pub const NUX_TEXT_RUN_GEOMETRY_MIN_SIZE: usize =
 /// Native TextInput geometry for an exact presented semantic occurrence.
 /// The transform maps input-local coordinates into the root artboard, including
 /// nested placement. Bounds describe shaped text, NOT the field container;
-/// use the semantic node's bounds for the field's interaction/container box.
+/// When present, layout_ancestor_* supplies the affine field layout box.
+/// Semantic bounds describe an axis-aligned interaction box, not local layout.
 /// Contains no editable text, glyph identifiers, or native selection state.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -59,10 +60,56 @@ pub struct NuxTextInputGeometry {
     pub first_baseline: f32,
     pub obscured: u32,
     pub multiline: u32,
+    /// Nearest layout ancestor, in its own local coordinates. The transform
+    /// includes nested occurrence placement; semantic bounds are only an AABB.
+    pub has_layout_ancestor: u32,
+    pub layout_ancestor_transform: [f32; 6],
+    pub layout_ancestor_min_x: f32,
+    pub layout_ancestor_min_y: f32,
+    pub layout_ancestor_max_x: f32,
+    pub layout_ancestor_max_y: f32,
 }
 
 pub const NUX_TEXT_INPUT_GEOMETRY_MIN_SIZE: usize =
-    std::mem::offset_of!(NuxTextInputGeometry, multiline) + std::mem::size_of::<u32>();
+    std::mem::offset_of!(NuxTextInputGeometry, layout_ancestor_max_y) + std::mem::size_of::<f32>();
+
+fn nearest_layout_geometry(
+    owner: &nuxie::runtime::core::CoreHandle,
+) -> Result<Option<([f32; 6], [f32; 4])>, NuxStatus> {
+    let mut visited = std::collections::HashSet::from([owner.identity_key()]);
+    let mut ancestor = owner
+        .with(|object| {
+            object
+                .as_component()
+                .and_then(|component| component.parent_handle())
+        })
+        .flatten();
+    while let Some(current) = ancestor {
+        if !visited.insert(current.identity_key()) {
+            return Err(NuxStatus::InvalidArgument);
+        }
+        if visited.len() > 16_384 {
+            return Err(NuxStatus::LimitExceeded);
+        }
+        if let Some(value) = current.with_downcast::<LayoutComponent, _>(|layout| {
+            let bounds = layout.local_bounds();
+            (
+                *layout.shape_world_transform().values(),
+                [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y],
+            )
+        }) {
+            return Ok(Some(value));
+        }
+        ancestor = current
+            .with(|object| {
+                object
+                    .as_component()
+                    .and_then(|component| component.parent_handle())
+            })
+            .flatten();
+    }
+    Ok(None)
+}
 
 /// Read settled native TextInput geometry for the same presented field used by
 /// field_string_copy/set. Stale/foreign snapshots are rejected. Does not focus,
@@ -140,9 +187,37 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                     origin.x,
                     origin.y,
                 ];
+                match nearest_layout_geometry(input) {
+                    Ok(Some((transform, bounds))) => {
+                        let [a, b, c, d, tx, ty] = transform;
+                        let points = [(tx, ty), (tx + a, ty + b), (tx + c, ty + d)]
+                            .map(|(x, y)| root_transform_point(&artboard, Vec2D::new(x, y)));
+                        let [Some(origin), Some(x), Some(y)] = points else {
+                            return NuxStatus::NotFound;
+                        };
+                        value.has_layout_ancestor = 1;
+                        value.layout_ancestor_transform = [
+                            x.x - origin.x,
+                            x.y - origin.y,
+                            y.x - origin.x,
+                            y.y - origin.y,
+                            origin.x,
+                            origin.y,
+                        ];
+                        [
+                            value.layout_ancestor_min_x,
+                            value.layout_ancestor_min_y,
+                            value.layout_ancestor_max_x,
+                            value.layout_ancestor_max_y,
+                        ] = bounds;
+                    }
+                    Ok(None) => {}
+                    Err(status) => return status,
+                }
                 if !value
                     .world_transform
                     .iter()
+                    .chain(&value.layout_ancestor_transform)
                     .chain(
                         [
                             value.min_x,
@@ -150,6 +225,10 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                             value.max_x,
                             value.max_y,
                             value.first_baseline,
+                            value.layout_ancestor_min_x,
+                            value.layout_ancestor_min_y,
+                            value.layout_ancestor_max_x,
+                            value.layout_ancestor_max_y,
                         ]
                         .iter(),
                     )
@@ -239,44 +318,19 @@ pub unsafe extern "C" fn nux_player_text_run_geometry(
         }) else {
             return NuxStatus::NotFound;
         };
-        let mut visited = std::collections::HashSet::from([owner.identity_key()]);
-        let mut ancestor = owner
-            .with(|object| {
-                object
-                    .as_component()
-                    .and_then(|component| component.parent_handle())
-            })
-            .flatten();
-        while let Some(current) = ancestor {
-            if !visited.insert(current.identity_key()) {
-                return NuxStatus::InvalidArgument;
-            }
-            if visited.len() > 16_384 {
-                return NuxStatus::LimitExceeded;
-            }
-            if let Some((transform, bounds)) =
-                current.with_downcast::<LayoutComponent, _>(|layout| {
-                    (
-                        *layout.shape_world_transform().values(),
-                        layout.local_bounds(),
-                    )
-                })
-            {
+        match nearest_layout_geometry(&owner) {
+            Ok(Some((transform, bounds))) => {
                 value.has_layout_ancestor = 1;
                 value.layout_ancestor_transform = transform;
-                value.layout_ancestor_min_x = bounds.min_x;
-                value.layout_ancestor_min_y = bounds.min_y;
-                value.layout_ancestor_max_x = bounds.max_x;
-                value.layout_ancestor_max_y = bounds.max_y;
-                break;
+                [
+                    value.layout_ancestor_min_x,
+                    value.layout_ancestor_min_y,
+                    value.layout_ancestor_max_x,
+                    value.layout_ancestor_max_y,
+                ] = bounds;
             }
-            ancestor = current
-                .with(|object| {
-                    object
-                        .as_component()
-                        .and_then(|component| component.parent_handle())
-                })
-                .flatten();
+            Ok(None) => {}
+            Err(status) => return status,
         }
         if !value
             .world_transform
@@ -316,6 +370,128 @@ mod tests {
         NuxStringView {
             data: value.as_ptr().cast(),
             len: value.len(),
+        }
+    }
+
+    #[test]
+    fn native_input_geometry_preserves_layout_box_and_affine_basis() {
+        for (bytes, artboard_index, expected_layout, expected_origin) in [
+            (
+                fixture::nested_layout_native_input_artboard(),
+                0,
+                [0.0, 2.0, -3.0, 0.0, 24.0, 24.0],
+                [-9.0, 38.0],
+            ),
+            (
+                fixture::nested_layout_native_input_occurrence(),
+                1,
+                [0.0, 1.0, -1.5, 0.0, 212.0, 162.0],
+                [195.5, 169.0],
+            ),
+        ] {
+            unsafe {
+                let mut file = ptr::null_mut();
+                assert_eq!(
+                    nux_file_import(
+                        bytes.as_ptr(),
+                        bytes.len(),
+                        &NuxRenderCallbacks::default(),
+                        &mut file
+                    ),
+                    NuxStatus::Ok
+                );
+                let mut instance = ptr::null_mut();
+                assert_eq!(
+                    nux_artboard_instance_new(file, artboard_index, &mut instance),
+                    NuxStatus::Ok
+                );
+                let mut player = ptr::null_mut();
+                assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+                assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+                let step = NuxPlayerStep {
+                    struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                    ..Default::default()
+                };
+                let mut result = ptr::null_mut();
+                assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                let mut scheduling = NuxPlayerSchedulingInfo {
+                    struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_step_result_scheduling(result, &mut scheduling),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    nux_player_acknowledge_presented(player, scheduling.render_revision),
+                    NuxStatus::Ok
+                );
+                let mut snapshot = ptr::null_mut();
+                assert_eq!(
+                    nux_player_semantic_snapshot(player, &mut snapshot),
+                    NuxStatus::Ok
+                );
+                let mut node = NuxSemanticNodeView {
+                    struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                    ..Default::default()
+                };
+                let mut info = NuxSemanticSnapshotInfo {
+                    struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_semantic_snapshot_info(snapshot, &mut info),
+                    NuxStatus::Ok
+                );
+                for index in 0..info.node_count {
+                    assert_eq!(
+                        nux_semantic_snapshot_node(snapshot, index, &mut node),
+                        NuxStatus::Ok
+                    );
+                    if node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD {
+                        break;
+                    }
+                }
+                assert_eq!(node.role, NUX_SEMANTIC_ROLE_TEXT_FIELD);
+                let mut geometry = NuxTextInputGeometry {
+                    struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_text_input_geometry(
+                        player,
+                        snapshot,
+                        node.id,
+                        name("editable"),
+                        &mut geometry
+                    ),
+                    NuxStatus::Ok
+                );
+                assert_eq!(geometry.has_layout_ancestor, 1);
+                assert_eq!(
+                    [
+                        geometry.layout_ancestor_min_x,
+                        geometry.layout_ancestor_min_y,
+                        geometry.layout_ancestor_max_x,
+                        geometry.layout_ancestor_max_y
+                    ],
+                    [0.0, 0.0, 100.0, 40.0]
+                );
+                for (actual, expected) in geometry
+                    .layout_ancestor_transform
+                    .into_iter()
+                    .zip(expected_layout)
+                {
+                    assert!((actual - expected).abs() < 0.0001, "{actual} != {expected}");
+                }
+                assert!((geometry.world_transform[4] - expected_origin[0]).abs() < 0.0001);
+                assert!((geometry.world_transform[5] - expected_origin[1]).abs() < 0.0001);
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+                assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                assert_eq!(nux_player_free(player), NuxStatus::Ok);
+                assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+                assert_eq!(nux_file_free(file), NuxStatus::Ok);
+            }
         }
     }
 

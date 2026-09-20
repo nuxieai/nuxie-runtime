@@ -1186,6 +1186,57 @@
       ]
     },
     {
+      "name": "NuxTextInputGeometry",
+      "size": 72,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "render_revision",
+          "offset": 8
+        },
+        {
+          "name": "world_transform",
+          "offset": 16
+        },
+        {
+          "name": "min_x",
+          "offset": 40
+        },
+        {
+          "name": "min_y",
+          "offset": 44
+        },
+        {
+          "name": "max_x",
+          "offset": 48
+        },
+        {
+          "name": "max_y",
+          "offset": 52
+        },
+        {
+          "name": "has_first_baseline",
+          "offset": 56
+        },
+        {
+          "name": "first_baseline",
+          "offset": 60
+        },
+        {
+          "name": "obscured",
+          "offset": 64
+        },
+        {
+          "name": "multiline",
+          "offset": 68
+        }
+      ]
+    },
+    {
       "name": "NuxTextRunGeometry",
       "size": 136,
       "alignment": 8,

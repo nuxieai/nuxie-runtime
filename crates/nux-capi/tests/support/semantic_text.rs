@@ -80,6 +80,43 @@ pub fn with_string_properties(mut bytes: Vec<u8>, names: &[&str]) -> Vec<u8> {
     bytes
 }
 
+pub fn repeated_nonvisual_fields() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9_641, 0] { push_var_uint(&mut bytes, value); }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 120.0);
+        push_f32(bytes, "Artboard", "height", 60.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 100.0);
+        push_f32(bytes, "ParametricPath", "height", 40.0);
+    });
+    push_object(&mut bytes, "SemanticData", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "SemanticData", "role", 6);
+        push_string(bytes, "SemanticData", "label", "Field");
+    });
+    bytes = with_string_properties(bytes, &["editable"]);
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 400.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    for x in [60.0, 240.0] {
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Component", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", 0);
+            push_f32(bytes, "Node", "x", x);
+            push_f32(bytes, "Node", "y", 30.0);
+        });
+    }
+    bytes
+}
+
 fn text_artboard(compound: bool) -> Vec<u8> {
     text_artboard_with_transform(compound, None)
 }

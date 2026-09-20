@@ -775,6 +775,8 @@ pub struct NuxPlayer {
     artboard: Rc<ArtboardOccurrence>,
     owner_thread: ThreadId,
     provenance: Arc<()>,
+    file_provenance: Arc<()>,
+    view_model_catalog: Arc<NuxViewModelCatalog>,
     selection_index: usize,
     selection_name: Box<[u8]>,
 }
@@ -3046,6 +3048,8 @@ fn publish_player(
             artboard: Rc::clone(&artboard.occurrence),
             owner_thread: artboard.owner_thread,
             provenance: Arc::clone(&artboard.provenance),
+            file_provenance: Arc::clone(&artboard.file_provenance),
+            view_model_catalog: Arc::clone(&artboard.view_model_catalog),
             selection_index,
             selection_name: selection_name.as_bytes().to_vec().into_boxed_slice(),
         }));

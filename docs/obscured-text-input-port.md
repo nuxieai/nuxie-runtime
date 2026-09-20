@@ -70,3 +70,11 @@ Native TextInput lookup now checks the semantic owner's subtree, not just its
 artboard. All four field geometries resolve independently and editing the first
 preserves the other three. Existing CustomPropertyString lookup remains unchanged
 during qualification. All 36 C API unit tests pass after this correction.
+
+Shaped geometry is now covered with the reproducible `roboto-input.ttf` fixture
+(provenance/license in `fixtures/fonts/README.md`). Plain, secure, multiline,
+and empty fields report a first baseline matching the font-table oracle at
+24 px, with the correct parent translation. The initial test failure was an
+incorrect fixture asset reference (asset ID versus file asset index), not a
+runtime defect. All 37 C API unit tests pass. This verifies the geometry returned
+to a host, not UIKit/Android/browser overlay alignment or native composition.

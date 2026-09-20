@@ -90,6 +90,7 @@ unsafe fn with_presented_field_property(
     snapshot: *const NuxSemanticSnapshot,
     node_id: u32,
     name: NuxStringView,
+    writable: bool,
     use_property: impl FnOnce(&ArtboardOccurrence, &nuxie::runtime::core::CoreHandle) -> NuxStatus,
 ) -> NuxStatus {
     if name.len > 4096 {
@@ -128,7 +129,12 @@ unsafe fn with_presented_field_property(
         }
         manager.node_by_id(node_id).ok_or(NuxStatus::NotFound)
     });
-    let property = match node.and_then(|node| field_string_property(&node, &name)) {
+    let property = match node.and_then(|node| {
+        if writable && node.borrow().state_flags & SemanticState::READ_ONLY.0 != 0 {
+            return Err(NuxStatus::NotFound);
+        }
+        field_string_property(&node, &name)
+    }) {
         Ok(property) => property,
         Err(status) => return status,
     };
@@ -157,7 +163,7 @@ pub unsafe extern "C" fn nux_player_field_string_copy(
             *out_length = 0;
         }
         unsafe {
-            with_presented_field_property(player, snapshot, node_id, name, |_, property| {
+            with_presented_field_property(player, snapshot, node_id, name, false, |_, property| {
                 use nuxie::runtime::generated::core_registry::CoreRegistry;
                 let Some(value) = CoreRegistry::get_string_handle(property, 246) else {
                     return NuxStatus::NotFound;
@@ -206,6 +212,7 @@ pub unsafe extern "C" fn nux_player_field_string_set(
                 snapshot,
                 node_id,
                 name,
+                true,
                 |occurrence, property| {
                     use nuxie::runtime::generated::core_registry::CoreRegistry;
                     let Some(before) = CoreRegistry::get_string_handle(property, 246) else {
@@ -1127,6 +1134,37 @@ mod tests {
                     .all(|node| !node.value.contains("秘密")),
                 "non-rendering values do not enter ordinary semantic captures"
             );
+            data.with_downcast_mut::<SemanticData, _>(|data| {
+                data.set_state_flags(SemanticState::READ_ONLY.0)
+            });
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            snapshot = capture();
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    string_view("forbidden")
+                ),
+                NuxStatus::NotFound
+            );
+            assert_eq!(
+                nux_player_field_string_copy(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    copied.as_mut_ptr(),
+                    copied.len(),
+                    &mut length
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(&copied[..length], "秘密 🦊".as_bytes());
+            data.with_downcast_mut::<SemanticData, _>(|data| data.set_state_flags(0));
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            snapshot = capture();
             if compound {
                 let inner = artboard.with_artboard(|artboard| {
                     artboard

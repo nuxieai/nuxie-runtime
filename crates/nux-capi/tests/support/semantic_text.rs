@@ -74,58 +74,73 @@ pub fn with_string_properties(mut bytes: Vec<u8>, names: &[&str]) -> Vec<u8> {
         push_object(&mut bytes, "CustomPropertyString", |bytes| {
             push_uint(bytes, "Component", "parentId", 0);
             push_string(bytes, "Component", "name", name);
-            push_string(bytes, "CustomPropertyString", "propertyValue", "editable value");
+            push_string(
+                bytes,
+                "CustomPropertyString",
+                "propertyValue",
+                "editable value",
+            );
         });
     }
     bytes
 }
 
 pub fn repeated_nonvisual_fields() -> Vec<u8> {
-    repeated_fields(None, false)
+    repeated_fields(None, false, 1)
 }
 
 pub fn repeated_native_input_fields(obscured: bool) -> Vec<u8> {
-    repeated_fields(Some(obscured), false)
+    repeated_fields(Some(obscured), false, 1)
 }
 
 pub fn transformed_native_input_fields(obscured: bool) -> Vec<u8> {
-    repeated_fields(Some(obscured), true)
+    repeated_fields(Some(obscured), true, 1)
 }
 
-fn repeated_fields(native_input: Option<bool>, transformed: bool) -> Vec<u8> {
+pub fn repeated_pair_native_input_fields(obscured: bool) -> Vec<u8> {
+    repeated_fields(Some(obscured), false, 2)
+}
+
+fn repeated_fields(native_input: Option<bool>, transformed: bool, field_count: u64) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
-    for value in [7, 0, 9_641, 0] { push_var_uint(&mut bytes, value); }
+    for value in [7, 0, 9_641, 0] {
+        push_var_uint(&mut bytes, value);
+    }
     push_object(&mut bytes, "Backboard", |_| {});
     push_object(&mut bytes, "Artboard", |bytes| {
         push_f32(bytes, "Artboard", "width", 120.0);
         push_f32(bytes, "Artboard", "height", 60.0);
     });
-    push_object(&mut bytes, "Shape", |bytes| {
-        push_uint(bytes, "Component", "parentId", 0);
-    });
-    push_object(&mut bytes, "Rectangle", |bytes| {
-        push_uint(bytes, "Component", "parentId", 1);
-        push_f32(bytes, "ParametricPath", "width", 100.0);
-        push_f32(bytes, "ParametricPath", "height", 40.0);
-    });
-    push_object(&mut bytes, "SemanticData", |bytes| {
-        push_uint(bytes, "Component", "parentId", 1);
-        push_uint(bytes, "SemanticData", "role", 6);
-        push_string(bytes, "SemanticData", "label", "Field");
-    });
-    if let Some(obscured) = native_input {
-        push_object(&mut bytes, "TextInput", |bytes| {
-            push_uint(bytes, "Component", "parentId", 1);
-            push_string(bytes, "Component", "name", "editable");
-            if transformed {
-                push_f32(bytes, "Node", "x", 7.0);
-                push_f32(bytes, "Node", "y", 11.0);
-            }
-            push_string(bytes, "TextInput", "text", "editable value");
-            push_uint(bytes, "TextInput", "obscured", u64::from(obscured));
+    for field in 0..field_count {
+        let shape_id = 1 + field * 4;
+        push_object(&mut bytes, "Shape", |bytes| {
+            push_uint(bytes, "Component", "parentId", 0);
+            push_f32(bytes, "Node", "y", field as f32 * 50.0);
         });
-    } else {
-        bytes = with_string_properties(bytes, &["editable"]);
+        push_object(&mut bytes, "Rectangle", |bytes| {
+            push_uint(bytes, "Component", "parentId", shape_id);
+            push_f32(bytes, "ParametricPath", "width", 100.0);
+            push_f32(bytes, "ParametricPath", "height", 40.0);
+        });
+        push_object(&mut bytes, "SemanticData", |bytes| {
+            push_uint(bytes, "Component", "parentId", shape_id);
+            push_uint(bytes, "SemanticData", "role", 6);
+            push_string(bytes, "SemanticData", "label", "Field");
+        });
+        if let Some(obscured) = native_input {
+            push_object(&mut bytes, "TextInput", |bytes| {
+                push_uint(bytes, "Component", "parentId", shape_id);
+                push_string(bytes, "Component", "name", "editable");
+                if transformed {
+                    push_f32(bytes, "Node", "x", 7.0);
+                    push_f32(bytes, "Node", "y", 11.0);
+                }
+                push_string(bytes, "TextInput", "text", "editable value");
+                push_uint(bytes, "TextInput", "obscured", u64::from(obscured));
+            });
+        } else {
+            bytes = with_string_properties(bytes, &["editable"]);
+        }
     }
     push_object(&mut bytes, "Artboard", |bytes| {
         push_f32(bytes, "Artboard", "width", 400.0);

@@ -85,6 +85,149 @@ fn eligible_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHan
         .ok_or(NuxStatus::NotFound)
 }
 
+unsafe fn with_presented_field_property(
+    player: *const NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    name: NuxStringView,
+    use_property: impl FnOnce(&ArtboardOccurrence, &nuxie::runtime::core::CoreHandle) -> NuxStatus,
+) -> NuxStatus {
+    if name.len > 4096 {
+        return NuxStatus::LimitExceeded;
+    }
+    let name = match with_utf8_view(name, str::to_owned) {
+        Ok(name) => name,
+        Err(status) => return status,
+    };
+    let validity = unsafe { nux_player_validate_semantic_snapshot(player, snapshot) };
+    if validity != NuxStatus::Ok {
+        return validity;
+    }
+    let _player = enter_status_handle!(player, HandleKind::Player);
+    let _snapshot = enter_status_handle!(snapshot, HandleKind::SemanticSnapshot);
+    let player = unsafe { &*player };
+    let snapshot = unsafe { &*snapshot };
+    let _occurrence = match enter_occurrence(&player.artboard) {
+        Ok(guard) => guard,
+        Err(status) => return status,
+    };
+    if !snapshot
+        .nodes
+        .iter()
+        .any(|node| node.id == node_id && node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD)
+    {
+        return NuxStatus::NotFound;
+    }
+    let artboard = player.artboard.instance.borrow().native_handle();
+    let Some(manager) = artboard.with_artboard(|artboard| artboard.semantic_manager()) else {
+        return NuxStatus::NotFound;
+    };
+    let node = manager.with_semantic_manager(|manager| {
+        if manager.version() != snapshot.tree_version {
+            return Err(NuxStatus::HandleMismatch);
+        }
+        manager.node_by_id(node_id).ok_or(NuxStatus::NotFound)
+    });
+    let property = match node.and_then(|node| field_string_property(&node, &name)) {
+        Ok(property) => property,
+        Err(status) => return status,
+    };
+    use_property(&player.artboard, &property)
+}
+
+/// Copy a field's non-rendering UTF-8 value into caller-owned memory, without
+/// a terminator. A null buffer with zero capacity queries the required length.
+/// Insufficient capacity returns LIMIT_EXCEEDED without copying partial text.
+/// This explicit execution read is not included in semantic/diagnostic captures.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_field_string_copy(
+    player: *const NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    name: NuxStringView,
+    buffer: *mut u8,
+    capacity: usize,
+    out_length: *mut usize,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if out_length.is_null() || (buffer.is_null() && capacity != 0) {
+            return NuxStatus::NullArgument;
+        }
+        unsafe {
+            *out_length = 0;
+        }
+        unsafe {
+            with_presented_field_property(player, snapshot, node_id, name, |_, property| {
+                use nuxie::runtime::generated::core_registry::CoreRegistry;
+                let Some(value) = CoreRegistry::get_string_handle(property, 246) else {
+                    return NuxStatus::NotFound;
+                };
+                if value.len() > 1024 * 1024 {
+                    return NuxStatus::LimitExceeded;
+                }
+                *out_length = value.len();
+                if buffer.is_null() && capacity == 0 {
+                    return NuxStatus::Ok;
+                }
+                if capacity < value.len() {
+                    return NuxStatus::LimitExceeded;
+                }
+                if !value.is_empty() {
+                    ptr::copy_nonoverlapping(value.as_ptr(), buffer, value.len());
+                }
+                NuxStatus::Ok
+            })
+        }
+    })
+}
+
+/// Edit a presented field's non-rendering value through its native callback.
+/// A changed value invalidates the capture; step/present before another edit.
+/// Native bindings perform reverse conversion on their normal settlement path.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_field_string_set(
+    player: *mut NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    name: NuxStringView,
+    value: NuxStringView,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if value.len > 1024 * 1024 {
+            return NuxStatus::LimitExceeded;
+        }
+        let value = match with_utf8_view(value, str::to_owned) {
+            Ok(value) => value,
+            Err(status) => return status,
+        };
+        unsafe {
+            with_presented_field_property(
+                player,
+                snapshot,
+                node_id,
+                name,
+                |occurrence, property| {
+                    use nuxie::runtime::generated::core_registry::CoreRegistry;
+                    let Some(before) = CoreRegistry::get_string_handle(property, 246) else {
+                        return NuxStatus::NotFound;
+                    };
+                    if before == value {
+                        return NuxStatus::Ok;
+                    }
+                    if let Err(status) = occurrence.invalidate_render() {
+                        return status;
+                    }
+                    if CoreRegistry::set_string_handle(property, 246, value) {
+                        NuxStatus::Ok
+                    } else {
+                        NuxStatus::RuntimeError
+                    }
+                },
+            )
+        }
+    })
+}
+
 /// Immutable capture. Text views remain valid until this handle is freed.
 /// Like other runtime handles, all access is restricted to the creator thread.
 pub struct NuxSemanticSnapshot {
@@ -780,6 +923,106 @@ mod tests {
                 field_string_property(&field, &"x".repeat(4097)),
                 Err(NuxStatus::LimitExceeded)
             ));
+            let string_view = |text: &str| NuxStringView {
+                data: text.as_ptr().cast(),
+                len: text.len(),
+            };
+            let property_name = string_view("editable");
+            let mut length = 999;
+            assert_eq!(
+                nux_player_field_string_copy(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    ptr::null_mut(),
+                    0,
+                    &mut length
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(length, "editable value".len());
+            let mut short = [0xab; 2];
+            assert_eq!(
+                nux_player_field_string_copy(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    short.as_mut_ptr(),
+                    short.len(),
+                    &mut length
+                ),
+                NuxStatus::LimitExceeded
+            );
+            assert_eq!(short, [0xab; 2], "short reads cannot copy partial secrets");
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    id,
+                    string_view("absent"),
+                    string_view("rejected")
+                ),
+                NuxStatus::NotFound
+            );
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    string_view("editable value")
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_validate_semantic_snapshot(player, snapshot),
+                NuxStatus::Ok,
+                "no-op writes preserve the presented revision"
+            );
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    string_view("秘密 🦊")
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    string_view("stale")
+                ),
+                NuxStatus::HandleMismatch
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            snapshot = capture();
+            let mut copied = [0u8; 64];
+            assert_eq!(
+                nux_player_field_string_copy(
+                    player,
+                    snapshot,
+                    id,
+                    property_name,
+                    copied.as_mut_ptr(),
+                    copied.len(),
+                    &mut length
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(&copied[..length], "秘密 🦊".as_bytes());
+            assert!(
+                (&(*snapshot).nodes)
+                    .iter()
+                    .all(|node| !node.value.contains("秘密")),
+                "non-rendering values do not enter ordinary semantic captures"
+            );
             if compound {
                 let inner = artboard.with_artboard(|artboard| {
                     artboard

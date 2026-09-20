@@ -105,7 +105,7 @@ fn eligible_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHan
         .ok_or(NuxStatus::NotFound)
 }
 
-unsafe fn with_presented_field_property(
+pub(super) unsafe fn with_presented_field_property(
     player: *const NuxPlayer,
     snapshot: *const NuxSemanticSnapshot,
     node_id: u32,
@@ -736,17 +736,26 @@ mod tests {
 
     #[test]
     fn field_string_edits_are_local_to_repeated_occurrences() {
-        check_repeated_field_edits(fixture::repeated_nonvisual_fields());
+        check_repeated_field_edits(fixture::repeated_nonvisual_fields(), None, false);
     }
 
     #[test]
     fn native_input_edits_are_local_to_repeated_occurrences() {
         for obscured in [false, true] {
-            check_repeated_field_edits(fixture::repeated_native_input_fields(obscured));
+            check_repeated_field_edits(
+                fixture::repeated_native_input_fields(obscured),
+                Some(obscured),
+                false,
+            );
+            check_repeated_field_edits(
+                fixture::transformed_native_input_fields(obscured),
+                Some(obscured),
+                true,
+            );
         }
     }
 
-    fn check_repeated_field_edits(bytes: Vec<u8>) {
+    fn check_repeated_field_edits(bytes: Vec<u8>, native_input: Option<bool>, transformed: bool) {
         unsafe {
             let mut file = ptr::null_mut();
             assert_eq!(
@@ -806,6 +815,40 @@ mod tests {
                 data: text.as_ptr().cast(),
                 len: text.len(),
             };
+            for (id, x) in [(ids[0], 60.0), (ids[1], 240.0)] {
+                let mut geometry = NuxTextInputGeometry {
+                    struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                    ..Default::default()
+                };
+                let status = nux_player_text_input_geometry(
+                    player,
+                    snapshot,
+                    id,
+                    view("editable"),
+                    &mut geometry,
+                );
+                if let Some(obscured) = native_input {
+                    assert_eq!(status, NuxStatus::Ok);
+                    let expected = if transformed {
+                        [0.0, 2.0, -3.0, 0.0, x - 33.0, 44.0]
+                    } else {
+                        [1.0, 0.0, 0.0, 1.0, x, 30.0]
+                    };
+                    for (actual, expected) in geometry.world_transform.into_iter().zip(expected) {
+                        assert!(
+                            (actual - expected).abs() < 0.0001,
+                            "actual {actual}, expected {expected}"
+                        );
+                    }
+                    assert_eq!(geometry.obscured, u32::from(obscured));
+                    assert_eq!(
+                        geometry.has_first_baseline, 0,
+                        "fontless fixture has no shaped baseline"
+                    );
+                } else {
+                    assert_eq!(status, NuxStatus::NotFound);
+                }
+            }
             for edit in ["first edit", "日本語 e\u{301}🙂", ""] {
                 assert_eq!(
                     nux_player_field_string_set(
@@ -816,6 +859,20 @@ mod tests {
                         view(edit)
                     ),
                     NuxStatus::Ok
+                );
+                let mut stale_geometry = NuxTextInputGeometry {
+                    struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_text_input_geometry(
+                        player,
+                        snapshot,
+                        ids[0],
+                        view("editable"),
+                        &mut stale_geometry
+                    ),
+                    NuxStatus::HandleMismatch
                 );
                 assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
                 snapshot = capture();

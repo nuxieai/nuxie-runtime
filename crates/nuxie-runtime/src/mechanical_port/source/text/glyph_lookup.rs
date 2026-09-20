@@ -3,11 +3,26 @@ use crate::mechanical_port::source::text_engine::Paragraph;
 pub struct GlyphLookup {
     glyph_indices: Vec<u32>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_input_sentinel_without_glyphs_matches_upstream_unsigned_indices() {
+        let mut lookup = GlyphLookup::default();
+        lookup.compute(&[0x200b], &[]);
+        assert_eq!(lookup.get(0), u32::MAX);
+        assert_eq!(lookup.get(1), 0);
+        lookup.compute(&[], &[]);
+        assert_eq!(lookup.get(0), 0);
+    }
+}
 impl GlyphLookup {
     pub fn compute(&mut self, text: &[u32], shape: &[Paragraph]) {
         let count = text.len();
         self.glyph_indices.resize(count + 1, 0);
-        let mut glyph_index = 0;
+        let mut glyph_index = 0u32;
         let mut last_text_index = 0;
         for paragraph in shape {
             for run in &paragraph.runs {
@@ -23,12 +38,14 @@ impl GlyphLookup {
             }
         }
         for i in last_text_index as usize..count {
-            self.glyph_indices[i] = glyph_index - 1;
+            // C++ uint32_t arithmetic: a sentinel with no shaped glyph maps to
+            // UINT32_MAX, followed by the unreachable end glyph at zero.
+            self.glyph_indices[i] = glyph_index.wrapping_sub(1);
         }
         self.glyph_indices[count] = if count == 0 {
             0
         } else {
-            self.glyph_indices[count - 1] + 1
+            self.glyph_indices[count - 1].wrapping_add(1)
         };
     }
     pub fn count(&self, mut index: u32) -> u32 {

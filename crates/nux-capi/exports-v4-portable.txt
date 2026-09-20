@@ -30,6 +30,7 @@ nux_player_acknowledge_presented
 nux_player_enable_semantics
 nux_player_field_string_copy
 nux_player_field_string_set
+nux_player_field_view_model_instance
 nux_player_free
 nux_player_info
 nux_player_new_default

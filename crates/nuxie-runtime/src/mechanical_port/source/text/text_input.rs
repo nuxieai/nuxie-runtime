@@ -18,7 +18,7 @@ use crate::mechanical_port::source::{
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     renderer::Renderer,
     status_code::StatusCode,
-    text_engine::TextSizing,
+    text_engine::{TextAlign, TextSizing, VerticalTextAlign},
 };
 impl std::ops::Deref for TextInput {
     type Target = TextInputBase;
@@ -49,6 +49,7 @@ pub struct TextInput {
     scroll_x: f32,
     scroll_y: f32,
     layout_width: f32,
+    layout_height: f32,
     raw_text_input: RawTextInput,
 }
 
@@ -66,6 +67,7 @@ impl Default for TextInput {
             scroll_x: 0.0,
             scroll_y: 0.0,
             layout_width: f32::NAN,
+            layout_height: f32::NAN,
             raw_text_input: RawTextInput::default(),
         }
     }
@@ -99,6 +101,80 @@ impl TextInput {
     }
     pub fn mark_shape_dirty(&mut self) {
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+        self.base.mark_layout_node_dirty();
+    }
+    pub fn align_value_changed(&mut self) {
+        self.update_alignment();
+        self.mark_shape_dirty();
+    }
+    pub fn vertical_align_value_changed(&mut self) {
+        self.update_alignment();
+        self.mark_shape_dirty();
+    }
+    fn update_alignment(&mut self) -> bool {
+        let align = match self.base.align_value() {
+            0 => TextAlign::Left,
+            1 => TextAlign::Right,
+            2 => TextAlign::Center,
+            other => TextAlign::Unknown(other),
+        };
+        let vertical = match self.base.vertical_align_value() {
+            0 => VerticalTextAlign::Top,
+            1 => VerticalTextAlign::Bottom,
+            2 => VerticalTextAlign::Middle,
+            other => VerticalTextAlign::Unknown(other),
+        };
+        // Upstream 7098a7c8: align against the viewport content box, not the
+        // scrolling distance measured from the content origin to its far edge.
+        let viewport = self.scroll_constraint.as_ref().and_then(|scroll| {
+            scroll
+                .with(|scroll| {
+                    scroll
+                        .as_scroll_constraint()
+                        .and_then(ScrollConstraint::viewport_handle)
+                })
+                .flatten()
+        });
+        let (width, height) = viewport
+            .and_then(|viewport| {
+                viewport
+                    .with(|viewport| {
+                        viewport.as_layout_component().map(|viewport| {
+                            (
+                                viewport.layout_width()
+                                    - viewport.padding_left()
+                                    - viewport.padding_right(),
+                                viewport.layout_height()
+                                    - viewport.padding_top()
+                                    - viewport.padding_bottom(),
+                            )
+                        })
+                    })
+                    .flatten()
+            })
+            .unwrap_or((self.layout_width, self.layout_height));
+        let width = if width.is_nan() || width < 0.0 {
+            0.0
+        } else {
+            width
+        };
+        let height = if height.is_nan() || height < 0.0 {
+            0.0
+        } else {
+            height
+        };
+        if self.raw_text_input.align() == align
+            && self.raw_text_input.align_width() == width
+            && self.raw_text_input.vertical_align() == vertical
+            && self.raw_text_input.align_height() == height
+        {
+            return false;
+        }
+        self.raw_text_input.set_align(align);
+        self.raw_text_input.set_align_width(width);
+        self.raw_text_input.set_vertical_align(vertical);
+        self.raw_text_input.set_align_height(height);
+        true
     }
     pub fn local_bounds(&self) -> Aabb {
         self.raw_text_input.bounds()
@@ -157,6 +233,7 @@ impl TextInput {
                 })?
             });
         self.update_multiline(false);
+        self.update_alignment();
         if self.text_style.is_none() {
             StatusCode::MissingObject
         } else {
@@ -185,6 +262,7 @@ impl TextInput {
                 .expect("TextInput style");
             self.raw_text_input.set_font(font);
             self.raw_text_input.set_font_size(font_size);
+            self.update_alignment();
             let changed = self.raw_text_input.update(&factory);
             if changed & Flags::ShapeDirty as u8 != 0 {
                 self.world_bounds = self
@@ -283,6 +361,7 @@ impl TextInput {
         _direction: LayoutDirection,
     ) {
         self.layout_width = size.x;
+        self.layout_height = size.y;
         self.update_multiline(false);
     }
     pub fn text_changed(&mut self) {
@@ -682,6 +761,9 @@ impl TextInput {
         self.is_dragging
     }
     pub fn advance_component(&mut self, elapsed: f32, _flags: AdvanceFlags) -> bool {
+        if self.update_alignment() {
+            self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
+        }
         self.advance_drag(elapsed)
     }
     pub fn is_dragging(&self) -> bool {

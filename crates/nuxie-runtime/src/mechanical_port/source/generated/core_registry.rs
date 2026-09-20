@@ -3183,6 +3183,8 @@ pub enum CoreField {
     TextHeight,
     TextInputMultiline,
     TextInputObscured,
+    TextInputAlignValue,
+    TextInputVerticalAlignValue,
     TextInputSelectionRadius,
     TextInputText,
     TextModifierGroupModifierFlags,
@@ -7090,6 +7092,8 @@ impl CoreRegistry {
             279 => CoreField::TextStyleFontAssetId,
             289 => CoreField::TextStyleAxisTag,
             281 => CoreField::TextAlignValue,
+            222 => CoreField::TextInputAlignValue,
+            1094 => CoreField::TextInputVerticalAlignValue,
             284 => CoreField::TextSizingValue,
             287 => CoreField::TextOverflowValue,
             377 => CoreField::TextOriginValue,
@@ -7759,6 +7763,8 @@ impl CoreRegistry {
             279 => CoreField::TextStyleFontAssetId,
             289 => CoreField::TextStyleAxisTag,
             281 => CoreField::TextAlignValue,
+            222 => CoreField::TextInputAlignValue,
+            1094 => CoreField::TextInputVerticalAlignValue,
             284 => CoreField::TextSizingValue,
             287 => CoreField::TextOverflowValue,
             377 => CoreField::TextOriginValue,
@@ -49341,6 +49347,18 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
     }
     fn set_uint(&mut self, field: CoreField, value: u32) {
         match field {
+            CoreField::TextInputAlignValue => {
+                if self.base.set_align_value_value(value) {
+                    self.align_value_changed();
+                    crate::mechanical_port::source::core::CoreObject::core_mut(self).notify_property_changed(222);
+                }
+            }
+            CoreField::TextInputVerticalAlignValue => {
+                if self.base.set_vertical_align_value_value(value) {
+                    self.vertical_align_value_changed();
+                    crate::mechanical_port::source::core::CoreObject::core_mut(self).notify_property_changed(1094);
+                }
+            }
             CoreField::ComponentParentId => {
                 if self
                     .base
@@ -49579,6 +49597,8 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
     }
     fn get_uint(&mut self, field: CoreField) -> u32 {
         match field {
+            CoreField::TextInputAlignValue => self.base.align_value(),
+            CoreField::TextInputVerticalAlignValue => self.base.vertical_align_value(),
             CoreField::ComponentParentId => self
                 .base
                 .base
@@ -75116,7 +75136,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_input_base::TextInputBaseCallbacks
     for crate::mechanical_port::source::text::text_input::TextInput
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text_input::TextInput; multiline_changed, obscured_changed, selection_radius_changed, text_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text_input::TextInput; align_value_changed, vertical_align_value_changed, multiline_changed, obscured_changed, selection_radius_changed, text_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
     }

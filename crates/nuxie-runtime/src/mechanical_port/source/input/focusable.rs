@@ -311,8 +311,9 @@ pub trait Focusable {
         is_repeat: bool,
     ) -> bool;
     fn text_input(&mut self, text: &str) -> bool;
-    fn selected_text(&self) -> String {
-        String::new()
+    /// `Some("")` consumes lookup (secure input); `None` searches ancestors.
+    fn selected_text(&self) -> Option<String> {
+        None
     }
     /// Native occurrence used to release this wrapper before synchronous actions.
     fn gamepad_dispatch_owner(&self) -> Option<CoreHandle> {

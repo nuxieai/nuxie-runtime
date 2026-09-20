@@ -18,6 +18,7 @@ use crate::mechanical_port::source::text_engine::{
 };
 
 const ZERO_WIDTH_SPACE: Unichar = 8203;
+const OBSCURING_BULLET: Unichar = 0x2022;
 
 // src/text/raw_text_input.cpp::encodeCodePoints at ed92313a. Encode the
 // complete counted span, including any embedded zero inserted as a code point.
@@ -47,6 +48,7 @@ pub enum Flags {
     SelectionDirty = 1 << 1,
     SeparateSelectionText = 1 << 2,
     MeasureDirty = 1 << 3,
+    Obscured = 1 << 4,
 }
 
 impl BitOr for Flags {
@@ -129,6 +131,7 @@ pub struct RawTextInput {
     cursor_path: ShapePaintPath,
     selection_path: TextSelectionPath,
     text: Vec<Unichar>,
+    obscured_text: Vec<Unichar>,
     shape: FullyShapedText,
     measuring_shape: Option<Box<FullyShapedText>>,
     last_measure_max_width: f32,
@@ -178,6 +181,7 @@ impl RawTextInput {
             cursor_path: ShapePaintPath::default(),
             selection_path: TextSelectionPath::default(),
             text: vec![ZERO_WIDTH_SPACE],
+            obscured_text: Vec::new(),
             shape: FullyShapedText::default(),
             measuring_shape: None,
             last_measure_max_width: 0.0,
@@ -502,8 +506,14 @@ impl RawTextInput {
     fn ensure_shape(&mut self) {
         if self.unflag(Flags::ShapeDirty as u8) {
             self.text_run.unichar_count = self.text.len() as u32;
+            self.prepare_obscured_text();
+            let text = if self.obscured() {
+                &mut self.obscured_text
+            } else {
+                &mut self.text
+            };
             self.shape.shape(
-                &mut self.text,
+                text,
                 std::slice::from_mut(&mut self.text_run),
                 self.sizing,
                 self.max_width,
@@ -814,7 +824,11 @@ impl RawTextInput {
         if self.empty() || position.code_point_index() as usize >= self.text.len() - 1 {
             Delineator::Whitespace
         } else {
-            Self::classify(self.text[position.code_point_index() as usize])
+            Self::classify(if self.obscured() {
+                OBSCURING_BULLET
+            } else {
+                self.text[position.code_point_index() as usize]
+            })
         }
     }
 
@@ -1022,6 +1036,42 @@ impl RawTextInput {
         self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
     }
 
+    pub fn obscured(&self) -> bool {
+        self.flagged(Flags::Obscured as u8)
+    }
+
+    pub fn set_obscured(&mut self, value: bool) {
+        if value == self.obscured() {
+            return;
+        }
+        if value {
+            self.flag(Flags::Obscured as u8);
+        } else {
+            self.unflag(Flags::Obscured as u8);
+        }
+        let unresolved = |cursor: Cursor| {
+            Cursor::new(
+                CursorPosition::unresolved(cursor.start().code_point_index()),
+                CursorPosition::unresolved(cursor.end().code_point_index()),
+            )
+        };
+        self.cursor = unresolved(self.cursor);
+        for entry in &mut self.journal {
+            entry.cursor_from = unresolved(entry.cursor_from);
+            entry.cursor_to = unresolved(entry.cursor_to);
+        }
+        self.ideal_cursor_x = -1.0;
+        self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+    }
+
+    fn prepare_obscured_text(&mut self) {
+        if self.obscured() {
+            self.obscured_text.clear();
+            self.obscured_text.resize(self.text.len(), OBSCURING_BULLET);
+            *self.obscured_text.last_mut().expect("text sentinel") = ZERO_WIDTH_SPACE;
+        }
+    }
+
     pub fn measure(&mut self, max_width: f32, max_height: f32) -> Aabb {
         if self.text_run.font.is_none() {
             return Aabb::default();
@@ -1034,8 +1084,14 @@ impl RawTextInput {
         }
         if self.unflag(Flags::MeasureDirty as u8) || force {
             self.text_run.unichar_count = self.text.len() as u32;
+            self.prepare_obscured_text();
+            let text = if self.obscured() {
+                &mut self.obscured_text
+            } else {
+                &mut self.text
+            };
             self.measuring_shape.as_mut().unwrap().shape(
-                &mut self.text,
+                text,
                 std::slice::from_mut(&mut self.text_run),
                 self.sizing,
                 max_width,

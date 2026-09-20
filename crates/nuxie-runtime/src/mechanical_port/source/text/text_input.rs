@@ -129,6 +129,7 @@ impl TextInput {
                 self.raw_text_input.set_font(Some(font));
                 self.raw_text_input.set_font_size(font_size);
             }
+            self.raw_text_input.set_obscured(self.base.obscured());
             self.sync_displayed_text_from_source(false);
         }
         self.scroll_constraint = self
@@ -297,6 +298,11 @@ impl TextInput {
     }
     pub fn multiline_changed(&mut self) {
         self.update_multiline(true);
+    }
+    pub fn obscured_changed(&mut self) {
+        self.raw_text_input.set_obscured(self.base.obscured());
+        self.base.mark_layout_node_dirty();
+        self.mark_shape_dirty();
     }
     fn stripped_line_breaks(text: &str) -> String {
         let mut stripped = String::with_capacity(text.len());
@@ -479,7 +485,11 @@ impl TextInput {
         true
     }
     pub fn selected_text(&self) -> String {
-        self.raw_text_input.selected_text()
+        if self.base.obscured() {
+            String::new()
+        } else {
+            self.raw_text_input.selected_text()
+        }
     }
     pub fn gamepad_dispatch(&mut self, _invocation: &ListenerInvocation) -> bool {
         false

@@ -72,6 +72,94 @@ fn retained_factory() -> RuntimeFactoryHandle {
     RuntimeFactoryHandle::from_factory(&mut factory).expect("retained native factory")
 }
 
+// rive-runtime bec99be4: mask at shaping/measurement, never in the editable buffer.
+#[test]
+fn obscured_text_shapes_and_measures_bullets_without_replacing_source() {
+    let factory = retained_factory();
+    let font = load_font("assets/fonts/Inter_18pt-Regular.ttf");
+    let mut input = RawTextInput::new();
+    input.set_font(Some(font.clone()));
+    let mut bullets = RawTextInput::new();
+    bullets.set_font(Some(font));
+    for value in ["hunter2", "日本語", "a\u{301}🙂", "", "a b\nc"] {
+        input.set_text(value.into());
+        input.set_obscured(true);
+        bullets.set_text("•".repeat(value.chars().count()));
+        input.update(&factory);
+        bullets.update(&factory);
+        assert_eq!(input.text(), value);
+        assert_eq!(input.measure(300.0, 200.0), bullets.measure(300.0, 200.0));
+        assert_eq!(input.bounds(), bullets.bounds());
+        let glyphs = |input: &RawTextInput| {
+            input
+                .shape()
+                .paragraphs()
+                .iter()
+                .flat_map(|paragraph| {
+                    paragraph
+                        .runs
+                        .iter()
+                        .flat_map(|run| run.glyphs.iter().copied())
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            glyphs(&input),
+            glyphs(&bullets),
+            "rendered glyphs must be bullets, including newlines"
+        );
+        input.select_all();
+        assert_eq!(
+            input.selected_text(),
+            value,
+            "raw layer retains actual text"
+        );
+        input.set_obscured(false);
+        assert_eq!(input.text(), value);
+        assert_cursor(input.cursor(), 0, value.chars().count() as u32);
+    }
+}
+
+#[test]
+fn obscured_toggle_preserves_edit_history_and_invalidates_cursor_lines() {
+    let factory = retained_factory();
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.insert("ab\ncd");
+    input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(4)));
+    input.update(&factory);
+    assert_eq!(input.cursor().end().line_index(), 1);
+    input.insert("!");
+    input.update(&factory);
+    input.set_obscured(true);
+    assert_eq!(input.cursor().end().line_index(), u32::MAX);
+    input.update(&factory);
+    input.undo();
+    input.update(&factory);
+    assert_eq!(input.text(), "ab\ncd");
+    assert_eq!(input.cursor().end().line_index(), 0);
+    input.redo();
+    assert_eq!(input.text(), "ab\nc!d");
+    assert_eq!(input.cursor().end().line_index(), u32::MAX);
+    input.set_obscured(false);
+    assert_eq!(input.text(), "ab\nc!d");
+}
+
+#[test]
+fn obscured_word_navigation_does_not_disclose_internal_spaces() {
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.insert("ab cd");
+    input.set_obscured(true);
+    input.update(&retained_factory());
+    input.set_cursor(Cursor::collapsed(CursorPosition::new(0, 3)));
+    input.select_word();
+    assert_eq!(input.selected_text(), "ab cd");
+    input.set_cursor(Cursor::zero());
+    input.cursor_right(CursorBoundary::Word, false);
+    assert_eq!(input.cursor().end().code_point_index(), 5);
+}
+
 fn load_font(relative_path: &str) -> FontRef {
     let root = std::env::var_os("RIVE_RUNTIME_DIR")
         .unwrap_or_else(|| "/Users/levi/dev/oss/rive-runtime".into());

@@ -3182,6 +3182,7 @@ pub enum CoreField {
     TextFollowPathModifierStrength,
     TextHeight,
     TextInputMultiline,
+    TextInputObscured,
     TextInputSelectionRadius,
     TextInputText,
     TextModifierGroupModifierFlags,
@@ -7251,6 +7252,7 @@ impl CoreRegistry {
             779 => CoreField::TextFollowPathModifierRadial,
             782 => CoreField::TextFollowPathModifierOrient,
             979 => CoreField::TextInputMultiline,
+            1095 => CoreField::TextInputObscured,
             703 => CoreField::TextFitFromBaseline,
             914 => CoreField::ScriptAssetIsModule,
             _ => return,
@@ -7906,6 +7908,7 @@ impl CoreRegistry {
             779 => CoreField::TextFollowPathModifierRadial,
             782 => CoreField::TextFollowPathModifierOrient,
             979 => CoreField::TextInputMultiline,
+            1095 => CoreField::TextInputObscured,
             703 => CoreField::TextFitFromBaseline,
             914 => CoreField::ScriptAssetIsModule,
             _ => return false,
@@ -49417,6 +49420,13 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                     <crate::mechanical_port::source::text::text_input::TextInput as crate::mechanical_port::source::generated::text::text_input_base::TextInputBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::text::text_input_base::TextInputBase::MULTILINE_PROPERTY_KEY);
                 }
             }
+            CoreField::TextInputObscured => {
+                if self.base.set_obscured_value(value) {
+                    self.obscured_changed();
+                    crate::mechanical_port::source::core::CoreObject::core_mut(self)
+                        .notify_property_changed(1095);
+                }
+            }
             _ => {}
         }
     }
@@ -49618,6 +49628,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
     fn get_bool(&mut self, field: CoreField) -> bool {
         match field {
             CoreField::TextInputMultiline => self.base.multiline(),
+            CoreField::TextInputObscured => self.base.obscured(),
             _ => false,
         }
     }
@@ -75105,7 +75116,7 @@ impl crate::mechanical_port::source::generated::component_base::ComponentBaseCal
 impl crate::mechanical_port::source::generated::text::text_input_base::TextInputBaseCallbacks
     for crate::mechanical_port::source::text::text_input::TextInput
 {
-    forward_callback_methods!(crate::mechanical_port::source::text::text_input::TextInput; multiline_changed, selection_radius_changed, text_changed);
+    forward_callback_methods!(crate::mechanical_port::source::text::text_input::TextInput; multiline_changed, obscured_changed, selection_radius_changed, text_changed);
     fn notify_property_changed(&mut self, property_key: u16) {
         <crate::mechanical_port::source::drawable::Drawable as crate::mechanical_port::source::generated::drawable_base::DrawableBaseCallbacks>::notify_property_changed(&mut self.base.base, property_key)
     }

@@ -43,6 +43,27 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
     handle.with_downcast_mut(f).expect("live TextInput")
 }
 
+#[test]
+fn obscured_native_input_preserves_value_and_blocks_selection_export() {
+    let (_file, artboard, input) = input_fixture();
+    assert!(CoreRegistry::set_string_handle(
+        &input,
+        817,
+        "hunter2".into()
+    ));
+    artboard.advance_default(0.0);
+    with_input(&input, |input| input.raw_text_input().select_all());
+    assert_eq!(with_input(&input, |input| input.selected_text()), "hunter2");
+    assert!(CoreRegistry::set_bool_handle(&input, 1095, true));
+    assert_eq!(with_input(&input, |input| input.selected_text()), "");
+    with_input(&input, |input| {
+        assert_eq!(input.base.text(), "hunter2");
+        assert!(input.raw_text_input().obscured());
+    });
+    assert!(CoreRegistry::set_bool_handle(&input, 1095, false));
+    assert_eq!(with_input(&input, |input| input.selected_text()), "hunter2");
+}
+
 fn input_cursor(handle: &CoreHandle) -> Option<(u32, u32)> {
     handle.with_downcast_mut::<TextInput, _>(|input| {
         let cursor = input.raw_text_input().cursor();

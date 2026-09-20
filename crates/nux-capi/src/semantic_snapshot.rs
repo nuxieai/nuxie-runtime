@@ -702,6 +702,110 @@ mod tests {
     }
 
     #[test]
+    fn field_string_edits_are_local_to_repeated_occurrences() {
+        let bytes = fixture::repeated_nonvisual_fields();
+        unsafe {
+            let mut file = ptr::null_mut();
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            let mut instance = ptr::null_mut();
+            assert_eq!(
+                nux_artboard_instance_new(file, 1, &mut instance),
+                NuxStatus::Ok
+            );
+            let mut player = ptr::null_mut();
+            assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+            let capture = || {
+                let step = NuxPlayerStep {
+                    struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                    ..Default::default()
+                };
+                let mut result = ptr::null_mut();
+                assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                let mut info = NuxPlayerSchedulingInfo {
+                    struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                    ..Default::default()
+                };
+                assert_eq!(
+                    nux_player_step_result_scheduling(result, &mut info),
+                    NuxStatus::Ok
+                );
+                assert_eq!(
+                    nux_player_acknowledge_presented(player, info.render_revision),
+                    NuxStatus::Ok
+                );
+                assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                let mut snapshot = ptr::null_mut();
+                assert_eq!(
+                    nux_player_semantic_snapshot(player, &mut snapshot),
+                    NuxStatus::Ok
+                );
+                snapshot
+            };
+            let snapshot = capture();
+            let mut fields = (&(*snapshot).nodes)
+                .iter()
+                .filter(|node| node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD)
+                .collect::<Vec<_>>();
+            fields.sort_by(|a, b| a.min_x.total_cmp(&b.min_x));
+            assert_eq!(fields.len(), 2, "both nested fields are presented");
+            let ids = [fields[0].id, fields[1].id];
+            assert_ne!(ids[0], ids[1]);
+            let view = |text: &str| NuxStringView {
+                data: text.as_ptr().cast(),
+                len: text.len(),
+            };
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    ids[0],
+                    view("editable"),
+                    view("first edit")
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            let snapshot = capture();
+            for (id, expected) in [(ids[0], "first edit"), (ids[1], "editable value")] {
+                let mut bytes = [0u8; 64];
+                let mut length = 0;
+                assert_eq!(
+                    nux_player_field_string_copy(
+                        player,
+                        snapshot,
+                        id,
+                        view("editable"),
+                        bytes.as_mut_ptr(),
+                        bytes.len(),
+                        &mut length
+                    ),
+                    NuxStatus::Ok
+                );
+                assert_eq!(&bytes[..length], expected.as_bytes());
+            }
+            assert!(
+                (&(*snapshot).nodes)
+                    .iter()
+                    .all(|node| node.value.is_empty()),
+                "no editable text is painted or captured"
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
+        }
+    }
+
+    #[test]
     fn editable_text_world_transform_includes_compound_parent_pose() {
         // Expected matrices are independent affine arithmetic, not runtime
         // decomposition. Nonuniform scale followed by rotation must retain

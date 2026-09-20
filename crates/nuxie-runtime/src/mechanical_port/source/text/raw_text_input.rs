@@ -14,7 +14,7 @@ use crate::mechanical_port::source::text::text_selection_path::TextSelectionPath
 use crate::mechanical_port::source::text::utf::Utf;
 use crate::mechanical_port::source::text_engine::{
     FontRef, GlyphLine, OrderedLine, TextAlign, TextOrigin, TextOverflow, TextRun, TextSizing,
-    TextWrap, Unichar, is_white_space,
+    TextWrap, Unichar, VerticalTextAlign, is_white_space,
 };
 
 const ZERO_WIDTH_SPACE: Unichar = 8203;
@@ -142,6 +142,9 @@ pub struct RawTextInput {
     sizing: TextSizing,
     overflow: TextOverflow,
     align: TextAlign,
+    align_width: f32,
+    vertical_align: VerticalTextAlign,
+    align_height: f32,
     wrap: TextWrap,
     max_width: f32,
     max_height: f32,
@@ -192,6 +195,9 @@ impl RawTextInput {
             sizing: TextSizing::AutoWidth,
             overflow: TextOverflow::Visible,
             align: TextAlign::Left,
+            align_width: 0.0,
+            vertical_align: VerticalTextAlign::Top,
+            align_height: 0.0,
             wrap: TextWrap::Wrap,
             max_width: 0.0,
             max_height: 0.0,
@@ -269,6 +275,44 @@ impl RawTextInput {
 
     pub fn sizing(&self) -> TextSizing {
         self.sizing
+    }
+
+    pub fn align(&self) -> TextAlign {
+        self.align
+    }
+    pub fn align_width(&self) -> f32 {
+        self.align_width
+    }
+    pub fn vertical_align(&self) -> VerticalTextAlign {
+        self.vertical_align
+    }
+    pub fn align_height(&self) -> f32 {
+        self.align_height
+    }
+
+    pub fn set_align(&mut self, value: TextAlign) {
+        if self.align != value {
+            self.align = value;
+            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        }
+    }
+    pub fn set_align_width(&mut self, value: f32) {
+        if self.align_width != value {
+            self.align_width = value;
+            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        }
+    }
+    pub fn set_vertical_align(&mut self, value: VerticalTextAlign) {
+        if self.vertical_align != value {
+            self.vertical_align = value;
+            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        }
+    }
+    pub fn set_align_height(&mut self, value: f32) {
+        if self.align_height != value {
+            self.align_height = value;
+            self.flag(Flags::ShapeDirty | Flags::MeasureDirty | Flags::SelectionDirty);
+        }
     }
 
     pub fn set_sizing(&mut self, value: TextSizing) {
@@ -512,7 +556,7 @@ impl RawTextInput {
             } else {
                 &mut self.text
             };
-            self.shape.shape(
+            self.shape.shape_aligned(
                 text,
                 std::slice::from_mut(&mut self.text_run),
                 self.sizing,
@@ -523,6 +567,9 @@ impl RawTextInput {
                 self.origin,
                 self.overflow,
                 self.paragraph_spacing,
+                self.align_width,
+                self.vertical_align,
+                self.align_height,
             );
         }
     }
@@ -570,7 +617,7 @@ impl RawTextInput {
             self.clip_render_path = None;
         }
 
-        let mut y = 0.0;
+        let mut y = self.shape.vertical_offset();
         let paragraph_lines = self.shape.paragraph_lines();
         let ordered_lines = self.shape.ordered_lines();
         if self.origin == TextOrigin::Baseline
@@ -1090,7 +1137,7 @@ impl RawTextInput {
             } else {
                 &mut self.text
             };
-            self.measuring_shape.as_mut().unwrap().shape(
+            self.measuring_shape.as_mut().unwrap().shape_aligned(
                 text,
                 std::slice::from_mut(&mut self.text_run),
                 self.sizing,
@@ -1101,6 +1148,9 @@ impl RawTextInput {
                 self.origin,
                 self.overflow,
                 self.paragraph_spacing,
+                self.align_width,
+                self.vertical_align,
+                self.align_height,
             );
             self.last_measure_max_width = max_width;
             self.last_measure_max_height = max_height;

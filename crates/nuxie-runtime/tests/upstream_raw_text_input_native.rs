@@ -13,10 +13,57 @@ use nuxie_runtime::source::{
         cursor::{Cursor, CursorPosition},
         font_hb::HbFont,
         raw_text_input::{CursorBoundary, RawTextInput},
-        text_engine::{FontRef, TextDirection, TextSizing},
+        text_engine::{FontRef, TextAlign, TextDirection, TextSizing, VerticalTextAlign},
     },
 };
 use std::path::PathBuf;
+
+// Alignment authority: upstream 7098a7c8. Expectations use the natural font
+// metrics, then check the field-relative translation of bounds and caret.
+#[test]
+fn field_alignment_moves_bounds_and_caret_without_changing_intrinsic_size() {
+    let factory = retained_factory();
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(24.0);
+    input.insert("hello");
+    input.update(&factory);
+    let natural = input.bounds();
+    let caret = input.cursor_visual_position();
+    for (horizontal, factor_x) in [
+        (TextAlign::Left, 0.0),
+        (TextAlign::Center, 0.5),
+        (TextAlign::Right, 1.0),
+    ] {
+        for (vertical, factor_y) in [
+            (VerticalTextAlign::Top, 0.0),
+            (VerticalTextAlign::Middle, 0.5),
+            (VerticalTextAlign::Bottom, 1.0),
+        ] {
+            input.set_align(horizontal);
+            input.set_align_width(500.0);
+            input.set_vertical_align(vertical);
+            input.set_align_height(200.0);
+            input.update(&factory);
+            let bounds = input.bounds();
+            let position = input.cursor_visual_position();
+            let dx = (500.0 - natural.width()) * factor_x;
+            let dy = (200.0 - natural.height()) * factor_y;
+            assert_approx(bounds.min_x, natural.min_x + dx);
+            assert_approx(bounds.min_y, natural.min_y + dy);
+            assert_approx(bounds.width(), natural.width());
+            assert_approx(bounds.height(), natural.height());
+            assert_approx(position.x(), caret.x() + dx);
+            assert_approx(position.top(), caret.top() + dy);
+            assert_eq!(input.measure(500.0, 200.0), bounds);
+        }
+    }
+    input.set_align_width(1.0);
+    input.set_align_height(1.0);
+    input.update(&factory);
+    assert_approx(input.bounds().min_x, natural.min_x);
+    assert_approx(input.bounds().min_y, natural.min_y);
+}
 
 // Source-derived coverage for selectedText added by ed92313a; the upstream
 // commit did not add tests. Selection offsets are Unicode code-point indices.

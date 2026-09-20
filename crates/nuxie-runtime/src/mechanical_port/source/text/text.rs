@@ -768,6 +768,15 @@ impl Text {
         align: TextAlign,
         wrap: TextWrap,
     ) -> Vec<Vec<GlyphLine>> {
+        Self::break_lines_aligned(paragraphs, width, align, wrap, 0.0)
+    }
+    pub fn break_lines_aligned(
+        paragraphs: &[Paragraph],
+        width: f32,
+        align: TextAlign,
+        wrap: TextWrap,
+        min_align_width: f32,
+    ) -> Vec<Vec<GlyphLine>> {
         let auto_width = width == -1.0;
         let mut paragraph_width = width;
         let mut lines = Vec::with_capacity(paragraphs.len());
@@ -788,6 +797,7 @@ impl Text {
             }
             lines.push(paragraph_lines);
         }
+        paragraph_width = paragraph_width.max(min_align_width);
         for (paragraph_index, paragraph) in paragraphs.iter().enumerate() {
             GlyphLine::compute_line_spacing(
                 paragraph_index == 0,

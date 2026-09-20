@@ -11,7 +11,8 @@ use nuxie_runtime::{
     source::assets::font_asset::FontAsset,
     source::assets::image_asset::ImageAsset,
     source::generated::{
-        core_registry::CoreRegistry, layout_component_base::LayoutComponentBase,
+        component_base::ComponentBase, core_registry::CoreRegistry,
+        layout_component_base::LayoutComponentBase,
         shapes::paint::solid_color_base::SolidColorBase,
         text::text_value_run_base::TextValueRunBase,
         world_transform_component_base::WorldTransformComponentBase,
@@ -979,6 +980,90 @@ fn nested_occurrence_input_writes_target_the_retained_machine() {
 }
 
 #[test]
+fn nested_text_write_uses_generated_callbacks_without_editing_siblings() {
+    let bytes = decode_base64_fixture(PROJECTION_CORPUS_AUTHORED_RUNTIME_FIXTURE);
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).expect("retained factory");
+    let file = File::import(&bytes, retained, None, None, None).expect("fixture imports");
+    let artboard_index = file
+        .with_file(|file| {
+            (0..file.artboard_count())
+                .find(|&index| file.artboard_name_at(index) == "Projection corpus")
+        })
+        .expect("root artboard");
+    let mut first =
+        ArtboardInstance::from_native(file.clone(), artboard_index).expect("first root");
+    let mut second =
+        ArtboardInstance::from_native(file.clone(), artboard_index).expect("second root");
+    for root in [&mut first, &mut second] {
+        let source = file
+            .with_file(|file| file.artboard_at_source(artboard_index))
+            .unwrap();
+        let view_model = file
+            .with_file_mut(|file| file.create_default_view_model_instance_for_artboard(source))
+            .and_then(|native| RuntimeOwnedViewModelHandle::from_native(file.clone(), native))
+            .unwrap();
+        root.bind_owned_view_model_handle(view_model);
+        root.advance(0.0).unwrap();
+        root.advance(0.0).unwrap();
+    }
+    let sources = file.with_file(|file| {
+        (0..file.artboard_count())
+            .filter_map(|index| file.artboard_at_source(index))
+            .collect::<Vec<_>>()
+    });
+    let (mut occurrence, local_id, source_name) = sources
+        .iter()
+        .find_map(|source| {
+            let (name, local_id) = source.with_downcast::<Artboard, _>(|source| {
+                let local_id = source.objects().iter().position(|object| {
+                    object
+                        .as_ref()
+                        .is_some_and(|object| object.is_type_of(TextValueRunBase::TYPE_KEY))
+                });
+                (source.base.name().to_owned(), local_id)
+            })?;
+            let local_id = local_id?;
+            let occurrence = first
+                .nested_artboard_occurrences_named(&name)
+                .into_iter()
+                .next()?;
+            Some((occurrence, local_id, name))
+        })
+        .expect("fixture has a nested text occurrence");
+    let sibling = second
+        .nested_artboard_occurrences_named(&source_name)
+        .into_iter()
+        .next()
+        .unwrap();
+    let key = TextValueRunBase::TEXT_PROPERTY_KEY;
+    let original = occurrence.string_property(local_id, key).unwrap();
+    let replacement = "Occurrence edit — 月";
+    assert_ne!(original, replacement);
+    assert!(occurrence.set_string_property(local_id, key, replacement));
+    occurrence.update_components();
+    first.advance(0.0).unwrap();
+    assert_eq!(
+        occurrence.string_property(local_id, key).as_deref(),
+        Some(replacement)
+    );
+    assert!(
+        first
+            .semantic_text_with_bounds()
+            .iter()
+            .any(|text| text.value.contains(replacement)),
+        "the generated TextValueRun callback must invalidate the rendered text"
+    );
+    assert_eq!(sibling.string_property(local_id, key), Some(original));
+    assert!(
+        second
+            .semantic_text_with_bounds()
+            .iter()
+            .all(|text| !text.value.contains(replacement))
+    );
+}
+
+#[test]
 fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurrence() {
     let (_factory, mut artboard) = import_host_artboard("runtime_nested_inputs.riv");
     let second = ArtboardInstance::from_native(artboard.native_file(), 0)
@@ -1019,6 +1104,45 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
         .expect("named projection fences the observed child");
     assert!(!occurrence.set_double_property(0, u16::MAX, 1.0));
     assert!(!occurrence.set_color_property(0, u16::MAX, 0xff00_00ff));
+    assert_eq!(occurrence.string_property(0, u16::MAX), None);
+    assert!(!occurrence.set_string_property(0, u16::MAX, "invalid"));
+    assert_eq!(
+        occurrence.string_property(usize::MAX, ComponentBase::NAME_PROPERTY_KEY),
+        None
+    );
+    assert!(!occurrence.set_string_property(
+        usize::MAX,
+        ComponentBase::NAME_PROPERTY_KEY,
+        "invalid"
+    ));
+    assert_eq!(
+        occurrence.string_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        None
+    );
+    assert!(!occurrence.set_string_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY, "invalid"));
+    let name_key = ComponentBase::NAME_PROPERTY_KEY;
+    let original_name = occurrence.string_property(0, name_key).expect("child name");
+    let mut sibling = second
+        .nested_artboard_occurrences_named(&source_name)
+        .into_iter()
+        .next()
+        .expect("independent child");
+    assert_eq!(
+        sibling.string_property(0, name_key),
+        Some(original_name.clone())
+    );
+    assert!(occurrence.set_string_property(0, name_key, "Edited — 月"));
+    assert!(!occurrence.set_string_property(0, name_key, "Edited — 月"));
+    assert_eq!(
+        occurrence.string_property(0, name_key).as_deref(),
+        Some("Edited — 月")
+    );
+    assert_eq!(sibling.string_property(0, name_key), Some(original_name));
+    assert!(sibling.set_string_property(0, name_key, "Independent"));
+    assert_eq!(
+        occurrence.string_property(0, name_key).as_deref(),
+        Some("Edited — 月")
+    );
 
     let authored_width = CoreRegistry::get_double_handle(
         &child.core_handle(),
@@ -1097,6 +1221,8 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
     assert!(!occurrence.is_current());
     assert_eq!(occurrence.artboard_dimensions(), None);
     assert!(!occurrence.set_artboard_dimensions(width, height));
+    assert_eq!(occurrence.string_property(0, name_key), None);
+    assert!(!occurrence.set_string_property(0, name_key, "stale"));
 }
 
 #[test]
@@ -1280,6 +1406,11 @@ fn named_nested_projection_rejects_a_component_list_occurrence_recycled_for_anot
         "the old row-A fence must reject the same Artboard root rebound to row B"
     );
     assert!(!occurrence.set_double_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY, 1.0,));
+    assert_eq!(
+        occurrence.string_property(0, ComponentBase::NAME_PROPERTY_KEY),
+        None
+    );
+    assert!(!occurrence.set_string_property(0, ComponentBase::NAME_PROPERTY_KEY, "stale row"));
 }
 
 #[test]

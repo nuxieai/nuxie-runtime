@@ -101,6 +101,55 @@ pub fn repeated_pair_native_input_fields(obscured: bool) -> Vec<u8> {
     repeated_fields(Some(obscured), false, 2)
 }
 
+pub fn shaped_native_input(obscured: bool, text: &str) -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9_641, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "FontAsset", |bytes| {
+        push_uint(bytes, "FontAsset", "assetId", 7);
+    });
+    push_object(&mut bytes, "FileAssetContents", |bytes| {
+        let font = include_bytes!("../../../../fixtures/fonts/roboto-input.ttf");
+        push_var_uint(bytes, u64::from(property_key("FileAssetContents", "bytes")));
+        push_var_uint(bytes, font.len() as u64);
+        bytes.extend_from_slice(font);
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 240.0);
+        push_f32(bytes, "Artboard", "height", 100.0);
+    });
+    push_object(&mut bytes, "Shape", |bytes| {
+        push_uint(bytes, "Component", "parentId", 0);
+        push_f32(bytes, "Node", "x", 12.0);
+        push_f32(bytes, "Node", "y", 18.0);
+    });
+    push_object(&mut bytes, "Rectangle", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_f32(bytes, "ParametricPath", "width", 200.0);
+        push_f32(bytes, "ParametricPath", "height", 60.0);
+    });
+    push_object(&mut bytes, "SemanticData", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "SemanticData", "role", 6);
+    });
+    push_object(&mut bytes, "TextInput", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_string(bytes, "Component", "name", "editable");
+        push_string(bytes, "TextInput", "text", text);
+        push_uint(bytes, "TextInput", "multiline", 1);
+        push_uint(bytes, "TextInput", "obscured", u64::from(obscured));
+    });
+    push_object(&mut bytes, "TextStylePaint", |bytes| {
+        push_uint(bytes, "Component", "parentId", 4);
+        // Style references the file asset index, not FileAsset.assetId.
+        push_uint(bytes, "TextStyle", "fontAssetId", 0);
+        push_f32(bytes, "TextStyle", "fontSize", 24.0);
+    });
+    bytes
+}
+
 fn repeated_fields(native_input: Option<bool>, transformed: bool, field_count: u64) -> Vec<u8> {
     let mut bytes = b"RIVE".to_vec();
     for value in [7, 0, 9_641, 0] {

@@ -320,6 +320,97 @@ mod tests {
     }
 
     #[test]
+    fn native_input_geometry_reports_shaped_baseline_for_plain_secure_and_empty_text() {
+        for obscured in [false, true] {
+            for text in ["aaa", "a\na", ""] {
+                unsafe {
+                    let bytes = fixture::shaped_native_input(obscured, text);
+                    let mut file = ptr::null_mut();
+                    assert_eq!(
+                        nux_file_import(
+                            bytes.as_ptr(),
+                            bytes.len(),
+                            &NuxRenderCallbacks::default(),
+                            &mut file
+                        ),
+                        NuxStatus::Ok
+                    );
+                    let mut instance = ptr::null_mut();
+                    assert_eq!(
+                        nux_artboard_instance_new(file, 0, &mut instance),
+                        NuxStatus::Ok
+                    );
+                    let mut player = ptr::null_mut();
+                    assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+                    assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+                    let step = NuxPlayerStep {
+                        struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                        ..Default::default()
+                    };
+                    let mut result = ptr::null_mut();
+                    assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+                    let mut scheduling = NuxPlayerSchedulingInfo {
+                        struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                        ..Default::default()
+                    };
+                    assert_eq!(
+                        nux_player_step_result_scheduling(result, &mut scheduling),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(
+                        nux_player_acknowledge_presented(player, scheduling.render_revision),
+                        NuxStatus::Ok
+                    );
+                    let mut snapshot = ptr::null_mut();
+                    assert_eq!(
+                        nux_player_semantic_snapshot(player, &mut snapshot),
+                        NuxStatus::Ok
+                    );
+                    let mut node = NuxSemanticNodeView {
+                        struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                        ..Default::default()
+                    };
+                    assert_eq!(
+                        nux_semantic_snapshot_node(snapshot, 0, &mut node),
+                        NuxStatus::Ok
+                    );
+                    let mut geometry = NuxTextInputGeometry {
+                        struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                        ..Default::default()
+                    };
+                    assert_eq!(
+                        nux_player_text_input_geometry(
+                            player,
+                            snapshot,
+                            node.id,
+                            name("editable"),
+                            &mut geometry
+                        ),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(geometry.world_transform, [1.0, 0.0, 0.0, 1.0, 12.0, 18.0]);
+                    assert_eq!(geometry.has_first_baseline, 1);
+                    // Independent font-table oracle: Roboto hhea ascent 1900,
+                    // unitsPerEm 2048, authored font size 24, top origin.
+                    assert!(
+                        (geometry.first_baseline - 1900.0 * 24.0 / 2048.0).abs() < 0.001,
+                        "baseline {} for {text:?}, secure {obscured}",
+                        geometry.first_baseline
+                    );
+                    assert_eq!(geometry.obscured, u32::from(obscured));
+                    assert_eq!(geometry.multiline, 1);
+                    assert!(geometry.max_y > geometry.min_y);
+                    assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+                    assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+                    assert_eq!(nux_player_free(player), NuxStatus::Ok);
+                    assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+                    assert_eq!(nux_file_free(file), NuxStatus::Ok);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn nearest_layout_owner_preserves_its_affine_basis_and_separate_text_offset() {
         unsafe {
             let bytes = fixture::nested_layout_text_artboard();

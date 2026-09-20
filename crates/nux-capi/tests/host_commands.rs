@@ -1713,6 +1713,201 @@ fn authored_failure_rolls_back_commands_and_poisons_the_occurrence() {
 }
 
 #[test]
+fn field_string_reverse_converter_preserves_source_and_recovers() {
+    let mut payload = vec![0];
+    payload.extend(compile_luau(
+        br#"
+        return function()
+            return {
+                convert = function(self, input)
+                    local output = DataValue.string()
+                    output.value = tostring(input.value)
+                    return output
+                end,
+                reverseConvert = function(self, input)
+                    local value = tonumber(input.value)
+                    if value == nil or value < 0 then error("invalid number") end
+                    local output = DataValue.number()
+                    output.value = value
+                    return output
+                end,
+            }
+        end
+    "#,
+    ));
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 18_290, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "ViewModel", |b| {
+        push_string(b, "ViewModel", "name", "Root")
+    });
+    push_object(&mut bytes, "ViewModelPropertyNumber", |b| {
+        push_string(b, "ViewModelPropertyNumber", "name", "amount")
+    });
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "ViewModelInstance", |b| {
+        push_uint(b, "ViewModelInstance", "viewModelId", 0)
+    });
+    push_object(&mut bytes, "ViewModelInstanceNumber", |b| {
+        push_uint(b, "ViewModelInstanceNumber", "viewModelPropertyId", 0);
+        push_f32(b, "ViewModelInstanceNumber", "propertyValue", 90.0);
+    });
+    push_object(&mut bytes, "ScriptedDataConverter", |b| {
+        push_uint(b, "ScriptedDataConverter", "scriptAssetId", 0)
+    });
+    push_object(&mut bytes, "ScriptAsset", |b| {
+        push_uint(b, "ScriptAsset", "assetId", 0);
+        push_string(b, "ScriptAsset", "name", "EditableNumber");
+    });
+    push_object(&mut bytes, "FileAssetContents", |b| {
+        push_blob(b, "FileAssetContents", "bytes", &payload)
+    });
+    push_object(&mut bytes, "Artboard", |b| {
+        push_f32(b, "Artboard", "width", 200.0);
+        push_f32(b, "Artboard", "height", 80.0);
+        push_uint(b, "Artboard", "viewModelId", 0);
+    });
+    push_object(&mut bytes, "Shape", |b| {
+        push_uint(b, "Component", "parentId", 0)
+    });
+    push_object(&mut bytes, "Rectangle", |b| {
+        push_uint(b, "Component", "parentId", 1);
+        push_f32(b, "ParametricPath", "width", 100.0);
+        push_f32(b, "ParametricPath", "height", 40.0);
+    });
+    push_object(&mut bytes, "SemanticData", |b| {
+        push_uint(b, "Component", "parentId", 1);
+        push_uint(b, "SemanticData", "role", 6);
+    });
+    push_object(&mut bytes, "CustomPropertyString", |b| {
+        push_uint(b, "Component", "parentId", 0);
+        push_string(b, "Component", "name", "editable");
+    });
+    push_object(&mut bytes, "DataBindContext", |b| {
+        push_uint(b, "DataBindContext", "propertyKey", 246);
+        push_blob(b, "DataBindContext", "sourcePathIds", &[0, 0]);
+        push_uint(b, "DataBindContext", "converterId", 0);
+        push_uint(b, "DataBindContext", "flags", 10);
+    });
+    let file = trusted_import(
+        &bytes,
+        &NuxHostCommandImportConfig {
+            module_name: view("bridge"),
+            ..NuxHostCommandImportConfig::default()
+        },
+    );
+    unsafe {
+        let mut artboard = std::ptr::null_mut();
+        let mut model = std::ptr::null_mut();
+        let mut player = std::ptr::null_mut();
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_view_model_instance_new_authored(file, 0, 0, &mut model),
+            NuxStatus::Ok
+        );
+        assert_eq!(
+            nux_artboard_instance_bind_view_model(artboard, model),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+        assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+        let capture = || {
+            let result = step(player, &[]);
+            let mut info = NuxPlayerSchedulingInfo {
+                struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut info),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_acknowledge_presented(player, info.render_revision),
+                NuxStatus::Ok
+            );
+            nux_player_step_result_free(result);
+            let mut snapshot = std::ptr::null_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            snapshot
+        };
+        for (input, expected_source) in [("150", 150.0), ("invalid", 150.0), ("260", 260.0)] {
+            let snapshot = capture();
+            let mut node = NuxSemanticNodeView {
+                struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_semantic_snapshot_node(snapshot, 0, &mut node),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_field_string_set(
+                    player,
+                    snapshot,
+                    node.id,
+                    view("editable"),
+                    view(input)
+                ),
+                NuxStatus::Ok
+            );
+            nux_semantic_snapshot_free(snapshot);
+            let settled = capture();
+            let mut state = std::ptr::null_mut();
+            assert_eq!(
+                nux_view_model_instance_snapshot(model, &mut state),
+                NuxStatus::Ok
+            );
+            let mut value = NuxViewModelSnapshotValueView::default();
+            assert_eq!(
+                nux_view_model_snapshot_value(state, 0, &mut value),
+                NuxStatus::Ok
+            );
+            assert_eq!(value.number_value, expected_source, "edit {input}");
+            let mut draft = [0u8; 64];
+            let mut draft_len = 0;
+            assert_eq!(
+                nux_player_field_string_copy(
+                    player,
+                    settled,
+                    node.id,
+                    view("editable"),
+                    draft.as_mut_ptr(),
+                    draft.len(),
+                    &mut draft_len
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                &draft[..draft_len],
+                input.as_bytes(),
+                "the provisional edit survives conversion rejection"
+            );
+            assert_eq!(
+                nux_semantic_snapshot_node(settled, 0, &mut node),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                node.value.len, 0,
+                "the editable value is not semantic paint"
+            );
+            nux_view_model_snapshot_free(state);
+            nux_semantic_snapshot_free(settled);
+        }
+        nux_player_free(player);
+        nux_view_model_instance_free(model);
+        nux_artboard_instance_free(artboard);
+        nux_file_free(file);
+    }
+}
+
+#[test]
 fn protected_converter_failure_keeps_native_player_usable() {
     let mut payload = vec![0];
     payload.extend(compile_luau(

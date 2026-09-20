@@ -12,15 +12,35 @@ use nuxie::runtime::semantic::{
 const MAX_NODES: usize = 16_384;
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
 
-/// Resolve a generated, non-rendering value in the field's own occurrence.
+/// Property used by either supported editable endpoint, not by a display run.
+fn editable_string_key(object: &nuxie::runtime::core::CoreHandle) -> Option<i32> {
+    use nuxie::runtime::{
+        core::CoreType,
+        custom_property_string::CustomPropertyString,
+        generated::{
+            custom_property_string_base::CustomPropertyStringBase,
+            text::text_input_base::TextInputBase,
+        },
+        text::text_input::TextInput,
+    };
+    if object.is_type_of(TextInput::TYPE_KEY) {
+        Some(i32::from(TextInputBase::TEXT_PROPERTY_KEY))
+    } else if object.is_type_of(CustomPropertyString::TYPE_KEY) {
+        Some(i32::from(
+            CustomPropertyStringBase::PROPERTY_VALUE_PROPERTY_KEY,
+        ))
+    } else {
+        None
+    }
+}
+
+/// Resolve an editable value in the field's own occurrence.
 /// The caller must first validate its presented snapshot and field node id.
 fn field_string_property(
     node: &SemanticNodeRef,
     name: &str,
 ) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
-    use nuxie::runtime::{
-        artboard::Artboard, core::CoreType, custom_property_string::CustomPropertyString,
-    };
+    use nuxie::runtime::artboard::Artboard;
     if name.is_empty() {
         return Err(NuxStatus::InvalidArgument);
     }
@@ -54,7 +74,7 @@ fn field_string_property(
                 .iter()
                 .flatten()
                 .filter(|object| {
-                    object.is_type_of(CustomPropertyString::TYPE_KEY)
+                    editable_string_key(object).is_some()
                         && object
                             .with(|object| {
                                 object
@@ -141,7 +161,7 @@ unsafe fn with_presented_field_property(
     use_property(&player.artboard, &property)
 }
 
-/// Copy a field's non-rendering UTF-8 value into caller-owned memory, without
+/// Copy a field's editable UTF-8 value into caller-owned memory, without
 /// a terminator. A null buffer with zero capacity queries the required length.
 /// Insufficient capacity returns LIMIT_EXCEEDED without copying partial text.
 /// This explicit execution read is not included in semantic/diagnostic captures.
@@ -165,7 +185,10 @@ pub unsafe extern "C" fn nux_player_field_string_copy(
         unsafe {
             with_presented_field_property(player, snapshot, node_id, name, false, |_, property| {
                 use nuxie::runtime::generated::core_registry::CoreRegistry;
-                let Some(value) = CoreRegistry::get_string_handle(property, 246) else {
+                let Some(key) = editable_string_key(property) else {
+                    return NuxStatus::NotFound;
+                };
+                let Some(value) = CoreRegistry::get_string_handle(property, key) else {
                     return NuxStatus::NotFound;
                 };
                 if value.len() > 1024 * 1024 {
@@ -187,7 +210,7 @@ pub unsafe extern "C" fn nux_player_field_string_copy(
     })
 }
 
-/// Edit a presented field's non-rendering value through its native callback.
+/// Edit a presented field's value through its native callback.
 /// A changed value invalidates the capture; step/present before another edit.
 /// Native bindings perform reverse conversion on their normal settlement path.
 #[unsafe(no_mangle)]
@@ -215,7 +238,10 @@ pub unsafe extern "C" fn nux_player_field_string_set(
                 true,
                 |occurrence, property| {
                     use nuxie::runtime::generated::core_registry::CoreRegistry;
-                    let Some(before) = CoreRegistry::get_string_handle(property, 246) else {
+                    let Some(key) = editable_string_key(property) else {
+                        return NuxStatus::NotFound;
+                    };
+                    let Some(before) = CoreRegistry::get_string_handle(property, key) else {
                         return NuxStatus::NotFound;
                     };
                     if before == value {
@@ -224,7 +250,7 @@ pub unsafe extern "C" fn nux_player_field_string_set(
                     if let Err(status) = occurrence.invalidate_render() {
                         return status;
                     }
-                    if CoreRegistry::set_string_handle(property, 246, value) {
+                    if CoreRegistry::set_string_handle(property, key, value) {
                         NuxStatus::Ok
                     } else {
                         NuxStatus::RuntimeError
@@ -710,7 +736,17 @@ mod tests {
 
     #[test]
     fn field_string_edits_are_local_to_repeated_occurrences() {
-        let bytes = fixture::repeated_nonvisual_fields();
+        check_repeated_field_edits(fixture::repeated_nonvisual_fields());
+    }
+
+    #[test]
+    fn native_input_edits_are_local_to_repeated_occurrences() {
+        for obscured in [false, true] {
+            check_repeated_field_edits(fixture::repeated_native_input_fields(obscured));
+        }
+    }
+
+    fn check_repeated_field_edits(bytes: Vec<u8>) {
         unsafe {
             let mut file = ptr::null_mut();
             assert_eq!(
@@ -757,7 +793,7 @@ mod tests {
                 );
                 snapshot
             };
-            let snapshot = capture();
+            let mut snapshot = capture();
             let mut fields = (&(*snapshot).nodes)
                 .iter()
                 .filter(|node| node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD)
@@ -770,41 +806,43 @@ mod tests {
                 data: text.as_ptr().cast(),
                 len: text.len(),
             };
-            assert_eq!(
-                nux_player_field_string_set(
-                    player,
-                    snapshot,
-                    ids[0],
-                    view("editable"),
-                    view("first edit")
-                ),
-                NuxStatus::Ok
-            );
-            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
-            let snapshot = capture();
-            for (id, expected) in [(ids[0], "first edit"), (ids[1], "editable value")] {
-                let mut bytes = [0u8; 64];
-                let mut length = 0;
+            for edit in ["first edit", "日本語 e\u{301}🙂", ""] {
                 assert_eq!(
-                    nux_player_field_string_copy(
+                    nux_player_field_string_set(
                         player,
                         snapshot,
-                        id,
+                        ids[0],
                         view("editable"),
-                        bytes.as_mut_ptr(),
-                        bytes.len(),
-                        &mut length
+                        view(edit)
                     ),
                     NuxStatus::Ok
                 );
-                assert_eq!(&bytes[..length], expected.as_bytes());
+                assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+                snapshot = capture();
+                for (id, expected) in [(ids[0], edit), (ids[1], "editable value")] {
+                    let mut bytes = [0u8; 64];
+                    let mut length = 0;
+                    assert_eq!(
+                        nux_player_field_string_copy(
+                            player,
+                            snapshot,
+                            id,
+                            view("editable"),
+                            bytes.as_mut_ptr(),
+                            bytes.len(),
+                            &mut length
+                        ),
+                        NuxStatus::Ok
+                    );
+                    assert_eq!(&bytes[..length], expected.as_bytes());
+                }
+                assert!(
+                    (&(*snapshot).nodes)
+                        .iter()
+                        .all(|node| node.value.is_empty()),
+                    "editable text is not included in semantic captures"
+                );
             }
-            assert!(
-                (&(*snapshot).nodes)
-                    .iter()
-                    .all(|node| node.value.is_empty()),
-                "no editable text is painted or captured"
-            );
             assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
             assert_eq!(nux_player_free(player), NuxStatus::Ok);
             assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);

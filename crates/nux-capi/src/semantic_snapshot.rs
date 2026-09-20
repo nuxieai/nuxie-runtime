@@ -12,6 +12,69 @@ use nuxie::runtime::semantic::{
 const MAX_NODES: usize = 16_384;
 const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
 
+/// Resolve a generated, non-rendering value in the field's own occurrence.
+/// The caller must first validate its presented snapshot and field node id.
+fn field_string_property(
+    node: &SemanticNodeRef,
+    name: &str,
+) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
+    use nuxie::runtime::{
+        artboard::Artboard, core::CoreType, custom_property_string::CustomPropertyString,
+    };
+    if name.is_empty() {
+        return Err(NuxStatus::InvalidArgument);
+    }
+    if name.len() > 4096 {
+        return Err(NuxStatus::LimitExceeded);
+    }
+    let data = eligible_data(node)?;
+    if !data
+        .with_downcast::<SemanticData, _>(|data| data.base.role() == NUX_SEMANTIC_ROLE_TEXT_FIELD)
+        .unwrap_or(false)
+    {
+        return Err(NuxStatus::NotFound);
+    }
+    let owner = node
+        .borrow()
+        .core_owner
+        .clone()
+        .ok_or(NuxStatus::NotFound)?;
+    let artboard = owner
+        .with(|owner| {
+            owner
+                .as_component()
+                .and_then(|component| component.artboard_handle())
+        })
+        .flatten()
+        .ok_or(NuxStatus::NotFound)?;
+    let matches = artboard
+        .with_downcast::<Artboard, _>(|artboard| {
+            artboard
+                .objects()
+                .iter()
+                .flatten()
+                .filter(|object| {
+                    object.is_type_of(CustomPropertyString::TYPE_KEY)
+                        && object
+                            .with(|object| {
+                                object
+                                    .as_component()
+                                    .is_some_and(|component| component.name() == name)
+                            })
+                            .unwrap_or(false)
+                })
+                .take(2)
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .ok_or(NuxStatus::NotFound)?;
+    match matches.as_slice() {
+        [property] => Ok(property.clone()),
+        [] => Err(NuxStatus::NotFound),
+        _ => Err(NuxStatus::InvalidArgument),
+    }
+}
+
 fn eligible_data(node: &SemanticNodeRef) -> Result<nuxie::runtime::core::CoreHandle, NuxStatus> {
     if !SemanticNode::is_action_eligible(node) {
         return Err(NuxStatus::NotFound);
@@ -584,6 +647,7 @@ mod tests {
         } else {
             fixture::semantic_text_artboard()
         };
+        let bytes = fixture::with_string_properties(bytes, &["editable", "duplicate", "duplicate"]);
         unsafe {
             let mut file = ptr::null_mut();
             assert_eq!(
@@ -679,6 +743,43 @@ mod tests {
                 NuxStatus::Ok
             );
             assert_eq!(found, id);
+            let manager = artboard
+                .with_artboard(|artboard| artboard.semantic_manager())
+                .unwrap();
+            let field = manager
+                .with_semantic_manager(|manager| manager.node_by_id(id))
+                .unwrap();
+            let property =
+                field_string_property(&field, "editable").expect("field-owned value resolves");
+            assert_eq!(
+                nuxie::runtime::generated::core_registry::CoreRegistry::get_string_handle(
+                    &property, 246
+                ),
+                Some("editable value".into()),
+            );
+            assert!(matches!(
+                field_string_property(&field, "absent"),
+                Err(NuxStatus::NotFound)
+            ));
+            assert!(
+                matches!(
+                    field_string_property(&field, "field/name"),
+                    Err(NuxStatus::NotFound)
+                ),
+                "a drawable TextValueRun is not an editable-value property"
+            );
+            assert!(matches!(
+                field_string_property(&field, "duplicate"),
+                Err(NuxStatus::InvalidArgument)
+            ));
+            assert!(matches!(
+                field_string_property(&field, ""),
+                Err(NuxStatus::InvalidArgument)
+            ));
+            assert!(matches!(
+                field_string_property(&field, &"x".repeat(4097)),
+                Err(NuxStatus::LimitExceeded)
+            ));
             if compound {
                 let inner = artboard.with_artboard(|artboard| {
                     artboard

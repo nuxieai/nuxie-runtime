@@ -69,6 +69,17 @@ pub fn compound_semantic_text_artboard() -> Vec<u8> {
     text_artboard(true)
 }
 
+pub fn with_string_properties(mut bytes: Vec<u8>, names: &[&str]) -> Vec<u8> {
+    for name in names {
+        push_object(&mut bytes, "CustomPropertyString", |bytes| {
+            push_uint(bytes, "Component", "parentId", 0);
+            push_string(bytes, "Component", "name", name);
+            push_string(bytes, "CustomPropertyString", "propertyValue", "editable value");
+        });
+    }
+    bytes
+}
+
 fn text_artboard(compound: bool) -> Vec<u8> {
     text_artboard_with_transform(compound, None)
 }

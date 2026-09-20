@@ -221,3 +221,47 @@ The supplied AVPlayer, MediaPlayer and HTMLVideoElement adapters accept only
 creation or playback mutation. Qualification fixtures now use the managed
 class. The allocator can fall back to separately declared software support
 within its budget; these platform APIs do not promise selectable software.
+
+## Script-owned interactive segments
+
+Luau owns segment names and onboarding logic. A script resolves a video from its
+current artboard with `ctx:video(name)` and can use:
+
+- `video:duration()` — decoder duration in seconds, or nil before metadata.
+- `video:playRange(startSeconds, endSeconds)` — request ID for a play-once,
+  half-open range. Names can remain ordinary script tables.
+- `video:scrub(progress, startSeconds, endSeconds)` — request ID for a paused
+  seek; progress must be finite and between zero and one (inclusive).
+- `video:requestStatus()` — nil or `{id, state}` for the latest request. States
+  are `pending`, `playing`, `settled`, `completed`, `cancelled`, and `failed`.
+- `video:cancelRequest(id)` — cancel and pause only if this is still the latest
+  request; returns false for an obsolete request owner.
+
+A burst of interactive requests before a host drain produces only the latest
+seek. Repeating an unchanged pending or settled scrub without intervening queued
+commands reuses its request ID instead of restarting the seek. Other playback
+commands remain ordered. Ordinary play/seek/loop/re-entry
+commands cancel interactive ownership. Request IDs survive source replacement,
+while source replacement clears the request status. Stale generation frames
+cannot settle a newer request. Consumers must match the returned ID before
+advancing their own UI. `playing` describes an active range request; lifecycle
+suspension still vetoes actual playback independently.
+
+The core refuses decoded images outside the active play range and retains the
+last accepted in-range image on completion. This is **not an exact-endpoint
+frame guarantee**: a crossing frame is rejected rather than displayed, and a
+range that crosses its end without presenting a valid frame reports `failed`,
+not a successful hold. Pause is issued on the first observed crossing or decoder end. This is
+not sample-exact audio clipping. Interactive motion should be muted.
+
+`settled` means a frame for the current seek generation was accepted within the
+requested bounds and within 50 ms of the seek target. Same-generation preroll
+outside that tolerance is rejected. This explicit tolerance is not exact seeking;
+if a host cannot deliver such a frame the request remains pending until the caller
+cancels or the decoder reports failure.
+Scrubbing to one maps to the end timestamp and accepts that endpoint. No promise
+of constant-rate random-access decoding or bounded wall-clock completion is
+made. A script may bound its pending UI and cancel its request on timeout.
+Existing decoder failure reports set the request to `failed`. These APIs do not
+introduce a new decoder action, asset format, shared player across artboards,
+or changes to ordinary authored autoplay/loop behavior outside the request.

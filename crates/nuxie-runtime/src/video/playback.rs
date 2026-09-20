@@ -86,6 +86,13 @@ pub enum Command {
     Play,
     Pause,
     Seek(f64),
+    Interactive {
+        id: u64,
+        start: f64,
+        end: f64,
+        target: f64,
+        play: bool,
+    },
     Rate(f32),
     Volume(f32),
     Mute(bool),
@@ -128,8 +135,31 @@ pub enum PlaybackError {
     QueueFull,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RequestState {
+    Pending,
+    Playing,
+    Settled,
+    Completed,
+    Cancelled,
+    Failed,
+}
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct InteractiveRequest {
+    pub id: u64,
+    pub state: RequestState,
+    start: f64,
+    end: f64,
+    target: f64,
+    play: bool,
+    accepted_frame: bool,
+}
+
 #[derive(Debug)]
 pub struct Playback {
+    request: Option<InteractiveRequest>,
+    next_request: u64,
+    restore_held_frame: bool,
     settings: PlaybackSettings,
     state: PlaybackState,
     wants_play: bool,
@@ -151,6 +181,9 @@ impl Default for Playback {
 impl Playback {
     pub fn new(settings: PlaybackSettings) -> Self {
         Self {
+            request: None,
+            next_request: 0,
+            restore_held_frame: false,
             settings,
             state: if settings.valid() {
                 PlaybackState::Opening
@@ -174,8 +207,10 @@ impl Playback {
     /// survive replacement; old queued commands/events and frame clocks do not.
     pub fn replace_source(&mut self, settings: PlaybackSettings) -> Result<u64, PlaybackError> {
         let generation = self.validate_source_replacement(settings)?;
+        let next_request = self.next_request;
         let suspension_reasons = self.suspension_reasons;
         *self = Self::new(settings);
+        self.next_request = next_request;
         self.generation = generation;
         self.suspension_reasons = suspension_reasons;
         self.emit(PlaybackEvent::State(PlaybackState::Opening));
@@ -213,6 +248,7 @@ impl Playback {
             .checked_add(1)
             .ok_or(PlaybackError::InvalidValue)?;
         self.ready = false;
+        self.restore_held_frame = true;
         self.pending_actions.clear();
         self.first_frame = false;
         self.transition(PlaybackState::Opening);
@@ -241,6 +277,82 @@ impl Playback {
     pub fn pop_event(&mut self) -> Option<PlaybackEvent> {
         self.events.pop_front()
     }
+    pub fn request_status(&self) -> Option<InteractiveRequest> {
+        self.request
+    }
+    /// Cancel only the current owner; a stale caller cannot pause its replacement.
+    pub fn cancel_request(&mut self, id: u64) -> Result<bool, PlaybackError> {
+        if self.request.is_none_or(|request| request.id != id) {
+            return Ok(false);
+        }
+        self.can_enqueue(Command::Pause)?;
+        self.commands
+            .retain(|command| !matches!(command, Command::Interactive { .. }));
+        self.commands.push_back(Command::Pause);
+        if let Some(request) = &mut self.request {
+            request.state = RequestState::Cancelled;
+        }
+        Ok(true)
+    }
+    /// Ranges are half-open; completion retains the last accepted in-range image.
+    /// Audio stopping is observation-driven, not a sample-exact decoder boundary.
+    pub fn play_range(&mut self, start: f64, end: f64) -> Result<u64, PlaybackError> {
+        self.interactive(start, end, start, true)
+    }
+    /// New requests replace queued interactive work; ordinary commands retain order.
+    pub fn scrub(&mut self, progress: f64, start: f64, end: f64) -> Result<u64, PlaybackError> {
+        if !progress.is_finite() || !(0.0..=1.0).contains(&progress) {
+            return Err(PlaybackError::InvalidValue);
+        }
+        // Scrubbing includes the endpoint, unlike play-once's exclusive end.
+        self.interactive(start, end, start + progress * (end - start), false)
+    }
+    fn interactive(
+        &mut self,
+        start: f64,
+        end: f64,
+        target: f64,
+        play: bool,
+    ) -> Result<u64, PlaybackError> {
+        if !play && self.commands.is_empty() {
+            if let Some(request) = self.request {
+                if !request.play
+                    && request.start == start
+                    && request.end == end
+                    && request.target == target
+                    && matches!(request.state, RequestState::Pending | RequestState::Settled)
+                {
+                    return Ok(request.id);
+                }
+            }
+        }
+        let id = self
+            .next_request
+            .checked_add(1)
+            .ok_or(PlaybackError::InvalidValue)?;
+        let command = Command::Interactive {
+            id,
+            start,
+            end,
+            target,
+            play,
+        };
+        self.can_enqueue(command)?;
+        self.commands
+            .retain(|command| !matches!(command, Command::Interactive { .. }));
+        self.commands.push_back(command);
+        self.next_request = id;
+        self.request = Some(InteractiveRequest {
+            id,
+            state: RequestState::Pending,
+            accepted_frame: false,
+            start,
+            end,
+            target,
+            play,
+        });
+        Ok(id)
+    }
     pub fn enqueue(&mut self, command: Command) -> Result<(), PlaybackError> {
         self.can_enqueue(command)?;
         self.commands.push_back(command);
@@ -257,6 +369,18 @@ impl Playback {
             return Err(PlaybackError::Failed);
         }
         let valid = match command {
+            Command::Interactive {
+                start, end, target, ..
+            } => {
+                start.is_finite()
+                    && end.is_finite()
+                    && target.is_finite()
+                    && start >= 0.0
+                    && end > start
+                    && target >= start
+                    && target <= end
+                    && self.duration.is_none_or(|duration| end <= duration)
+            }
             Command::LoopRange { start, end } => {
                 valid_loop_range(start, end)
                     && self.duration.is_none_or(|duration| start < duration)
@@ -272,7 +396,13 @@ impl Playback {
         if !valid {
             return Err(PlaybackError::InvalidValue);
         }
-        if self.commands.len() >= 256 {
+        if self.commands.len() >= 256
+            && !(matches!(command, Command::Interactive { .. })
+                && self
+                    .commands
+                    .iter()
+                    .any(|command| matches!(command, Command::Interactive { .. })))
+        {
             return Err(PlaybackError::QueueFull);
         }
         Ok(())
@@ -292,7 +422,7 @@ impl Playback {
     fn seek(&mut self, seconds: f64, actions: &mut Vec<DecoderAction>) {
         self.generation = self.generation.wrapping_add(1);
         self.position = self.duration.map_or(seconds, |d| seconds.min(d));
-        if self.settings.looping
+        if self.loop_enabled()
             && (self.position < self.settings.loop_start
                 || self.loop_end().is_some_and(|end| self.position >= end))
         {
@@ -340,6 +470,15 @@ impl Playback {
             DecoderAction::Pause
         }]
     }
+    fn loop_enabled(&self) -> bool {
+        self.settings.looping
+            && self.request.is_none_or(|request| {
+                matches!(
+                    request.state,
+                    RequestState::Cancelled | RequestState::Failed
+                )
+            })
+    }
     fn loop_end(&self) -> Option<f64> {
         if self.settings.loop_end == 0.0 {
             self.duration
@@ -350,7 +489,7 @@ impl Playback {
         }
     }
     fn repair_loop_position(&mut self, actions: &mut Vec<DecoderAction>) {
-        if self.settings.looping
+        if self.loop_enabled()
             && (self.position < self.settings.loop_start
                 || self.loop_end().is_some_and(|end| self.position >= end))
         {
@@ -367,7 +506,40 @@ impl Playback {
         let before = self.effective_play();
         let mut retry_play = false;
         while let Some(command) = self.commands.pop_front() {
+            if matches!(
+                command,
+                Command::Play
+                    | Command::Seek(_)
+                    | Command::Loop(_)
+                    | Command::LoopRange { .. }
+                    | Command::Reenter
+                    | Command::Dispose
+            ) {
+                if let Some(request) = &mut self.request {
+                    request.state = RequestState::Cancelled;
+                }
+            }
             match command {
+                Command::Interactive {
+                    id,
+                    start,
+                    end,
+                    target,
+                    play,
+                } => {
+                    self.request = Some(InteractiveRequest {
+                        id,
+                        state: RequestState::Pending,
+                        accepted_frame: false,
+                        start,
+                        end,
+                        target,
+                        play,
+                    });
+                    self.wants_play = play;
+                    self.seek(target, &mut actions);
+                    retry_play = play;
+                }
                 Command::Loop(enabled) => {
                     self.settings.looping = enabled;
                     self.repair_loop_position(&mut actions);
@@ -455,12 +627,19 @@ impl Playback {
         {
             return Vec::new();
         }
-        if self.settings.looping && self.settings.loop_start >= duration {
+        if self.loop_enabled() && self.settings.loop_start >= duration {
+            self.failed(generation);
+            return vec![DecoderAction::Dispose];
+        }
+        if self
+            .request
+            .is_some_and(|r| r.end > duration && r.state == RequestState::Pending)
+        {
             self.failed(generation);
             return vec![DecoderAction::Dispose];
         }
         self.duration = Some(duration);
-        if self.settings.looping {
+        if self.loop_enabled() {
             self.position = self.position.max(self.settings.loop_start);
         }
         self.ready = true;
@@ -498,7 +677,66 @@ impl Playback {
         {
             return false;
         }
-        if self.settings.looping {
+        if let Some(request) = self.request {
+            match request.state {
+                RequestState::Pending | RequestState::Playing => {
+                    if self
+                        .commands
+                        .iter()
+                        .any(|command| matches!(command, Command::Interactive { .. }))
+                    {
+                        return false;
+                    }
+                    if pts < request.start {
+                        return false;
+                    }
+                    if request.play && pts >= request.end {
+                        self.wants_play = false;
+                        if let Some(current) = &mut self.request {
+                            current.state = if request.accepted_frame {
+                                RequestState::Completed
+                            } else {
+                                RequestState::Failed
+                            };
+                        }
+                        self.transition(PlaybackState::Paused);
+                        self.pending_actions.push(DecoderAction::Pause);
+                        return false;
+                    }
+                    if !request.play && pts > request.end {
+                        return false;
+                    }
+                    // A seek can produce preroll within the same generation. Do not
+                    // call that settled merely because it belongs to this range.
+                    // 50 ms is an explicit presentation tolerance, not exact seek.
+                    if !request.accepted_frame && (pts - request.target).abs() > 0.05 {
+                        return false;
+                    }
+                    if let Some(current) = &mut self.request {
+                        current.accepted_frame = true;
+                        current.state = if request.play {
+                            RequestState::Playing
+                        } else {
+                            RequestState::Settled
+                        };
+                    }
+                }
+                RequestState::Completed | RequestState::Settled => {
+                    if !self.restore_held_frame
+                        || pts < request.start
+                        || pts > request.end
+                        || (request.play && pts == request.end)
+                        || (pts - self.position).abs() > 0.05
+                    {
+                        return false;
+                    }
+                    self.restore_held_frame = false;
+                }
+                RequestState::Failed => return false,
+                RequestState::Cancelled => {}
+            }
+        }
+        if self.loop_enabled() {
             if pts < self.settings.loop_start {
                 return false;
             }
@@ -510,6 +748,7 @@ impl Playback {
                 return false;
             }
         }
+        self.restore_held_frame = false;
         self.position = pts;
         if !self.first_frame {
             self.first_frame = true;
@@ -534,7 +773,28 @@ impl Playback {
         {
             return Vec::new();
         }
-        if self.settings.looping {
+        if self
+            .commands
+            .iter()
+            .any(|command| matches!(command, Command::Interactive { .. }))
+        {
+            return Vec::new();
+        }
+        if let Some(request) = &mut self.request {
+            if request.play
+                && matches!(request.state, RequestState::Pending | RequestState::Playing)
+            {
+                request.state = if request.accepted_frame {
+                    RequestState::Completed
+                } else {
+                    RequestState::Failed
+                };
+                self.wants_play = false;
+                self.transition(PlaybackState::Paused);
+                return vec![DecoderAction::Pause];
+            }
+        }
+        if self.loop_enabled() {
             let mut actions = Vec::new();
             self.seek(self.settings.loop_start, &mut actions);
             self.emit(PlaybackEvent::Looped);
@@ -572,6 +832,9 @@ impl Playback {
         if generation == self.generation
             && !matches!(self.state, PlaybackState::Disposed | PlaybackState::Failed)
         {
+            if let Some(request) = &mut self.request {
+                request.state = RequestState::Failed;
+            }
             self.ready = false;
             self.commands.clear();
             self.pending_actions.clear();

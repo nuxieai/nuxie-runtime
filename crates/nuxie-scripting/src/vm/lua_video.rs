@@ -122,6 +122,56 @@ fn state_name(state: PlaybackState) -> &'static str {
 }
 impl UserData for ScriptVideo {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("duration", |_, this, ()| {
+            this.with(|v| v.playback.duration())
+        });
+        methods.add_method("playRange", |_, this, (start, end): (f64, f64)| {
+            let id = this
+                .with(|v| v.playback.play_range(start, end))?
+                .map_err(|error| Error::RuntimeError(format!("video range: {error:?}")))?;
+            this.needs_update.set(true);
+            Ok(id)
+        });
+        methods.add_method(
+            "scrub",
+            |_, this, (progress, start, end): (f64, f64, f64)| {
+                let id = this
+                    .with(|v| v.playback.scrub(progress, start, end))?
+                    .map_err(|error| Error::RuntimeError(format!("video scrub: {error:?}")))?;
+                this.needs_update.set(true);
+                Ok(id)
+            },
+        );
+        methods.add_method("cancelRequest", |_, this, id: u64| {
+            let cancelled = this
+                .with(|v| v.playback.cancel_request(id))?
+                .map_err(|error| Error::RuntimeError(format!("video cancellation: {error:?}")))?;
+            if cancelled {
+                this.needs_update.set(true);
+            }
+            Ok(cancelled)
+        });
+        methods.add_method("requestStatus", |lua, this, ()| {
+            this.with(|v| v.playback.request_status())?
+                .map(|request| {
+                    use nuxie_runtime::video::playback::RequestState;
+                    let result = lua.create_table();
+                    result.set("id", request.id)?;
+                    result.set(
+                        "state",
+                        match request.state {
+                            RequestState::Pending => "pending",
+                            RequestState::Playing => "playing",
+                            RequestState::Settled => "settled",
+                            RequestState::Completed => "completed",
+                            RequestState::Cancelled => "cancelled",
+                            RequestState::Failed => "failed",
+                        },
+                    )?;
+                    Ok::<_, Error>(result)
+                })
+                .transpose()
+        });
         methods.add_method("play", |_, this, ()| this.command(Command::Play));
         methods.add_method("pause", |_, this, ()| this.command(Command::Pause));
         methods.add_method("seek", |_, this, seconds: f64| {
@@ -348,6 +398,52 @@ mod tests {
         }
         alive.set(false);
         assert!(lua.load("group:play()").exec().is_err());
+    }
+    #[test]
+    fn luau_interactive_video_reports_latest_request_and_duration() {
+        let arena = nuxie_runtime::source::core::CoreArena::default();
+        let handle = arena.insert(Video::default());
+        let lua = luaur_rt::Lua::new();
+        lua.globals()
+            .set(
+                "video",
+                lua.create_userdata(ScriptVideo::new(
+                    handle.clone(),
+                    Rc::new(Cell::new(true)),
+                    Rc::new(Cell::new(false)),
+                ))
+                .unwrap(),
+            )
+            .unwrap();
+        lua.load("assert(video:duration() == nil); assert(video:requestStatus() == nil)")
+            .exec()
+            .unwrap();
+        handle
+            .with_downcast_mut::<Video, _>(|v| {
+                v.playback.opened(0, 10.0);
+            })
+            .unwrap();
+        lua.load("assert(video:duration() == 10); first = video:playRange(1,3); latest = video:scrub(0.5,2,6); assert(latest > first); assert(video:requestStatus().id == latest); assert(video:requestStatus().state == 'pending')").exec().unwrap();
+        handle
+            .with_downcast_mut::<Video, _>(|v| {
+                let actions = v.playback.drain_actions();
+                assert_eq!(
+                    actions
+                        .iter()
+                        .filter(|a| matches!(
+                            a,
+                            nuxie_runtime::video::playback::DecoderAction::Seek { .. }
+                        ))
+                        .count(),
+                    1
+                );
+                assert!(v.playback.accept_frame(v.playback.generation(), 4.0));
+            })
+            .unwrap();
+        lua.load("assert(video:requestStatus().state == 'settled'); assert(video:position() == 4)")
+            .exec()
+            .unwrap();
+        assert!(lua.load("video:scrub(2,0,10)").exec().is_err());
     }
     #[test]
     fn luau_controls_use_the_live_video_queue_and_expire_with_context() {

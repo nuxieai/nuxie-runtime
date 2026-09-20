@@ -44,6 +44,119 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
 }
 
 #[test]
+fn native_input_alignment_schema_deserialization_and_clone_agree() {
+    use nuxie_runtime::source::core::{CoreObject, binary_reader::BinaryReader};
+    let mut input = TextInput::default();
+    for key in [222, 1094] {
+        let (_, property) = nuxie_schema::property_by_key_in_hierarchy(569, key).unwrap();
+        assert_eq!(property.key.int, key);
+        assert_eq!(property.runtime_type, nuxie_schema::FieldKind::Uint);
+        assert_eq!(
+            nuxie_schema::core_registry_setter_field_kind_by_property_key(key),
+            Some(nuxie_schema::FieldKind::Uint)
+        );
+        assert_eq!(
+            nuxie_schema::core_registry_getter_field_kind_by_property_key(key),
+            Some(nuxie_schema::FieldKind::Uint)
+        );
+        assert!(input.deserialize(key, &mut BinaryReader::new(&[2])));
+    }
+    let cloned = input.clone_boxed().unwrap();
+    let cloned = cloned.as_text_input().unwrap();
+    assert_eq!(cloned.base.align_value(), 2);
+    assert_eq!(cloned.base.vertical_align_value(), 2);
+    for key in [817, 818, 979, 1095] {
+        assert_eq!(
+            nuxie_schema::property_by_key_in_hierarchy(569, key)
+                .unwrap()
+                .1
+                .key
+                .int,
+            key
+        );
+    }
+}
+
+// Upstream 7098a7c8: alignment moves text within the field, not its intrinsic
+// dimensions. Exercise the registry entry points used by imported bindings.
+#[test]
+fn native_input_alignment_properties_drive_field_relative_geometry() {
+    let (_file, artboard, input) = input_fixture();
+    assert!(CoreRegistry::set_string_handle(&input, 817, "hi".into()));
+    artboard.advance_default(0.0);
+    let (width, height, natural) = with_input(&input, |input| {
+        let bounds = input.local_bounds();
+        let raw = input.raw_text_input();
+        (raw.align_width(), raw.align_height(), bounds)
+    });
+    assert!(width > natural.width());
+    assert!(height > natural.height());
+    for (horizontal, x_factor) in [(0, 0.0), (1, 1.0), (2, 0.5)] {
+        for (vertical, y_factor) in [(0, 0.0), (1, 1.0), (2, 0.5)] {
+            assert!(CoreRegistry::set_uint_handle(&input, 222, horizontal));
+            assert!(CoreRegistry::set_uint_handle(&input, 1094, vertical));
+            assert_eq!(CoreRegistry::get_uint_handle(&input, 222), Some(horizontal));
+            assert_eq!(CoreRegistry::get_uint_handle(&input, 1094), Some(vertical));
+            artboard.advance_default(0.0);
+            let bounds = with_input(&input, |input| input.local_bounds());
+            assert!((bounds.min_x - (width - natural.width()) * x_factor).abs() < 0.01);
+            assert!((bounds.min_y - (height - natural.height()) * y_factor).abs() < 0.01);
+            assert!((bounds.width() - natural.width()).abs() < 0.01);
+            assert!((bounds.height() - natural.height()).abs() < 0.01);
+        }
+    }
+}
+
+// Upstream's viewport-padding regression, including a second change after the
+// first layout to prove alignment is refreshed rather than captured at import.
+#[test]
+fn native_input_alignment_tracks_viewport_padding_changes() {
+    let (_file, artboard, input) = input_fixture();
+    artboard.advance_default(0.0);
+    let size = with_input(&input, |input| {
+        let raw = input.raw_text_input();
+        (raw.align_width(), raw.align_height())
+    });
+    assert!(size.0 > 0.0 && size.1 > 0.0);
+    let mut viewport = input.clone();
+    for _ in 0..3 {
+        viewport = viewport
+            .with(|node| node.component_parent_handle())
+            .flatten()
+            .expect("viewport ancestry");
+    }
+    let style = viewport
+        .with(|node| {
+            node.as_layout_component()
+                .and_then(|layout| layout.style_handle())
+        })
+        .flatten()
+        .expect("viewport style");
+    for (left, right, top, bottom) in [
+        (12.0, 8.0, 5.0, 3.0),
+        (3.0, 1.0, 2.0, 4.0),
+        (0.0, 0.0, 0.0, 0.0),
+    ] {
+        for (property, value) in [(512, left), (513, right), (514, top), (515, bottom)] {
+            assert!(CoreRegistry::set_double_handle(&style, property, value));
+        }
+        artboard.advance_default(0.0);
+        let aligned = with_input(&input, |input| {
+            let raw = input.raw_text_input();
+            (raw.align_width(), raw.align_height())
+        });
+        assert!(
+            (aligned.0 - (size.0 - left - right)).abs() < 0.01,
+            "width: {aligned:?}"
+        );
+        assert!(
+            (aligned.1 - (size.1 - top - bottom)).abs() < 0.01,
+            "height: {aligned:?}"
+        );
+    }
+}
+
+#[test]
 fn obscured_native_input_preserves_value_and_blocks_selection_export() {
     let (_file, artboard, input) = input_fixture();
     assert!(CoreRegistry::set_string_handle(

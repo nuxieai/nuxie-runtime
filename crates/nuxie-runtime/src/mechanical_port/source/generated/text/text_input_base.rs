@@ -10,6 +10,8 @@ pub trait TextInputBaseCallbacks:
     fn selection_radius_changed(&mut self) {}
     fn multiline_changed(&mut self) {}
     fn obscured_changed(&mut self) {}
+    fn align_value_changed(&mut self) {}
+    fn vertical_align_value_changed(&mut self) {}
 }
 
 pub struct TextInputBase {
@@ -18,6 +20,8 @@ pub struct TextInputBase {
     selection_radius: f32,
     multiline: bool,
     obscured: bool,
+    align_value: u32,
+    vertical_align_value: u32,
 }
 
 impl Default for TextInputBase {
@@ -28,6 +32,8 @@ impl Default for TextInputBase {
             selection_radius: 5.0,
             multiline: true,
             obscured: false,
+            align_value: 0,
+            vertical_align_value: 0,
         }
     }
 }
@@ -38,6 +44,51 @@ impl TextInputBase {
     pub const SELECTION_RADIUS_PROPERTY_KEY: u16 = 818;
     pub const MULTILINE_PROPERTY_KEY: u16 = 979;
     pub const OBSCURED_PROPERTY_KEY: u16 = 1095;
+    pub const ALIGN_VALUE_PROPERTY_KEY: u16 = 222;
+    pub const VERTICAL_ALIGN_VALUE_PROPERTY_KEY: u16 = 1094;
+
+    pub fn align_value(&self) -> u32 {
+        self.align_value
+    }
+    pub fn vertical_align_value(&self) -> u32 {
+        self.vertical_align_value
+    }
+    pub fn set_align_value(&mut self, value: u32, callbacks: &mut impl TextInputBaseCallbacks) {
+        if self.set_align_value_value(value) {
+            callbacks.align_value_changed();
+            TextInputBaseCallbacks::notify_property_changed(
+                callbacks,
+                Self::ALIGN_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub fn set_vertical_align_value(
+        &mut self,
+        value: u32,
+        callbacks: &mut impl TextInputBaseCallbacks,
+    ) {
+        if self.set_vertical_align_value_value(value) {
+            callbacks.vertical_align_value_changed();
+            TextInputBaseCallbacks::notify_property_changed(
+                callbacks,
+                Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY,
+            );
+        }
+    }
+    pub(crate) fn set_align_value_value(&mut self, value: u32) -> bool {
+        if self.align_value == value {
+            return false;
+        }
+        self.align_value = value;
+        true
+    }
+    pub(crate) fn set_vertical_align_value_value(&mut self, value: u32) -> bool {
+        if self.vertical_align_value == value {
+            return false;
+        }
+        self.vertical_align_value = value;
+        true
+    }
 
     pub fn is_type_of(type_key: u16) -> bool {
         matches!(type_key, Self::TYPE_KEY | 13 | 2 | 38 | 91 | 11 | 10)
@@ -132,6 +183,8 @@ impl TextInputBase {
         self.selection_radius = object.selection_radius;
         self.multiline = object.multiline;
         self.obscured = object.obscured;
+        self.align_value = object.align_value;
+        self.vertical_align_value = object.vertical_align_value;
         self.base.copy(&object.base, callbacks);
     }
     pub fn deserialize(
@@ -141,6 +194,14 @@ impl TextInputBase {
         callbacks: &mut impl TextInputBaseCallbacks,
     ) -> bool {
         match property_key {
+            Self::ALIGN_VALUE_PROPERTY_KEY => {
+                self.align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
+            Self::VERTICAL_ALIGN_VALUE_PROPERTY_KEY => {
+                self.vertical_align_value = crate::mechanical_port::source::core::field_types::core_uint_type::CoreUintType::deserialize(reader);
+                true
+            }
             Self::OBSCURED_PROPERTY_KEY => {
                 self.obscured = crate::mechanical_port::source::core::field_types::core_bool_type::CoreBoolType::deserialize(reader);
                 true

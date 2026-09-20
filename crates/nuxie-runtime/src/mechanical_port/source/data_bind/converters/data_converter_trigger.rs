@@ -1,6 +1,6 @@
 use crate::mechanical_port::source::{
     data_bind::data_values::{
-        data_type::DataType, data_value::DataValue, data_value_integer::DataValueInteger,
+        data_type::DataType, data_value::DataValue, data_value_integer::integer_value,
         data_value_trigger::DataValueTrigger,
     },
     generated::data_bind::converters::data_converter_trigger_base::DataConverterTriggerBase,
@@ -15,10 +15,7 @@ impl DataConverterTrigger {
         DataType::Trigger
     }
     pub fn convert<'a>(&'a mut self, input: &dyn DataValue) -> &'a dyn DataValue {
-        let value = input
-            .as_any()
-            .downcast_ref::<DataValueInteger>()
-            .map_or(0, |value| value.value().wrapping_add(1));
+        let value = integer_value(input).map_or(0, |value| value.wrapping_add(1));
         self.output.set_value(value);
         &self.output
     }

@@ -3,10 +3,9 @@ use crate::mechanical_port::source::{
     data_bind::data_values::{
         data_type::DataType, data_value::DataValue, data_value_number::DataValueNumber,
     },
+    data_bind_flags::DataBindFlags,
 };
 use crate::mechanical_port::source::generated::data_bind::converters::data_converter_system_normalizer_base::DataConverterSystemNormalizerBase;
-pub const TO_SOURCE: u32 = 1;
-pub const TO_TARGET: u32 = 2;
 #[derive(Default)]
 pub struct DataConverterSystemNormalizer {
     pub base: DataConverterSystemNormalizerBase,
@@ -51,7 +50,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 }
 impl DataConverterSystemNormalizer {
     pub fn convert(&mut self, input: &dyn DataValue, flags: u32) -> Box<dyn DataValue> {
-        if flags & TO_SOURCE == TO_SOURCE {
+        if flags & u32::from(DataBindFlags::DIRECTION.0) == u32::from(DataBindFlags::TO_SOURCE.0) {
             self.base.base.reverse_convert(input)
         } else {
             let output = self
@@ -65,7 +64,7 @@ impl DataConverterSystemNormalizer {
         }
     }
     pub fn reverse_convert(&mut self, input: &dyn DataValue, flags: u32) -> Box<dyn DataValue> {
-        if flags & TO_TARGET == TO_TARGET {
+        if flags & u32::from(DataBindFlags::DIRECTION.0) == u32::from(DataBindFlags::TO_TARGET.0) {
             let output = self
                 .base
                 .base

@@ -1,10 +1,8 @@
 use crate::mechanical_port::source::{
     core::CoreHandle, data_bind::data_values::data_type::DataType,
-    data_bind::data_values::data_value::DataValue,
+    data_bind::data_values::data_value::DataValue, data_bind_flags::DataBindFlags,
     generated::data_bind::converters::data_converter_system_degs_to_rads_base::DataConverterSystemDegsToRadsBase,
 };
-pub const TO_SOURCE: u32 = 1;
-pub const TO_TARGET: u32 = 2;
 #[derive(Default)]
 pub struct DataConverterSystemDegsToRads {
     pub base: DataConverterSystemDegsToRadsBase,
@@ -49,7 +47,7 @@ impl crate::mechanical_port::source::generated::core_registry::DataConverterCapa
 }
 impl DataConverterSystemDegsToRads {
     pub fn convert<'a>(&'a mut self, input: &dyn DataValue, flags: u32) -> Box<dyn DataValue> {
-        if flags & TO_SOURCE == TO_SOURCE {
+        if flags & u32::from(DataBindFlags::DIRECTION.0) == u32::from(DataBindFlags::TO_SOURCE.0) {
             self.base.base.reverse_convert(input)
         } else {
             clone_value(self.base.base.convert(input))
@@ -60,7 +58,7 @@ impl DataConverterSystemDegsToRads {
         input: &dyn DataValue,
         flags: u32,
     ) -> Box<dyn DataValue> {
-        if flags & TO_TARGET == TO_TARGET {
+        if flags & u32::from(DataBindFlags::DIRECTION.0) == u32::from(DataBindFlags::TO_TARGET.0) {
             clone_value(self.base.base.convert(input))
         } else {
             self.base.base.reverse_convert(input)

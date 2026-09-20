@@ -709,7 +709,10 @@ impl Playback {
                     // A seek can produce preroll within the same generation. Do not
                     // call that settled merely because it belongs to this range.
                     // 50 ms is an explicit presentation tolerance, not exact seek.
-                    if !request.accepted_frame && (pts - request.target).abs() > 0.05 {
+                    if !request.play
+                        && !request.accepted_frame
+                        && (pts - request.target).abs() > 0.05
+                    {
                         return false;
                     }
                     if let Some(current) = &mut self.request {

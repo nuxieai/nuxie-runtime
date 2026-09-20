@@ -28,6 +28,21 @@ fn finite_range_holds_last_in_range_frame_and_rejects_late_delivery() {
 }
 
 #[test]
+fn range_accepts_first_valid_frame_delayed_by_decoder_load() {
+    let mut p = opened();
+    p.play_range(2.0, 4.0).unwrap();
+    p.drain_actions();
+    let generation = p.generation();
+    assert!(!p.accept_frame(generation, 1.9));
+    assert!(p.accept_frame(generation, 2.067));
+    assert_eq!(p.request_status().unwrap().state, RequestState::Playing);
+    assert!(p.accept_frame(generation, 3.9));
+    assert!(!p.accept_frame(generation, 4.0));
+    assert_eq!(p.request_status().unwrap().state, RequestState::Completed);
+    assert_eq!(p.position(), 3.9);
+}
+
+#[test]
 fn scrub_burst_is_one_latest_seek_and_one_settled_frame() {
     let mut p = opened();
     let mut id = 0;

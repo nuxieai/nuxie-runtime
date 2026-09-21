@@ -786,11 +786,14 @@ fn drawable_chain(
 fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisibility) -> bool {
     handle
         .with(|object| {
-            if let Some(text) = object.as_text() {
+            if object.as_text().is_some() || object.as_text_input().is_some() {
                 if visibility == GeometryVisibility::Retained {
                     return true;
                 }
-                let render_opacity = text.base.render_opacity();
+                let Some(drawable) = object.as_drawable() else {
+                    return false;
+                };
+                let render_opacity = drawable.render_opacity();
                 return render_opacity.is_finite() && render_opacity > 0.0;
             }
             if object.as_shape().is_none() {

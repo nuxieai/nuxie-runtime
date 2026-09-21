@@ -48,6 +48,151 @@ fn import_host_artboard(fixture: &str) -> (PersistentFactory<RecordingFactory>, 
     (factory, artboard)
 }
 
+#[test]
+fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
+    let bytes = std::fs::read(fixture_path("text_input.riv")).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let index = file.with_file(|file| {
+        (0..file.artboard_count())
+            .find(|&index| file.artboard_name_at(index) == "Text Input - Multiline")
+            .unwrap()
+    });
+    let mut artboard = ArtboardInstance::from_native(file, index).unwrap();
+    artboard.advance(0.0).unwrap();
+    let native = artboard.native_handle();
+    let (local_id, input) = native.with_artboard(|artboard| {
+        artboard
+            .objects()
+            .iter()
+            .enumerate()
+            .find_map(|(id, object)| {
+                let object = object.as_ref()?;
+                object
+                    .with(|object| object.as_text_input().is_some())
+                    .unwrap_or(false)
+                    .then(|| (id, object.clone()))
+            })
+            .unwrap()
+    });
+    let field = artboard
+        .visible_geometry_with_bounds()
+        .into_iter()
+        .find(|hit| {
+            hit.path
+                .last()
+                .is_some_and(|part| part.local_id as usize == local_id)
+        })
+        .expect("native input belongs to the host geometry catalogue");
+    let point = field.bounds.center();
+    let has_field = |artboard: &mut ArtboardInstance| {
+        artboard
+            .hit_test_segments_with_bounds(point)
+            .iter()
+            .any(|hit| hit.path == field.path)
+    };
+    assert!(has_field(&mut artboard));
+    assert!(
+        !artboard
+            .hit_test_segments_with_bounds(Vec2D::new(-1.0e6, -1.0e6))
+            .iter()
+            .any(|hit| hit.path == field.path)
+    );
+    let flags = CoreRegistry::get_uint_handle(&input, 129).unwrap();
+    let hidden = nuxie_runtime::source::drawable_flag::DrawableFlag::HIDDEN.0;
+    assert!(CoreRegistry::set_uint_handle(
+        &input,
+        129,
+        flags | u32::from(hidden)
+    ));
+    assert!(!has_field(&mut artboard));
+    assert!(
+        artboard
+            .retained_geometry_with_bounds()
+            .iter()
+            .any(|hit| hit.path == field.path)
+    );
+    assert!(CoreRegistry::set_uint_handle(&input, 129, flags));
+    assert!(has_field(&mut artboard));
+
+    let opacity_key = i32::from(WorldTransformComponentBase::OPACITY_PROPERTY_KEY);
+    assert!(CoreRegistry::set_double_handle(&input, opacity_key, 0.0));
+    artboard.advance(0.0).unwrap();
+    assert!(!has_field(&mut artboard));
+    assert!(
+        artboard
+            .retained_geometry_with_bounds()
+            .iter()
+            .any(|hit| hit.path == field.path)
+    );
+    assert!(CoreRegistry::set_double_handle(&input, opacity_key, 1.0));
+    artboard.advance(0.0).unwrap();
+    assert!(has_field(&mut artboard));
+
+    // Overflowing text retains geometry but must obey the same ancestor clips
+    // as rendering. Turning off those clips exposes the same native target.
+    assert!(CoreRegistry::set_string_handle(
+        &input,
+        817,
+        "A line of text\n".repeat(40)
+    ));
+    artboard.advance(0.0).unwrap();
+    let overflow = artboard
+        .visible_geometry_with_bounds()
+        .into_iter()
+        .find(|hit| hit.path == field.path)
+        .unwrap()
+        .bounds;
+    let overflow_point = Vec2D::new(overflow.center().x, overflow.max_y - 2.0);
+    let hit_overflow = |artboard: &mut ArtboardInstance| {
+        artboard
+            .hit_test_segments_with_bounds(overflow_point)
+            .iter()
+            .any(|hit| hit.path == field.path)
+    };
+    assert!(
+        hit_overflow(&mut artboard),
+        "the upstream fixture starts with clipping disabled"
+    );
+    let mut parent = input
+        .with(|object| object.component_parent_handle())
+        .flatten();
+    let mut clipped = Vec::new();
+    let clip_key = i32::from(LayoutComponentBase::CLIP_PROPERTY_KEY);
+    while let Some(owner) = parent {
+        parent = owner
+            .with(|object| object.component_parent_handle())
+            .flatten();
+        if owner
+            .with(|object| object.as_layout_component().is_some())
+            .unwrap_or(false)
+        {
+            assert!(CoreRegistry::set_bool_handle(&owner, clip_key, true));
+            clipped.push(owner);
+        }
+    }
+    assert!(!clipped.is_empty());
+    artboard.advance(0.0).unwrap();
+    assert!(
+        !hit_overflow(&mut artboard),
+        "overflow outside the viewport is clipped"
+    );
+    for owner in &clipped {
+        assert!(CoreRegistry::set_bool_handle(owner, clip_key, false));
+    }
+    artboard.advance(0.0).unwrap();
+    assert!(
+        hit_overflow(&mut artboard),
+        "disabling clipping exposes the same native target"
+    );
+    for owner in clipped {
+        assert!(CoreRegistry::set_bool_handle(&owner, clip_key, true));
+    }
+    artboard.advance(0.0).unwrap();
+    assert!(!hit_overflow(&mut artboard));
+}
+
 fn occurrence_identity(handle: &nuxie_runtime::CoreHandle) -> u64 {
     let (arena, slot, generation) = handle.identity_key();
     let mut value = 0xcbf2_9ce4_8422_2325u64;

@@ -44,6 +44,26 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
 }
 
 #[test]
+fn native_input_point_hit_respects_drawable_hidden_flag() {
+    let (_file, artboard, input) = input_fixture();
+    artboard.advance_default(0.0);
+    let point = with_input(&input, |input| {
+        *input.base.world_transform() * input.local_bounds().center()
+    });
+    assert!(with_input(&input, |input| input.hit_test_point(point, false, true)));
+    let flags = CoreRegistry::get_uint_handle(&input, 129).unwrap();
+    let hidden = nuxie_runtime::source::drawable_flag::DrawableFlag::HIDDEN.0;
+    assert!(CoreRegistry::set_uint_handle(
+        &input,
+        129,
+        flags | u32::from(hidden)
+    ));
+    assert!(!with_input(&input, |input| input.hit_test_point(point, false, true)));
+    assert!(CoreRegistry::set_uint_handle(&input, 129, flags));
+    assert!(with_input(&input, |input| input.hit_test_point(point, false, true)));
+}
+
+#[test]
 fn native_input_alignment_schema_deserialization_and_clone_agree() {
     use nuxie_runtime::source::core::{CoreObject, binary_reader::BinaryReader};
     let mut input = TextInput::default();

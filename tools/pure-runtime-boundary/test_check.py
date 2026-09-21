@@ -69,6 +69,31 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
                 self.assertTrue(check(owner, source))
         self.assertTrue(check("crates/nux-capi/src/other.rs", accepted))
 
+    def test_field_property_facade_paths_are_scoped_and_fail_closed(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        owner = "crates/nux-capi/src/semantic_snapshot.rs"
+        accepted = """use nuxie::runtime::{
+            artboard::Artboard, core::CoreType,
+            custom_property_string::CustomPropertyString,
+        };"""
+        self.assertEqual(check(owner, accepted), [])
+        for source in (
+            accepted.replace("Artboard", "UnknownArtboard"),
+            accepted.replace("CustomPropertyString", "UnknownProperty"),
+            accepted.replace("artboard::Artboard", "artboard::*"),
+            accepted.replace("custom_property_string::CustomPropertyString",
+                             "custom_property_string::*"),
+        ):
+            with self.subTest(source=source):
+                self.assertTrue(check(owner, source))
+        for source in (
+            accepted,
+            "use nuxie::runtime::artboard::Artboard;",
+            "use nuxie::runtime::custom_property_string::CustomPropertyString;",
+        ):
+            with self.subTest(other_owner_source=source):
+                self.assertTrue(check("crates/nux-capi/src/other.rs", source))
+
     def test_video_facade_paths_are_scoped_and_fail_closed(self) -> None:
         check = BOUNDARY_TOOL.portable_abi_facade_source_errors
         owner = "crates/nux-capi/src/video_sync.rs"

@@ -319,7 +319,9 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::semantic::semantic_trait::SemanticTrait",
     },
     "crates/nux-capi/src/semantic_snapshot.rs": {
+        "runtime::artboard::Artboard",
         "runtime::core::CoreHandle", "runtime::core::CoreType",
+        "runtime::custom_property_string::CustomPropertyString",
         "runtime::semantic::semantic_data::SemanticData",
         "runtime::semantic::semantic_manager::RuntimeSemanticManagerHandle",
         "runtime::semantic::semantic_manager::SemanticManager",

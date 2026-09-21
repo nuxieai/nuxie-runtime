@@ -44,6 +44,25 @@ fn with_input<R>(handle: &CoreHandle, f: impl FnOnce(&mut TextInput) -> R) -> R 
 }
 
 #[test]
+fn empty_shaped_text_has_no_selection_rectangles() {
+    use nuxie_runtime::source::{math::aabb::Aabb, text::fully_shaped_text::FullyShapedText};
+    let shape = FullyShapedText::default();
+    let existing = Aabb::new(1.0, 2.0, 3.0, 4.0);
+    let mut rectangles = vec![existing];
+    for cursor in [
+        Cursor::zero(),
+        Cursor::new(CursorPosition::new(3, 9), CursorPosition::unresolved(40)),
+    ] {
+        cursor.selection_rects(&mut rectangles, &shape);
+    }
+    assert_eq!(
+        rectangles,
+        vec![existing],
+        "empty text appends no selection geometry"
+    );
+}
+
+#[test]
 fn native_input_point_hit_respects_drawable_hidden_flag() {
     let (_file, artboard, input) = input_fixture();
     artboard.advance_default(0.0);

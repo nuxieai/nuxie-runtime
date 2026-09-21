@@ -1105,7 +1105,23 @@ fn collect_semantic_text(
         }
 
         let Some((local_bounds, world, value)) = handle
-            .with(|object| {
+            .with_mut(|object| {
+                if let Some(input) = object.as_text_input_mut() {
+                    let render_opacity = input.base.render_opacity();
+                    if !render_opacity.is_finite() || render_opacity <= 0.0 {
+                        return None;
+                    }
+                    let bounds = input.local_bounds();
+                    let world = *input.base.world_transform();
+                    // Inspection must never carry secure source text into
+                    // diagnostics, recordings, or downstream serialization.
+                    let value = if input.base.obscured() {
+                        "[REDACTED]".to_owned()
+                    } else {
+                        input.raw_text_input().text()
+                    };
+                    return Some((bounds, world, value));
+                }
                 let text = object.as_text()?;
                 let render_opacity = text.base.render_opacity();
                 if !render_opacity.is_finite() || render_opacity <= 0.0 {

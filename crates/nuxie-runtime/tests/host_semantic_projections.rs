@@ -49,6 +49,90 @@ fn import_host_artboard(fixture: &str) -> (PersistentFactory<RecordingFactory>, 
 }
 
 #[test]
+fn native_input_semantic_text_updates_and_redacts_secure_values() {
+    let bytes = std::fs::read(fixture_path("text_input.riv")).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let index = file.with_file(|file| {
+        (0..file.artboard_count())
+            .find(|&index| file.artboard_name_at(index) == "Text Input - Multiline")
+            .unwrap()
+    });
+    let mut artboard = ArtboardInstance::from_native(file, index).unwrap();
+    let input = artboard.native_handle().with_artboard(|artboard| {
+        artboard.objects().iter().flatten().find(|object| {
+            object.with(|object| object.as_text_input().is_some()).unwrap_or(false)
+        }).cloned().expect("fixture has a native input")
+    });
+    use nuxie_runtime::source::generated::text::text_input_base::TextInputBase;
+    let text_key = i32::from(TextInputBase::TEXT_PROPERTY_KEY);
+    let secure_key = i32::from(TextInputBase::OBSCURED_PROPERTY_KEY);
+    for value in ["first value", "changed — 月"] {
+        assert!(CoreRegistry::set_string_handle(&input, text_key, value.into()));
+        artboard.advance(0.0).unwrap();
+        assert!(artboard.semantic_text_with_bounds().iter().any(|text| text.value == value),
+            "native input must report its settled editable value");
+    }
+    assert!(CoreRegistry::set_bool_handle(&input, secure_key, true));
+    artboard.advance(0.0).unwrap();
+    let observations = artboard.semantic_text_with_bounds();
+    assert!(observations.iter().any(|text| text.value == "[REDACTED]"));
+    assert!(observations.iter().all(|text| !text.value.contains("changed")));
+    assert!(!format!("{observations:?}").contains("changed"));
+    assert!(CoreRegistry::set_bool_handle(&input, secure_key, false));
+    artboard.advance(0.0).unwrap();
+    assert!(artboard.semantic_text_with_bounds().iter().any(|text| text.value == "changed — 月"));
+}
+
+#[test]
+fn nested_native_input_inspection_keeps_occurrence_values_and_redaction_separate() {
+    let mut bytes = std::fs::read(fixture_path("text_input.riv")).unwrap();
+    let mut factory = PersistentFactory::new(RecordingFactory::default());
+    let retained = RuntimeFactoryHandle::from_factory(&mut factory).unwrap();
+    let original = File::import(&bytes, retained.clone(), None, None, None).unwrap();
+    let (source, root) = original.with_file(|file| {
+        ((0..file.artboard_count()).find(|&index| file.artboard_name_at(index) == "Text Input - Multiline").unwrap(), file.artboard_count())
+    });
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_string(bytes, "Artboard", "name", "Input inspection host");
+        push_f32(bytes, "Artboard", "width", 2000.0);
+        push_f32(bytes, "Artboard", "height", 2000.0);
+    });
+    for x in [0.0, 800.0] {
+        push_object(&mut bytes, "NestedArtboard", |bytes| {
+            push_uint(bytes, "Node", "parentId", 0);
+            push_uint(bytes, "NestedArtboard", "artboardId", source as u64);
+            push_f32(bytes, "Node", "x", x);
+        });
+    }
+    let file = File::import(&bytes, retained, None, None, None).unwrap();
+    let mut artboard = ArtboardInstance::from_native(file, root).unwrap();
+    artboard.advance(0.0).unwrap();
+    let children = artboard.native_handle().with_artboard(|artboard| {
+        artboard.objects().iter().flatten().filter_map(|object| {
+            object.with_downcast::<NestedArtboard, _>(|nested| nested.artboard_instance_default()).flatten()
+        }).collect::<Vec<_>>()
+    });
+    assert_eq!(children.len(), 2);
+    use nuxie_runtime::source::generated::text::text_input_base::TextInputBase;
+    for (index, child) in children.iter().enumerate() {
+        let input = child.with_artboard(|artboard| {
+            artboard.objects().iter().flatten().find(|object| object.with(|object| object.as_text_input().is_some()).unwrap_or(false)).cloned().unwrap()
+        });
+        assert!(CoreRegistry::set_string_handle(&input, i32::from(TextInputBase::TEXT_PROPERTY_KEY), format!("occurrence-{index}")));
+        assert!(CoreRegistry::set_bool_handle(&input, i32::from(TextInputBase::OBSCURED_PROPERTY_KEY), index == 0));
+    }
+    artboard.advance(0.0).unwrap();
+    let observations = artboard.semantic_text_with_bounds();
+    let secure = observations.iter().find(|text| text.value == "[REDACTED]").unwrap();
+    let plain = observations.iter().find(|text| text.value == "occurrence-1").unwrap();
+    assert_ne!(secure.path, plain.path);
+    assert!(secure.path.len() > 1 && plain.path.len() > 1);
+    assert!(!format!("{observations:?}").contains("occurrence-0"));
+}
+
+#[test]
 fn native_input_is_a_host_hit_target_without_a_painted_field_background() {
     let bytes = std::fs::read(fixture_path("text_input.riv")).unwrap();
     let mut factory = PersistentFactory::new(RecordingFactory::default());

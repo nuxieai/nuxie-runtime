@@ -365,6 +365,11 @@ impl Cursor {
     ) {
     }
     pub fn selection_rects(&self, rects: &mut Vec<Aabb>, shape: &FullyShapedText) {
+        // No line exists for clamped cursor positions to reference after an
+        // empty shaping result. Preserve the caller's accumulated rectangles.
+        if shape.ordered_lines().is_empty() {
+            return;
+        }
         let first = self.first().clamped(shape);
         let last = self.last().clamped(shape);
         let lookup = shape.glyph_lookup();

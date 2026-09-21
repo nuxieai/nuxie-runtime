@@ -49350,13 +49350,15 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
             CoreField::TextInputAlignValue => {
                 if self.base.set_align_value_value(value) {
                     self.align_value_changed();
-                    crate::mechanical_port::source::core::CoreObject::core_mut(self).notify_property_changed(222);
+                    crate::mechanical_port::source::core::CoreObject::core_mut(self)
+                        .notify_property_changed(222);
                 }
             }
             CoreField::TextInputVerticalAlignValue => {
                 if self.base.set_vertical_align_value_value(value) {
                     self.vertical_align_value_changed();
-                    crate::mechanical_port::source::core::CoreObject::core_mut(self).notify_property_changed(1094);
+                    crate::mechanical_port::source::core::CoreObject::core_mut(self)
+                        .notify_property_changed(1094);
                 }
             }
             CoreField::ComponentParentId => {

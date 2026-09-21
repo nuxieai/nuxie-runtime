@@ -21876,7 +21876,10 @@ static DEF_263_ANCESTORS: &[&str] = &[
 static DEF_263_PROPERTIES: &[Property] = &[
     Property {
         name: "alignValue",
-        key: Key { int: 222, name: "alignvalue" },
+        key: Key {
+            int: 222,
+            name: "alignvalue",
+        },
         alternates: &[],
         declared_type: "uint",
         runtime_type: FieldKind::Uint,
@@ -21908,7 +21911,10 @@ static DEF_263_PROPERTIES: &[Property] = &[
     },
     Property {
         name: "verticalAlignValue",
-        key: Key { int: 1094, name: "verticalalignvalue" },
+        key: Key {
+            int: 1094,
+            name: "verticalalignvalue",
+        },
         alternates: &[],
         declared_type: "uint",
         runtime_type: FieldKind::Uint,

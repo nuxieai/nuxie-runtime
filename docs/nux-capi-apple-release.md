@@ -86,6 +86,16 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.9 candidate adds script-owned video ranges, terminal hold, duration,
+coalesced scrubbing and observable request completion. Browser and Apple hosts
+preserve initial and same-position paused frames. A completed endpoint seek can
+acknowledge its actual decoded frame even when that frame precedes the source
+duration by more than the ordinary seek tolerance. ABI v4 and the existing size
+ceilings remain unchanged. The SDK must adopt this release before authored
+scripts use the new video methods; a local XCFramework override does not update
+its public package pin. A seek into an audio-only tail can still yield no decoded
+image; endpoint acknowledgement does not synthesize missing decoder output.
+
 The v0.10.5 candidate enumerates root, nested, and materialized list videos.
 `NuxVideoInfo` appends `source_artboard_index` and `source_component_id` while
 preserving existing field offsets and ABI v4. Hosts check `struct_size` before

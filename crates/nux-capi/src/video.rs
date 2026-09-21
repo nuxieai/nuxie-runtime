@@ -499,7 +499,10 @@ pub unsafe extern "C" fn nux_player_video_command(
 
 /// Drain queued commands and apply one decoder observation. Observation kinds:
 /// none=0, ready=1 (`value`=duration), playing=2, ended=3, buffering=4,
-/// play-blocked=5, failed=6. Stale generations are ignored. Deliver every action
+/// play-blocked=5, failed=6, selected-seek-frame=7 (`value`=actual decoded PTS).
+/// Kind 7 certifies pixels selected after successful current-generation seek completion;
+/// deliver it immediately before presenting those pixels, never with a media-clock value.
+/// Stale generations are ignored. Deliver every action
 /// synchronously in order; decode callbacks marshal back to the creator thread.
 /// A callback is required even when this step happens to emit no actions.
 #[unsafe(no_mangle)]
@@ -515,7 +518,9 @@ pub unsafe extern "C" fn nux_player_video_step(
     ffi_guard(NuxStatus::RuntimeError, || {
         status(with_video(player, component_id, |video, occurrence| {
             let callback = callback.ok_or(NuxStatus::NullArgument)?;
-            if observation > 6 || (observation == 1 && (!value.is_finite() || value < 0.0)) {
+            if observation > 7
+                || (matches!(observation, 1 | 7) && (!value.is_finite() || value < 0.0))
+            {
                 return Err(NuxStatus::InvalidArgument);
             }
             let before = video
@@ -546,6 +551,9 @@ pub unsafe extern "C" fn nux_player_video_step(
                         3 => actions.extend(v.playback.ended(generation)),
                         4 => v.playback.observed_buffering(generation),
                         5 => v.playback.observed_play_blocked(generation),
+                        7 => {
+                            v.playback.observe_selected_seek_frame(generation, value);
+                        }
                         _ => {}
                     }
                     if v.playback.state() == PlaybackState::Disposed {

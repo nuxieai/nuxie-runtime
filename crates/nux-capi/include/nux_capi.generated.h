@@ -2345,7 +2345,10 @@ NuxStatus nux_player_video_set_loop_range(const struct NuxPlayer *player,
 /**
  * Drain queued commands and apply one decoder observation. Observation kinds:
  * none=0, ready=1 (`value`=duration), playing=2, ended=3, buffering=4,
- * play-blocked=5, failed=6. Stale generations are ignored. Deliver every action
+ * play-blocked=5, failed=6, selected-seek-frame=7 (`value`=actual decoded PTS).
+ * Kind 7 certifies pixels selected after successful current-generation seek completion;
+ * deliver it immediately before presenting those pixels, never with a media-clock value.
+ * Stale generations are ignored. Deliver every action
  * synchronously in order; decode callbacks marshal back to the creator thread.
  * A callback is required even when this step happens to emit no actions.
  */

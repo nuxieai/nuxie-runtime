@@ -38,3 +38,13 @@ to `1280x720`. Its frame rate, colors, two-second duration, H.264 baseline, AAC
 tone and timing oracle are otherwise identical. It exercises sustained native
 frame copying, GPU upload, rendering and reclamation at 720p. This benchmark
 fixture is not a product resolution limit.
+
+`red-blue-endpoint.mp4` reduces the original fixture to 10fps while retaining
+its audio. Its last video sample starts at 1.9s and the browser track ends at
+2.0s, exceeding the ordinary 50ms seek tolerance. The browser endpoint proof
+must settle using the decoder-selected frame's actual timestamp and blue pixels.
+
+```sh
+ffmpeg -i red-blue-audio.mp4 -vf fps=10 -c:v libx264 \
+  -pix_fmt yuv420p -c:a copy red-blue-endpoint.mp4
+```

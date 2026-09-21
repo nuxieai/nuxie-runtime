@@ -224,7 +224,7 @@ void nux_video_apple_action(void *handle, int action, double value, uint64_t gen
     }
 }
 // Returns one observation at a time. 1=ready,2=playing,3=ended,4=frame,
-// -1=failure,0=no event. Decode surfaces are retained until copied/replaced.
+// 5=frame selected by a completed seek, -1=failure,0=no event. Decode surfaces are retained until copied/replaced.
 int nux_video_apple_poll(void *handle, uint64_t *generation, double *time,
                          uint32_t *width, uint32_t *height) {
     @autoreleasepool {
@@ -252,13 +252,14 @@ int nux_video_apple_poll(void *handle, uint64_t *generation, double *time,
         CMTime actual;
         CVPixelBufferRef frame = [p.output copyPixelBufferForItemTime:position itemTimeForDisplay:&actual];
         if (!frame) return 0;
+        BOOL selectedAfterSeek = p.frameRequestedAfterSeek;
         p.frameRequestedAfterSeek = NO;
         if (p.pendingFrame) CVPixelBufferRelease(p.pendingFrame);
         p.pendingFrame = frame; p.frameTime = CMTimeGetSeconds(actual);
         *width = (uint32_t)CVPixelBufferGetWidth(frame);
         *height = (uint32_t)CVPixelBufferGetHeight(frame);
         *time = p.frameTime;
-        return 4;
+        return selectedAfterSeek ? 5 : 4;
     }
 }
 bool nux_video_apple_copy_rgba(void *handle, uint8_t *out, size_t capacity) {

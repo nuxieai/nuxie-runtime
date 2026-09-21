@@ -352,6 +352,20 @@ fn c_bridge_uses_live_occurrence_and_rejects_reentry_wrong_thread_and_stale_deco
             NuxStatus::Ok
         );
         assert_eq!(probe.actions, vec![(3, 1.0, 0), (4, 1.0, 0), (0, 0.0, 0)]);
+        // Selected-seek receipts share the observation ABI but require real,
+        // finite decoded timestamps. Without an interactive request they are inert.
+        for value in [f64::NAN, f64::INFINITY, -1.0] {
+            assert_eq!(
+                nux_player_video_step(player, 1, 7, 0, value, Some(action), context),
+                NuxStatus::InvalidArgument
+            );
+        }
+        probe.actions.clear();
+        assert_eq!(
+            nux_player_video_step(player, 1, 7, 0, 1.9666666667, Some(action), context),
+            NuxStatus::Ok
+        );
+        assert!(probe.actions.is_empty());
         let mut event = NuxVideoEvent {
             kind: 99,
             state: 99,

@@ -33,6 +33,9 @@ python3 -u tools/video-qualification/browser/serve.py --directory target/video-b
 ```
 
 Open the printed localhost URL for WebGL2, or its `/webgpu/` child for WebGPU.
+`/endpoint.html` checks a 10fps final sample 100ms before the source endpoint:
+first scrub, coalesced repeated scrub, departure and return, and superseding
+an in-flight seek. It requires settled playback and actual blue decoded pixels.
 Append `?embedded=1` to exercise an MP4 embedded in the imported scene and
 resolved through a Blob URL. The page displays a pass/failure and submitted frame count. These are owned
 local fixture pages; no provider requests or credentials are involved. The

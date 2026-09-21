@@ -29,6 +29,7 @@ use crate::{
         math::{
             aabb::Aabb as NativeAabb, mat2d::Mat2D as NativeMat2D, vec2d::Vec2D as NativeVec2D,
         },
+        semantic::semantic_role::SemanticRole,
         text::{
             cursor::{Cursor, CursorPosition},
             fully_shaped_text::FullyShapedText,
@@ -786,7 +787,23 @@ fn drawable_chain(
 fn authored_geometry_is_catalogued(handle: &CoreHandle, visibility: GeometryVisibility) -> bool {
     handle
         .with(|object| {
-            if object.as_text().is_some() || object.as_text_input().is_some() {
+            // Native TextInput bounds describe shaped text, not the whole
+            // editable field. The declared semantic field's layout remains a
+            // hit target when its text is empty or the user clicks padding.
+            // Its native LayoutComponent point test retains ancestor clipping.
+            let is_field_layout = object.as_layout_component().is_some()
+                && object.as_container_component().is_some_and(|component| {
+                    component.children().iter().any(|child| {
+                        child
+                            .with(|child| {
+                                child.as_semantic_data().is_some_and(|data| {
+                                    data.base.role() == SemanticRole::TextField as u32
+                                })
+                            })
+                            .unwrap_or(false)
+                    })
+                });
+            if object.as_text().is_some() || object.as_text_input().is_some() || is_field_layout {
                 if visibility == GeometryVisibility::Retained {
                     return true;
                 }

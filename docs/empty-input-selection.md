@@ -34,8 +34,13 @@ building the complete runtime. Logs from qualification:
 `/tmp/nuxie-cpp-empty-cursor-build.log` and
 `/tmp/nuxie-cpp-empty-cursor-run.log`.
 
-Proposed bounded correction: an empty shape contributes no selection rectangles.
-Preserve caller-owned output entries and all nonempty-shape behavior. Before
-shipping, demonstrate the correction in the C++ probe and Rust cursor regression,
-then rerun the original subset-font clearing path. Explicit approval is pending:
-this would be an upstream bug fix, not restoration of C++ port parity.
+The user approved the bounded correction: an empty shape contributes no selection
+rectangles. The implemented guard preserves caller-owned output entries and all
+nonempty-shape behavior. `empty_shaped_text_has_no_selection_rectangles` covers
+the guard, and the parent authoring suite's `raw_input_with_subset_font_can_be_cleared`
+regression passes. The current raw/native input suites pass all 41 tests after
+rebasing onto runtime main (log: `/tmp/nuxie-input-rebased-alignment.log`).
+
+This is an upstream bug correction, not restoration of C++ port parity. The C++
+probe above records the original upstream failure; it is not evidence of a
+corrected upstream C++ build.

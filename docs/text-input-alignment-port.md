@@ -30,5 +30,11 @@ measurement parity, registry-backed updates, changing viewport padding, schema
 dispatch, deserialization, and cloning. Existing editing/selection tests remain
 green. Log: `/tmp/nuxie-input-alignment-combined-tests.log`.
 
-This does not qualify the editor's native-input projection or cold publication
-cutover. Those still need integration and browser/device execution evidence.
+The post-rebase rerun passes 41 tests (23 raw + 18 native), including the later
+empty-shape and hit-region regressions. Evidence:
+`/tmp/nuxie-input-rebased-alignment.log`.
+
+These runtime tests do not by themselves qualify the editor's native-input
+projection, cold publication, or native SDK cutover. The parent repository's
+`specs/input-foundation-upstream-review.md` records integration evidence and
+remaining device qualification separately, with tested revisions identified.

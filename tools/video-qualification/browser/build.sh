@@ -21,8 +21,10 @@ mkdir -p "$video_output"
 "$video_bindgen" "$repo_dir/target/wasm32-unknown-unknown/$video_profile_dir/video_qualification.wasm" --out-dir "$video_output" --target web
 cp "$proof_dir/index.html" "$video_output/index.html"
 cp "$proof_dir/sync.html" "$video_output/sync.html"
+cp "$proof_dir/endpoint.html" "$video_output/endpoint.html"
 cp "$repo_dir/fixtures/video/red-blue-sync.mp4" "$video_output/"
 cp "$repo_dir/fixtures/video/red-blue-audio.mp4" "$video_output/"
+cp "$repo_dir/fixtures/video/red-blue-endpoint.mp4" "$video_output/"
 printf 'Serve this generated directory on an available localhost port: %s\n' "$video_output"
 
 cp "$proof_dir/benchmark.html" "$video_output/benchmark.html"

@@ -23,6 +23,9 @@ pub struct BrowserPlayer {
     capture_pending: Rc<Cell<bool>>,
     capture_callback: Option<Closure<dyn FnMut(f64, JsValue)>>,
     capture_request: Option<f64>,
+    pending_seek_generation: Rc<Cell<Option<u64>>>,
+    completed_seek_generation: Rc<Cell<Option<u64>>>,
+    _seeked_callback: Closure<dyn FnMut()>,
     max_frame_bytes: usize,
     object_url: Option<String>,
     play_blocked: Rc<Cell<bool>>,
@@ -80,6 +83,19 @@ impl BrowserPlayer {
             .ok_or_else(|| JsValue::from_str("video canvas unavailable"))?
             .dyn_into()?;
         let play_blocked = Rc::new(Cell::new(false));
+        let pending_seek_generation = Rc::new(Cell::new(None));
+        let completed_seek_generation = Rc::new(Cell::new(None));
+        let seeked_callback = {
+            let video = video.clone();
+            let pending = pending_seek_generation.clone();
+            let completed = completed_seek_generation.clone();
+            Closure::wrap_assert_unwind_safe(Box::new(move || {
+                if !video.seeking() && video.ready_state() >= 2 {
+                    completed.set(pending.take());
+                }
+            }) as Box<dyn FnMut()>)
+        };
+        video.set_onseeked(Some(seeked_callback.as_ref().unchecked_ref()));
         let mut player = Self {
             video,
             canvas,
@@ -94,6 +110,9 @@ impl BrowserPlayer {
             capture_pending: Rc::new(Cell::new(false)),
             capture_callback: None,
             capture_request: None,
+            pending_seek_generation,
+            completed_seek_generation,
+            _seeked_callback: seeked_callback,
             max_frame_bytes,
             object_url: None,
             play_blocked,
@@ -222,6 +241,8 @@ impl BrowserPlayer {
                 self.play_attempt
                     .set(self.play_attempt.get().wrapping_add(1));
                 self.play_blocked.set(false);
+                self.pending_seek_generation.set(None);
+                self.completed_seek_generation.set(None);
                 self.generation = generation;
                 self.capture_generation.set(generation);
                 self.ended = false;
@@ -261,6 +282,7 @@ impl BrowserPlayer {
                 }
                 self.last_capture_pts.set(None);
                 self.cancel_capture();
+                self.pending_seek_generation.set(Some(generation));
                 self.video.set_current_time(seconds);
                 self.arm_capture()?;
             }
@@ -318,10 +340,26 @@ impl BrowserPlayer {
                 playback.observed_playing(self.generation);
             }
         }
+        // rVFC and seeked are separate browser tasks. Retain an already copied
+        // frame until seeked certifies completion instead of presenting it early
+        // and losing the only paused endpoint frame.
+        if self.pending_seek_generation.get().is_some() {
+            self.arm_capture()?;
+            return Ok(None);
+        }
         let captured = self.capture.borrow_mut().take();
         self.arm_capture()?;
         match captured {
-            Some(Ok(frame)) => Ok(Some(frame)),
+            Some(Ok(frame)) => {
+                // A seek completion certifies only the actual compositor frame
+                // captured for that generation. Keep its mediaTime: currentTime
+                // can equal duration while the selected final sample starts earlier.
+                if self.completed_seek_generation.get() == Some(frame.generation) {
+                    self.completed_seek_generation.set(None);
+                    playback.observe_selected_seek_frame(frame.generation, frame.pts);
+                }
+                Ok(Some(frame))
+            }
             Some(Err(error)) => {
                 playback.failed(self.generation);
                 self.close();
@@ -336,6 +374,9 @@ impl BrowserPlayer {
             return;
         }
         self.disposed = true;
+        self.video.set_onseeked(None);
+        self.pending_seek_generation.set(None);
+        self.completed_seek_generation.set(None);
         self.cancel_capture();
         self.play_attempt
             .set(self.play_attempt.get().wrapping_add(1));

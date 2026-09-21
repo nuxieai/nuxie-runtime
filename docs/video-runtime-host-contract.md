@@ -60,6 +60,15 @@ frames and observations accordingly. Stale generations cannot replace the
 current scene frame. Submit canonical frame bytes with the renderer-specific
 video presentation API, using the renderer which owns the occurrence.
 
+A successful seek can select a final decoded image whose timestamp precedes the
+container duration (for example, when audio ends later). A host that has completed
+that generation’s seek and copied its selected decoded image may send observation
+`7` with the image’s actual presentation timestamp immediately before submitting
+those same pixels. This one-use receipt permits full-source endpoint scrubbing to
+settle on that image; it does not relax ordinary frame or preroll checks. A media
+clock, an ended notification, or a requested seek time is not a decoded-frame
+receipt. Hosts without this evidence keep the ordinary acceptance behavior.
+
 Lifecycle suspension must reach the actual decoder before the app stops frame
 updates. Rust managed players provide `set_suspended` for this purpose. C hosts
 must queue the suspension reason, immediately drain its actions, and execute

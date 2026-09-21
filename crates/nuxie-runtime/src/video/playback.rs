@@ -160,6 +160,7 @@ pub struct Playback {
     request: Option<InteractiveRequest>,
     next_request: u64,
     restore_held_frame: bool,
+    selected_seek_frame: Option<(u64, u64, f64)>,
     settings: PlaybackSettings,
     state: PlaybackState,
     wants_play: bool,
@@ -184,6 +185,7 @@ impl Playback {
             request: None,
             next_request: 0,
             restore_held_frame: false,
+            selected_seek_frame: None,
             settings,
             state: if settings.valid() {
                 PlaybackState::Opening
@@ -340,6 +342,7 @@ impl Playback {
         self.can_enqueue(command)?;
         self.commands
             .retain(|command| !matches!(command, Command::Interactive { .. }));
+        self.selected_seek_frame = None;
         self.commands.push_back(command);
         self.next_request = id;
         self.request = Some(InteractiveRequest {
@@ -355,6 +358,7 @@ impl Playback {
     }
     pub fn enqueue(&mut self, command: Command) -> Result<(), PlaybackError> {
         self.can_enqueue(command)?;
+        self.selected_seek_frame = None;
         self.commands.push_back(command);
         Ok(())
     }
@@ -420,6 +424,7 @@ impl Playback {
         }
     }
     fn seek(&mut self, seconds: f64, actions: &mut Vec<DecoderAction>) {
+        self.selected_seek_frame = None;
         self.generation = self.generation.wrapping_add(1);
         self.position = self.duration.map_or(seconds, |d| seconds.min(d));
         if self.loop_enabled()
@@ -589,6 +594,7 @@ impl Playback {
                     }
                 }
                 Command::Dispose => {
+                    self.selected_seek_frame = None;
                     self.generation = self.generation.wrapping_add(1);
                     self.ready = false;
                     self.wants_play = false;
@@ -669,7 +675,33 @@ impl Playback {
             self.transition(PlaybackState::Playing);
         }
     }
+    /// Certify the actual image selected by a successfully completed seek.
+    /// Hosts must report decoded PTS, never the requested time or media clock,
+    /// immediately before presenting those same pixels. Only a pending scrub
+    /// at the source endpoint can use this one-shot receipt for an audio tail.
+    pub fn observe_selected_seek_frame(&mut self, generation: u64, pts: f64) -> bool {
+        let Some(request) = self.request else {
+            return false;
+        };
+        if generation != self.generation
+            || !self.ready
+            || !self.commands.is_empty()
+            || !pts.is_finite()
+            || pts < request.start
+            || pts > request.end
+            || request.play
+            || request.state != RequestState::Pending
+            || request.target != request.end
+            || self.duration != Some(request.end)
+            || matches!(self.state, PlaybackState::Failed | PlaybackState::Disposed)
+        {
+            return false;
+        }
+        self.selected_seek_frame = Some((request.id, generation, pts));
+        true
+    }
     pub fn accept_frame(&mut self, generation: u64, pts: f64) -> bool {
+        let selected_seek_frame = self.selected_seek_frame.take();
         if generation != self.generation
             || !pts.is_finite()
             || pts < 0.0
@@ -712,6 +744,7 @@ impl Playback {
                     if !request.play
                         && !request.accepted_frame
                         && (pts - request.target).abs() > 0.05
+                        && selected_seek_frame != Some((request.id, generation, pts))
                     {
                         return false;
                     }

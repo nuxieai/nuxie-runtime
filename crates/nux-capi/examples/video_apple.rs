@@ -177,7 +177,11 @@ mod proof {
                     let player = players[index];
                     let decoder = &mut decoders[index];
                     step(player, 1, 0, 0, 0.0, decoder);
-                    match decoder.poll().unwrap() {
+                    let observation = decoder.poll().unwrap();
+                    if let Some(Observation::SelectedSeekFrame(ref frame)) = observation {
+                        step(player, 1, 7, frame.generation, frame.pts, decoder);
+                    }
+                    match observation {
                         Some(Observation::Ready {
                             generation,
                             duration,
@@ -188,7 +192,7 @@ mod proof {
                         Some(Observation::Ended(generation)) => {
                             step(player, 1, 3, generation, 0.0, decoder)
                         }
-                        Some(Observation::Frame(frame)) => {
+                        Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
                             let view = NuxVideoFrame {
                                 struct_size: size_of::<NuxVideoFrame>() as u32,
                                 generation: frame.generation,
@@ -357,7 +361,18 @@ mod proof {
                 assert!(Instant::now() < deadline, "C ABI playback timed out");
                 pump_run_loop(0.01).unwrap();
                 step(player, catalog.id, 0, catalog.generation, 0.0, &mut decoder);
-                match decoder.poll().unwrap() {
+                let observation = decoder.poll().unwrap();
+                if let Some(Observation::SelectedSeekFrame(ref frame)) = observation {
+                    step(
+                        player,
+                        catalog.id,
+                        7,
+                        frame.generation,
+                        frame.pts,
+                        &mut decoder,
+                    );
+                }
+                match observation {
                     Some(Observation::Ready {
                         generation,
                         duration,
@@ -368,7 +383,7 @@ mod proof {
                     Some(Observation::Ended(generation)) => {
                         step(player, catalog.id, 3, generation, 0.0, &mut decoder)
                     }
-                    Some(Observation::Frame(frame)) => {
+                    Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
                         let pixels = NuxVideoFrame {
                             struct_size: size_of::<NuxVideoFrame>() as u32,
                             generation: frame.generation,

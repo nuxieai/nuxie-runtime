@@ -288,6 +288,35 @@ impl BrowserVideoProof {
     pub fn frames(&self) -> u32 {
         self.frames
     }
+    pub fn endpoint_duration(&self) -> f64 {
+        self.video
+            .with_downcast::<Video, _>(|v| v.playback.duration().unwrap_or(0.0))
+            .unwrap()
+    }
+    pub fn endpoint_scrub(&mut self, progress: f64) -> Result<(), JsValue> {
+        self.video
+            .with_downcast_mut::<Video, _>(|v| {
+                v.playback
+                    .scrub(progress, 0.0, v.playback.duration().unwrap())
+            })
+            .unwrap()
+            .map(|_| ())
+            .map_err(error)
+    }
+    pub fn endpoint_tick(&mut self) -> Result<bool, JsValue> {
+        self.render_tick()?;
+        Ok(self
+            .video
+            .with_downcast::<Video, _>(|v| {
+                v.playback
+                    .request_status()
+                    .is_some_and(|r| r.state == RequestState::Settled)
+            })
+            .unwrap())
+    }
+    pub fn endpoint_pts(&self) -> f64 {
+        self.last_pts
+    }
 }
 
 #[wasm_bindgen]

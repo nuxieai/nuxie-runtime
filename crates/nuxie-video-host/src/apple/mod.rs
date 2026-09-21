@@ -52,10 +52,15 @@ pub enum AppleError {
 /// are released immediately after the bounded copy. Pixels are opaque SDR RGBA.
 pub use crate::scene::Frame;
 pub enum Observation {
-    Ready { generation: u64, duration: f64 },
+    Ready {
+        generation: u64,
+        duration: f64,
+    },
     Playing(u64),
     Ended(u64),
     Frame(Frame),
+    /// Actual decoded image selected by a successful seek in this generation.
+    SelectedSeekFrame(Frame),
 }
 /// Session ownership is explicit because AVAudioSession is process-wide.
 /// Apps with an existing audio engine keep ownership and implement authored
@@ -174,7 +179,7 @@ impl ApplePlayer {
             }),
             2 => Some(Observation::Playing(generation)),
             3 => Some(Observation::Ended(generation)),
-            4 => {
+            4 | 5 => {
                 let length = (width as usize)
                     .checked_mul(height as usize)
                     .and_then(|n| n.checked_mul(4))
@@ -185,13 +190,18 @@ impl ApplePlayer {
                 {
                     return Err(AppleError::DecodeFailed);
                 }
-                Some(Observation::Frame(Frame {
+                let frame = Frame {
                     generation,
                     pts: time,
                     width,
                     height,
                     rgba,
-                }))
+                };
+                Some(if kind == 5 {
+                    Observation::SelectedSeekFrame(frame)
+                } else {
+                    Observation::Frame(frame)
+                })
             }
             _ => return Err(AppleError::DecodeFailed),
         })
@@ -248,6 +258,10 @@ impl ApplePlayer {
                 Vec::new()
             }
             Some(Observation::Ended(generation)) => playback.ended(generation),
+            Some(Observation::SelectedSeekFrame(frame)) => {
+                playback.observe_selected_seek_frame(frame.generation, frame.pts);
+                return Ok(Some(frame));
+            }
             Some(Observation::Frame(frame)) => return Ok(Some(frame)),
             None => Vec::new(),
         };

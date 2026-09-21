@@ -291,3 +291,58 @@ fn repeated_unchanged_scrub_does_not_restart_decoder_seek() {
     assert_eq!(p.scrub(0.5, 0.0, 10.0).unwrap(), id);
     assert!(p.drain_actions().is_empty());
 }
+
+fn endpoint_scrub() -> Playback {
+    let mut p = Playback::default();
+    p.opened(0, 2.022);
+    p.scrub(1.0, 0.0, 2.022).unwrap();
+    p.drain_actions();
+    p
+}
+
+#[test]
+fn endpoint_audio_tail_requires_exact_selected_seek_frame_receipt() {
+    let mut p = endpoint_scrub();
+    let pts = 59.0 / 30.0;
+    let generation = p.generation();
+    assert!(!p.accept_frame(generation, pts));
+    assert_eq!(p.request_status().unwrap().state, RequestState::Pending);
+    assert!(p.observe_selected_seek_frame(generation, pts));
+    assert!(p.accept_frame(generation, pts));
+    assert_eq!(p.position(), pts);
+    assert_eq!(p.request_status().unwrap().state, RequestState::Settled);
+    assert!(!p.observe_selected_seek_frame(generation, pts));
+    assert!(!p.accept_frame(generation, pts));
+}
+
+#[test]
+fn selected_seek_receipt_is_consumed_by_mismatch_and_rejects_stale_owners() {
+    let mut p = endpoint_scrub();
+    let pts = 59.0 / 30.0;
+    let generation = p.generation();
+    assert!(!p.observe_selected_seek_frame(generation - 1, pts));
+    assert!(!p.accept_frame(generation, pts));
+    assert!(p.observe_selected_seek_frame(generation, pts));
+    assert!(!p.accept_frame(generation, pts - 0.1));
+    assert!(!p.accept_frame(generation, pts));
+    assert!(p.observe_selected_seek_frame(generation, pts));
+    p.scrub(0.5, 0.0, 2.022).unwrap();
+    assert!(!p.observe_selected_seek_frame(generation, pts));
+    assert!(!p.accept_frame(generation, pts));
+    p.drain_actions();
+    assert!(!p.observe_selected_seek_frame(generation, pts));
+    assert!(!p.accept_frame(p.generation(), pts));
+}
+
+#[test]
+fn selected_seek_receipt_cannot_relax_interior_scrub_or_invalid_frames() {
+    let mut p = endpoint_scrub();
+    for pts in [f64::NAN, f64::INFINITY, -1.0, 2.1] {
+        assert!(!p.observe_selected_seek_frame(p.generation(), pts));
+    }
+    p.scrub(1.0, 0.0, 1.0).unwrap();
+    p.drain_actions();
+    assert!(!p.observe_selected_seek_frame(p.generation(), 0.8));
+    assert!(!p.accept_frame(p.generation(), 0.8));
+    assert!(p.accept_frame(p.generation(), 1.0));
+}

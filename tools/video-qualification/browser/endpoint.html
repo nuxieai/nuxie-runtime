@@ -1,0 +1,36 @@
+<!doctype html><meta charset="utf-8"><title>Browser video endpoint proof</title>
+<canvas id="canvas" width="64" height="32"></canvas><pre id="result">loading</pre>
+<script type="module">
+import init,{BrowserVideoProof} from './video_qualification.js';
+const result=document.querySelector('#result');
+let proof;
+try {
+  await init();
+  // 10fps makes the real final sample 100ms earlier than the track endpoint.
+  proof=new BrowserVideoProof(document.querySelector('#canvas'),new URL('./red-blue-endpoint.mp4',location.href).href);
+  const until=async(test)=>{
+    const started=performance.now();
+    while(!test()){
+      if(performance.now()-started>10000)throw new Error('endpoint timed out');
+      await new Promise(requestAnimationFrame);
+    }
+  };
+  await until(()=>{proof.endpoint_tick();return proof.endpoint_duration()>0;});
+  const observations=[];
+  for(const mode of ['first','repeat','return','superseded']){
+    if(mode==='return'||mode==='superseded'){
+      proof.endpoint_scrub(0);
+      if(mode==='return')await until(()=>proof.endpoint_tick());
+      else proof.endpoint_tick();
+    }
+    const before=proof.frames();
+    proof.endpoint_scrub(1);
+    await until(()=>proof.endpoint_tick()&&(mode==='repeat'||proof.frames()>before));
+    const pts=proof.endpoint_pts(),duration=proof.endpoint_duration(),pixel=Array.from(proof.decoded_pixel());
+    if(!(duration-pts>0.05&&duration-pts<0.15&&pixel[2]>200&&pixel[0]<30))throw new Error(JSON.stringify({mode,pts,duration,pixel}));
+    observations.push({mode,pts,duration,pixel});
+  }
+  result.textContent=JSON.stringify({status:'passed',observations});
+}catch(error){result.textContent='FAILED: '+error;}
+finally{proof?.free();}
+</script>

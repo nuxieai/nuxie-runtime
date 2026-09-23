@@ -13,6 +13,7 @@ async function loadFreshHost() {
 }
 
 function fakeSession(label) {
+  let loseDevice;
   const submitted = [];
   const shaderModules = [];
   const context = {
@@ -31,7 +32,7 @@ function fakeSession(label) {
     destroyed: false,
     features: new Set(),
     limits: {},
-    lost: new Promise(() => {}),
+    lost: new Promise((resolve) => { loseDevice = resolve; }),
     queue,
     addEventListener() {},
     createShaderModule(descriptor) {
@@ -56,7 +57,37 @@ function fakeSession(label) {
       return context;
     },
   };
-  return { adapter, canvas, context, device, shaderModules, submitted };
+  return { adapter, canvas, context, device, shaderModules, submitted, loseDevice };
+}
+
+for (const phase of ["before submission", "during submission"]) {
+  test(`reports device loss ${phase} without poisoning another canvas`, async () => {
+    const first = fakeSession("lost");
+    const second = fakeSession("healthy");
+    const adapters = [first.adapter, second.adapter];
+    Object.defineProperty(globalThis, "navigator", {
+      configurable: true,
+      value: { gpu: { requestAdapter: async () => adapters.shift() } },
+    });
+    const host = await loadFreshHost();
+    const firstId = await host.prepareWebGpu(first.canvas);
+    const secondId = await host.prepareWebGpu(second.canvas);
+    try {
+      let pending;
+      if (phase === "during submission") {
+        first.device.queue.onSubmittedWorkDone = () => new Promise(() => {});
+        pending = host.waitForWebGpu(firstId);
+      }
+      first.loseDevice({ reason: "destroyed", message: "test device loss" });
+      await first.device.lost;
+      await assert.rejects(pending ?? host.waitForWebGpu(firstId), /device lost.*test device loss/i);
+      await host.waitForWebGpu(secondId);
+      assert.deepEqual(second.submitted, ["healthy"]);
+    } finally {
+      host.releaseWebGpu(firstId);
+      host.releaseWebGpu(secondId);
+    }
+  });
 }
 
 test("keeps prepared WebGPU canvases isolated by session", async () => {

@@ -57,6 +57,7 @@ impl DataBindContainerDependent {
 pub struct ViewModelInstance {
     pub base: ViewModelInstanceBase,
     property_values: Vec<CoreHandle>,
+    // One entry per reference; parents() exposes unique owners.
     parents: Vec<CoreHandle>,
     dependents: Vec<DataBindContainerDependent>,
     property_symbols: HashMap<SymbolType, CoreHandle>,
@@ -335,7 +336,7 @@ impl ViewModelInstance {
 
     pub fn rebind_dependents_occurrence(owner: &CoreHandle) {
         let (dependents, parents) = owner
-            .with_downcast::<Self, _>(|owner| (owner.dependents.clone(), owner.parents.clone()))
+            .with_downcast::<Self, _>(|owner| (owner.dependents.clone(), owner.parents()))
             .expect("ViewModel occurrence");
         for dependent in dependents {
             dependent.relink_data_context();
@@ -504,13 +505,13 @@ impl ViewModelInstance {
     }
 
     pub fn add_parent(&mut self, parent: CoreHandle) {
-        if !self.parents.contains(&parent) {
-            self.parents.push(parent);
-        }
+        self.parents.push(parent);
     }
 
     pub fn remove_parent(&mut self, parent: &CoreHandle) {
-        self.parents.retain(|candidate| candidate != parent);
+        if let Some(index) = self.parents.iter().position(|candidate| candidate == parent) {
+            self.parents.remove(index);
+        }
     }
 
     pub fn has_parents(&self) -> bool {
@@ -568,7 +569,13 @@ impl ViewModelInstance {
     }
 
     pub fn parents(&self) -> Vec<CoreHandle> {
-        self.parents.clone()
+        let mut owners = Vec::new();
+        for parent in &self.parents {
+            if !owners.contains(parent) {
+                owners.push(parent.clone());
+            }
+        }
+        owners
     }
 
     pub fn rebind_properties(&mut self) {
@@ -599,7 +606,7 @@ impl ViewModelInstance {
         for dependent in &self.dependents {
             dependent.relink_data_context();
         }
-        for parent in self.parents.clone() {
+        for parent in self.parents() {
             parent.with_mut(|parent| {
                 if let Some(parent) = parent.as_view_model_instance_mut() {
                     parent.rebind_dependents();

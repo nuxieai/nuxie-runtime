@@ -1251,6 +1251,15 @@ impl RuntimeOwnedViewModelHandle {
     pub fn instance_identity(&self) -> u64 {
         identity(&self.native_handle())
     }
+    /// Every current owner, including shared nested references and list slots.
+    pub fn parent_instances(&self) -> Option<Vec<Self>> {
+        let file = self.native_file();
+        self.native_handle()
+            .with_downcast::<ViewModelInstance, _>(ViewModelInstance::parents)?
+            .into_iter()
+            .map(|parent| Self::from_native(file.clone(), parent))
+            .collect()
+    }
     pub fn observable_mutation_generation(&self) -> u64 {
         HOST_GENERATIONS.with(|values| {
             values

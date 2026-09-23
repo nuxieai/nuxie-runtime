@@ -86,6 +86,13 @@ for the measurements and comparison with published v0.9.8.
 
 ## Immutable release
 
+The v0.10.11 candidate adds `nux_player_text_input_content_offset_set` for
+native editors to synchronize their content displacement with an authored
+TextInput's existing ScrollConstraint. The stationary field viewport remains
+the geometry and accessibility basis. This presentation-only operation does
+not edit text, selection, bindings, or responses. ABI v4 is retained; SDKs using
+the new symbol must adopt this release rather than the v0.10.10 binary.
+
 The v0.10.9 candidate adds script-owned video ranges, terminal hold, duration,
 coalesced scrubbing and observable request completion. Browser and Apple hosts
 preserve initial and same-position paused frames. A completed endpoint seek can

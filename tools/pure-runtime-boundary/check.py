@@ -319,6 +319,10 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::semantic::semantic_trait::SemanticTrait",
     },
     "crates/nux-capi/src/semantic_snapshot.rs": {
+        "runtime::data_bind::data_context::DataContext",
+        "runtime::generated::custom_property_string_base::CustomPropertyStringBase",
+        "runtime::generated::text::text_input_base::TextInputBase",
+        "runtime::text::text_input::TextInput",
         "runtime::artboard::Artboard",
         "runtime::core::CoreHandle", "runtime::core::CoreType",
         "runtime::custom_property_string::CustomPropertyString",
@@ -338,6 +342,10 @@ PORTABLE_ABI_FACADE_FILE_PATHS = {
         "runtime::math::path_types::PathDirection",
     },
     "crates/nux-capi/src/text_geometry.rs": {
+        "runtime::core::CoreHandle",
+        "runtime::math::vec2d::Vec2D",
+        "runtime::semantic::semantic_provider::root_transform_point",
+        "runtime::text::text_input::TextInput",
         "runtime::layout_component::LayoutComponent", "runtime::text::text::Text",
         "runtime::text::text_value_run::TextValueRun",
         "runtime::generated::component_base::ComponentBaseCallbacks",

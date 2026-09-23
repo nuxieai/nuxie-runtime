@@ -94,6 +94,36 @@ class PureRuntimeBoundaryCliTest(unittest.TestCase):
             with self.subTest(other_owner_source=source):
                 self.assertTrue(check("crates/nux-capi/src/other.rs", source))
 
+    def test_text_input_adapter_paths_are_exact_and_owner_scoped(self) -> None:
+        check = BOUNDARY_TOOL.portable_abi_facade_source_errors
+        cases = {
+            "semantic_snapshot.rs": (
+                "data_bind::data_context::DataContext",
+                "generated::custom_property_string_base::CustomPropertyStringBase",
+                "generated::text::text_input_base::TextInputBase",
+                "text::text_input::TextInput",
+            ),
+            "text_geometry.rs": (
+                "core::CoreHandle",
+                "math::vec2d::Vec2D",
+                "semantic::semantic_provider::root_transform_point",
+                "text::text_input::TextInput",
+            ),
+        }
+        for filename, paths in cases.items():
+            owner = f"crates/nux-capi/src/{filename}"
+            for path in paths:
+                with self.subTest(owner=owner, path=path):
+                    source = f"use nuxie::runtime::{path};"
+                    self.assertEqual(check(owner, source), [])
+                    self.assertTrue(check("crates/nux-capi/src/other.rs", source))
+                    module = path.rsplit("::", 1)[0]
+                    self.assertTrue(check(owner, f"use nuxie::runtime::{module}::*;"))
+                    self.assertTrue(check(owner, f"use nuxie::runtime::{module}::Unapproved;"))
+            self.assertTrue(check(owner, "use nuxie::runtime::*;"))
+        self.assertEqual(check("crates/nux-capi/src/text_geometry.rs",
+                               "fn geometry(owner: &nuxie::runtime::core::CoreHandle) {}"), [])
+
     def test_video_facade_paths_are_scoped_and_fail_closed(self) -> None:
         check = BOUNDARY_TOOL.portable_abi_facade_source_errors
         owner = "crates/nux-capi/src/video_sync.rs"

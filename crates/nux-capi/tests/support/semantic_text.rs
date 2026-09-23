@@ -329,6 +329,47 @@ pub fn nested_layout_native_input_artboard() -> Vec<u8> {
     nested_layout_artboard(true)
 }
 
+pub fn scrolling_native_input_artboard() -> Vec<u8> {
+    let mut bytes = b"RIVE".to_vec();
+    for value in [7, 0, 9_641, 0] {
+        push_var_uint(&mut bytes, value);
+    }
+    push_object(&mut bytes, "Backboard", |_| {});
+    push_object(&mut bytes, "Artboard", |bytes| {
+        push_f32(bytes, "Artboard", "width", 300.0);
+        push_f32(bytes, "Artboard", "height", 200.0);
+    });
+    for (parent, style, width) in [(0, 2, 100.0), (1, 4, 500.0), (3, 6, 500.0)] {
+        push_object(&mut bytes, "LayoutComponent", |bytes| {
+            push_uint(bytes, "Component", "parentId", parent);
+            push_f32(bytes, "LayoutComponent", "width", width);
+            push_f32(bytes, "LayoutComponent", "height", 40.0);
+            push_uint(bytes, "LayoutComponent", "styleId", style);
+        });
+        push_object(&mut bytes, "LayoutComponentStyle", |_| {});
+    }
+    push_object(&mut bytes, "TextInput", |bytes| {
+        push_uint(bytes, "Component", "parentId", 5);
+        push_string(bytes, "Component", "name", "editable");
+        push_string(bytes, "TextInput", "text", "unchanged");
+    });
+    push_object(&mut bytes, "SemanticData", |bytes| {
+        push_uint(bytes, "Component", "parentId", 1);
+        push_uint(bytes, "SemanticData", "role", 6);
+    });
+    push_object(&mut bytes, "ScrollConstraint", |bytes| {
+        push_uint(bytes, "Component", "parentId", 3);
+        push_uint(bytes, "DraggableConstraint", "directionValue", 0);
+        push_uint(bytes, "ScrollConstraint", "interactive", 0);
+        push_uint(bytes, "ScrollConstraint", "infinite", 1);
+    });
+    push_object(&mut bytes, "TextStylePaint", |bytes| {
+        push_uint(bytes, "Component", "parentId", 7);
+        push_f32(bytes, "TextStyle", "fontSize", 24.0);
+    });
+    bytes
+}
+
 pub fn nested_layout_native_input_occurrence() -> Vec<u8> {
     let mut bytes = nested_layout_artboard(true);
     push_object(&mut bytes, "Artboard", |bytes| {

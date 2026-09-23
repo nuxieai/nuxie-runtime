@@ -48,15 +48,12 @@ export async function prepareWebGpu(canvas) {
   device.addEventListener("uncapturederror", ({ error }) => {
     traceWebGpu("uncaptured-error", error?.message ?? String(error));
   });
-  void device.lost.then((info) => {
-    traceWebGpu("device-lost", info.message);
-  });
   if (nextPreparedSessionId > 0xffffffff) {
     device.destroy();
     throw new Error("WebGPU session identifier space is exhausted");
   }
   const sessionId = nextPreparedSessionId++;
-  preparedSessions.set(sessionId, {
+  const session = {
     id: sessionId,
     adapter,
     device,
@@ -65,13 +62,36 @@ export async function prepareWebGpu(canvas) {
     surfaceTexture: undefined,
     surfaceWidth: 0,
     surfaceHeight: 0,
+    lostError: null,
+    lossWaiters: new Set(),
+  };
+  void device.lost.then((info) => {
+    traceWebGpu("device-lost", info.message);
+    session.lostError = new Error(`WebGPU device lost: ${info.message || info.reason}`);
+    for (const reject of session.lossWaiters) reject(session.lostError);
+    session.lossWaiters.clear();
   });
+  preparedSessions.set(sessionId, session);
   pendingPreparedSessionIds.push(sessionId);
   return sessionId;
 }
 
 export async function waitForWebGpu(sessionId) {
-  await preparedSession(sessionId).device.queue.onSubmittedWorkDone();
+  const session = preparedSession(sessionId);
+  if (session.lostError) throw session.lostError;
+  let rejectOnLoss;
+  try {
+    await new Promise((resolve, reject) => {
+      rejectOnLoss = reject;
+      session.lossWaiters.add(reject);
+      Promise.resolve().then(() => session.device.queue.onSubmittedWorkDone()).then(resolve, reject);
+    });
+    if (session.lostError) throw session.lostError;
+  } finally {
+    // A frame must not retain another handler on the lifetime-long device.lost
+    // promise. Drop this submission's waiter as soon as either path settles.
+    session.lossWaiters.delete(rejectOnLoss);
+  }
 }
 
 export async function captureWebGpuPixels(sessionId) {

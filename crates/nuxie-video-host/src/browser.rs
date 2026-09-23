@@ -16,6 +16,7 @@ pub struct BrowserPlayer {
     generation: u64,
     capture_generation: Rc<Cell<u64>>,
     last_capture_pts: Rc<Cell<Option<f64>>>,
+    deferred_capture: Rc<Cell<Option<(u64, f64)>>>,
     opened: bool,
     disposed: bool,
     ended: bool,
@@ -103,6 +104,7 @@ impl BrowserPlayer {
             generation,
             capture_generation: Rc::new(Cell::new(generation)),
             last_capture_pts: Rc::new(Cell::new(None)),
+            deferred_capture: Rc::new(Cell::new(None)),
             opened: false,
             disposed: false,
             ended: false,
@@ -132,6 +134,7 @@ impl BrowserPlayer {
             }
         }
         self.capture_pending.set(false);
+        self.deferred_capture.set(None);
         self.capture_callback = None;
         self.capture.borrow_mut().take();
     }
@@ -148,6 +151,7 @@ impl BrowserPlayer {
         let context = self.context.clone();
         let generation = self.capture_generation.clone();
         let last_capture_pts = self.last_capture_pts.clone();
+        let deferred_capture = self.deferred_capture.clone();
         let max_bytes = self.max_frame_bytes;
         let capture = self.capture.clone();
         let pending = self.capture_pending.clone();
@@ -157,7 +161,7 @@ impl BrowserPlayer {
         let callback =
             Closure::wrap_assert_unwind_safe(Box::new(move |_now: f64, metadata: JsValue| {
                 pending.set(false);
-                if video.seeking() || video.ready_state() < 2 {
+                if video.seeking() {
                     return;
                 }
                 let frame = (|| {
@@ -165,12 +169,23 @@ impl BrowserPlayer {
                         .as_f64()
                         .filter(|n| n.is_finite() && *n >= 0.0)
                         .ok_or_else(|| JsValue::from_str("invalid video frame timestamp"))?;
+                    if video.ready_state() < 2 {
+                        // Chromium can report the first compositor frame before
+                        // loadeddata. A paused video may never report another.
+                        deferred_capture.set(Some((generation.get(), pts)));
+                        return Ok(None);
+                    }
+                    deferred_capture.set(None);
                     let frame =
                         capture_frame(&video, &canvas, &context, generation.get(), pts, max_bytes)?;
                     last_capture_pts.set(Some(pts));
-                    Ok(frame)
+                    Ok(Some(frame))
                 })();
-                *capture.borrow_mut() = Some(frame);
+                match frame {
+                    Ok(Some(frame)) => *capture.borrow_mut() = Some(Ok(frame)),
+                    Err(error) => *capture.borrow_mut() = Some(Err(error)),
+                    Ok(None) => (),
+                }
             }) as Box<dyn FnMut(f64, JsValue)>);
         let id = request
             .call1(&self.video, callback.as_ref())?
@@ -274,8 +289,14 @@ impl BrowserPlayer {
                             );
                             *self.capture.borrow_mut() = Some(frame);
                         }
-                    } else if let Some(Ok(frame)) = self.capture.borrow_mut().as_mut() {
-                        frame.generation = generation;
+                    } else {
+                        if let Some(Ok(frame)) = self.capture.borrow_mut().as_mut() {
+                            frame.generation = generation;
+                        }
+                        if let Some((_, pts)) = self.deferred_capture.get() {
+                            self.deferred_capture
+                                .set(((pts - seconds).abs() <= 0.05).then_some((generation, pts)));
+                        }
                     }
                     self.arm_capture()?;
                     return Ok(());
@@ -317,6 +338,30 @@ impl BrowserPlayer {
         }
         if self.play_blocked.replace(false) {
             playback.observed_play_blocked(self.generation);
+        }
+        if !self.video.seeking() && self.video.ready_state() >= 2 {
+            if let Some((generation, pts)) = self.deferred_capture.take() {
+                // Only reuse a receipt while the paused decoder still selects
+                // its frame. Seeks/disposal cancel it; moving playback waits for
+                // its next compositor callback instead of relabeling new pixels.
+                if generation == self.generation
+                    && self.video.paused()
+                    && (self.video.current_time() - pts).abs() <= 0.05
+                {
+                    let frame = capture_frame(
+                        &self.video,
+                        &self.canvas,
+                        &self.context,
+                        generation,
+                        pts,
+                        self.max_frame_bytes,
+                    );
+                    if frame.is_ok() {
+                        self.last_capture_pts.set(Some(pts));
+                    }
+                    *self.capture.borrow_mut() = Some(frame);
+                }
+            }
         }
         if !self.opened && self.video.ready_state() >= 1 && self.video.duration().is_finite() {
             self.opened = true;

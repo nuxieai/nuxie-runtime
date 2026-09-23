@@ -46,6 +46,10 @@ pub const NUX_TEXT_RUN_GEOMETRY_MIN_SIZE: usize =
 /// When present, layout_ancestor_* supplies the affine field layout box.
 /// Semantic bounds describe an axis-aligned interaction box, not local layout.
 /// Contains no editable text, glyph identifiers, or native selection state.
+/// With a host-owned content ScrollConstraint, geometry is the unscrolled
+/// editing basis and layout_ancestor_* is its stationary viewport. Native
+/// editors apply their own content offset; feeding it back here would scroll
+/// the UIKit control a second time.
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
 pub struct NuxTextInputGeometry {
@@ -72,6 +76,93 @@ pub struct NuxTextInputGeometry {
 
 pub const NUX_TEXT_INPUT_GEOMETRY_MIN_SIZE: usize =
     std::mem::offset_of!(NuxTextInputGeometry, layout_ancestor_max_y) + std::mem::size_of::<f32>();
+
+// Match TextInput::on_added_clean's upstream input -> layout -> content
+// relationship. Never search arbitrary ancestors and scroll an enclosing page.
+fn input_content_scroll(
+    input: &nuxie::runtime::core::CoreHandle,
+) -> Option<nuxie::runtime::core::CoreHandle> {
+    use nuxie::runtime::text::text_input::TextInput;
+    let layout = input.with_downcast::<TextInput, _>(|input| input.base.parent_handle())??;
+    layout
+        .with(|value| value.component_parent_handle())??
+        .with(|parent| {
+            let constraints = parent.as_transform_component()?.constraints();
+            let mut scrolls = constraints.iter().filter(|constraint| {
+                constraint
+                    .with(|value| value.as_scroll_constraint().is_some())
+                    .unwrap_or(false)
+            });
+            let scroll = scrolls.next()?.clone();
+            // An ambiguous authored container must not be guessed at.
+            scrolls.next().is_none().then_some(scroll)
+        })?
+}
+
+/// Synchronize a native editor's content displacement with the input's existing
+/// ScrollConstraint. Positive offsets move content left/up, in artboard-local
+/// content units (not device pixels). The field viewport remains fixed.
+/// This changes presentation only: no text, binding, cursor, or response write.
+/// A changed offset invalidates the capture; step/present before another write.
+/// Returns NotFound for legacy fields or inputs without a content constraint.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nux_player_text_input_content_offset_set(
+    player: *mut NuxPlayer,
+    snapshot: *const NuxSemanticSnapshot,
+    node_id: u32,
+    name: NuxStringView,
+    offset_x: f32,
+    offset_y: f32,
+) -> NuxStatus {
+    ffi_guard(NuxStatus::RuntimeError, || {
+        if !offset_x.is_finite() || !offset_y.is_finite() {
+            return NuxStatus::InvalidArgument;
+        }
+        unsafe {
+            semantic_snapshot::with_presented_field_property(
+                player,
+                snapshot,
+                node_id,
+                name,
+                true,
+                |occurrence, input| {
+                    let Some(scroll) = input_content_scroll(input) else {
+                        return NuxStatus::NotFound;
+                    };
+                    scroll
+                        .with_mut(|value| {
+                            let Some(scroll) = value.as_scroll_constraint_mut() else {
+                                return NuxStatus::NotFound;
+                            };
+                            let x = if scroll.base.constrains_horizontal() {
+                                -offset_x
+                            } else {
+                                0.0
+                            };
+                            let y = if scroll.base.constrains_vertical() {
+                                -offset_y
+                            } else {
+                                0.0
+                            };
+                            if scroll.authored_scroll_offset_x() == x
+                                && scroll.authored_scroll_offset_y() == y
+                            {
+                                return NuxStatus::Ok;
+                            }
+                            if let Err(status) = occurrence.invalidate_render() {
+                                return status;
+                            }
+                            scroll.stop_physics();
+                            scroll.set_authored_scroll_offset_x(x);
+                            scroll.set_authored_scroll_offset_y(y);
+                            NuxStatus::Ok
+                        })
+                        .unwrap_or(NuxStatus::NotFound)
+                },
+            )
+        }
+    })
+}
 
 fn nearest_layout_geometry(
     owner: &nuxie::runtime::core::CoreHandle,
@@ -135,8 +226,8 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                     math::vec2d::Vec2D, semantic::semantic_provider::root_transform_point,
                     text::text_input::TextInput,
                 };
-                let Some((mut value, world, artboard)) =
-                    input.with_downcast_mut::<TextInput, _>(|input| {
+                let Some((mut value, mut world, artboard)) = input
+                    .with_downcast_mut::<TextInput, _>(|input| {
                         let world = *input.base.world_transform();
                         let artboard = input.base.artboard_handle();
                         let bounds = input.local_bounds();
@@ -170,6 +261,42 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                 let Some(artboard) = artboard else {
                     return NuxStatus::NotFound;
                 };
+                let scroll_layout = input_content_scroll(input).and_then(|scroll| {
+                    scroll.with(|value| {
+                        let scroll = value.as_scroll_constraint()?;
+                        Some((
+                            scroll.content_handle()?,
+                            scroll.viewport_handle()?,
+                            scroll.clamped_offset_x() * scroll.base.strength(),
+                            scroll.clamped_offset_y() * scroll.base.strength(),
+                        ))
+                    })?
+                });
+                let layout = if let Some((content, viewport, x, y)) = scroll_layout {
+                    let Some(transform) = content
+                        .with(|value| {
+                            value
+                                .as_transform_component()
+                                .map(|value| *value.world_transform())
+                        })
+                        .flatten()
+                    else {
+                        return NuxStatus::NotFound;
+                    };
+                    let delta = transform * Vec2D::new(x, y) - transform * Vec2D::new(0.0, 0.0);
+                    // Preserve all authored rotation/scale and nested placement.
+                    world[4] -= delta.x;
+                    world[5] -= delta.y;
+                    Ok(viewport.with_downcast::<LayoutComponent, _>(|layout| {
+                        let bounds = layout.local_bounds();
+                        (
+                            *layout.shape_world_transform().values(),
+                            [bounds.min_x, bounds.min_y, bounds.max_x, bounds.max_y],
+                        )
+                    }))
+                } else {
+                    nearest_layout_geometry(input)
+                };
                 let points = [
                     Vec2D::new(0.0, 0.0),
                     Vec2D::new(1.0, 0.0),
@@ -187,7 +314,7 @@ pub unsafe extern "C" fn nux_player_text_input_geometry(
                     origin.x,
                     origin.y,
                 ];
-                match nearest_layout_geometry(input) {
+                match layout {
                     Ok(Some((transform, bounds))) => {
                         let [a, b, c, d, tx, ty] = transform;
                         let points = [(tx, ty), (tx + a, ty + b), (tx + c, ty + d)]
@@ -370,6 +497,223 @@ mod tests {
         NuxStringView {
             data: value.as_ptr().cast(),
             len: value.len(),
+        }
+    }
+
+    #[test]
+    fn native_input_scroll_uses_existing_constraint_without_editing_value() {
+        unsafe {
+            let bytes = fixture::scrolling_native_input_artboard();
+            let mut file = ptr::null_mut();
+            assert_eq!(
+                nux_file_import(
+                    bytes.as_ptr(),
+                    bytes.len(),
+                    &NuxRenderCallbacks::default(),
+                    &mut file
+                ),
+                NuxStatus::Ok
+            );
+            let mut instance = ptr::null_mut();
+            assert_eq!(
+                nux_artboard_instance_new(file, 0, &mut instance),
+                NuxStatus::Ok
+            );
+            let mut player = ptr::null_mut();
+            assert_eq!(nux_player_new_static(instance, &mut player), NuxStatus::Ok);
+            assert_eq!(nux_player_enable_semantics(player), NuxStatus::Ok);
+            let mut result = ptr::null_mut();
+            let step = NuxPlayerStep {
+                struct_size: std::mem::size_of::<NuxPlayerStep>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+            let mut scheduling = NuxPlayerSchedulingInfo {
+                struct_size: std::mem::size_of::<NuxPlayerSchedulingInfo>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut scheduling),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_acknowledge_presented(player, scheduling.render_revision),
+                NuxStatus::Ok
+            );
+            let mut snapshot = ptr::null_mut();
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            let mut info = NuxSemanticSnapshotInfo {
+                struct_size: std::mem::size_of::<NuxSemanticSnapshotInfo>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_semantic_snapshot_info(snapshot, &mut info),
+                NuxStatus::Ok
+            );
+            let mut node = NuxSemanticNodeView {
+                struct_size: std::mem::size_of::<NuxSemanticNodeView>() as u32,
+                ..Default::default()
+            };
+            for index in 0..info.node_count {
+                assert_eq!(
+                    nux_semantic_snapshot_node(snapshot, index, &mut node),
+                    NuxStatus::Ok
+                );
+                if node.role == NUX_SEMANTIC_ROLE_TEXT_FIELD {
+                    break;
+                }
+            }
+            assert_eq!(node.role, NUX_SEMANTIC_ROLE_TEXT_FIELD);
+            let mut before = NuxTextInputGeometry {
+                struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_player_text_input_geometry(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    &mut before
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                before.layout_ancestor_max_x, 100.0,
+                "Editing uses the viewport, not the 500-unit content extent"
+            );
+            assert_eq!(
+                nux_player_text_input_content_offset_set(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    f32::NAN,
+                    0.0
+                ),
+                NuxStatus::InvalidArgument
+            );
+            assert_eq!(
+                nux_player_text_input_content_offset_set(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    0.0,
+                    0.0
+                ),
+                NuxStatus::Ok
+            );
+            // A no-op leaves this capture usable; a real offset retires it.
+            assert_eq!(
+                nux_player_text_input_content_offset_set(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    70.0,
+                    20.0
+                ),
+                NuxStatus::Ok
+            );
+            assert_ne!(
+                nux_player_text_input_content_offset_set(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    80.0,
+                    0.0
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+            assert_eq!(nux_player_step(player, &step, &mut result), NuxStatus::Ok);
+            assert_eq!(
+                nux_player_step_result_scheduling(result, &mut scheduling),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_acknowledge_presented(player, scheduling.render_revision),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_semantic_snapshot(player, &mut snapshot),
+                NuxStatus::Ok
+            );
+            let mut after = NuxTextInputGeometry {
+                struct_size: std::mem::size_of::<NuxTextInputGeometry>() as u32,
+                ..Default::default()
+            };
+            assert_eq!(
+                nux_player_text_input_geometry(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    &mut after
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                after.world_transform, before.world_transform,
+                "Native editor placement must not feed back its own scroll displacement"
+            );
+            assert_eq!(
+                after.layout_ancestor_transform,
+                before.layout_ancestor_transform
+            );
+            assert_eq!(
+                semantic_snapshot::with_presented_field_property(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    false,
+                    |_, input| {
+                        use nuxie::runtime::text::text_input::TextInput;
+                        assert_eq!(
+                            input.with_downcast::<TextInput, _>(|input| input
+                                .base
+                                .text()
+                                .to_owned()),
+                            Some("unchanged".into())
+                        );
+                        let scroll = input_content_scroll(input).unwrap();
+                        scroll.with(|value| {
+                            let scroll = value.as_scroll_constraint().unwrap();
+                            assert_eq!(scroll.authored_scroll_offset_x(), -70.0);
+                            assert_eq!(
+                                scroll.authored_scroll_offset_y(),
+                                0.0,
+                                "The horizontal field ignores the other axis"
+                            );
+                        });
+                        NuxStatus::Ok
+                    }
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(
+                nux_player_text_input_content_offset_set(
+                    player,
+                    snapshot,
+                    node.id,
+                    name("editable"),
+                    0.0,
+                    0.0
+                ),
+                NuxStatus::Ok
+            );
+            assert_eq!(nux_semantic_snapshot_free(snapshot), NuxStatus::Ok);
+            assert_eq!(nux_player_step_result_free(result), NuxStatus::Ok);
+            assert_eq!(nux_player_free(player), NuxStatus::Ok);
+            assert_eq!(nux_artboard_instance_free(instance), NuxStatus::Ok);
+            assert_eq!(nux_file_free(file), NuxStatus::Ok);
         }
     }
 

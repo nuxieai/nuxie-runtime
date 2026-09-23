@@ -1130,6 +1130,10 @@ typedef struct NuxViewModelChangeView {
  * When present, layout_ancestor_* supplies the affine field layout box.
  * Semantic bounds describe an axis-aligned interaction box, not local layout.
  * Contains no editable text, glyph identifiers, or native selection state.
+ * With a host-owned content ScrollConstraint, geometry is the unscrolled
+ * editing basis and layout_ancestor_* is its stationary viewport. Native
+ * editors apply their own content offset; feeding it back here would scroll
+ * the UIKit control a second time.
  */
 typedef struct NuxTextInputGeometry {
   uint32_t struct_size;
@@ -2235,6 +2239,21 @@ NuxStatus nux_player_step_result_view_model_change_list_item(const struct NuxPla
                                                              size_t change_index,
                                                              size_t item_index,
                                                              uint64_t *out_instance_id);
+
+/**
+ * Synchronize a native editor's content displacement with the input's existing
+ * ScrollConstraint. Positive offsets move content left/up, in artboard-local
+ * content units (not device pixels). The field viewport remains fixed.
+ * This changes presentation only: no text, binding, cursor, or response write.
+ * A changed offset invalidates the capture; step/present before another write.
+ * Returns NotFound for legacy fields or inputs without a content constraint.
+ */
+NuxStatus nux_player_text_input_content_offset_set(struct NuxPlayer *player,
+                                                   const struct NuxSemanticSnapshot *snapshot,
+                                                   uint32_t node_id,
+                                                   struct NuxStringView name,
+                                                   float offset_x,
+                                                   float offset_y);
 
 /**
  * Read settled native TextInput geometry for the same presented field used by

@@ -182,7 +182,7 @@ impl HbFont {
         text: &[Unichar],
         text_start: u32,
         text_run: &TextRun,
-        original_text_run: &TextRun,
+        _original_text_run: &TextRun,
         fallback_index: u32,
     ) {
         let glyph_run = shape_run(&text[text_start as usize..], text_run, text_start);
@@ -201,7 +201,9 @@ impl HbFont {
                         glyph_runs,
                         text,
                         &glyph_run,
-                        original_text_run,
+                        // Match HBFont::shapeFallbackRun: retries are bounded by
+                        // this fallback subrun, not the original paragraph run.
+                        text_run,
                         fallback_index + 1,
                     );
                 } else if !glyph_run.glyphs.is_empty() {
@@ -1067,6 +1069,43 @@ impl skrifa::color::ColorPainter for PaintState<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recursive_fallback_stays_inside_the_current_subrun() {
+        fn fallback(_: u32, index: u32, _: &dyn Font) -> Option<FontRef> {
+            (index < 3).then(|| {
+                HbFont::decode(&decode_hex(include_str!("testdata/legacy_kern_he.hex")))
+                    .expect("fixture font decodes")
+            })
+        }
+        let font = HbFont::decode(&decode_hex(include_str!("testdata/legacy_kern_he.hex")))
+            .expect("fixture font decodes");
+        let original = TextRun {
+            font: Some(font.clone()),
+            size: 24.0,
+            line_height: -1.0,
+            letter_spacing: 0.0,
+            unichar_count: 4,
+            script: u32::from_be_bytes(*b"Latn"),
+            style_id: 0,
+            level: 0,
+        };
+        let current = TextRun {
+            unichar_count: 1,
+            ..original.clone()
+        };
+        let mut runs = Vec::new();
+        let text = ['H' as u32, 'e' as u32, '\n' as u32, 's' as u32];
+        crate::source::text_engine::with_host_fallback_proc(fallback, || {
+            font.as_any()
+                .downcast_ref::<HbFont>()
+                .unwrap()
+                .shape_fallback_run(&mut runs, &text, 2, &current, &original, 1);
+        });
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text_indices, [2]);
+        assert_eq!(runs[0].glyphs, [0]);
+    }
 
     fn decode_hex(input: &str) -> Vec<u8> {
         let input: String = input

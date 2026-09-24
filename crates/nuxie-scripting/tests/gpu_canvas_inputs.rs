@@ -194,3 +194,90 @@ fn retained_program_ignores_the_current_scripted_renderer_surface() {
     assert_eq!(plan.vertex_count, 6);
     assert_eq!(plan.clear_color, [0.1, 0.2, 0.3, 1.0]);
 }
+
+#[test]
+fn retained_program_samples_supplied_images_and_reports_missing_names() {
+    use nuxie_scripting::gpu_canvas::GpuCanvasSnapshotImage;
+
+    let source = r#"
+        return function(context)
+            local canvas = context:gpuCanvas()
+            local shader = context:shader("scene")
+            local painting = context:image("asset_painting")
+            local missing = context:image("asset_missing")
+            local pipeline = GPUPipeline.new {
+                vertex = shader,
+                fragment = shader,
+                vertexLayout = {},
+                colorTargets = { { format = "rgba8unorm" } },
+            }
+            local layout = GPUBindGroupLayout.new { groupIndex = 0, shader = shader }
+            local group = GPUBindGroup.new {
+                layout = layout,
+                textures = { { slot = 0, view = painting:view() } },
+            }
+            canvas:resize(painting.width, painting.height)
+            return {
+                missingIsNil = missing == nil,
+                draw = function(self, renderer)
+                    local pass = canvas:beginRenderPass {
+                        color = { { loadOp = "clear", storeOp = "store" } },
+                    }
+                    pass:setPipeline(pipeline)
+                    pass:setBindGroup(0, group)
+                    pass:draw(3)
+                    pass:finish()
+                    renderer:drawImage(painting, nil, "srcOver", 1.0)
+                end,
+            }
+        end
+    "#;
+    let rgba = vec![
+        255, 0, 0, 255, 0, 255, 0, 255, //
+        0, 0, 255, 255, 255, 255, 255, 255,
+    ];
+    let mut program = GpuCanvasBytecodeProgram::load_with_images(
+        &compile_source(source).expect("image source compiles"),
+        vec![GpuCanvasSnapshotImage {
+            name: "asset_painting".into(),
+            width: 2,
+            height: 2,
+            rgba: rgba.clone(),
+        }],
+    )
+    .expect("image program loads");
+
+    let plan = program.draw().expect("image program draws");
+    assert_eq!((plan.width, plan.height), (2, 2));
+    let bindings: Vec<_> = plan
+        .pipelines
+        .iter()
+        .flat_map(|pipeline| &pipeline.texture_bindings)
+        .chain(&plan.texture_bindings)
+        .collect();
+    let binding = bindings.first().expect("the image view is bound");
+    assert_eq!((binding.width, binding.height), (2, 2));
+    assert_eq!(binding.format, "rgba8unorm");
+    assert_eq!(binding.uploads.len(), 1);
+    assert_eq!(binding.uploads[0].bytes, rgba);
+    assert_eq!(binding.uploads[0].bytes_per_row, 8);
+    assert_eq!(program.missing_images(), vec!["asset_missing".to_string()]);
+}
+
+#[test]
+fn retained_program_rejects_images_whose_pixels_do_not_match_their_size() {
+    use nuxie_scripting::gpu_canvas::GpuCanvasSnapshotImage;
+
+    let error = GpuCanvasBytecodeProgram::load_with_images(
+        &compile_source("return function(context) context:gpuCanvas() return {} end")
+            .expect("source compiles"),
+        vec![GpuCanvasSnapshotImage {
+            name: "short".into(),
+            width: 2,
+            height: 2,
+            rgba: vec![0; 4],
+        }],
+    )
+    .expect_err("short pixel buffers are rejected");
+    assert!(error.to_string().contains("must be 2x2 RGBA8 pixels"));
+}

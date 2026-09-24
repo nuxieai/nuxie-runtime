@@ -216,7 +216,7 @@ fn retained_program_samples_supplied_images_and_reports_missing_names() {
                 layout = layout,
                 textures = { { slot = 0, view = painting:view() } },
             }
-            canvas:resize(painting.width, painting.height)
+            canvas:resize(painting.width * context:pixelRatio(), painting.height * context:pixelRatio())
             return {
                 missingIsNil = missing == nil,
                 draw = function(self, renderer)

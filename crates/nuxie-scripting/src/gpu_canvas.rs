@@ -1372,6 +1372,11 @@ impl GpuCanvasContextBindings {
 impl UserData for GpuCanvasContextBindings {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("gpuCanvas", |lua, this, ()| this.canvas_userdata(lua));
+        // Direct hosts render at one pixel per point unless the VM says
+        // otherwise, so scripts that size canvases by the ratio run unchanged.
+        methods.add_method("pixelRatio", |lua, _, ()| {
+            Ok(crate::vm::script_pixel_ratio(lua))
+        });
         methods.add_method("image", |lua, this, name: String| {
             let Some(images) = &this.snapshot_images else {
                 return Ok(Value::Nil);

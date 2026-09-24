@@ -161,17 +161,15 @@ impl BrowserPlayer {
         let callback =
             Closure::wrap_assert_unwind_safe(Box::new(move |_now: f64, metadata: JsValue| {
                 pending.set(false);
-                if video.seeking() {
-                    return;
-                }
                 let frame = (|| {
                     let pts = js_sys::Reflect::get(&metadata, &JsValue::from_str("mediaTime"))?
                         .as_f64()
                         .filter(|n| n.is_finite() && *n >= 0.0)
                         .ok_or_else(|| JsValue::from_str("invalid video frame timestamp"))?;
-                    if video.ready_state() < 2 {
-                        // Chromium can report the first compositor frame before
-                        // loadeddata. A paused video may never report another.
+                    if video.seeking() || video.ready_state() < 2 {
+                        // Chromium can report the selected compositor frame before
+                        // seeked or loadeddata. Preserve its timestamp: a paused
+                        // video may never report another callback after readiness.
                         deferred_capture.set(Some((generation.get(), pts)));
                         return Ok(None);
                     }

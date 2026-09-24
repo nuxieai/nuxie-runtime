@@ -282,6 +282,39 @@ impl GpuImageView {
         }
     }
 
+    /// A sampleable RGBA8 texture whose one upload is the decoded image, for
+    /// direct hosts that have pixels but no renderer image.
+    fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Self {
+        Self {
+            texture: GpuTexture {
+                resource_id: NEXT_GPU_TEXTURE_RESOURCE_ID.fetch_add(1, Ordering::Relaxed),
+                lifetime: GpuCanvasResourceLifetime::new(),
+                width,
+                height,
+                depth_or_array_layers: 1,
+                format: "rgba8unorm".into(),
+                texture_type: "2d".into(),
+                render_target: false,
+                sample_count: 1,
+                mip_level_count: 1,
+                uploads: Rc::new(RefCell::new(vec![GpuCanvasTextureUpload {
+                    bytes: rgba,
+                    width,
+                    height,
+                    depth: 1,
+                    x: 0,
+                    y: 0,
+                    z: 0,
+                    mip_level: 0,
+                    array_layer: 0,
+                    bytes_per_row: width * 4,
+                    rows_per_image: height,
+                }])),
+                external_image: None,
+            },
+        }
+    }
+
     pub(crate) fn create_userdata(&self, lua: &luaur_rt::Lua) -> Result<AnyUserData> {
         lua.create_userdata(GpuTextureView {
             texture: Some(self.texture.clone()),
@@ -1178,6 +1211,44 @@ pub(crate) struct GpuCanvasContextBindings {
     canvases: Rc<RefCell<Vec<Rc<RefCell<GpuCanvasState>>>>>,
     shaders: GpuCanvasShaderCatalog,
     renderer_bindings: Option<RendererBindings>,
+    /// Decoded images a direct host supplies for `context:image(name)`.
+    /// Imported files resolve images through their view-model context.
+    snapshot_images: Option<Rc<SnapshotImages>>,
+}
+
+/// Decoded RGBA8 pixels for one image a direct-host program can sample.
+#[derive(Clone, Debug)]
+pub struct GpuCanvasSnapshotImage {
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+#[derive(Default)]
+struct SnapshotImages {
+    by_name: BTreeMap<String, (u32, u32, GpuImageView)>,
+    missed: RefCell<BTreeSet<String>>,
+}
+
+/// `context:image(name)` in a direct-host program: `width`, `height`, and
+/// `view()` bound as a texture in a GPU pass. The draw renderer there records
+/// nothing, so `renderer:drawImage` with it is a no-op.
+struct SnapshotImage {
+    width: u32,
+    height: u32,
+    view: GpuImageView,
+}
+
+impl UserData for SnapshotImage {
+    fn add_fields<F: UserDataFields<Self>>(fields: &mut F) {
+        fields.add_field_method_get("width", |_, this| Ok(this.width));
+        fields.add_field_method_get("height", |_, this| Ok(this.height));
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        methods.add_method("view", |lua, this, ()| this.view.create_userdata(lua));
+    }
 }
 
 impl GpuCanvasContextBindings {
@@ -1276,6 +1347,7 @@ impl GpuCanvasContextBindings {
             canvases: Rc::new(RefCell::new(Vec::new())),
             shaders: GpuCanvasShaderCatalog::Direct(Rc::new(BTreeMap::new())),
             renderer_bindings: None,
+            snapshot_images: None,
         }
     }
 
@@ -1300,6 +1372,24 @@ impl GpuCanvasContextBindings {
 impl UserData for GpuCanvasContextBindings {
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
         methods.add_method("gpuCanvas", |lua, this, ()| this.canvas_userdata(lua));
+        methods.add_method("image", |lua, this, name: String| {
+            let Some(images) = &this.snapshot_images else {
+                return Ok(Value::Nil);
+            };
+            match images.by_name.get(&name) {
+                Some((width, height, view)) => lua
+                    .create_userdata(SnapshotImage {
+                        width: *width,
+                        height: *height,
+                        view: view.clone(),
+                    })
+                    .map(Value::UserData),
+                None => {
+                    images.missed.borrow_mut().insert(name);
+                    Ok(Value::Nil)
+                }
+            }
+        });
         methods.add_method("shader", |lua, this, name: String| {
             this.shader_userdata(lua, name)
         });
@@ -1324,6 +1414,7 @@ impl ImportedGpuCanvasInstance {
             canvases: Rc::clone(&canvases),
             shaders: GpuCanvasShaderCatalog::Imported(Rc::clone(&shaders)),
             renderer_bindings: Some(renderer_bindings.clone()),
+            snapshot_images: None,
         };
         (
             Self {
@@ -2072,6 +2163,7 @@ pub struct GpuCanvasBytecodeProgram {
     renderer: Table,
     state: Rc<RefCell<GpuCanvasState>>,
     execution_budget: Rc<Cell<u32>>,
+    images: Rc<SnapshotImages>,
 }
 
 impl std::fmt::Debug for GpuCanvasBytecodeProgram {
@@ -2086,6 +2178,29 @@ impl GpuCanvasBytecodeProgram {
     /// Load precompiled Luau bytecode, run its protocol generator, and retain
     /// the returned script instance.
     pub fn load(bytecode: &[u8]) -> Result<Self> {
+        Self::load_with_images(bytecode, Vec::new())
+    }
+
+    /// Load bytecode with decoded images the script reads through
+    /// `context:image(name)`.
+    pub fn load_with_images(bytecode: &[u8], images: Vec<GpuCanvasSnapshotImage>) -> Result<Self> {
+        let mut snapshot_images = SnapshotImages::default();
+        for image in images {
+            let expected = (image.width as usize)
+                .checked_mul(image.height as usize)
+                .and_then(|pixels| pixels.checked_mul(4));
+            if image.width == 0 || image.height == 0 || expected != Some(image.rgba.len()) {
+                return Err(Error::runtime(format!(
+                    "snapshot image '{}' must be {}x{} RGBA8 pixels",
+                    image.name, image.width, image.height
+                )));
+            }
+            let view = GpuImageView::from_rgba(image.width, image.height, image.rgba);
+            snapshot_images
+                .by_name
+                .insert(image.name, (image.width, image.height, view));
+        }
+        let images = Rc::new(snapshot_images);
         let vm = ScriptVm::new();
         vm.lua().set_memory_limit(MAX_LUAU_VM_MEMORY_BYTES)?;
         let execution_budget = Rc::new(Cell::new(MAX_LUAU_INTERRUPTS_PER_CALL));
@@ -2134,6 +2249,7 @@ impl GpuCanvasBytecodeProgram {
                 ],
             )]))),
             renderer_bindings: None,
+            snapshot_images: Some(Rc::clone(&images)),
         };
         let context = vm.lua().create_userdata(bindings)?;
         let chunk = vm.load_bytecode("gpu-canvas", bytecode)?;
@@ -2156,7 +2272,13 @@ impl GpuCanvasBytecodeProgram {
             renderer,
             state,
             execution_budget,
+            images,
         })
+    }
+
+    /// Names the script asked `context:image` for that were not supplied.
+    pub fn missing_images(&self) -> Vec<String> {
+        self.images.missed.borrow().iter().cloned().collect()
     }
 
     /// Advance the retained script by an exact fixed-step delta. A missing

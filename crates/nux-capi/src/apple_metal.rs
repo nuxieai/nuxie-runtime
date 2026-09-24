@@ -1580,6 +1580,9 @@ pub unsafe extern "C" fn nux_renderer_render_player(
             } else {
                 None
             };
+            player
+                .artboard
+                .report_script_pixel_ratio(transform.as_ref());
             session.record_ore_replay_marker();
             let mut recording = session.make_screen_renderer(0);
             recording.save();

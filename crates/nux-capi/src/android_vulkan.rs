@@ -529,11 +529,19 @@ fn with_rendered_player<T>(
         let artboard = player.artboard.instance.try_borrow_mut().map_err(|_| {
             ApiFailure::new(NuxStatus::ReentrantCall, "player occurrence is active")
         })?;
-        if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER {
-            recording.transform(centered_contain_transform(
+        let transform = if fit == NUX_ANDROID_VULKAN_RENDERER_FIT_CONTAIN_CENTER {
+            Some(centered_contain_transform(
                 artboard.artboard_bounds(),
                 (state.pixel_width, state.pixel_height),
-            )?);
+            )?)
+        } else {
+            None
+        };
+        player
+            .artboard
+            .report_script_pixel_ratio(transform.as_ref());
+        if let Some(transform) = transform {
+            recording.transform(transform);
         }
         artboard.draw(recording.as_mut());
     }

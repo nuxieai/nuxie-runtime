@@ -2039,11 +2039,19 @@ impl UserData for ScriptedContext {
                     .as_ref()
                     .and_then(|model| model.image_asset_named(&name))
             });
+            // Misses still return nil, as upstream; the VM log records why.
             Ok(match image {
-                Some(image) => create_asset_image(lua, image)?
-                    .map(Value::UserData)
-                    .unwrap_or(Value::Nil),
-                None => Value::Nil,
+                Some(image) => match create_asset_image(lua, image)? {
+                    Some(image) => Value::UserData(image),
+                    None => {
+                        super::lua_image::report_image_lookup_miss(lua, &name, true);
+                        Value::Nil
+                    }
+                },
+                None => {
+                    super::lua_image::report_image_lookup_miss(lua, &name, false);
+                    Value::Nil
+                }
             })
         });
         methods.add_method("blob", |lua, this, name: String| {
@@ -2090,6 +2098,10 @@ impl UserData for ScriptedContext {
                 None => (0, 0),
             };
             gpu_canvas.canvas_userdata_with_size(lua, width, height)
+        });
+        methods.add_method("pixelRatio", |lua, this, ()| {
+            this.require_live("pixelRatio")?;
+            Ok(super::script_pixel_ratio(lua))
         });
         methods.add_method("features", |lua, this, ()| {
             this.require_live("features")?;
@@ -4564,6 +4576,97 @@ mod tests {
                 .eval()
                 .unwrap();
             assert!(!found);
+        }
+
+        fn capture_script_log(lua: &Lua) -> Rc<RefCell<Vec<(u8, String)>>> {
+            let lines = Rc::new(RefCell::new(Vec::new()));
+            let logging = crate::vm::logging_scripting_context::LoggingScriptingContext::default();
+            let sink = lines.clone();
+            logging.set_sink(Rc::new(move |level, line: &[u8]| {
+                sink.borrow_mut()
+                    .push((level as u8, String::from_utf8_lossy(line).into_owned()));
+            }));
+            lua.set_app_data(logging);
+            lines
+        }
+
+        #[test]
+        fn context_image_nil_lookups_are_reported_once_through_the_vm_log() {
+            let fixture = std::env::var_os("RIVE_RUNTIME_DIR")
+                .map(std::path::PathBuf::from)
+                .unwrap_or_else(|| std::path::PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
+                .join("tests/unit_tests/assets/walle.riv");
+            let bytes = std::fs::read(&fixture)
+                .unwrap_or_else(|error| panic!("missing fixture {}: {error}", fixture.display()));
+            let file = native_test_file(&bytes);
+            let lua = Lua::new();
+            let lines = capture_script_log(&lua);
+            // Names are known but no decoded image owner is installed yet.
+            crate::vm::lua_image::set_script_image_assets(
+                &lua,
+                nuxie_runtime::script_image_assets(&file),
+            );
+            lua.globals().set("context", context(&lua)).unwrap();
+            let all_nil: bool = lua
+                .load(
+                    r#"
+                    local a = context:image("missing")
+                    local b = context:image("missing")
+                    local c = context:image("walle.jpg")
+                    return a == nil and b == nil and c == nil
+                    "#,
+                )
+                .eval()
+                .unwrap();
+            assert!(all_nil, "misses still return nil, as upstream");
+            let lines = lines.borrow();
+            assert_eq!(
+                *lines,
+                vec![
+                    (
+                        nuxie_runtime::source::logging_scripting_context::ScriptingLogLevel::Warn
+                            as u8,
+                        "context:image(\"missing\") found no image asset with that name; available: \"eve.png\", \"walle.jpg\"".to_owned(),
+                    ),
+                    (
+                        nuxie_runtime::source::logging_scripting_context::ScriptingLogLevel::Info
+                            as u8,
+                        "context:image(\"walle.jpg\") has no decoded image (GPU-compressed format or still loading)".to_owned(),
+                    ),
+                ],
+                "each miss is reported once, with the reason"
+            );
+        }
+
+        #[test]
+        fn context_image_miss_without_image_assets_says_so() {
+            let lua = Lua::new();
+            let lines = capture_script_log(&lua);
+            lua.globals().set("context", context(&lua)).unwrap();
+            lua.load(r#"context:image("anyname")"#).exec().unwrap();
+            assert_eq!(
+                lines.borrow().last().map(|(_, line)| line.as_str()),
+                Some(
+                    "context:image(\"anyname\") found no image asset; this file has no image assets"
+                )
+            );
+        }
+
+        #[test]
+        fn context_pixel_ratio_reports_the_host_scale() {
+            let vm = crate::vm::ScriptVm::new();
+            let lua = vm.lua();
+            lua.globals().set("context", context(&lua)).unwrap();
+            let read = || {
+                lua.load("return context:pixelRatio()")
+                    .eval::<f64>()
+                    .unwrap()
+            };
+            assert_eq!(read(), 1.0, "defaults to one pixel per artboard unit");
+            vm.set_pixel_ratio(3.0);
+            assert_eq!(read(), 3.0);
+            vm.set_pixel_ratio(f32::NAN);
+            assert_eq!(read(), 1.0, "invalid host values fall back to 1");
         }
 
         #[test]

@@ -18,6 +18,7 @@ use crate::mechanical_port::source::{
     renderer::include::rive::renderer::{
         buffer_ring_hpp::{BufferRingContract, HeapBufferRing},
         gpu_hpp::{FlushDescriptor, StorageBufferStructure},
+        render_canvas_hpp::RenderCanvas,
         render_context_helper_impl_hpp::{
             RenderContextHelperBackendContract, RenderContextHelperBufferFactoryContract,
             RenderContextHelperImpl, RenderContextHelperImplAccess,
@@ -42,6 +43,8 @@ pub struct FlushStats {
     pub atlas_fill_batches: u64,
     pub atlas_stroke_batches: u64,
     pub atlas_content_area: u64,
+    // Summed render-target area across flushes (a4dbc3ff WorkObservingNULL).
+    pub target_pixels: u64,
 }
 impl std::ops::Sub for FlushStats {
     type Output = Self;
@@ -57,6 +60,7 @@ impl std::ops::Sub for FlushStats {
             atlas_fill_batches: self.atlas_fill_batches - b.atlas_fill_batches,
             atlas_stroke_batches: self.atlas_stroke_batches - b.atlas_stroke_batches,
             atlas_content_area: self.atlas_content_area - b.atlas_content_area,
+            target_pixels: self.target_pixels - b.target_pixels,
         }
     }
 }
@@ -174,6 +178,25 @@ impl RenderContextHelperBackendContract for RenderContextNull {
         s.atlas_stroke_batches += d.featherAtlasStrokeBatchCount as u64;
         s.atlas_content_area +=
             u64::from(d.featherAtlasContentWidth) * u64::from(d.featherAtlasContentHeight);
+        if let Some(target) = d.renderTarget {
+            let target = unsafe { target.as_ref() };
+            s.target_pixels += u64::from(target.width()) * u64::from(target.height());
+        }
+    }
+    // Backs an offscreen canvas with null-device pixels so replay actually
+    // opens its frame instead of dropping the content. Without this a canvas
+    // recorded against this context stays unbacked and its draws are
+    // discarded, which would make an offscreen render look free.
+    unsafe fn ensureCanvasBacking(&mut self, canvas: *mut RenderCanvas) {
+        let canvas = unsafe { &mut *canvas };
+        if canvas.isBacked() {
+            return;
+        }
+        let (width, height) = (canvas.width(), canvas.height());
+        canvas.setBacking(
+            make_rcp(|| Texture::new(width, height)),
+            make_rcp(|| RenderTarget::new(width, height)),
+        );
     }
 }
 pub struct NullBackend {

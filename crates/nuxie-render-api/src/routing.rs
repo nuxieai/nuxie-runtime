@@ -5,7 +5,7 @@
 
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{ColorInt, RenderCanvas, Renderer};
+use crate::{ColorInt, RenderCanvas, RenderImage, Renderer};
 
 pub type OreContextHandle = Rc<RefCell<dyn nuxie_ore_metal::context::ContextApi>>;
 pub type RenderCanvasHandle = Rc<RefCell<Box<dyn RenderCanvas>>>;
@@ -48,6 +48,25 @@ pub fn canvas_texture_owner(
 /// The scripting owner invalidates its Lua renderer before ending the content
 /// bracket, exactly as it does for an immediate canvas frame.
 pub trait DeferredCanvasHost {
+    /// Allocates the canvas whose content this host is about to take. A
+    /// recording host can hand back an unbacked canvas and leave the pixels to
+    /// whoever replays, while a host that draws immediately must return one
+    /// with a real texture. `None` means this host cannot provide one, and the
+    /// caller draws normally instead.
+    fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle>;
+
+    /// The image a composite should sample to get this canvas's pixels.
+    /// Usually the canvas's own render image, but a backend that stores canvas
+    /// textures bottom-up can hand back a Y-flipped companion instead.
+    fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>>;
+
+    /// A renderer to issue the composite through, or `None` to use the one
+    /// that was drawing. The caller re-applies the current transform, since a
+    /// fresh renderer shares no state with the original.
+    fn composite_renderer(&mut self) -> Option<Box<dyn Renderer>> {
+        None
+    }
+
     fn begin_canvas_content(
         &mut self,
         canvas: RenderCanvasHandle,

@@ -1143,6 +1143,13 @@ impl crate::mechanical_port::source::core::CoreType
 }
 
 impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::bitmap_cache::BitmapCache
+{
+    const TYPE_KEY: u16 =
+        crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::TYPE_KEY;
+}
+
+impl crate::mechanical_port::source::core::CoreType
     for crate::mechanical_port::source::foreground_layout_drawable::ForegroundLayoutDrawable
 {
     const TYPE_KEY: u16 = crate::mechanical_port::source::generated::foreground_layout_drawable_base::ForegroundLayoutDrawableBase::TYPE_KEY;
@@ -2596,6 +2603,7 @@ pub enum CoreConcreteType {
     CustomPropertyGroup,
     Event,
     FocusData,
+    BitmapCache,
     CustomPropertyBoolean,
     ScriptInputBoolean,
     ScriptInputColor,
@@ -2838,6 +2846,10 @@ pub enum CoreField {
     FocusDataCanTraverse,
     FocusDataEdgeBehaviorValue,
     FocusDataFocusFlags,
+    BitmapCacheResolution,
+    BitmapCacheCacheFlags,
+    BitmapCacheCacheEnabled,
+    BitmapCacheDither,
     FollowPathConstraintDistance,
     FollowPathConstraintOffset,
     FollowPathConstraintOrient,
@@ -6738,6 +6750,7 @@ impl CoreRegistry {
             548 => CoreConcreteType::CustomPropertyGroup,
             128 => CoreConcreteType::Event,
             653 => CoreConcreteType::FocusData,
+            136 => CoreConcreteType::BitmapCache,
             129 => CoreConcreteType::CustomPropertyBoolean,
             631 => CoreConcreteType::ScriptInputBoolean,
             626 => CoreConcreteType::ScriptInputColor,
@@ -7034,6 +7047,7 @@ impl CoreRegistry {
             1077 => CoreField::ImageSamplerWrapX,
             1078 => CoreField::ImageSamplerWrapY,
             1033 => CoreField::FocusDataFocusFlags,
+            418 => CoreField::BitmapCacheCacheFlags,
             956 => CoreField::FocusDataEdgeBehaviorValue,
             121 => CoreField::DrawRulesDrawTargetId,
             494 => CoreField::LayoutComponentStyleId,
@@ -7225,6 +7239,8 @@ impl CoreRegistry {
             164 => CoreField::RectangleLinkCornerRadius,
             94 => CoreField::ClippingShapeIsVisible,
             953 => CoreField::FocusDataCanFocus,
+            419 => CoreField::BitmapCacheCacheEnabled,
+            420 => CoreField::BitmapCacheDither,
             954 => CoreField::FocusDataCanTouch,
             955 => CoreField::FocusDataCanTraverse,
             245 => CoreField::CustomPropertyBooleanPropertyValue,
@@ -7421,6 +7437,7 @@ impl CoreRegistry {
             83 => CoreField::CubicMirroredVertexDistance,
             126 => CoreField::PolygonCornerRadius,
             1071 => CoreField::TextStyleBackgroundCornerRadius,
+            417 => CoreField::BitmapCacheResolution,
             127 => CoreField::StarInnerRadius,
             380 => CoreField::ImageOriginX,
             381 => CoreField::ImageOriginY,
@@ -7705,6 +7722,7 @@ impl CoreRegistry {
             1077 => CoreField::ImageSamplerWrapX,
             1078 => CoreField::ImageSamplerWrapY,
             1033 => CoreField::FocusDataFocusFlags,
+            418 => CoreField::BitmapCacheCacheFlags,
             956 => CoreField::FocusDataEdgeBehaviorValue,
             121 => CoreField::DrawRulesDrawTargetId,
             494 => CoreField::LayoutComponentStyleId,
@@ -7844,6 +7862,8 @@ impl CoreRegistry {
     }
     pub fn get_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> bool {
         let field = match property_key {
+            419 => CoreField::BitmapCacheCacheEnabled,
+            420 => CoreField::BitmapCacheDither,
             // Virtual semantic getters added upstream in d4fe1022. These must
             // mirror the setters: reverse bindings read the current target.
             989 => CoreField::SemanticDataIsExpandable,
@@ -8075,6 +8095,7 @@ impl CoreRegistry {
             83 => CoreField::CubicMirroredVertexDistance,
             126 => CoreField::PolygonCornerRadius,
             1071 => CoreField::TextStyleBackgroundCornerRadius,
+            417 => CoreField::BitmapCacheResolution,
             127 => CoreField::StarInnerRadius,
             380 => CoreField::ImageOriginX,
             381 => CoreField::ImageOriginY,
@@ -8474,6 +8495,10 @@ impl CoreRegistry {
             1077 => 0,
             1078 => 0,
             1033 => 0,
+            418 => 0,
+            419 => 4,
+            420 => 4,
+            417 => 2,
             956 => 0,
             121 => 0,
             494 => 0,
@@ -9099,6 +9124,10 @@ impl CoreRegistry {
             1077 => 100,
             1078 => 100,
             1033 => 653,
+            417 => 136,
+            418 => 136,
+            419 => 136,
+            420 => 136,
             956 => 653,
             121 => 49,
             494 => 409,
@@ -76129,6 +76158,7 @@ impl CoreRegistry {
             548 => Some(Box::new(<crate::mechanical_port::source::custom_property_group::CustomPropertyGroup>::default())),
             128 => Some(Box::new(<crate::mechanical_port::source::event::Event>::default())),
             653 => Some(Box::new(<crate::mechanical_port::source::focus_data::FocusData>::default())),
+            136 => Some(Box::new(<crate::mechanical_port::source::bitmap_cache::BitmapCache>::default())),
             129 => Some(Box::new(<crate::mechanical_port::source::custom_property_boolean::CustomPropertyBoolean>::default())),
             631 => Some(Box::new(<crate::mechanical_port::source::script_input_boolean::ScriptInputBoolean>::default())),
             626 => Some(Box::new(<crate::mechanical_port::source::script_input_color::ScriptInputColor>::default())),
@@ -76461,4 +76491,201 @@ impl crate::mechanical_port::source::core::CoreType
     for crate::mechanical_port::source::text::text_style_background::TextStyleBackground
 {
     const TYPE_KEY: u16 = crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::TYPE_KEY;
+}
+
+impl CoreRegistryObject for crate::mechanical_port::source::bitmap_cache::BitmapCache {
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::is_type_of(
+            type_key,
+        )
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::ComponentParentId => {
+                if self.base.base.base.set_parent_id_value(value) {
+                    <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::parent_id_changed(self);
+                    <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::PARENT_ID_PROPERTY_KEY);
+                }
+            }
+            CoreField::BitmapCacheCacheFlags => {
+                if self.base.set_cache_flags_value(value) {
+                    <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::cache_flags_changed(self);
+                    <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::CACHE_FLAGS_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        match field {
+            CoreField::ComponentName => {
+                if self.base.base.base.set_name_value(value) {
+                    <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::name_changed(self);
+                    <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::component_base::ComponentBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::component_base::ComponentBase::NAME_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        match field {
+            CoreField::BitmapCacheCacheEnabled => {
+                let current = self.base.cache_flags();
+                let mask = crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::CACHE_ENABLED_BITMASK;
+                let next = (current & !mask) | if value { mask } else { 0 };
+                if current != next {
+                    if self.base.set_cache_flags_value(next) {
+                        <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::cache_flags_changed(self);
+                        <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::CACHE_FLAGS_PROPERTY_KEY);
+                    }
+                }
+            }
+            CoreField::BitmapCacheDither => {
+                let current = self.base.cache_flags();
+                let mask = crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::DITHER_BITMASK;
+                let next = (current & !mask) | if value { mask } else { 0 };
+                if current != next {
+                    if self.base.set_cache_flags_value(next) {
+                        <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::cache_flags_changed(self);
+                        <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::CACHE_FLAGS_PROPERTY_KEY);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        if field == CoreField::BitmapCacheResolution && self.base.set_resolution_value(value) {
+            <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::resolution_changed(self);
+            <crate::mechanical_port::source::bitmap_cache::BitmapCache as crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::RESOLUTION_PROPERTY_KEY);
+        }
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ComponentParentId => self.base.base.base.parent_id(),
+            CoreField::BitmapCacheCacheFlags => self.base.cache_flags(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::ComponentName => self.base.base.base.name().to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        match field {
+            CoreField::BitmapCacheCacheEnabled => self.base.cache_enabled(),
+            CoreField::BitmapCacheDither => self.base.dither(),
+            _ => false,
+        }
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        match field {
+            CoreField::BitmapCacheResolution => self.base.resolution(),
+            _ => 0.0,
+        }
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::bitmap_cache::BitmapCache
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::is_type_of(
+            type_key,
+        )
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        let mut callbacks = Self::default();
+        Some(Box::new(self.base.clone_into(&mut callbacks)))
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+impl CoreCapabilities for crate::mechanical_port::source::bitmap_cache::BitmapCache {
+    fn lifecycle_validate(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<bool> {
+        Some(
+            crate::mechanical_port::source::component::Component::validate(
+                &mut self.base.base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_on_added_dirty(
+        &mut self,
+        context: &mut dyn crate::mechanical_port::source::core_context::CoreContext,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::component::Component::on_added_dirty(
+                &mut self.base.base,
+                context,
+            ),
+        )
+    }
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        Some(
+            crate::mechanical_port::source::component::Component::import(
+                &mut self.base.base,
+                stack,
+            ),
+        )
+    }
+
+    fn as_component(&self) -> Option<&crate::mechanical_port::source::component::Component> {
+        Some(&self.base.base)
+    }
+    fn as_component_mut(
+        &mut self,
+    ) -> Option<&mut crate::mechanical_port::source::component::Component> {
+        Some(&mut self.base.base)
+    }
 }

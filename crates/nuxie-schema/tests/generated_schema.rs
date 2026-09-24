@@ -17,7 +17,7 @@ fn reference_runtime_dir() -> PathBuf {
 
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    assert_eq!(DEFINITIONS.len(), 350);
+    assert_eq!(DEFINITIONS.len(), 353);
     assert_eq!(
         definition_by_name("ViewModelPropertyAssetBlob")
             .expect("blob property definition")
@@ -37,14 +37,14 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 606);
+    assert_eq!(runtime_property_count, 635);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 225);
+    assert_eq!(animatable_property_count, 232);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -65,7 +65,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 455);
+    assert_eq!(described_property_count, 468);
 }
 
 #[test]
@@ -77,7 +77,7 @@ fn generated_schema_metadata_matches_cpp_defs_json() {
         runtime_dir.display()
     );
 
-    let defs = read_defs_json(&runtime_dir.join("dev/defs"));
+    let defs = schema_defs_json(&runtime_dir);
     let expected_files = defs
         .iter()
         .filter_map(|(file, json)| {
@@ -89,6 +89,7 @@ fn generated_schema_metadata_matches_cpp_defs_json() {
         .collect::<BTreeSet<_>>();
     let actual_files = DEFINITIONS
         .iter()
+        .filter(|definition| is_upstream_definition(definition))
         .map(|definition| definition.file.to_owned())
         .collect::<BTreeSet<_>>();
     assert_eq!(
@@ -96,7 +97,10 @@ fn generated_schema_metadata_matches_cpp_defs_json() {
         "generated definition set should exactly match runtime dev/defs files"
     );
 
-    for definition in DEFINITIONS {
+    for definition in DEFINITIONS
+        .iter()
+        .filter(|definition| is_upstream_definition(definition))
+    {
         let json = defs
             .get(definition.file)
             .unwrap_or_else(|| panic!("missing JSON definition for {}", definition.file));
@@ -945,6 +949,22 @@ fn object_supports_property_follows_cpp_registry_semantics() {
     assert!(!object_supports_property(122, 13)); // NestedTrigger is not a Node transform.
     assert!(!object_supports_property(106, 212)); // Encoded FileAssetContents.bytes payload.
     assert!(!object_supports_property(65_000, 4)); // Unknown object type.
+}
+
+/// The upstream definitions `make schema` generates from: the pinned
+/// `dev/defs` with the out-of-order upstream definitions in
+/// `defs/upstream-overlay` replacing the file at the same relative path. The
+/// port's own `defs/nuxie` extensions are not upstream metadata and are
+/// excluded from these comparisons.
+fn schema_defs_json(runtime_dir: &Path) -> BTreeMap<String, Value> {
+    let overlay = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../defs/upstream-overlay");
+    let mut defs = read_defs_json(&runtime_dir.join("dev/defs"));
+    defs.extend(read_defs_json(&overlay));
+    defs
+}
+
+fn is_upstream_definition(definition: &nuxie_schema::Definition) -> bool {
+    !definition.file.starts_with("nuxie/")
 }
 
 fn read_defs_json(defs_dir: &Path) -> BTreeMap<String, Value> {

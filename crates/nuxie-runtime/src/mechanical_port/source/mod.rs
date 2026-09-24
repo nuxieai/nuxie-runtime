@@ -12,6 +12,7 @@ pub mod audio;
 pub mod audio_event;
 pub mod backboard;
 pub mod bindable_artboard;
+pub mod bitmap_cache;
 pub mod bones;
 pub mod bounds_provider;
 pub mod clip_result;

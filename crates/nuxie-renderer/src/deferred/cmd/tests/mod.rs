@@ -1,4 +1,15 @@
 //! Literal test-body ports from tests/unit_tests/renderer at e949498e.
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod artboard_bitmap_cache_test;
 mod canvas_schedule_test;
 mod deferred_canvas_import_test;
 #[cfg(all(
@@ -19,8 +30,20 @@ mod deferred_path_query_test;
 mod deferred_replay_order_test;
 mod deferred_segment_test;
 mod deferred_source_equivalence_test;
+mod deferred_transform_shadow_test;
 mod foreign_image_registry_test;
 mod gpu_census_test;
+#[cfg(all(
+    feature = "rive-decoders",
+    any(
+        feature = "native-vulkan-experimental",
+        feature = "renderer-vulkan",
+        feature = "renderer-webgpu",
+        feature = "renderer-webgl2",
+        feature = "renderer-metal"
+    )
+))]
+mod modulate_opacity_test;
 #[cfg(all(
     feature = "rive-decoders",
     any(

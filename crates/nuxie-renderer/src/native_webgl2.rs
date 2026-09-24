@@ -260,4 +260,12 @@ impl Renderer for WebGl2Frame {
     fn modulate_opacity(&mut self, opacity: f32) {
         self.core.modulate_opacity(opacity);
     }
+
+    fn current_transform(&self) -> Option<Mat2D> {
+        self.core.current_transform()
+    }
+
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        self.core.current_modulated_opacity()
+    }
 }

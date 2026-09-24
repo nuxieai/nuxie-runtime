@@ -1329,6 +1329,17 @@ impl Renderer for NativeMetalFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         <RiveRenderer as RendererContract>::modulateOpacity(&mut self.renderer, opacity);
     }
+
+    fn current_transform(&self) -> Option<Mat2D> {
+        let mut out = Mat2D::IDENTITY;
+        <RiveRenderer as RendererContract>::currentTransform(&self.renderer, &mut out).then_some(out)
+    }
+
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        let mut out = 1.0;
+        <RiveRenderer as RendererContract>::currentModulatedOpacity(&self.renderer, &mut out)
+            .then_some(out)
+    }
 }
 
 #[cfg(any())]

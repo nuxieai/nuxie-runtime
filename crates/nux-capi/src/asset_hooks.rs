@@ -245,6 +245,9 @@ impl<F: AssetUploadFactory> Factory for AssetFactory<F> {
     fn deferred_canvas_host(&mut self) -> Option<nuxie::render_api::DeferredCanvasHostHandle> {
         self.inner.deferred_canvas_host()
     }
+    fn canvas_content_host(&mut self) -> Option<nuxie::render_api::DeferredCanvasHostHandle> {
+        self.inner.canvas_content_host()
+    }
     fn make_deferred_render_canvas(
         &mut self,
         width: u32,

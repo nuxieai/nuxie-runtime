@@ -2540,6 +2540,21 @@ pub trait Renderer {
         opacity: f32,
     );
     fn modulate_opacity(&mut self, opacity: f32);
+
+    /// Reports the renderer's current transform (CTM), if the renderer tracks
+    /// one. Needed when a draw has to be re-issued through a different
+    /// renderer that does not share this one's state.
+    fn current_transform(&self) -> Option<Mat2D> {
+        None
+    }
+
+    /// Reports the opacity accumulated by `modulate_opacity()`, if the
+    /// renderer tracks it. The companion to `current_transform()`: a draw
+    /// re-issued through a fresh renderer starts at opacity 1, so an enclosing
+    /// `modulate_opacity()` scope has to be carried across by hand.
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        None
+    }
 }
 
 /// One active 2D frame targeting a renderer-owned offscreen canvas.
@@ -2700,6 +2715,20 @@ pub trait Factory {
 
     fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
         None
+    }
+
+    /// A host that can hand out an offscreen frame to draw into, used by
+    /// features that rasterize into a texture rather than to the screen (an
+    /// artboard caching itself as a bitmap). A recording session doubles as
+    /// one, which is the default.
+    ///
+    /// Kept separate from `deferred_canvas_host()` on purpose: that one
+    /// answers "content is being recorded for a later replay", and the
+    /// scripting layer keys canvas allocation and frame handling off it. A
+    /// renderer that draws immediately can serve this hook, but must not
+    /// answer that one.
+    fn canvas_content_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.deferred_canvas_host()
     }
 
     /// Called after replayed ORE passes, before the renderer draws again.
@@ -2913,6 +2942,9 @@ impl Factory for PersistentFactoryContext {
     fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
         self.with_factory(|factory| factory.deferred_canvas_host())
     }
+    fn canvas_content_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.with_factory(|factory| factory.canvas_content_host())
+    }
     fn make_deferred_render_canvas(
         &mut self,
         width: u32,
@@ -3055,6 +3087,9 @@ impl<F: Factory + 'static> Factory for PersistentFactory<F> {
     }
     fn deferred_canvas_host(&mut self) -> Option<DeferredCanvasHostHandle> {
         self.borrow_mut().deferred_canvas_host()
+    }
+    fn canvas_content_host(&mut self) -> Option<DeferredCanvasHostHandle> {
+        self.borrow_mut().canvas_content_host()
     }
     fn make_deferred_render_canvas(
         &mut self,

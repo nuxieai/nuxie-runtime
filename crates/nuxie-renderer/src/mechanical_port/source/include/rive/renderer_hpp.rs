@@ -1097,6 +1097,25 @@ pub trait RendererContract {
     // virtual void modulateOpacity(float opacity) = 0;
     fn modulateOpacity(&mut self, opacity: f32);
 
+    // Reports the renderer's current transform (CTM) into *out, if the
+    // renderer tracks one. Returns false and leaves *out untouched otherwise.
+    // Needed when a draw has to be re-issued through a different renderer that
+    // does not share this one's state.
+    // virtual bool currentTransform(Mat2D* out) const { return false; }
+    fn currentTransform(&self, _out: &mut Mat2D) -> bool {
+        false
+    }
+
+    // Reports the opacity accumulated by modulateOpacity() into *out, if the
+    // renderer tracks it. Returns false and leaves *out untouched otherwise.
+    // The companion to currentTransform(): a draw re-issued through a fresh
+    // renderer starts at opacity 1, so an enclosing modulateOpacity() scope
+    // has to be carried across by hand.
+    // virtual bool currentModulatedOpacity(float* out) const { return false; }
+    fn currentModulatedOpacity(&self, _out: &mut f32) -> bool {
+        false
+    }
+
     // helpers
 
     // void translate(float x, float y);

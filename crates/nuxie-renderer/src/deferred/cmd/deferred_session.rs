@@ -186,6 +186,9 @@ pub struct DeferredSession {
     render_context: Rc<RefCell<Option<PersistentFactoryContext>>>,
     canvas_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
     screen_renderers: Rc<RefCell<HashMap<u64, RendererOwner>>>,
+    // The CTM shadow of each retained screen recorder, reset at the frame
+    // boundary. Held beside the owner because the owner is type-erased.
+    screen_transforms: Rc<RefCell<HashMap<u64, TransformShadow>>>,
     targets: Rc<RefCell<SessionTargets>>,
 }
 impl DeferredSession {
@@ -205,6 +208,7 @@ impl DeferredSession {
             render_context: Rc::new(RefCell::new(None)),
             canvas_renderers: Rc::new(RefCell::new(HashMap::new())),
             screen_renderers: Rc::new(RefCell::new(HashMap::new())),
+            screen_transforms: Rc::new(RefCell::new(HashMap::new())),
             targets: Rc::new(RefCell::new(SessionTargets::default())),
         };
         out.wire_ore_canvases();
@@ -234,7 +238,18 @@ impl DeferredSession {
         self.screen_renderers
             .borrow_mut()
             .entry(target)
-            .or_insert_with(|| Rc::new(RefCell::new(self.make_screen_renderer(target))))
+            .or_insert_with(|| {
+                let renderer = DeferredRenderer::new(
+                    self.command_buffer(),
+                    Some(self.canvases()),
+                    Some(self.routing.clone()),
+                    screen_target(target),
+                );
+                self.screen_transforms
+                    .borrow_mut()
+                    .insert(target, renderer.transform_shadow());
+                Rc::new(RefCell::new(Box::new(renderer) as Box<dyn Renderer>))
+            })
             .clone()
     }
     pub fn acquire_screen_target(&mut self) -> u64 {
@@ -248,6 +263,7 @@ impl DeferredSession {
     }
     pub fn release_screen_target(&mut self, target: u64) {
         self.screen_renderers.borrow_mut().remove(&target);
+        self.screen_transforms.borrow_mut().remove(&target);
         self.targets.borrow_mut().free.push(target);
     }
     pub fn attached_target_count(&self) -> usize {
@@ -281,6 +297,12 @@ impl DeferredSession {
         self.ore_context.borrow_mut().resetFrame();
         self.routing.borrow_mut().reset_frame();
         self.canvas_renderers.borrow_mut().clear();
+        // Screen recorders are kept across frames (FFI hosts hold them), so
+        // their CTM shadow is ours to clear. Canvas recorders are rebuilt
+        // above and start at identity already.
+        for shadow in self.screen_transforms.borrow().values() {
+            reset_transform_shadow(shadow);
+        }
     }
     pub fn stream_bytes(&self) -> u64 {
         let buffer = self.command_buffer();
@@ -381,8 +403,28 @@ impl Renderer for ScopedRenderer {
     fn modulate_opacity(&mut self, o: f32) {
         self.0.borrow_mut().modulate_opacity(o);
     }
+    fn current_transform(&self) -> Option<Mat2D> {
+        self.0.borrow().current_transform()
+    }
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        self.0.borrow().current_modulated_opacity()
+    }
 }
 impl DeferredCanvasHost for DeferredSession {
+    // Recording: the stream only names the canvas, and whoever replays
+    // resolves it against its own device.
+    fn content_canvas_image(&mut self, canvas: &RenderCanvasHandle) -> Option<Rc<dyn RenderImage>> {
+        Some(canvas.borrow().render_image())
+    }
+    // The canvas needs no pixels here; whoever replays allocates them on the
+    // context it replays against, so this only mints the identity the stream
+    // refers to.
+    fn make_content_canvas(&mut self, width: u32, height: u32) -> Option<RenderCanvasHandle> {
+        let mut rc = self.render_context.borrow().clone()?;
+        rc.make_deferred_render_canvas(width, height)
+            .ok()
+            .map(|canvas| Rc::new(RefCell::new(canvas)))
+    }
     fn begin_canvas_content(
         &mut self,
         canvas: RenderCanvasHandle,

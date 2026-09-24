@@ -440,6 +440,9 @@ impl Factory for AppleMetalFactory {
     fn deferred_canvas_host(&mut self) -> Option<nuxie::render_api::DeferredCanvasHostHandle> {
         self.session.deferred_canvas_host()
     }
+    fn canvas_content_host(&mut self) -> Option<nuxie::render_api::DeferredCanvasHostHandle> {
+        self.session.canvas_content_host()
+    }
     fn make_render_canvas(
         &mut self,
         width: u32,
@@ -670,6 +673,21 @@ impl Renderer for ReplayFrameRenderer {
             .unwrap()
             .renderer()
             .modulate_opacity(opacity);
+    }
+    fn current_transform(&self) -> Option<Mat2D> {
+        // A query must never panic on a slot another call is using.
+        self.0
+            .try_borrow_mut()
+            .ok()?
+            .as_mut()
+            .and_then(|frame| frame.renderer().current_transform())
+    }
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        self.0
+            .try_borrow_mut()
+            .ok()?
+            .as_mut()
+            .and_then(|frame| frame.renderer().current_modulated_opacity())
     }
 }
 

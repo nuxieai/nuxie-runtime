@@ -12,6 +12,16 @@ impl DeferredCanvasHost for StubCanvasHost {
         None
     }
     fn end_canvas_content(&mut self, _: &RenderCanvasHandle) {}
+    // A stub that never draws has nothing to allocate against.
+    fn make_content_canvas(&mut self, _: u32, _: u32) -> Option<RenderCanvasHandle> {
+        None
+    }
+    fn content_canvas_image(
+        &mut self,
+        _: &RenderCanvasHandle,
+    ) -> Option<std::rc::Rc<dyn RenderImage>> {
+        None
+    }
 }
 
 struct SessionFactory {

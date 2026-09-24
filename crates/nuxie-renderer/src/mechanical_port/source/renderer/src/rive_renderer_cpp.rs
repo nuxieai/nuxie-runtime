@@ -1761,4 +1761,16 @@ impl RendererContract for RiveRenderer {
         let current = self.current_state().modulatedOpacity;
         self.current_state_mut().modulatedOpacity = (current * opacity).max(0.0);
     }
+
+    // Inline in rive_renderer.hpp.
+    fn currentTransform(&self, out: &mut Mat2D) -> bool {
+        *out = self.current_state().matrix;
+        true
+    }
+
+    // Inline in rive_renderer.hpp.
+    fn currentModulatedOpacity(&self, out: &mut f32) -> bool {
+        *out = self.current_state().modulatedOpacity;
+        true
+    }
 }

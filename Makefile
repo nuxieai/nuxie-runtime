@@ -148,8 +148,16 @@ CC ?= cc
 fixtures:
 	RIVE_RUNTIME_DIR="$(RIVE_RUNTIME_DIR)" tools/fetch-test-assets.sh
 
+# Definitions ported out of upstream order (docs/upstream-sync-map.md) are
+# overlaid on the pinned upstream defs until a sync reaches their commit.
+SCHEMA_OVERLAY_DIR ?= $(CURDIR)/defs/upstream-overlay
+
 schema:
-	cargo run -p nuxie-codegen -- --defs "$(DEFS_DIR)" --out crates/nuxie-schema/src/generated/schema.rs
+	@defs="$$(mktemp -d)"; \
+	cp -R "$(DEFS_DIR)/." "$$defs/" && \
+	cp -R "$(SCHEMA_OVERLAY_DIR)/." "$$defs/" && \
+	cargo run -p nuxie-codegen -- --defs "$$defs" --out crates/nuxie-schema/src/generated/schema.rs; \
+	status=$$?; rm -rf "$$defs"; exit $$status
 	cargo fmt --all
 
 .PHONY: fmt fmt-check

@@ -2223,6 +2223,7 @@ impl GpuCanvasBytecodeProgram {
         let resource_budget = Rc::new(RefCell::new(GpuCanvasResourceBudget::default()));
         install_gpu_canvas_globals_with_budget(&vm, resource_budget)?;
         crate::vm::lua_image::install_image_globals(vm.lua())?;
+        crate::vm::install_value_globals(vm.lua())?;
         let renderer = vm.lua().create_table();
         for method in [
             "save",

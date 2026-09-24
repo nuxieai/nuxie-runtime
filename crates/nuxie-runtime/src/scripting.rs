@@ -959,6 +959,11 @@ impl ScriptImageAssets {
     pub fn named(&self, name: &str) -> Option<ScriptImage> {
         self.by_name.get(name).copied()
     }
+
+    /// Every image asset name a script can pass to `context:image`.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.by_name.keys().map(String::as_str)
+    }
 }
 
 pub fn script_image_assets(source: &impl ScriptFileSource) -> ScriptImageAssets {

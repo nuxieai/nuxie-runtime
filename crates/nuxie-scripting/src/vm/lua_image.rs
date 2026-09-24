@@ -1,12 +1,15 @@
 //! Direct owner for pinned `src/lua/renderer/lua_image.cpp`.
 
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 use std::rc::Rc;
 use std::sync::Arc;
 
-use luaur_rt::{AnyUserData, Error, Lua, Result, UserData, UserDataFields};
+use luaur_rt::{AnyUserData, Error, Lua, Result, UserData, UserDataFields, UserDataMethods};
 use nuxie_render_api::{ImageFilter, ImageSampler, ImageWrap, RenderCanvasHandle, RenderImage};
 use nuxie_runtime::{RuntimeImageAssetOwners, ScriptImage, ScriptImageAssets};
+
+use super::logging_scripting_context::LoggingScriptingContext;
 
 #[derive(Clone, Default)]
 struct ScriptedImageAssetOwners(Option<Arc<RuntimeImageAssetOwners>>);
@@ -97,7 +100,12 @@ impl UserData for ScriptedImage {
         fields.add_field_method_get("height", |_, this| {
             this.with_render_image(RenderImage::height)
         });
-        fields.add_field_method_get("view", |lua, this| {
+    }
+
+    fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
+        // Upstream `image_index` returns `riveImageViewImpl` as a function, so
+        // scripts call `image:view()`.
+        methods.add_method("view", |lua, this, ()| {
             crate::gpu_canvas::ore::image_view(
                 lua,
                 this.render_image()?,
@@ -159,6 +167,64 @@ pub(super) fn set_script_image_assets(lua: &Lua, assets: ScriptImageAssets) {
 pub(super) fn script_image_asset_named(lua: &Lua, name: &str) -> Option<ScriptImage> {
     lua.app_data_ref::<ScriptedImageAssets>()
         .and_then(|assets| assets.0.named(name))
+}
+
+#[derive(Clone, Default)]
+struct ImageLookupReports(Rc<RefCell<BTreeSet<(String, bool)>>>);
+
+/// Report a nil `context:image(name)` once per name through the VM log, so a
+/// host can show why a drawable drew nothing. An undecoded image is logged at
+/// info level because it usually resolves within a frame or two; a name with
+/// no asset is a warning that lists the names the file does carry. The
+/// undecoded wording matches the Rive editor's own message.
+pub(super) fn report_image_lookup_miss(lua: &Lua, name: &str, undecoded: bool) {
+    let reports = match lua.app_data_ref::<ImageLookupReports>() {
+        Some(reports) => reports.clone(),
+        None => {
+            let reports = ImageLookupReports::default();
+            lua.set_app_data(reports.clone());
+            reports
+        }
+    };
+    if !reports.0.borrow_mut().insert((name.to_owned(), undecoded)) {
+        return;
+    }
+    let Some(logging) = lua
+        .app_data_ref::<LoggingScriptingContext>()
+        .map(|logging| logging.clone())
+    else {
+        return;
+    };
+    if undecoded {
+        logging.begin_line();
+        logging.append(
+            format!(
+                "context:image(\"{name}\") has no decoded image (GPU-compressed format or still loading)"
+            )
+            .as_bytes(),
+        );
+        logging.end_line();
+        return;
+    }
+    let names = lua
+        .app_data_ref::<ScriptedImageAssets>()
+        .map(|assets| {
+            assets
+                .0
+                .names()
+                .map(|name| format!("\"{name}\""))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let message = if names.is_empty() {
+        format!("context:image(\"{name}\") found no image asset; this file has no image assets")
+    } else {
+        format!(
+            "context:image(\"{name}\") found no image asset with that name; available: {}",
+            names.join(", ")
+        )
+    };
+    logging.print_warning(message.as_bytes());
 }
 
 pub(super) fn create_asset_image(lua: &Lua, image: ScriptImage) -> Result<Option<AnyUserData>> {
@@ -305,7 +371,7 @@ mod tests {
             )
             .unwrap();
         let format: String = lua
-            .load("image = video:image(); return image.view.format")
+            .load("image = video:image(); return image:view().format")
             .eval()
             .unwrap();
         assert_eq!(format, "rgba8unorm");
@@ -347,13 +413,20 @@ mod tests {
         assert!(lua.load("image.height = 5").exec().is_err());
         let format: String = lua
             .load(
-                "local first = image.view\n\
-                 local second = image.view\n\
+                "local first = image:view()\n\
+                 local second = image:view()\n\
                  return first.format",
             )
             .eval()
             .unwrap();
         assert_eq!(format, "rgba8unorm");
+        assert_eq!(
+            lua.load("return type(image.view)")
+                .eval::<String>()
+                .unwrap(),
+            "function",
+            "view is a method, as upstream: scripts call image:view()"
+        );
 
         let image = lua.globals().get::<AnyUserData>("image").unwrap();
         let image = image.borrow::<ScriptedImage>().unwrap();
@@ -373,7 +446,7 @@ mod tests {
             )
             .unwrap();
         let error = lua
-            .load("return image.view")
+            .load("return image:view()")
             .eval::<AnyUserData>()
             .expect_err("Image:view requires the active renderer context");
         assert!(

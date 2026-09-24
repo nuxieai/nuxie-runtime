@@ -121,7 +121,7 @@ playback.
 
 Luau `context:video(name):image()` returns an ordinary Image snapshot of the
 currently visible decoded frame or poster, or nil when none is available.
-The snapshot shares the renderer resource; `image.view` uses the existing
+The snapshot shares the renderer resource; `image:view()` uses the existing
 GPU sampling interface and `renderer:drawImage` uses ordinary scene drawing.
 It does not create another decoder or copy pixels. Request a new snapshot to
 observe a later frame. Retained snapshots remain valid across source replacement

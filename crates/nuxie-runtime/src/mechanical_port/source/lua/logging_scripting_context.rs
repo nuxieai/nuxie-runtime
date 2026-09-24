@@ -54,6 +54,11 @@ impl LoggingScriptingContext {
         }
     }
 
+    /// Nuxie extension: a host-visible warning line that is not a Lua error.
+    pub fn print_warning(&self, message: &[u8]) {
+        self.log(ScriptingLogLevel::Warn, message);
+    }
+
     fn log(&self, level: ScriptingLogLevel, line: &[u8]) {
         let sink = self.sink.borrow().clone();
         if let Some(sink) = sink {

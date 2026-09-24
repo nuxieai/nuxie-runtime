@@ -742,6 +742,16 @@ impl ScriptExecutionBudget {
     }
 }
 
+/// Device pixels per artboard unit for `context:pixelRatio()`; see
+/// [`ScriptVm::set_pixel_ratio`].
+#[derive(Clone, Copy)]
+struct ScriptPixelRatio(f32);
+
+pub(crate) fn script_pixel_ratio(lua: &Lua) -> f32 {
+    lua.app_data_ref::<ScriptPixelRatio>()
+        .map_or(1.0, |ratio| ratio.0)
+}
+
 /// A booted Luau VM.
 ///
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
@@ -2038,6 +2048,20 @@ impl ScriptVm {
     /// optional DataContext, matching `ScriptAsset::file()` ownership in C++.
     pub fn set_image_assets(&self, assets: nuxie_runtime::ScriptImageAssets) {
         lua_image::set_script_image_assets(&self.lua, assets);
+    }
+
+    /// Set the device pixels per artboard unit reported by
+    /// `context:pixelRatio()`. Nuxie extension with no upstream equivalent:
+    /// the drawing host knows the artboard-to-surface scale and sets it before
+    /// advancing and drawing, so scripts can size offscreen canvases to match.
+    /// Non-finite or non-positive values fall back to 1.
+    pub fn set_pixel_ratio(&self, ratio: f32) {
+        let ratio = if ratio.is_finite() && ratio > 0.0 {
+            ratio
+        } else {
+            1.0
+        };
+        self.lua.set_app_data(ScriptPixelRatio(ratio));
     }
 
     /// Install proof for exact original bytes before native File import.

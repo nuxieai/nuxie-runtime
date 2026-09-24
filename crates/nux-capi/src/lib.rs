@@ -388,6 +388,27 @@ struct ArtboardOccurrence {
 }
 
 impl ArtboardOccurrence {
+    /// Report the artboard-to-surface scale that the renderer applies, so this
+    /// occurrence's scripts can size offscreen canvases through
+    /// `context:pixelRatio()`. Without a fit transform one artboard unit is one
+    /// surface pixel.
+    #[cfg(any(
+        all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")),
+        feature = "android-vulkan"
+    ))]
+    fn report_script_pixel_ratio(&self, transform: Option<&nuxie::render_api::Mat2D>) {
+        #[cfg(feature = "scripting")]
+        if let Some(scripted) = self.scripted.as_ref() {
+            let ratio = transform.map_or(1.0, |transform| {
+                let [xx, xy, ..] = transform.0;
+                xx.hypot(xy)
+            });
+            scripted.vm().set_pixel_ratio(ratio);
+        }
+        #[cfg(not(feature = "scripting"))]
+        let _ = transform;
+    }
+
     fn invalidate_render(&self) -> Result<u64, NuxStatus> {
         let revision = self.next_render_revision()?;
         self.render_revision.set(revision);

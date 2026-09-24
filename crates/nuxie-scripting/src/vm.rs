@@ -747,6 +747,13 @@ impl ScriptExecutionBudget {
 #[derive(Clone, Copy)]
 struct ScriptPixelRatio(f32);
 
+/// Value globals (`Color`, `Mat2D`) for a direct host that has no renderer
+/// library, so scripts that build transforms and colors run unchanged.
+pub(crate) fn install_value_globals(lua: &Lua) -> Result<()> {
+    lua_color::install_color_global(lua)?;
+    lua_mat2d::install_mat2d_global(lua)
+}
+
 pub(crate) fn script_pixel_ratio(lua: &Lua) -> f32 {
     lua.app_data_ref::<ScriptPixelRatio>()
         .map_or(1.0, |ratio| ratio.0)

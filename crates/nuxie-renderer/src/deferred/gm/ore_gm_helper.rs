@@ -113,6 +113,21 @@ impl Renderer for FrameRenderer {
             .renderer()
             .modulate_opacity(o);
     }
+    fn current_transform(&self) -> Option<Mat2D> {
+        // A query must never panic on a slot another call is using.
+        self.0
+            .try_borrow_mut()
+            .ok()?
+            .as_mut()
+            .and_then(|frame| frame.renderer().current_transform())
+    }
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        self.0
+            .try_borrow_mut()
+            .ok()?
+            .as_mut()
+            .and_then(|frame| frame.renderer().current_modulated_opacity())
+    }
 }
 
 pub(super) struct GmHost {
@@ -122,6 +137,9 @@ pub(super) struct GmHost {
     canvas: Rc<RefCell<Option<Frame>>>,
     clear: u32,
     screen_initialized: bool,
+    // Offscreen frames opened while replaying, i.e. how many times content
+    // was actually rasterized into a canvas (a4dbc3ff TestingWindowFrameSink).
+    canvas_frames: usize,
 }
 impl GmHost {
     pub fn new(clear: u32) -> Self {
@@ -160,7 +178,11 @@ impl GmHost {
             canvas: Rc::new(RefCell::new(None)),
             clear,
             screen_initialized: open,
+            canvas_frames: 0,
         }
+    }
+    pub fn canvas_frames(&self) -> usize {
+        self.canvas_frames
     }
     pub fn screen(&self) -> RendererOwner {
         Rc::new(RefCell::new(Box::new(FrameRenderer(self.screen.clone()))))
@@ -244,6 +266,7 @@ impl DeferredFrameSink for GmHost {
     ) -> Option<RendererOwner> {
         self.flush_screen();
         assert!(self.canvas.borrow().is_none());
+        self.canvas_frames += 1;
         *self.canvas.borrow_mut() = Some(Frame::Canvas(
             canvas
                 .borrow_mut()

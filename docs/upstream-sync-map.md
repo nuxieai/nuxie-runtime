@@ -101,6 +101,24 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   deferred session so scripted GPUCanvas follows the new upstream contract.
   Do not restore immediate-context GPUCanvas as a compatibility fallback.
 
+## Out-of-order ports
+
+These upstream commits were ported ahead of the incremental sync with the
+user's approval. `LAST_SYNCED_SHA` does not move for them. When the sync
+reaches one of these commits, confirm the Rust owners match the upstream diff
+at that point, account for any intervening upstream changes to the same files,
+and delete the matching file from `defs/upstream-overlay/`.
+
+| Upstream SHA | Ported slice | Work |
+| --- | --- | --- |
+| `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Cache as bitmap: the BitmapCache core type, the Artboard offscreen raster and composite, `Renderer::current_transform`/`current_modulated_opacity`, `Factory::canvas_content_host`, the three new `DeferredCanvasHost` methods, and the deferred recorder's CTM shadow. The serializing/replay utilities, player and deploy harness, and the silver-factory test are not ported. See [cache-as-bitmap-port.md](cache-as-bitmap-port.md). | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
+
+The text input alignment (`7098a7c8`) and obscured input (`bec99be4`)
+properties were also added ahead of the sync (see
+[text-input-alignment-port.md](text-input-alignment-port.md)). Their schema
+definitions now live in `defs/upstream-overlay/text/text_input.json` so
+`make schema` reproduces the committed schema.
+
 ## One upstream commit at a time
 
 1. Fetch upstream metadata and enumerate `LAST_SYNCED_SHA..target` oldest first

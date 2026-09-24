@@ -1,0 +1,56 @@
+{
+  "name": "BitmapCache",
+  "key": {
+    "int": 136,
+    "string": "bitmapcache"
+  },
+  "extends": "component.json",
+  "properties": {
+    "resolution": {
+      "type": "double",
+      "initialValue": "1.0",
+      "animates": true,
+      "key": {
+        "int": 417,
+        "string": "resolution"
+      },
+      "description": "Texels per device pixel the cached raster is sized at; the raster re-renders when the viewed scale changes.",
+      "bindable": true
+    },
+    "cacheFlags": {
+      "type": "uint",
+      "initialValue": "1",
+      "animates": true,
+      "key": {
+        "int": 418,
+        "string": "cacheflags"
+      },
+      "description": "Bitmask for cache flags",
+      "bindable": true
+    },
+    "cacheEnabled": {
+      "type": "bool",
+      "animates": true,
+      "key": {
+        "int": 419,
+        "string": "cacheenabled"
+      },
+      "description": "Draw the artboard from a cached raster instead of as vectors.",
+      "bindable": true,
+      "passthroughForBitmask": "cacheFlags",
+      "passthroughBit": 0
+    },
+    "dither": {
+      "type": "bool",
+      "animates": true,
+      "key": {
+        "int": 420,
+        "string": "dither"
+      },
+      "description": "Reserved; not read by the runtime yet.",
+      "bindable": true,
+      "passthroughForBitmask": "cacheFlags",
+      "passthroughBit": 1
+    }
+  }
+}

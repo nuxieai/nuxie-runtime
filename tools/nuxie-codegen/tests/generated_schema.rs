@@ -21,6 +21,23 @@ fn fl_e8_static_text_fixture_type_keys_are_in_the_generated_schema() {
     );
 }
 
+fn copy_dir(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to)
+        .unwrap_or_else(|err| panic!("failed to create {}: {err}", to.display()));
+    for entry in std::fs::read_dir(from)
+        .unwrap_or_else(|err| panic!("failed to read directory {}: {err}", from.display()))
+    {
+        let entry = entry.unwrap_or_else(|err| panic!("failed to read dir entry: {err}"));
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target)
+                .unwrap_or_else(|err| panic!("failed to copy {}: {err}", entry.path().display()));
+        }
+    }
+}
+
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
@@ -46,9 +63,19 @@ fn generated_schema_is_reproducible_from_cpp_defs() {
         std::process::id()
     ));
 
+    // `make schema` overlays the out-of-order upstream definitions on the
+    // pinned defs; reproduce exactly that input.
+    let defs_dir = std::env::temp_dir().join(format!(
+        "rive-rust-generated-schema-defs-{}",
+        std::process::id()
+    ));
+    let _ = std::fs::remove_dir_all(&defs_dir);
+    copy_dir(&runtime_dir.join("dev/defs"), &defs_dir);
+    copy_dir(&workspace_root().join("defs/upstream-overlay"), &defs_dir);
+
     let output = Command::new(env!("CARGO_BIN_EXE_nuxie-codegen"))
         .arg("--defs")
-        .arg(runtime_dir.join("dev/defs"))
+        .arg(&defs_dir)
         .arg("--out")
         .arg(&actual_path)
         .output()
@@ -79,6 +106,7 @@ fn generated_schema_is_reproducible_from_cpp_defs() {
     let actual = std::fs::read_to_string(&actual_path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", actual_path.display()));
     let _ = std::fs::remove_file(&actual_path);
+    let _ = std::fs::remove_dir_all(&defs_dir);
 
     if actual != expected {
         let mismatch = first_mismatch(&actual, &expected);

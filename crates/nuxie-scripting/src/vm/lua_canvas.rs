@@ -219,6 +219,14 @@ impl Renderer for DeferredCanvasFrame {
     fn modulate_opacity(&mut self, opacity: f32) {
         self.target().modulate_opacity(opacity);
     }
+    // Upstream hands the host's recorder to the scripted renderer directly,
+    // so its transform and opacity queries answer through this frame.
+    fn current_transform(&self) -> Option<Mat2D> {
+        self.renderer.as_deref()?.current_transform()
+    }
+    fn current_modulated_opacity(&self) -> Option<f32> {
+        self.renderer.as_deref()?.current_modulated_opacity()
+    }
 }
 
 impl Drop for ScriptedCanvas {

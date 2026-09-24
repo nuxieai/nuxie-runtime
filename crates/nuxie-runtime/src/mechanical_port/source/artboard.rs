@@ -18,6 +18,7 @@ use crate::mechanical_port::source::{
     artboard_component_list::ArtboardComponentList,
     artboard_host::ArtboardHost,
     audio::audio_engine::AudioEngineRef,
+    bitmap_cache::BitmapCache,
     component::Component,
     component_dirt::ComponentDirt,
     core::field_types::core_callback_type::{CallbackContext, CallbackData},
@@ -152,6 +153,9 @@ pub struct Artboard {
     component_lists: Vec<CoreHandle>,
     artboard_hosts: Vec<CoreHandle>,
     joysticks: Vec<CoreHandle>,
+    // The BitmapCache child, collected in initialize(). None unless the
+    // artboard has one; the object itself owns the offscreen render state.
+    bitmap_cache: Option<CoreHandle>,
     resettables: Vec<CoreHandle>,
     scripted_objects: Vec<CoreHandle>,
     advancing_components: Vec<AdvancingComponentHandle>,
@@ -227,6 +231,7 @@ impl Default for Artboard {
             component_lists: Vec::new(),
             artboard_hosts: Vec::new(),
             joysticks: Vec::new(),
+            bitmap_cache: None,
             resettables: Vec::new(),
             scripted_objects: Vec::new(),
             advancing_components: Vec::new(),
@@ -476,6 +481,12 @@ impl Artboard {
 
     pub fn did_change(&self) -> bool {
         self.dirty_state.0.did_change.get()
+    }
+
+    /// The BitmapCache child of this artboard, if one exists. Its presence
+    /// enables cache-as-bitmap rendering. Populated during initialize().
+    pub fn bitmap_cache(&self) -> Option<CoreHandle> {
+        self.bitmap_cache.clone()
     }
     pub fn dirty_handle(&self) -> RuntimeArtboardDirtyHandle {
         self.dirty_state.clone()
@@ -877,6 +888,8 @@ impl Artboard {
                     root.with_downcast_mut::<Artboard, _>(|artboard| artboard.joysticks_apply_before_update = false);
                 }
                 root.with_downcast_mut::<Artboard, _>(|artboard| artboard.joysticks.push(object.clone()));
+            } else if object.is_type_of(crate::mechanical_port::source::generated::bitmap_cache_base::BitmapCacheBase::TYPE_KEY) {
+                root.with_downcast_mut::<Artboard, _>(|artboard| artboard.bitmap_cache = Some(object.clone()));
             }
             if object
                 .with(|object| object.is_advancing_component())
@@ -2344,10 +2357,28 @@ impl Artboard {
 
     pub fn draw_handle(root: &CoreHandle, renderer: &mut Renderer) {
         nuxie_render_api::increment_artboard_draw_frame_id();
-        Self::draw_internal_handle(root, renderer);
+        // A standalone/root artboard is never cached as a bitmap: it is
+        // already the top-level render target, and a host can skip drawing
+        // entirely via did_change(). Only nested/instanced draws (which reach
+        // draw_internal directly) participate in cache-as-bitmap.
+        Self::draw_content_handle(root, renderer);
     }
 
     pub fn draw_internal_handle(root: &CoreHandle, renderer: &mut Renderer) {
+        let has_cache = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.bitmap_cache.is_some())
+            .unwrap_or(false);
+        if has_cache && Self::draw_cached_as_bitmap_handle(root, renderer) {
+            return;
+        }
+        Self::draw_content_handle(root, renderer);
+    }
+
+    /// The actual vector-drawing body of draw_internal. Split out so the
+    /// cache-as-bitmap hook can rasterize into an offscreen canvas without
+    /// re-entering the hook, and so the standalone-root draw() path can bypass
+    /// caching entirely.
+    pub fn draw_content_handle(root: &CoreHandle, renderer: &mut Renderer) {
         let Some((save, first_drawable)) = root
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.draw_background(renderer))
             .flatten()
@@ -2446,6 +2477,346 @@ impl Artboard {
             }
             current.draw(renderer);
         }
+    }
+
+    /// Renders this artboard's content into the BitmapCache child's offscreen
+    /// canvas (if the cache is missing/stale) and composites it into
+    /// `renderer`. Returns false if caching is unavailable (no canvas content
+    /// host, zero size, or allocation failure), so the caller falls back to
+    /// draw_content.
+    pub fn draw_cached_as_bitmap_handle(root: &CoreHandle, renderer: &mut Renderer) -> bool {
+        // Only reached when bitmap_cache is Some (guarded in draw_internal).
+        let Some(cache) = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.bitmap_cache.clone())
+            .flatten()
+        else {
+            return false;
+        };
+
+        if !cache
+            .with_downcast::<BitmapCache, _>(|cache| cache.cache_enabled())
+            .unwrap_or(false)
+        {
+            // Authored off (or animated/bound off): behave as though the
+            // artboard had no BitmapCache at all. The texture is released by
+            // BitmapCache::cache_flags_changed when the bit clears.
+            return false;
+        }
+
+        if root
+            .with_downcast::<Artboard, _>(|artboard| artboard.child_opacity())
+            .unwrap_or(1.0)
+            == 0.0
+        {
+            // Fully transparent: nothing to draw, and no need to
+            // (re)rasterize. The pending change still has to be consumed the
+            // way draw_content would have on the vector path -- a host that
+            // gates frame submission on did_change() otherwise resubmits this
+            // invisible artboard every frame, forever. Fold it into the cache
+            // rather than dropping it, so content that moved while it was
+            // transparent still re-rasterizes when it becomes visible again.
+            let changed = root
+                .with_downcast::<Artboard, _>(|artboard| {
+                    let changed = artboard.did_change();
+                    artboard.dirty_state.0.did_change.set(false);
+                    changed
+                })
+                .unwrap_or(false);
+            cache.with_downcast_mut::<BitmapCache, _>(|cache| cache.dirty = cache.dirty || changed);
+            return true;
+        }
+
+        // canvas_content_host, not deferred_canvas_host: this only needs
+        // somewhere to rasterize into, and an immediate renderer can provide
+        // that without claiming its content is being recorded. The host also
+        // allocates the canvas, so nothing here has to go looking for a device.
+        let factory = root
+            .with_downcast::<Artboard, _>(|artboard| artboard.factory())
+            .flatten();
+        // No host means nobody can give us an offscreen frame (a plain non-GPU
+        // or test factory), so fall back to a normal vector draw.
+        let Some(deferred_host) = factory
+            .and_then(|factory| factory.with_factory_mut(|factory| factory.canvas_content_host()))
+        else {
+            return false;
+        };
+
+        // The artboard's own box, which is not [0,0,width,height] in general:
+        // with frame_origin off, bounds() is offset by the origin -- and
+        // NestedArtboard turns frame_origin off on everything it hosts, which
+        // is the only way to reach this path. bounds() also tracks the resolved
+        // layout size rather than the authored width/height.
+        let Some((bx, has_self_transform, did_change)) =
+            root.with_downcast::<Artboard, _>(|artboard| {
+                (
+                    artboard.bounds(),
+                    artboard.has_self_transform(),
+                    artboard.did_change(),
+                )
+            })
+        else {
+            return false;
+        };
+        let w = bx.width();
+        let h = bx.height();
+        if w <= 0.0 || h <= 0.0 {
+            return false;
+        }
+
+        // draw_content applies the artboard's own rotation/scale, so a self
+        // transform ends up baked into the raster -- while the target and the
+        // composite below are both sized and placed from the untransformed
+        // box. Until the target is sized from the transformed bounds, these
+        // artboards draw as vectors.
+        if has_self_transform {
+            return false;
+        }
+
+        // How many device pixels one artboard unit covers right now: viewport
+        // zoom times window density times whatever scale the mount transform
+        // adds. Reading it here (rather than at replay) is why DeferredRenderer
+        // shadows its CTM: the raster size has to be chosen while recording.
+        let ctm = renderer
+            .current_transform()
+            .map(|m| Mat2D::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5]));
+        // Read before rasterizing, for the same reason as the CTM: if the host
+        // hands back a fresh renderer to composite through, that renderer
+        // starts at opacity 1 and the enclosing modulate_opacity() scope has
+        // to be carried over by hand.
+        let modulated_opacity = renderer.current_modulated_opacity();
+        let mut device_scale = 1.0f32;
+        if let Some(ctm) = ctm {
+            let s = ctm.find_max_scale();
+            if s.is_finite() && s > 0.0 {
+                // Quantize to sixteenths so scrubbing zoom does not re-raster
+                // and re-allocate on every frame. Rounding up keeps the raster
+                // at least as fine as the screen, and the scales a user
+                // actually rests at (1, 1.5, 2, 3, 4) are already multiples of
+                // 1/16.
+                const SCALE_QUANTUM: f32 = 16.0;
+                device_scale = (s * SCALE_QUANTUM).ceil() / SCALE_QUANTUM;
+            }
+        }
+
+        // std::min/std::max keep their C++ argument order so a NaN resolution
+        // propagates to the finiteness check below, as upstream relies on.
+        fn cpp_min(a: f32, b: f32) -> f32 {
+            if b < a { b } else { a }
+        }
+        fn cpp_max(a: f32, b: f32) -> f32 {
+            if a < b { b } else { a }
+        }
+        const MIN_RES: f32 = 0.01;
+        const MAX_RES: f32 = 8.0;
+        let resolution = cache
+            .with_downcast::<BitmapCache, _>(|cache| cache.resolution())
+            .unwrap_or(1.0);
+        let res = cpp_min(cpp_max(resolution, MIN_RES), MAX_RES);
+
+        // Texels per artboard unit. resolution 1 means one texel per screen
+        // pixel, so the composite is a 1:1 blit; 2 is a genuine 2x supersample
+        // of what the screen shows. A renderer that cannot report a transform
+        // leaves device_scale at 1, which is the artboard-unit meaning.
+        let mut raster_scale = res * device_scale;
+
+        // Cap by shrinking the scale, not by clamping one axis: the composite
+        // below inverts one scale for both axes.
+        const MAX_DIM: u32 = 2048;
+        let max_scale = cpp_min(MAX_DIM as f32 / w, MAX_DIM as f32 / h);
+        raster_scale = cpp_min(raster_scale, max_scale);
+        if !(raster_scale > 0.0) || !raster_scale.is_finite() {
+            return false;
+        }
+
+        let width_px = cpp_min(cpp_max((w * raster_scale).ceil(), 1.0), MAX_DIM as f32) as u32;
+        let height_px = cpp_min(cpp_max((h * raster_scale).ceil(), 1.0), MAX_DIM as f32) as u32;
+
+        // Rebuild when there is no cache, it was explicitly invalidated
+        // (resolution changed), the target size or raster scale changed
+        // (artboard resized, or viewed at a different zoom), or the content
+        // changed this frame.
+        let needs_render = cache
+            .with_downcast::<BitmapCache, _>(|cache| {
+                let geom_changed = width_px != cache.width_px
+                    || height_px != cache.height_px
+                    || raster_scale != cache.raster_scale;
+                cache.canvas.is_none() || cache.dirty || geom_changed || did_change
+            })
+            .unwrap_or(false);
+        if needs_render {
+            Self::render_into_canvas_handle(
+                root,
+                &cache,
+                &deferred_host,
+                width_px,
+                height_px,
+                raster_scale,
+            );
+        }
+        let Some((canvas, cache_raster_scale)) = cache
+            .with_downcast::<BitmapCache, _>(|cache| {
+                cache
+                    .canvas
+                    .clone()
+                    .map(|canvas| (canvas, cache.raster_scale))
+            })
+            .flatten()
+        else {
+            return false; // allocation failed; fall back to vector draw.
+        };
+
+        // Composite the cached texture in place of the vector content. The
+        // renderer's CTM already includes the mount transform; draw_image()
+        // spans (width_px, height_px), so undoing the raster's fit -- scale
+        // back to the box, then move it to the box's corner -- maps a local
+        // point to CTM * point, pixel-exact with the vector path. The
+        // artboard's own opacity is already baked into the raster, so the only
+        // opacity left to apply is an enclosing modulate_opacity() scope --
+        // and only on the fresh-renderer path, which does not inherit it.
+        let Some(image) = deferred_host.borrow_mut().content_canvas_image(&canvas) else {
+            return false;
+        };
+        // Some hosts cannot composite through the renderer that was drawing
+        // when the offscreen frame interrupted it, and hand back a clean one
+        // instead. It shares no state, so the current transform and the
+        // modulated opacity both have to be re-applied by hand -- and it
+        // inherits no clip.
+        let fresh = deferred_host.borrow_mut().composite_renderer();
+        let mut fresh = match (fresh, ctm, modulated_opacity) {
+            (Some(fresh), Some(_), Some(_)) => Some(fresh),
+            _ => None,
+        };
+        // The opacity the composite has to supply itself. Stays 1 on the
+        // in-place path, where the interrupted renderer still carries its own
+        // modulated opacity and folds it into the draw below.
+        let composite_opacity = if fresh.is_some() {
+            modulated_opacity.unwrap_or(1.0)
+        } else {
+            1.0
+        };
+        let is_fresh = fresh.is_some();
+        let composite: &mut Renderer = match fresh.as_mut() {
+            Some(fresh) => fresh.as_mut(),
+            None => renderer,
+        };
+        composite.save();
+        if is_fresh {
+            if let Some(ctm) = ctm {
+                composite.transform(nuxie_render_api::Mat2D(*ctm.values()));
+            }
+        }
+        // Pixel snap. An origin that lands on a half pixel makes every
+        // bilinear tap a blend of two texels. Only meaningful when the
+        // transform is axis aligned; under rotation or skew there is no pixel
+        // grid to snap to.
+        if let Some(ctm) = ctm {
+            if ctm.xy() == 0.0 && ctm.yx() == 0.0 && ctm.xx() != 0.0 && ctm.yy() != 0.0 {
+                let device_origin = ctm * Vec2D::new(bx.left(), bx.top());
+                let delta = Vec2D::new(
+                    device_origin.x.round() - device_origin.x,
+                    device_origin.y.round() - device_origin.y,
+                );
+                // The nudge is in device space but transform() concatenates
+                // in local space, so push it back through the (diagonal)
+                // linear part.
+                composite.translate(delta.x / ctm.xx(), delta.y / ctm.yy());
+            }
+        }
+        composite.translate(bx.left(), bx.top());
+        // The exact inverse of the scale the content was rasterized at, not
+        // w / width_px, which would fold ceil()'s rounding into the mapping.
+        let inv_scale = 1.0 / cache_raster_scale;
+        composite.transform(nuxie_render_api::Mat2D([
+            inv_scale, 0.0, 0.0, inv_scale, 0.0, 0.0,
+        ]));
+        composite.draw_image(
+            Some(image.as_ref()),
+            nuxie_render_api::ImageSampler::LINEAR_CLAMP,
+            nuxie_render_api::BlendMode::SrcOver,
+            composite_opacity,
+        );
+        composite.restore();
+        true
+    }
+
+    fn render_into_canvas_handle(
+        root: &CoreHandle,
+        cache: &CoreHandle,
+        deferred_host: &nuxie_render_api::DeferredCanvasHostHandle,
+        width_px: u32,
+        height_px: u32,
+        raster_scale: f32,
+    ) {
+        let Some(bx) = root.with_downcast::<Artboard, _>(|artboard| artboard.bounds()) else {
+            return;
+        };
+        // Reuse the texture whenever it is already the right size. This runs
+        // on every frame the artboard changes, and on an immediate host each
+        // of these is a real GPU allocation.
+        let reuse = cache
+            .with_downcast::<BitmapCache, _>(|cache| {
+                cache.canvas.is_some() && cache.width_px == width_px && cache.height_px == height_px
+            })
+            .unwrap_or(false);
+        if !reuse {
+            // The host decides whether this needs real pixels now or can
+            // defer them to whoever replays.
+            let canvas = deferred_host
+                .borrow_mut()
+                .make_content_canvas(width_px, height_px);
+            cache.with_downcast_mut::<BitmapCache, _>(|cache| cache.canvas = canvas);
+        }
+        let Some(canvas) = cache
+            .with_downcast::<BitmapCache, _>(|cache| cache.canvas.clone())
+            .flatten()
+        else {
+            return;
+        };
+
+        // begin_canvas_content hands back a recording renderer whose frame
+        // targets the canvas texture. Draw our content into it at exactly
+        // raster_scale texels per artboard unit. clear_color is transparent
+        // black.
+        let content = deferred_host
+            .borrow_mut()
+            .begin_canvas_content(canvas.clone(), 0);
+        let Some(mut r) = content else {
+            // The host could not open an offscreen frame. Nothing was drawn,
+            // so drop the canvas rather than end a bracket that never began:
+            // the caller's check then takes the vector path, and leaving the
+            // cache dirty means a later frame retries.
+            cache.with_downcast_mut::<BitmapCache, _>(|cache| {
+                cache.canvas = None;
+                cache.width_px = 0;
+                cache.height_px = 0;
+                cache.dirty = true;
+            });
+            return;
+        };
+        r.save();
+        r.transform(nuxie_render_api::Mat2D([
+            raster_scale,
+            0.0,
+            0.0,
+            raster_scale,
+            0.0,
+            0.0,
+        ]));
+        r.translate(-bx.left(), -bx.top());
+        // draw_content (not draw_internal) so we never re-enter the cache hook.
+        Self::draw_content_handle(root, r.as_mut());
+        r.restore();
+        // The content renderer is a scoped proxy that must not outlive the
+        // bracket it records into.
+        drop(r);
+        deferred_host.borrow_mut().end_canvas_content(&canvas);
+
+        cache.with_downcast_mut::<BitmapCache, _>(|cache| {
+            cache.width_px = width_px;
+            cache.height_px = height_px;
+            cache.raster_scale = raster_scale;
+            cache.dirty = false;
+        });
     }
 
     pub fn add_to_render_path(&mut self, path: &mut RenderPath, transform: &Mat2D) {
@@ -4454,6 +4825,9 @@ impl RuntimeArtboardInstanceHandle {
     }
     pub fn draw_internal(&self, renderer: &mut Renderer) {
         Artboard::draw_internal_handle(&self.core_handle(), renderer);
+    }
+    pub fn draw_content(&self, renderer: &mut Renderer) {
+        Artboard::draw_content_handle(&self.core_handle(), renderer);
     }
     pub fn sync_style_changes(&self) -> bool {
         Artboard::sync_style_changes_handle(&self.core_handle())

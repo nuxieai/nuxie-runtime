@@ -317,11 +317,38 @@ pub const fn screen_target_id(target: u64) -> u64 {
     target & !SCREEN_TARGET_FLAG
 }
 
+/// Shadow of the CTM the replaying renderer will build. The bottom entry is
+/// the identity the replay starts from, so this is never empty.
+pub type TransformShadow = Rc<RefCell<Vec<Mat2D>>>;
+
+/// Screen recorders outlive a frame (FFI hosts hold them across frames), so
+/// the shadow has to drop back to identity at the frame boundary or a top
+/// level transform accumulates into the next frame.
+pub fn reset_transform_shadow(shadow: &TransformShadow) {
+    let mut stack = shadow.borrow_mut();
+    stack.clear();
+    stack.push(Mat2D::IDENTITY);
+}
+
+fn concat_transform(a: Mat2D, b: Mat2D) -> Mat2D {
+    let [a0, a1, a2, a3, a4, a5] = a.0;
+    let [b0, b1, b2, b3, b4, b5] = b.0;
+    Mat2D([
+        a0.mul_add(b0, a2 * b1),
+        a1.mul_add(b0, a3 * b1),
+        a0.mul_add(b2, a2 * b3),
+        a1.mul_add(b2, a3 * b3),
+        a0.mul_add(b4, a2 * b5) + a4,
+        a1.mul_add(b4, a3 * b5) + a5,
+    ])
+}
+
 pub struct DeferredRenderer {
     pub buffer: SharedRenderCommandBuffer,
     canvases: Option<Rc<RefCell<ForeignImageRegistry>>>,
     route_host: Option<Rc<RefCell<dyn DeferredRouteHost>>>,
     route_target: u64,
+    transform_stack: TransformShadow,
 }
 impl DeferredRenderer {
     pub fn new(
@@ -335,7 +362,14 @@ impl DeferredRenderer {
             canvases,
             route_host,
             route_target,
+            transform_stack: Rc::new(RefCell::new(vec![Mat2D::IDENTITY])),
         }
+    }
+    pub fn transform_shadow(&self) -> TransformShadow {
+        self.transform_stack.clone()
+    }
+    pub fn reset_transform(&mut self) {
+        reset_transform_shadow(&self.transform_stack);
     }
     fn route(&self) {
         if let Some(host) = &self.route_host {
@@ -367,14 +401,40 @@ impl DeferredRenderer {
 impl Renderer for DeferredRenderer {
     fn save(&mut self) {
         self.route();
+        {
+            let mut stack = self.transform_stack.borrow_mut();
+            let top = *stack.last().unwrap();
+            stack.push(top);
+        }
         self.buffer.lock().unwrap().append_type(RenderCmd::Save);
     }
     fn restore(&mut self) {
         self.route();
+        {
+            let mut stack = self.transform_stack.borrow_mut();
+            if stack.len() > 1 {
+                // An unbalanced restore is the caller's bug, but leaving the
+                // bottom entry in place keeps the shadow usable either way.
+                stack.pop();
+            }
+        }
         self.buffer.lock().unwrap().append_type(RenderCmd::Restore);
+    }
+    // Recording is otherwise write only, but a draw that has to pick a raster
+    // size needs to know the scale it will land at -- Artboard's bitmap cache
+    // sizes its offscreen from this. Mirroring the transform ops costs one
+    // Mat2D multiply per transform() and keeps the answer available at record
+    // time, where the decision has to be made.
+    fn current_transform(&self) -> Option<Mat2D> {
+        self.transform_stack.borrow().last().copied()
     }
     fn transform(&mut self, transform: Mat2D) {
         self.route();
+        {
+            let mut stack = self.transform_stack.borrow_mut();
+            let top = stack.last_mut().unwrap();
+            *top = concat_transform(*top, transform);
+        }
         let [xx, xy, yx, yy, tx, ty] = transform.0;
         self.buffer.lock().unwrap().append(
             RenderCmd::Transform,

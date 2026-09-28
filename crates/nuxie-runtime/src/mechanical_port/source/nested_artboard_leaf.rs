@@ -5,6 +5,7 @@ use crate::mechanical_port::source::{
         NestedArtboardLeafBase, NestedArtboardLeafBaseCallbacks,
     },
     layout::{Alignment, Fit},
+    layout_component::content_sizing_layout,
     renderer::compute_alignment,
 };
 
@@ -52,9 +53,10 @@ impl NestedArtboardLeaf {
             return;
         };
 
-        let bounds = owner
+        let parent = owner
             .with_downcast::<Self, _>(|owner| owner.base.base.parent_handle())
-            .expect("live NestedArtboardLeaf")
+            .expect("live NestedArtboardLeaf");
+        let bounds = content_sizing_layout(parent)
             .and_then(|parent| {
                 parent
                     .with(|parent| {

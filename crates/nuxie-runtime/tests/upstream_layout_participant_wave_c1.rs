@@ -12,6 +12,7 @@ use nuxie_runtime::source::{
     layout::layout_node_provider,
     layout_component::LayoutComponent,
     math::aabb::Aabb,
+    nested_artboard_layout::NestedArtboardLayout,
     shapes::{points_path::PointsPath, rectangle::Rectangle, shape::Shape},
     solo::Solo,
 };
@@ -109,6 +110,26 @@ fn only_solo(fixture: &Fixture) -> CoreHandle {
     let solos = fixture.find::<Solo>();
     assert_eq!(solos.len(), 1);
     solos[0].clone()
+}
+
+#[test]
+fn a_nested_artboard_layout_resolves_its_owning_layout_through_a_solo() {
+    let fixture = fixture(
+        "layout/solo_nested_artboard_layout.riv",
+        Some("Column Artboard"),
+        true,
+    );
+    let nested = fixture.find::<NestedArtboardLayout>();
+    assert_eq!(nested.len(), 1);
+    let parent = parent(&nested[0]).expect("nested artboard parent");
+    assert!(parent.is_type_of(<Solo as CoreType>::TYPE_KEY));
+    assert!(layout_node_provider::from_component(&parent).is_none());
+    nested[0]
+        .with_downcast::<NestedArtboardLayout, _>(|nested| {
+            assert!(!nested.is_row());
+            assert!(!nested.is_stack());
+        })
+        .expect("nested artboard layout");
 }
 fn active(solo: &CoreHandle) -> CoreHandle {
     solo.with_downcast::<Solo, _>(Solo::active_component)

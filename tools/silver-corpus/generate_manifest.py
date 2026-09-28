@@ -18,7 +18,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-UPSTREAM_REF = "58c2f5e80bd7398496561197037f93e7fbe35d6f"
+UPSTREAM_REF = "86fc70a74e0db7b747e04471bd4372cd38f6a0e7"
 LITERAL_MATCH = re.compile(
     r'(?:silver\.matches|serializer\(\)->matches)\(\s*"([^"]+)"', re.MULTILINE
 )
@@ -256,6 +256,7 @@ EXACT = (
     "text_listener_simpler",
     "collapse_data_binds-test_3",
     "databind_solo_to_enum",
+    "layout_solos",
     "listener_view_model",
     "viewmodel_image_reset",
     "zero_width_space_line_break",
@@ -946,6 +947,13 @@ def p1q_view_model_actions(
             action("set-view-model-enum", property="display_1", value=0),
             advance(0.016),
             draw,
+        )
+
+    if silver_id == "layout_solos":
+        return (
+            action("frame-size"),
+            action("bind-authored-view-model"),
+            action("render-view-model-enum-states", property="states", seconds=0.016),
         )
 
     if silver_id == "databind_solo_to_enum":
@@ -2816,6 +2824,14 @@ def literal_producers(runtime_dir: Path) -> list[Producer]:
                             "five clicks with .1-second advances. Enrollment alone is not "
                             "a validation result."
                         )
+                    if silver_id == "layout_solos":
+                        note = (
+                            "Exact comparison contract for 86fc70a7: bind the authored "
+                            "view-model instance (or create the artboard default when unset), "
+                            "walk every DataEnum state with a successful setter, then "
+                            "advance/apply 0.016, draw and addFrame for each. Enrollment "
+                            "alone is not a validation result."
+                        )
                     if silver_id == "ik_anim_test":
                         note = (
                             "Exact comparison contract for the literal six-draw IK producer: "
@@ -3169,7 +3185,7 @@ def render(producers: list[Producer]) -> str:
     runtime = sum(producer.lane == "runtime" for producer in producers)
     scripted = sum(producer.lane == "scripted" for producer in producers)
     unknown = sum(producer.status == "provenance-unknown" for producer in producers)
-    if (len(producers), runtime, scripted, unknown) != (265, 217, 45, 3):
+    if (len(producers), runtime, scripted, unknown) != (266, 218, 45, 3):
         raise ValueError(
             "ratchet mismatch: "
             f"entries={len(producers)} runtime={runtime} scripted={scripted} unknown={unknown}"
@@ -3182,8 +3198,8 @@ def render(producers: list[Producer]) -> str:
         "[corpus]",
         "version = 1",
         f"upstream_ref = {quoted(UPSTREAM_REF)}",
-        "expected_entries = 265",
-        "expected_runtime = 217",
+        "expected_entries = 266",
+        "expected_runtime = 218",
         "expected_scripted = 45",
         "max_provenance_unknown = 3",
         f"min_cpp_rust_exact = {len(EXACT)}",

@@ -202,6 +202,11 @@ pub enum Action {
         property: String,
         value: u64,
     },
+    /// Render each authored DataEnum entry, asserting every index write succeeds.
+    RenderViewModelEnumStates {
+        property: String,
+        seconds: f32,
+    },
     SetViewModelColor {
         property: String,
         value: u32,
@@ -699,6 +704,28 @@ impl Execution {
                         .set_value_index(
                             u32::try_from(*value).context("enum index exceeds source uint32")?,
                         );
+                }
+                Action::RenderViewModelEnumStates { property, seconds } => {
+                    let states = main_runtime(&owned_context)?
+                        .property_enum(property)
+                        .with_context(|| format!("missing enum view-model property {property}"))?;
+                    let count = states.values().len();
+                    anyhow::ensure!(
+                        count != 0,
+                        "enum {property} has no authored DataEnum values"
+                    );
+                    let machine = machine(&state_machine)?;
+                    for index in 0..count {
+                        let index =
+                            u32::try_from(index).context("enum index exceeds source uint32")?;
+                        anyhow::ensure!(
+                            states.set_value_index(index),
+                            "enum {property} rejected index {index}"
+                        );
+                        machine.advance_and_apply(*seconds);
+                        instance.draw(&mut renderer);
+                        factory.borrow_mut().add_frame();
+                    }
                 }
                 Action::SetViewModelColor { property, value } => {
                     main_runtime(&owned_context)?

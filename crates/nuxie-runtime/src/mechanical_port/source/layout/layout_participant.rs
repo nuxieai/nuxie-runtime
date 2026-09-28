@@ -526,6 +526,7 @@ impl LayoutParticipant {
             parent_is_stack,
             container_justify_items: u32::from(justify),
             inline_hugs: width_scale == LayoutScaleType::Hug,
+            width_fills: width_scale == LayoutScaleType::Fill,
             parent_is_row,
             is_ltr: direction_ltr,
             has_layout_parent: layout.is_some(),

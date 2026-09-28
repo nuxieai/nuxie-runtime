@@ -10,7 +10,7 @@ use crate::style_helpers::{TaffyMaxContent, TaffyMinContent};
 use crate::tree::{Layout, LayoutInput, LayoutOutput, RunMode, SizingMode};
 use crate::tree::{LayoutFlexboxContainer, LayoutPartialTreeExt, NodeId};
 use crate::util::debug::debug_log;
-use crate::util::sys::{f32_max, new_vec_with_capacity, Vec};
+use crate::util::sys::{f32_max, f32_min, new_vec_with_capacity, Vec};
 use crate::util::MaybeMath;
 use crate::util::{MaybeResolve, ResolveOrZero};
 use crate::{BoxGenerationMode, BoxSizing, Direction, RequestedAxis};
@@ -851,6 +851,17 @@ fn determine_flex_base_size(
     }
 }
 
+// Yoga's zero-space intrinsic probe is bounded before flex line collection
+// (YGNodeCalculateAvailableInnerDim), not only after sizing the container.
+#[inline]
+fn intrinsic_available_inner_main_space(constants: &AlgoConstants) -> f32 {
+    let inset = constants.content_box_inset.main_axis_sum(constants.dir);
+    let available = 0.0 - constants.margin.main_axis_sum(constants.dir) - inset;
+    let minimum = constants.min_size.main(constants.dir).map(|size| size - inset).unwrap_or(0.0);
+    let maximum = constants.max_size.main(constants.dir).map(|size| size - inset).unwrap_or(f32::MAX);
+    f32_max(f32_min(available, maximum), minimum)
+}
+
 /// Collect flex items into flex lines.
 ///
 /// # [9.3. Main Size Determination](https://www.w3.org/TR/css-flexbox-1/#main-sizing)
@@ -879,15 +890,19 @@ fn collect_flex_lines<'a>(
         lines.push(FlexLine { items: flex_items.as_mut_slice(), cross_size: 0.0, offset_cross: 0.0 });
         lines
     } else {
-        let main_axis_available_space = match constants.max_size.main(constants.dir) {
-            Some(max_size) => AvailableSpace::Definite(
-                available_space
-                    .main(constants.dir)
-                    .into_option()
-                    .unwrap_or(max_size)
-                    .maybe_max(constants.min_size.main(constants.dir)),
-            ),
-            None => available_space.main(constants.dir),
+        let main_axis_available_space = if available_space.main(constants.dir) == AvailableSpace::MinContent {
+            AvailableSpace::Definite(intrinsic_available_inner_main_space(constants))
+        } else {
+            match constants.max_size.main(constants.dir) {
+                Some(max_size) => AvailableSpace::Definite(
+                    available_space
+                        .main(constants.dir)
+                        .into_option()
+                        .unwrap_or(max_size)
+                        .maybe_max(constants.min_size.main(constants.dir)),
+                ),
+                None => available_space.main(constants.dir),
+            }
         };
 
         match main_axis_available_space {
@@ -999,7 +1014,31 @@ fn determine_container_main_size(
                     })
                     .max_by(|a, b| a.total_cmp(b))
                     .unwrap_or(0.0);
-                longest_line_length + main_content_box_inset
+                // Rive Yoga's grid min-content probe performs layout with
+                // AtMost(0) on the measured axis (TrackSizing.h at
+                // rive_changes_v2_0_1_3_grid). Yoga.cpp promotes a wrapping
+                // container's overflowing AtMost constraint to Exactly,
+                // allowing rigid children to overflow rather than enlarging
+                // the container. Model that intrinsic bound here; definite
+                // container dimensions were handled before this branch, and
+                // the common clamp below still honors min/max and box insets.
+                let intrinsic_available_main_space = intrinsic_available_inner_main_space(constants);
+                // Yoga's totalMainDim is computed before wrapping: use raw
+                // computed flex bases plus margins and all inter-item gaps,
+                // not the longest line or min-clamped hypothetical sizes.
+                let item_count = lines.iter().map(|line| line.items.len()).sum();
+                let total_main_dim = lines
+                    .iter()
+                    .flat_map(|line| line.items.iter())
+                    .map(|child| child.flex_basis + child.margin.main_axis_sum(constants.dir))
+                    .sum::<f32>()
+                    + sum_axis_gaps(constants.gap.main(constants.dir), item_count);
+                let main_size = if total_main_dim > intrinsic_available_main_space {
+                    intrinsic_available_main_space
+                } else {
+                    longest_line_length
+                };
+                main_size + main_content_box_inset
             }
             AvailableSpace::MinContent | AvailableSpace::MaxContent => {
                 // Define a base main_size variable. This is mutated once for iteration over the outer

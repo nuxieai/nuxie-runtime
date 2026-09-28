@@ -1612,6 +1612,44 @@ impl LayoutComponent {
                 .unwrap_or(true)
         }
     }
+    pub fn effective_width_scale_type(&self) -> LayoutScaleType {
+        if self.can_have_overrides() && self.width_unit_value_override != -1 {
+            match YGUnit::from(self.width_unit_value_override as u32) {
+                YGUnit::Point | YGUnit::Percent => return LayoutScaleType::Fixed,
+                YGUnit::Auto => {
+                    return if self
+                        .has_layout_flag(LayoutComponentFlags::WidthIntrinsicallySizeOverride)
+                    {
+                        LayoutScaleType::Hug
+                    } else {
+                        LayoutScaleType::Fill
+                    };
+                }
+                _ => {}
+            }
+        }
+        self.with_style(LayoutComponentStyle::width_scale_type)
+            .unwrap_or(LayoutScaleType::Fixed)
+    }
+    pub fn effective_height_scale_type(&self) -> LayoutScaleType {
+        if self.can_have_overrides() && self.height_unit_value_override != -1 {
+            match YGUnit::from(self.height_unit_value_override as u32) {
+                YGUnit::Point | YGUnit::Percent => return LayoutScaleType::Fixed,
+                YGUnit::Auto => {
+                    return if self
+                        .has_layout_flag(LayoutComponentFlags::HeightIntrinsicallySizeOverride)
+                    {
+                        LayoutScaleType::Hug
+                    } else {
+                        LayoutScaleType::Fill
+                    };
+                }
+                _ => {}
+            }
+        }
+        self.with_style(LayoutComponentStyle::height_scale_type)
+            .unwrap_or(LayoutScaleType::Fixed)
+    }
     pub fn main_axis_is_row(&self) -> bool {
         self.with_style(|style| {
             matches!(
@@ -1645,7 +1683,7 @@ impl LayoutComponent {
         &mut self,
         active_parent_style: Option<&crate::mechanical_port::source::layout::layout_style_applier::LayoutParentStyleSnapshot>,
     ) -> Option<LayoutSyncContext> {
-        let style = self.style_handle()?;
+        self.style_handle()?;
         let parent = self.layout_parent_handle();
         let active_parent_style =
             active_parent_style.filter(|snapshot| parent.as_ref() == Some(&snapshot.owner));
@@ -1685,16 +1723,13 @@ impl LayoutComponent {
                 crate::mechanical_port::source::layout::layout_style_applier::YGJustify::Stretch
                     as u8,
             ));
-        let inline_hugs = style
-            .with_downcast::<LayoutComponentStyle, _>(|style| {
-                style.width_scale_type() == LayoutScaleType::Hug
-            })
-            .unwrap_or(false);
+        let width_scale = self.effective_width_scale_type();
         Some(LayoutSyncContext {
             parent_is_grid,
             parent_is_stack,
             container_justify_items: u32::from(container_justify_items),
-            inline_hugs,
+            inline_hugs: width_scale == LayoutScaleType::Hug,
+            width_fills: width_scale == LayoutScaleType::Fill,
             parent_is_row: if self.can_have_overrides() {
                 self.has_layout_flag(LayoutComponentFlags::ParentIsRow)
             } else if let Some(snapshot) = active_parent_style {
@@ -2105,9 +2140,11 @@ impl LayoutComponent {
             }
             match available {
                 AvailableSpace::Definite(value) => (value, LayoutMeasureMode::AtMost),
-                AvailableSpace::MinContent | AvailableSpace::MaxContent => {
-                    (f32::NAN, LayoutMeasureMode::Undefined)
-                }
+                // Yoga's grid min-content probe measures the selected axis
+                // under AtMost(0), while its other unconstrained axis remains
+                // Undefined. Keep that distinction for native measured leaves.
+                AvailableSpace::MinContent => (0.0, LayoutMeasureMode::AtMost),
+                AvailableSpace::MaxContent => (f32::NAN, LayoutMeasureMode::Undefined),
             }
         }
         fn measure_host(
@@ -3288,27 +3325,11 @@ impl LayoutComponent {
             }
             if self.width_unit_value_override != -1 {
                 width_units = YGUnit::from(self.width_unit_value_override as u32);
-                width_scale = if width_units == YGUnit::Auto {
-                    if self.has_layout_flag(LayoutComponentFlags::WidthIntrinsicallySizeOverride) {
-                        LayoutScaleType::Hug
-                    } else {
-                        LayoutScaleType::Fill
-                    }
-                } else {
-                    LayoutScaleType::Fixed
-                };
+                width_scale = self.effective_width_scale_type();
             }
             if self.height_unit_value_override != -1 {
                 height_units = YGUnit::from(self.height_unit_value_override as u32);
-                height_scale = if height_units == YGUnit::Auto {
-                    if self.has_layout_flag(LayoutComponentFlags::HeightIntrinsicallySizeOverride) {
-                        LayoutScaleType::Hug
-                    } else {
-                        LayoutScaleType::Fill
-                    }
-                } else {
-                    LayoutScaleType::Fixed
-                };
+                height_scale = self.effective_height_scale_type();
             }
         }
         style.dimensions_mut()[YGDimension::Width] = YGValue::new(

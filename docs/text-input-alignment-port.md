@@ -1,8 +1,9 @@
 # Native TextInput alignment
 
 Authority: Rive commit `7098a7c86220fefe6e0620d83b53d906f6fe8dae`.
-This ports its input alignment behavior, not the separate caret-blinking and
-linked-corner-radius changes bundled in that upstream commit.
+The original ahead-port covered input alignment only. The sequential sync now
+includes the same commit's caret-blinking and linked-corner-radius changes;
+the historical qualification below describes the original alignment slice.
 
 - Native property keys: `alignValue` 222 and `verticalAlignValue` 1094, both uint
   and defaulting to zero. Schema lookup, registry mutation/readback,

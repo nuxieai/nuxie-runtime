@@ -45,6 +45,8 @@ pub struct TextInput {
     scroll_constraint: Option<CoreHandle>,
     is_dragging: bool,
     focused: bool,
+    cursor_blink_visible: bool,
+    cursor_blink_seconds: f32,
     last_drag_world_position: Vec2D,
     scroll_x: f32,
     scroll_y: f32,
@@ -63,6 +65,8 @@ impl Default for TextInput {
             scroll_constraint: None,
             is_dragging: false,
             focused: false,
+            cursor_blink_visible: true,
+            cursor_blink_seconds: 0.0,
             last_drag_world_position: Vec2D::new(f32::NAN, f32::NAN),
             scroll_x: 0.0,
             scroll_y: 0.0,
@@ -92,11 +96,36 @@ impl TextInput {
         &mut self.raw_text_input
     }
     pub fn mark_paint_dirty(&mut self) {
+        self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::PAINT, false);
     }
     pub fn mark_shape_dirty(&mut self) {
+        self.restart_cursor_blink();
         self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         self.base.mark_layout_node_dirty();
+    }
+    fn restart_cursor_blink(&mut self) {
+        self.cursor_blink_seconds = 0.0;
+        self.cursor_blink_visible = true;
+    }
+    fn advance_cursor_blink(&mut self, elapsed_seconds: f32) -> bool {
+        const CURSOR_BLINK_SECONDS: f32 = 0.5;
+        if !self.focused {
+            self.restart_cursor_blink();
+            return false;
+        }
+        self.cursor_blink_seconds += elapsed_seconds;
+        if self.cursor_blink_seconds >= CURSOR_BLINK_SECONDS {
+            // A long frame can span multiple phases; only an odd count flips
+            // visibility, and the remainder carries into the next advance.
+            let phases = (self.cursor_blink_seconds / CURSOR_BLINK_SECONDS).floor();
+            self.cursor_blink_seconds %= CURSOR_BLINK_SECONDS;
+            if phases % 2.0 != 0.0 {
+                self.cursor_blink_visible = !self.cursor_blink_visible;
+            }
+        }
+        // The cursor reads visibility directly; toggling requires no dirt.
+        true
     }
     pub fn align_value_changed(&mut self) {
         self.update_alignment();
@@ -752,17 +781,24 @@ impl TextInput {
         }
         self.is_dragging
     }
-    pub fn advance_component(&mut self, elapsed: f32, _flags: AdvanceFlags) -> bool {
+    pub fn advance_component(&mut self, elapsed: f32, flags: AdvanceFlags) -> bool {
         if self.update_alignment() {
             self.base.add_dirt(ComponentDirt::TEXT_SHAPE, false);
         }
-        self.advance_drag(elapsed)
+        let mut keep_going = self.advance_drag(elapsed);
+        if flags.contains(AdvanceFlags::ANIMATE) && self.advance_cursor_blink(elapsed) {
+            keep_going = true;
+        }
+        keep_going
     }
     pub fn is_dragging(&self) -> bool {
         self.is_dragging
     }
     pub fn is_focused(&self) -> bool {
         self.focused
+    }
+    pub fn is_cursor_visible(&self) -> bool {
+        self.focused && self.cursor_blink_visible
     }
     pub fn accepts_keyboard_input(&self) -> bool {
         true

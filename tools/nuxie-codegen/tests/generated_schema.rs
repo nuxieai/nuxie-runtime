@@ -42,6 +42,29 @@ fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
+#[test]
+fn reached_text_alignment_survives_retiring_the_forward_obscured_overlay() {
+    let read = |path: &str| -> Value {
+        serde_json::from_str(&std::fs::read_to_string(workspace_root().join(path)).unwrap())
+            .unwrap()
+    };
+    let current = read("defs/upstream-reconciliation/text/text_input.json");
+    let mut forward = read("defs/upstream-overlay/text/text_input.json");
+    assert_eq!(current["properties"]["alignValue"]["key"]["int"], 222);
+    assert_eq!(
+        current["properties"]["verticalAlignValue"]["key"]["int"],
+        1094
+    );
+    assert!(current["properties"].get("obscured").is_none());
+    let obscured = forward["properties"]
+        .as_object_mut()
+        .unwrap()
+        .remove("obscured")
+        .unwrap();
+    assert_eq!(obscured["key"]["int"], 1095);
+    assert_eq!(current, forward);
+}
+
 fn reference_runtime_dir() -> PathBuf {
     std::env::var_os("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)

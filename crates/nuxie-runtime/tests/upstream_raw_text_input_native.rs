@@ -1,4 +1,4 @@
-//! All 17 cases from pinned tests/unit_tests/runtime/raw_text_input_test.cpp.
+//! Original 17 cases plus the seven alignment cases added by 7098a7c8.
 //! Authority: Rive 4ac7b32798da0482e441ef09304dc3b480ed3ee5.
 //!
 //! RawTextInput's upstream TESTING measure counter is exposed by the native
@@ -17,6 +17,198 @@ use nuxie_runtime::source::{
     },
 };
 use std::path::PathBuf;
+
+fn aligned_input(align: TextAlign, width: f32) -> RawTextInput {
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(72.0);
+    input.insert("hello");
+    input.set_cursor(Cursor::zero());
+    input.set_align(align);
+    input.set_align_width(width);
+    input
+}
+
+#[test]
+fn single_line_input_aligns_within_its_align_width() {
+    let factory = retained_factory();
+    let mut left = aligned_input(TextAlign::Left, 800.0);
+    left.update(&factory);
+    let width = left.bounds().width();
+    assert!(width > 0.0 && width < 800.0);
+    assert_eq!(
+        left.cursor_visual_position_at(CursorPosition::zero()).x(),
+        0.0
+    );
+    assert_eq!(left.bounds().min_x, 0.0);
+    assert_approx(
+        left.cursor_visual_position_at(CursorPosition::new(0, 5))
+            .x(),
+        width,
+    );
+    for (align, start) in [
+        (TextAlign::Right, 800.0 - width),
+        (TextAlign::Center, (800.0 - width) / 2.0),
+    ] {
+        let mut input = aligned_input(align, 800.0);
+        input.update(&factory);
+        assert_approx(
+            input.cursor_visual_position_at(CursorPosition::zero()).x(),
+            start,
+        );
+        assert_approx(
+            input
+                .cursor_visual_position_at(CursorPosition::new(0, 5))
+                .x(),
+            start + width,
+        );
+        assert_approx(input.bounds().min_x, start);
+        assert_approx(input.bounds().max_x, start + width);
+        assert_approx(input.bounds().width(), width);
+    }
+}
+
+#[test]
+fn alignment_falls_back_left_when_text_overflows() {
+    let factory = retained_factory();
+    for align in [TextAlign::Left, TextAlign::Right, TextAlign::Center] {
+        let mut input = aligned_input(align, 10.0);
+        input.update(&factory);
+        assert_eq!(
+            input.cursor_visual_position_at(CursorPosition::zero()).x(),
+            0.0
+        );
+        assert_eq!(input.bounds().min_x, 0.0);
+    }
+    let mut input = aligned_input(TextAlign::Right, 0.0);
+    input.update(&factory);
+    assert_eq!(
+        input.cursor_visual_position_at(CursorPosition::zero()).x(),
+        0.0
+    );
+}
+
+#[test]
+fn hit_testing_round_trips_through_alignment() {
+    let factory = retained_factory();
+    for align in [TextAlign::Left, TextAlign::Right, TextAlign::Center] {
+        let mut input = aligned_input(align, 800.0);
+        input.update(&factory);
+        for index in 0..=5 {
+            let position = input.cursor_visual_position_at(CursorPosition::new(0, index));
+            assert!(position.found());
+            input.move_cursor_to(
+                Vec2D::new(position.x(), (position.top() + position.bottom()) / 2.0),
+                false,
+            );
+            assert_eq!(input.cursor().end().code_point_index(), index);
+        }
+    }
+}
+
+#[test]
+fn multiline_alignment_offsets_each_line_independently() {
+    let factory = retained_factory();
+    let start = |align, index: usize| {
+        let mut input = aligned_input(align, 0.0);
+        input.set_text("hello\nlonger line here".into());
+        input.set_sizing(TextSizing::AutoHeight);
+        input.set_max_width(900.0);
+        input.update(&factory);
+        assert!(input.shape().line_count() as usize > index);
+        input.shape().ordered_lines()[index].glyph_line().start_x
+    };
+    assert_eq!(start(TextAlign::Left, 0), 0.0);
+    assert_eq!(start(TextAlign::Left, 1), 0.0);
+    let right_short = start(TextAlign::Right, 0);
+    let right_long = start(TextAlign::Right, 1);
+    assert!(right_short > right_long && right_long > 0.0);
+    let center_short = start(TextAlign::Center, 0);
+    let center_long = start(TextAlign::Center, 1);
+    assert!(center_short > center_long);
+    assert_approx(center_short, right_short / 2.0);
+    assert_approx(center_long, right_long / 2.0);
+}
+
+#[test]
+fn input_aligns_vertically_within_its_align_height() {
+    let factory = retained_factory();
+    let mut top = aligned_input(TextAlign::Left, 0.0);
+    top.set_align_height(500.0);
+    top.update(&factory);
+    let height = top.bounds().height();
+    let min_y = top.bounds().min_y;
+    let caret_y = top.cursor_visual_position_at(CursorPosition::zero()).top();
+    assert!(height < 500.0);
+    for (align, field_height, offset) in [
+        (VerticalTextAlign::Top, 500.0, 0.0),
+        (VerticalTextAlign::Middle, 500.0, (500.0 - height) / 2.0),
+        (VerticalTextAlign::Bottom, 500.0, 500.0 - height),
+        (VerticalTextAlign::Bottom, 10.0, 0.0),
+    ] {
+        let mut input = aligned_input(TextAlign::Left, 0.0);
+        input.set_align_height(field_height);
+        input.set_vertical_align(align);
+        input.update(&factory);
+        assert_approx(input.shape().vertical_offset(), offset);
+        assert_approx(input.bounds().min_y, min_y + offset);
+        assert_approx(input.bounds().max_y, min_y + offset + height);
+        assert_approx(input.bounds().height(), height);
+        assert_approx(
+            input
+                .cursor_visual_position_at(CursorPosition::zero())
+                .top()
+                - caret_y,
+            offset,
+        );
+    }
+}
+
+#[test]
+fn vertical_alignment_round_trips_through_hit_testing() {
+    let factory = retained_factory();
+    let mut input = aligned_input(TextAlign::Left, 0.0);
+    input.set_align_height(500.0);
+    input.set_vertical_align(VerticalTextAlign::Middle);
+    input.update(&factory);
+    let position = input.cursor_visual_position_at(CursorPosition::new(0, 3));
+    assert!(position.found());
+    input.move_cursor_to(
+        Vec2D::new(position.x(), (position.top() + position.bottom()) / 2.0),
+        false,
+    );
+    assert_eq!(input.cursor().end().code_point_index(), 3);
+}
+
+#[test]
+fn multiline_alignment_uses_align_width_not_wrap_width() {
+    let factory = retained_factory();
+    let build = |align| {
+        let mut input = aligned_input(align, 0.0);
+        input.set_text("hello\nlonger line here".into());
+        input.set_sizing(TextSizing::AutoHeight);
+        input.set_max_width(900.0);
+        input.update(&factory);
+        input.set_max_width(input.bounds().width());
+        input.set_align_width(900.0);
+        input.update(&factory);
+        input
+    };
+    let start = |input: &RawTextInput, index: usize| {
+        input.shape().ordered_lines()[index].glyph_line().start_x
+    };
+    let left = build(TextAlign::Left);
+    let width = left.bounds().width();
+    assert_eq!(left.shape().line_count(), 2);
+    assert!(width < 900.0);
+    assert_eq!(start(&left, 0), 0.0);
+    assert_eq!(start(&left, 1), 0.0);
+    for (align, factor) in [(TextAlign::Right, 1.0), (TextAlign::Center, 0.5)] {
+        let input = build(align);
+        assert_approx(start(&input, 1), (900.0 - width) * factor);
+        assert!(start(&input, 0) > start(&input, 1));
+    }
+}
 
 // Alignment authority: upstream 7098a7c8. Expectations use the natural font
 // metrics, then check the field-relative translation of bounds and caret.

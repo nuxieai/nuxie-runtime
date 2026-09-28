@@ -3119,7 +3119,6 @@ pub enum CoreField {
     SemanticDataIsFocused,
     SemanticDataIsHidden,
     SemanticDataIsLiveRegion,
-    SemanticDataIsMixed,
     SemanticDataIsModal,
     SemanticDataIsMultiline,
     SemanticDataIsObscured,
@@ -7139,6 +7138,7 @@ impl CoreRegistry {
             986 => CoreField::SemanticDataHeadingLevel,
             987 => CoreField::SemanticDataTraitFlags,
             988 => CoreField::SemanticDataStateFlags,
+            998 => CoreField::SemanticDataIsChecked,
             823 => CoreField::BindablePropertyIdPropertyValue,
             686 => CoreField::BindablePropertyIntegerPropertyValue,
             586 => CoreField::DataBindPropertyKey,
@@ -7332,8 +7332,6 @@ impl CoreRegistry {
             995 => CoreField::SemanticDataIsFocusable,
             996 => CoreField::SemanticDataIsExpanded,
             997 => CoreField::SemanticDataIsSelected,
-            998 => CoreField::SemanticDataIsChecked,
-            999 => CoreField::SemanticDataIsMixed,
             1000 => CoreField::SemanticDataIsToggled,
             1001 => CoreField::SemanticDataIsRequired,
             1002 => CoreField::SemanticDataIsDisabled,
@@ -7904,6 +7902,7 @@ impl CoreRegistry {
             986 => CoreField::SemanticDataHeadingLevel,
             987 => CoreField::SemanticDataTraitFlags,
             988 => CoreField::SemanticDataStateFlags,
+            998 => CoreField::SemanticDataIsChecked,
             823 => CoreField::BindablePropertyIdPropertyValue,
             686 => CoreField::BindablePropertyIntegerPropertyValue,
             586 => CoreField::DataBindPropertyKey,
@@ -8046,8 +8045,6 @@ impl CoreRegistry {
             995 => CoreField::SemanticDataIsFocusable,
             996 => CoreField::SemanticDataIsExpanded,
             997 => CoreField::SemanticDataIsSelected,
-            998 => CoreField::SemanticDataIsChecked,
-            999 => CoreField::SemanticDataIsMixed,
             1000 => CoreField::SemanticDataIsToggled,
             1001 => CoreField::SemanticDataIsRequired,
             1002 => CoreField::SemanticDataIsDisabled,
@@ -8852,8 +8849,7 @@ impl CoreRegistry {
             995 => 4,
             996 => 4,
             997 => 4,
-            998 => 4,
-            999 => 4,
+            998 => 0,
             1000 => 4,
             1001 => 4,
             1002 => 4,
@@ -9482,7 +9478,6 @@ impl CoreRegistry {
             996 => 668,
             997 => 668,
             998 => 668,
-            999 => 668,
             1000 => 668,
             1001 => 668,
             1002 => 668,
@@ -41300,6 +41295,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
                     <crate::mechanical_port::source::semantic::semantic_data::SemanticData as crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase::TRAIT_FLAGS_PROPERTY_KEY);
                 }
             }
+            CoreField::SemanticDataIsChecked => self.set_is_checked(value as u8),
             CoreField::SemanticDataStateFlags => {
                 if self.base.set_state_flags_value(value) {
                     <crate::mechanical_port::source::semantic::semantic_data::SemanticData as crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBaseCallbacks>::state_flags_changed(self);
@@ -41352,8 +41348,6 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
             CoreField::SemanticDataIsFocusable => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_focusable(self, value),
             CoreField::SemanticDataIsExpanded => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_expanded(self, value),
             CoreField::SemanticDataIsSelected => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_selected(self, value),
-            CoreField::SemanticDataIsChecked => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_checked(self, value),
-            CoreField::SemanticDataIsMixed => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_mixed(self, value),
             CoreField::SemanticDataIsToggled => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_toggled(self, value),
             CoreField::SemanticDataIsRequired => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_required(self, value),
             CoreField::SemanticDataIsDisabled => crate::mechanical_port::source::semantic::semantic_data::SemanticData::set_is_disabled(self, value),
@@ -41383,6 +41377,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
             CoreField::SemanticDataHeadingLevel => self.base.heading_level(),
             CoreField::SemanticDataTraitFlags => self.base.trait_flags(),
             CoreField::SemanticDataStateFlags => self.base.state_flags(),
+            CoreField::SemanticDataIsChecked => u32::from(self.is_checked()),
             _ => 0,
         }
     }
@@ -41410,8 +41405,6 @@ impl CoreRegistryObject for crate::mechanical_port::source::semantic::semantic_d
             CoreField::SemanticDataIsFocusable => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_focusable(self),
             CoreField::SemanticDataIsExpanded => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_expanded(self),
             CoreField::SemanticDataIsSelected => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_selected(self),
-            CoreField::SemanticDataIsChecked => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_checked(self),
-            CoreField::SemanticDataIsMixed => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_mixed(self),
             CoreField::SemanticDataIsToggled => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_toggled(self),
             CoreField::SemanticDataIsRequired => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_required(self),
             CoreField::SemanticDataIsDisabled => crate::mechanical_port::source::semantic::semantic_data::SemanticData::is_disabled(self),

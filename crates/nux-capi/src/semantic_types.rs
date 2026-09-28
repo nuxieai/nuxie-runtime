@@ -3,8 +3,12 @@
 //! for interaction, regardless of role.
 
 #[cfg(test)]
+use nuxie::runtime::generated::semantic::semantic_data_base::SemanticDataBase;
+#[cfg(test)]
 use nuxie::runtime::semantic::{
-    semantic_role::SemanticRole, semantic_state::SemanticState, semantic_trait::SemanticTrait,
+    semantic_role::SemanticRole,
+    semantic_state::{SemanticCheckState, SemanticState},
+    semantic_trait::SemanticTrait,
 };
 
 pub const NUX_SEMANTIC_ROLE_NONE: u32 = 0;
@@ -28,8 +32,11 @@ pub const NUX_SEMANTIC_ROLE_RADIO_BUTTON: u32 = 17;
 pub const NUX_SEMANTIC_STATE_NONE: u32 = 0;
 pub const NUX_SEMANTIC_STATE_EXPANDED: u32 = 1 << 0;
 pub const NUX_SEMANTIC_STATE_SELECTED: u32 = 1 << 1;
-pub const NUX_SEMANTIC_STATE_CHECKED: u32 = 1 << 2;
-pub const NUX_SEMANTIC_STATE_MIXED: u32 = 1 << 3;
+pub const NUX_SEMANTIC_CHECK_STATE_UNCHECKED: u8 = 0;
+pub const NUX_SEMANTIC_CHECK_STATE_CHECKED: u8 = 1;
+pub const NUX_SEMANTIC_CHECK_STATE_MIXED: u8 = 2;
+pub const NUX_SEMANTIC_CHECK_STATE_BIT_OFFSET: u32 = 2;
+pub const NUX_SEMANTIC_CHECK_STATE_FIELD_MASK: u32 = 12;
 pub const NUX_SEMANTIC_STATE_TOGGLED: u32 = 1 << 4;
 pub const NUX_SEMANTIC_STATE_REQUIRED: u32 = 1 << 5;
 pub const NUX_SEMANTIC_STATE_DISABLED: u32 = 1 << 6;
@@ -87,8 +94,26 @@ mod tests {
         assert_eq!(NUX_SEMANTIC_STATE_NONE, SemanticState::NONE.0);
         assert_eq!(NUX_SEMANTIC_STATE_EXPANDED, SemanticState::EXPANDED.0);
         assert_eq!(NUX_SEMANTIC_STATE_SELECTED, SemanticState::SELECTED.0);
-        assert_eq!(NUX_SEMANTIC_STATE_CHECKED, SemanticState::CHECKED.0);
-        assert_eq!(NUX_SEMANTIC_STATE_MIXED, SemanticState::MIXED.0);
+        assert_eq!(
+            NUX_SEMANTIC_CHECK_STATE_UNCHECKED,
+            SemanticCheckState::Unchecked as u8
+        );
+        assert_eq!(
+            NUX_SEMANTIC_CHECK_STATE_CHECKED,
+            SemanticCheckState::Checked as u8
+        );
+        assert_eq!(
+            NUX_SEMANTIC_CHECK_STATE_MIXED,
+            SemanticCheckState::Mixed as u8
+        );
+        assert_eq!(
+            NUX_SEMANTIC_CHECK_STATE_BIT_OFFSET,
+            SemanticDataBase::IS_CHECKED_BIT_OFFSET
+        );
+        assert_eq!(
+            NUX_SEMANTIC_CHECK_STATE_FIELD_MASK,
+            SemanticDataBase::IS_CHECKED_FIELD_MASK
+        );
         assert_eq!(NUX_SEMANTIC_STATE_TOGGLED, SemanticState::TOGGLED.0);
         assert_eq!(NUX_SEMANTIC_STATE_REQUIRED, SemanticState::REQUIRED.0);
         assert_eq!(NUX_SEMANTIC_STATE_DISABLED, SemanticState::DISABLED.0);

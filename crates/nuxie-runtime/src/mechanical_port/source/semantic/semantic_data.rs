@@ -714,18 +714,23 @@ impl SemanticData {
         IS_SELECTED_BITMASK,
         IS_SELECTED_PROPERTY_KEY
     );
-    semantic_state_flag!(
-        is_checked,
-        set_is_checked,
-        IS_CHECKED_BITMASK,
-        IS_CHECKED_PROPERTY_KEY
-    );
-    semantic_state_flag!(
-        is_mixed,
-        set_is_mixed,
-        IS_MIXED_BITMASK,
-        IS_MIXED_PROPERTY_KEY
-    );
+    pub fn is_checked(&self) -> u8 {
+        ((self.base.state_flags() & SemanticDataBase::IS_CHECKED_FIELD_MASK)
+            >> SemanticDataBase::IS_CHECKED_BIT_OFFSET) as u8
+    }
+
+    pub fn set_is_checked(&mut self, value: u8) {
+        if self.is_checked() == value {
+            return;
+        }
+        let flags = (self.base.state_flags() & !SemanticDataBase::IS_CHECKED_FIELD_MASK)
+            | ((u32::from(value) << SemanticDataBase::IS_CHECKED_BIT_OFFSET)
+                & SemanticDataBase::IS_CHECKED_FIELD_MASK);
+        self.base.set_state_flags_value(flags);
+        self.state_flags_changed();
+        self.notify_property_changed(SemanticDataBase::STATE_FLAGS_PROPERTY_KEY);
+    }
+
     semantic_state_flag!(
         is_toggled,
         set_is_toggled,

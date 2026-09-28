@@ -34,14 +34,14 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .iter()
         .flat_map(|definition| definition.properties)
         .count();
-    assert_eq!(runtime_property_count, 636);
+    assert_eq!(runtime_property_count, 635);
 
     let animatable_property_count = DEFINITIONS
         .iter()
         .flat_map(|definition| definition.properties)
         .filter(|property| property.animates)
         .count();
-    assert_eq!(animatable_property_count, 232);
+    assert_eq!(animatable_property_count, 231);
 
     let grouped_property_count = DEFINITIONS
         .iter()
@@ -62,7 +62,7 @@ fn generated_schema_exposes_current_runtime_definition_set() {
         .flat_map(|definition| definition.properties)
         .filter(|property| property.description.is_some())
         .count();
-    assert_eq!(described_property_count, 469);
+    assert_eq!(described_property_count, 468);
 }
 
 #[test]
@@ -621,6 +621,44 @@ fn cpp_generated_value_setter_metadata_matches_generator_shapes() {
 }
 
 #[test]
+fn semantic_check_state_metadata_matches_0d8ca59d_runtime_field() {
+    let semantic_data = definition_by_name("SemanticData").expect("SemanticData exists");
+    let checked = semantic_data
+        .property_by_key(998)
+        .expect("SemanticData.isChecked");
+    assert_eq!(checked.name, "isChecked");
+    assert_eq!(checked.runtime_type, FieldKind::Uint);
+    assert_eq!(checked.declared_type, "uint8");
+    assert_eq!(checked.uint_storage(), Some(UintStorage::Uint8));
+    assert_eq!(
+        checked.cpp_bitmask_passthrough_bit_offset_constant(),
+        Some(2)
+    );
+    assert_eq!(
+        checked.cpp_bitmask_passthrough_field_mask_constant(),
+        Some(0xc)
+    );
+    let field = checked.bitmask_passthrough.expect("packed check state");
+    assert_eq!(field.target, "stateFlags");
+    assert_eq!(field.width, 2);
+    assert!(checked.bindable);
+    assert!(semantic_data.property_by_key(999).is_none());
+    assert!(
+        !semantic_data
+            .properties
+            .iter()
+            .any(|property| property.name == "isMixed")
+    );
+    // The reconciled description must explain the current field, not the
+    // historical independent isMixed boolean in the immutable public seed.
+    let description = checked.description.expect("check state description");
+    for meaning in ["0=unchecked", "1=checked", "2=mixed"] {
+        assert!(description.contains(meaning));
+    }
+    assert!(!description.contains("isMixed"));
+}
+
+#[test]
 fn cpp_generator_metadata_matches_pinned_seed_surface() {
     let artboard = definition_by_name("Artboard").expect("Artboard exists");
     assert_eq!(artboard.mixins, &["publishable.json"]);
@@ -674,16 +712,6 @@ fn cpp_generator_metadata_matches_pinned_seed_surface() {
             .expect("ViewModelInstance.viewModelId")
             .parentable,
         Some(1)
-    );
-
-    let semantic_data = definition_by_name("SemanticData").expect("SemanticData exists");
-    assert!(
-        semantic_data
-            .property_by_key(998)
-            .expect("SemanticData.isChecked")
-            .description
-            .expect("SemanticData.isChecked description")
-            .contains('\u{2014}')
     );
 
     let shape_paint = definition_by_name("ShapePaint").expect("ShapePaint exists");
@@ -925,12 +953,17 @@ fn core_registry_getter_field_kind_matches_cpp_getter_families() {
         Some(FieldKind::Uint)
     );
 
-    for key in 989..=1009 {
+    for key in (989..=1009).filter(|key| !matches!(key, 998 | 999)) {
         assert_eq!(
             core_registry_getter_field_kind_by_property_key(key),
             Some(FieldKind::Bool)
         );
     }
+    assert_eq!(
+        core_registry_getter_field_kind_by_property_key(998),
+        Some(FieldKind::Uint)
+    );
+    assert_eq!(core_registry_getter_field_kind_by_property_key(999), None);
     assert_eq!(core_registry_getter_field_kind_by_property_key(401), None);
     assert_eq!(core_registry_getter_field_kind_by_property_key(212), None);
 }

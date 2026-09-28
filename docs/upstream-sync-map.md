@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `d4fe10229b3c148f315ba309924fa837135e7a76`
+- LAST_SYNCED_SHA: `8fb7e2da583c7a2313f2a966b89e3d43d722489f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 162 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 162 require a Rust translation.
+  There are 161 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 161 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `8fb7e2da583c7a2313f2a966b89e3d43d722489f` | Upstream adds `RIVE_NO_AUDIO_DEVICE` to suppress automatic miniaudio device creation. No Rust production delta: our engine constructors always create a device-free mixer. Explicit host-owned CPAL sinks are separate APIs and retain their contract. | — |
 | `d4fe10229b3c148f315ba309924fa837135e7a76` | Translate runtime ID vocabulary/registry dispatch while retaining the single-varuint u32 wire representation; remove Folder runtime registration, preserve semantic bitmask getters and pending text/cache overlays, return zero for unrooted computed coordinates, and move the fire-event owner to its upstream handwritten path. Retain explicitly pinned last-public definitions for schema generation and reconcile runtime metadata against current generated headers; upstream no longer publishes the canonical JSON. Native C++ editor-only arena, fractional ordering and mutation/journal extensions are outside the runtime build, not claimed as implemented. | — |
 | `9b3319623a210449145097e9f7c7447cf2e50f3b` | Invalidate text-input layout after every reshape, including single-line auto-width measurement. Keep the already-present shape/layout dirt helper and remove the duplicate text-change invalidation; preserve separately audited ahead-ported text properties. | — |
 | `df50e6245122a3ebc2cbc8fad728b5cf497e8877` | Share transparent-container and list-participation predicates between layout collection and ArtboardComponentList parent resolution. Direct layouts still win; otherwise only flagged lists walk through transparent groups/Solos to the nearest layout. Translate all strengthened upstream assertions, including unflagged free-form placement and exact stack identity. | — |
@@ -155,13 +156,13 @@ user's approval. `LAST_SYNCED_SHA` does not move for them. When the sync
 reaches one of these commits, confirm the Rust owners match the upstream diff
 at that point and account for any intervening upstream changes to the same
 files. Retire overlay definitions by covered source properties, not by file
-name: preserve properties from later commits in shared files. Upstream's
-removal of `dev/defs` at `d4fe1022` also requires a replacement schema source
-before reconstructed overlays can be removed without losing definitions.
+name: preserve properties from later commits in shared files. After upstream
+removed `dev/defs` at `d4fe1022`, schema generation uses the pinned public seed
+in `defs/upstream-runtime` plus runtime reconciliation and forward overlays.
+Move covered properties into reconciliation before retiring an overlay.
 
 | Upstream SHA | Ported slice | Work |
 | --- | --- | --- |
-| `d4fe10229b3c148f315ba309924fa837135e7a76` | Semantic boolean registry getters only (keys 989–1009), added in local `a81c58e997dd59675ac699ebb44c8a1632596162`. The rest of this upstream commit remains to be accounted for. | — |
 | `7098a7c86220fefe6e0620d83b53d906f6fe8dae` | Raw and native TextInput alignment, added in local `3d21544107` and `5c731c6bac`. The bundled caret-blinking and linked-corner-radius changes remain unported. See [text-input-alignment-port.md](text-input-alignment-port.md). | — |
 | `bec99be4e4fecee71d0db012edeffdc561da319a` | Obscured TextInput, masking and selection-export behavior, added in local `1bcf034716`. See [obscured-text-input-port.md](obscured-text-input-port.md). | [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852) |
 | `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Cache as bitmap: the BitmapCache core type, the Artboard offscreen raster and composite, `Renderer::current_transform`/`current_modulated_opacity`, `Factory::canvas_content_host`, the three new `DeferredCanvasHost` methods, and the deferred recorder's CTM shadow. The serializing/replay utilities, player and deploy harness, and the silver-factory test are not ported. See [cache-as-bitmap-port.md](cache-as-bitmap-port.md). | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |

@@ -28,7 +28,7 @@ impl TextInputCursor {
                 let parent = parent
                     .as_text_input_mut()
                     .expect("TextInputDrawable parent");
-                if !parent.is_focused() {
+                if !parent.is_cursor_visible() {
                     return false;
                 }
                 use_path(parent.raw_text_input().cursor_path());
@@ -42,7 +42,7 @@ impl TextInputCursor {
                 .as_text_input_mut()
                 .expect("TextInputDrawable parent");
             let world = *parent.base.world_transform();
-            let path = if parent.is_focused() {
+            let path = if parent.is_cursor_visible() {
                 Some(parent.raw_text_input().cursor_path())
             } else {
                 None

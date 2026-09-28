@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "60ddf34e5155728ad9a307ed9b09c239872904e4"
+upstream_ref = "7098a7c86220fefe6e0620d83b53d906f6fe8dae"
 expected_entries = 266
 expected_runtime = 218
 expected_scripted = 45
@@ -536,7 +536,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Multiple layout collapsing and soloing in hierarchy."
-producer_line = 464
+producer_line = 522
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2560,7 +2560,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation time databound"
-producer_line = 552
+producer_line = 610
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2582,7 +2582,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation artboard component list"
-producer_line = 615
+producer_line = 673
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2604,7 +2604,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout animation nested artboards"
-producer_line = 581
+producer_line = 639
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2626,7 +2626,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout aspect ratio"
-producer_line = 647
+producer_line = 705
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 42 (addRawPath), field point: expected (142, 71), got (142, 133)."
 
 [[case]]
@@ -2648,7 +2648,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Animating layout display"
-producer_line = 492
+producer_line = 550
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2670,7 +2670,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout fixed/fill scale type round trip preserves units"
-producer_line = 686
+producer_line = 744
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2824,7 +2824,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Top-level hug artboard computes size from children"
-producer_line = 713
+producer_line = 771
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2846,7 +2846,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout occluded by rectangle pointer test"
-producer_line = 825
+producer_line = 883
 note = "Exact comparison contract for the six-draw pointer-order producer at 61f00897: fresh VMI, initial draw at zero, then five clicks with .1-second advances. Enrollment alone is not a validation result."
 
 [[case]]
@@ -2868,7 +2868,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/layout_test.cpp"
 provenance_test = "Layout background & foreground shape paints."
-producer_line = 520
+producer_line = 578
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5316,7 +5316,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/text_input_test.cpp"
 provenance_test = "file with text input renders correctly"
-producer_line = 47
+producer_line = 49
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

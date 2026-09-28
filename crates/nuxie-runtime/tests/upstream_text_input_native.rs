@@ -3,7 +3,7 @@
 
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
-    core::CoreHandle,
+    core::{CoreHandle, CoreType},
     focus_data::FocusData,
     generated::core_registry::CoreRegistry,
     input::focusable::{Key, KeyModifiers},
@@ -121,6 +121,7 @@ fn native_input_alignment_schema_deserialization_and_clone_agree() {
 #[test]
 fn native_input_alignment_properties_drive_field_relative_geometry() {
     let (_file, artboard, input) = input_fixture();
+    assert_eq!(CoreRegistry::get_uint_handle(&input, 222), Some(0));
     assert!(CoreRegistry::set_string_handle(&input, 817, "hi".into()));
     artboard.advance_default(0.0);
     let (width, height, natural) = with_input(&input, |input| {
@@ -129,6 +130,8 @@ fn native_input_alignment_properties_drive_field_relative_geometry() {
         (raw.align_width(), raw.align_height(), bounds)
     });
     assert!(width > natural.width());
+    assert!(width > 0.0);
+    assert_eq!(natural.min_x, 0.0);
     assert!(height > natural.height());
     for (horizontal, x_factor) in [(0, 0.0), (1, 1.0), (2, 0.5)] {
         for (vertical, y_factor) in [(0, 0.0), (1, 1.0), (2, 0.5)] {
@@ -137,6 +140,15 @@ fn native_input_alignment_properties_drive_field_relative_geometry() {
             assert_eq!(CoreRegistry::get_uint_handle(&input, 222), Some(horizontal));
             assert_eq!(CoreRegistry::get_uint_handle(&input, 1094), Some(vertical));
             artboard.advance_default(0.0);
+            assert_eq!(
+                with_input(&input, |input| input.raw_text_input().align()),
+                match horizontal {
+                    0 => nuxie_runtime::source::text::text_engine::TextAlign::Left,
+                    1 => nuxie_runtime::source::text::text_engine::TextAlign::Right,
+                    2 => nuxie_runtime::source::text::text_engine::TextAlign::Center,
+                    _ => unreachable!(),
+                }
+            );
             let bounds = with_input(&input, |input| input.local_bounds());
             assert!((bounds.min_x - (width - natural.width()) * x_factor).abs() < 0.01);
             assert!((bounds.min_y - (height - natural.height()) * y_factor).abs() < 0.01);
@@ -180,6 +192,10 @@ fn native_input_alignment_tracks_viewport_padding_changes() {
             assert!(CoreRegistry::set_double_handle(&style, property, value));
         }
         artboard.advance_default(0.0);
+        let padding_left = viewport
+            .with(|node| node.as_layout_component().unwrap().padding_left())
+            .unwrap();
+        assert!((padding_left - left).abs() < 0.01);
         let aligned = with_input(&input, |input| {
             let raw = input.raw_text_input();
             (raw.align_width(), raw.align_height())
@@ -192,6 +208,99 @@ fn native_input_alignment_tracks_viewport_padding_changes() {
             (aligned.1 - (size.1 - top - bottom)).abs() < 0.01,
             "height: {aligned:?}"
         );
+    }
+}
+
+// The upstream cursor-path assertions exercise the drawable's actual local
+// path gate, not just the TextInput visibility state used to implement it.
+fn cursor_has_local_path(cursor: &CoreHandle) -> bool {
+    use nuxie_runtime::source::{
+        shapes::paint::shape_paint::ShapePaintPathKind, text::text_input_cursor::TextInputCursor,
+    };
+    cursor
+        .with_downcast::<TextInputCursor, _>(|cursor| {
+            cursor.with_path_mut(ShapePaintPathKind::LocalClockwise, &mut |_| {})
+        })
+        .expect("live cursor")
+}
+
+#[test]
+fn text_input_cursor_blinks_while_focused() {
+    use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
+    let (_file, artboard, _input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let find = |type_key| {
+        artboard
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .find(|object| object.is_type_of(type_key))
+                    .cloned()
+            })
+            .expect("authored child")
+    };
+    let cursor = find(TextInputCursor::TYPE_KEY);
+    let focus = find(FocusData::TYPE_KEY);
+    machine.advance_and_apply(0.6);
+    assert!(!cursor_has_local_path(&cursor));
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert!(cursor_has_local_path(&cursor));
+    machine.advance_and_apply(0.5);
+    assert!(!cursor_has_local_path(&cursor));
+    machine.advance_and_apply(0.5);
+    assert!(cursor_has_local_path(&cursor));
+    machine.advance_and_apply(0.4);
+    machine.with_instance_mut(|machine| machine.text_input("a"));
+    machine.advance_and_apply(0.2);
+    assert!(cursor_has_local_path(&cursor));
+    machine.advance_and_apply(0.4);
+    machine.with_instance_mut(|machine| {
+        machine.key_input(Key::from_raw(263), KeyModifiers::from_raw(0), true, false)
+    });
+    machine.advance_and_apply(0.2);
+    assert!(cursor_has_local_path(&cursor));
+    machine.with_instance_mut(|machine| machine.clear_focus());
+    assert!(!cursor_has_local_path(&cursor));
+}
+
+#[test]
+fn caret_blink_accounts_for_every_elapsed_phase() {
+    use nuxie_runtime::source::text::text_input_cursor::TextInputCursor;
+    let (_file, artboard, _input) = input_fixture();
+    let machine = artboard
+        .state_machine_instance_handle(0)
+        .expect("authored state machine");
+    machine.advance_and_apply(0.0);
+    let find = |type_key| {
+        artboard
+            .with_artboard(|artboard| {
+                artboard
+                    .objects()
+                    .iter()
+                    .flatten()
+                    .find(|object| object.is_type_of(type_key))
+                    .cloned()
+            })
+            .expect("authored child")
+    };
+    let cursor = find(TextInputCursor::TYPE_KEY);
+    let focus = find(FocusData::TYPE_KEY);
+    machine.with_instance_mut(|machine| machine.set_focus(Some(focus)));
+    assert!(cursor_has_local_path(&cursor));
+    for (elapsed, visible) in [
+        (1.0, true),
+        (1.5, false),
+        (2.0, false),
+        (0.3, false),
+        (0.2, true),
+    ] {
+        machine.advance_and_apply(elapsed);
+        assert_eq!(cursor_has_local_path(&cursor), visible, "after {elapsed}s");
     }
 }
 

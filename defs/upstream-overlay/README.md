@@ -20,4 +20,9 @@ before they can be removed.
 | File | Upstream commit | Adds |
 |------|-----------------|------|
 | `bitmap_cache.json` | a4dbc3ff (cache as bitmap) | BitmapCache (type 136): `resolution` 417, `cacheFlags` 418, and its passthrough bits `cacheEnabled` 419 and `dither` 420 |
-| `text/text_input.json` | 7098a7c8 (input alignment), bec99be4 (obscured input) | `alignValue` 222, `verticalAlignValue` 1094, `obscured` 1095 |
+| `text/text_input.json` | bec99be4 (obscured input) | `obscured` 1095; retains the current alignment fields because overlays replace whole files |
+
+The reached 7098a7c8 alignment fields (`alignValue` 222 and
+`verticalAlignValue` 1094) now also live in
+`defs/upstream-reconciliation/text/text_input.json`. Removing the obscured
+overlay when its commit is reached must preserve that reconciled definition.

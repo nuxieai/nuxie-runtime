@@ -702,6 +702,9 @@ impl LayoutComponentStyle {
     pub fn position_bottom_units_value_changed(&mut self) {
         self.mark_layout_node_dirty();
     }
+    pub fn link_corner_radius_changed(&mut self) {
+        self.mark_layout_style_dirty();
+    }
     pub fn corner_radius_tl_changed(&mut self) {
         self.mark_layout_style_dirty();
     }

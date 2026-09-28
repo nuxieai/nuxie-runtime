@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `60ddf34e5155728ad9a307ed9b09c239872904e4`
+- LAST_SYNCED_SHA: `7098a7c86220fefe6e0620d83b53d906f6fe8dae`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 160 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 160 require a Rust translation.
+  There are 159 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 159 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `7098a7c86220fefe6e0620d83b53d906f6fe8dae` | Reconcile ahead-ported text-input horizontal/vertical alignment with the complete upstream delta; add caret blink timing/visibility and linked-corner-radius invalidation. Translate the upstream raw/native input and layout regression cases. Preserve later obscured-input behavior and its overlay while recording reached alignment metadata in runtime reconciliation. | — |
 | `60ddf34e5155728ad9a307ed9b09c239872904e4` | C++ incomplete-type build fix: move unchanged FiddleContext frame methods into a source file with the complete ORE context include. Upstream tools_common includes the new file; our custom harness source lists do not compile FiddleContext. No Rust behavior delta. | — |
 | `8fb7e2da583c7a2313f2a966b89e3d43d722489f` | Upstream adds `RIVE_NO_AUDIO_DEVICE` to suppress automatic miniaudio device creation. No Rust production delta: our engine constructors always create a device-free mixer. Explicit host-owned CPAL sinks are separate APIs and retain their contract. | — |
 | `d4fe10229b3c148f315ba309924fa837135e7a76` | Translate runtime ID vocabulary/registry dispatch while retaining the single-varuint u32 wire representation; remove Folder runtime registration, preserve semantic bitmask getters and pending text/cache overlays, return zero for unrooted computed coordinates, and move the fire-event owner to its upstream handwritten path. Retain explicitly pinned last-public definitions for schema generation and reconcile runtime metadata against current generated headers; upstream no longer publishes the canonical JSON. Native C++ editor-only arena, fractional ordering and mutation/journal extensions are outside the runtime build, not claimed as implemented. | — |
@@ -164,7 +165,6 @@ Move covered properties into reconciliation before retiring an overlay.
 
 | Upstream SHA | Ported slice | Work |
 | --- | --- | --- |
-| `7098a7c86220fefe6e0620d83b53d906f6fe8dae` | Raw and native TextInput alignment, added in local `3d21544107` and `5c731c6bac`. The bundled caret-blinking and linked-corner-radius changes remain unported. See [text-input-alignment-port.md](text-input-alignment-port.md). | — |
 | `bec99be4e4fecee71d0db012edeffdc561da319a` | Obscured TextInput, masking and selection-export behavior, added in local `1bcf034716`. See [obscured-text-input-port.md](obscured-text-input-port.md). | [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852) |
 | `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Cache as bitmap: the BitmapCache core type, the Artboard offscreen raster and composite, `Renderer::current_transform`/`current_modulated_opacity`, `Factory::canvas_content_host`, the three new `DeferredCanvasHost` methods, and the deferred recorder's CTM shadow. The serializing/replay utilities, player and deploy harness, and the silver-factory test are not ported. See [cache-as-bitmap-port.md](cache-as-bitmap-port.md). | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
 

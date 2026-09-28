@@ -6,7 +6,6 @@ pub mod export_audio;
 pub mod file_asset;
 pub mod file_asset_contents;
 pub mod file_asset_referencer;
-pub mod folder;
 pub mod font_asset;
 pub mod image_asset;
 pub mod manifest_asset;

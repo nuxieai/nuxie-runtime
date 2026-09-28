@@ -925,6 +925,10 @@ impl DataBind {
         self.set_flag(IN_PERSISTING, value);
     }
 
+    pub fn container(&self) -> Option<DataBindContainerOwner> {
+        self.container.clone()
+    }
+
     pub fn set_container(&mut self, value: Option<DataBindContainerOwner>) {
         self.container = value;
     }

@@ -2,7 +2,7 @@
 """Check runtime file coverage, not semantic parity or review completion.
 
 The pinned upstream tree is the inventory. Header/implementation pairs share
-one Rust owner; five upstream naming exceptions follow their Rust modules.
+one Rust owner; four upstream naming exceptions follow their Rust modules.
 Explicit adapted and deferred owners are reported separately, never as mirrors.
 No generated ledger or stored completion count is required.
 """
@@ -15,7 +15,6 @@ import sys
 
 OWNER_ROOT = Path("crates/nuxie-runtime/src/mechanical_port/source")
 RENAMED_OWNERS = {
-    "animation/state_machine_fire_event": "generated/animation/state_machine_fire_event",
     "nested_animation": "animation/nested_animation",
     "property_recorder": "animation/property_recorder",
     "shapes/shape_paint_path": "shapes/paint/shape_paint_path",
@@ -32,6 +31,17 @@ ADAPTED_OWNERS = {
 # C++ object-layout padding across preprocessor configurations has no Rust ABI
 # counterpart. This is not an exemption for scripting lifecycle behavior.
 CXX_ONLY_OWNERS = {"scripting_slots"}
+# d4fe1022 editor-native contracts are outside this runtime's feature surface.
+# Exact names only: future editor headers still require a scope review.
+EDITOR_ONLY_OWNERS = {
+    "core/fractional_index", "core/field_types/core_fractional_index_type",
+    "editor/core_handle", "editor/object_arena",
+}
+# Runtime expansion of editor_hooks leaves ordinary generated callbacks intact;
+# editor journaling/validation hooks disappear. No editor API is implemented.
+PREPROCESSOR_ADAPTED_OWNERS = {
+    "core/editor_hooks": OWNER_ROOT / "generated/component_base.rs",
+}
 # User-deferred execution lane, UNIV-3728. Enumerate exact owners so new upstream
 # files still fail this check until their scope is examined.
 DEFERRED_OWNERS = {
@@ -55,9 +65,9 @@ def upstream_owners(paths: list[str]) -> set[str]:
 def missing_owners(repo: Path, owners: set[str]) -> list[str]:
     missing = []
     for owner in sorted(owners):
-        if owner in DEFERRED_OWNERS or owner in CXX_ONLY_OWNERS:
+        if owner in DEFERRED_OWNERS or owner in CXX_ONLY_OWNERS or owner in EDITOR_ONLY_OWNERS:
             continue
-        target = ADAPTED_OWNERS.get(owner,
+        target = PREPROCESSOR_ADAPTED_OWNERS.get(owner) or ADAPTED_OWNERS.get(owner,
             OWNER_ROOT / (RENAMED_OWNERS.get(owner, owner) + ".rs"))
         if not (repo / target).is_file() or not (repo / target).read_text().strip():
             missing.append(f"{owner} -> {target}")
@@ -84,14 +94,21 @@ def main() -> int:
     adapted = owners & ADAPTED_OWNERS.keys()
     deferred = owners & DEFERRED_OWNERS
     cxx_only = owners & CXX_ONLY_OWNERS
-    mirrored = len(owners) - len(adapted) - len(deferred) - len(cxx_only)
+    editor_only = owners & EDITOR_ONLY_OWNERS
+    preprocessor = owners & PREPROCESSOR_ADAPTED_OWNERS.keys()
+    mirrored = len(owners) - len(adapted) - len(deferred) - len(cxx_only) - len(editor_only) - len(preprocessor)
     print(f"Runtime source correspondence: {mirrored} mirrored, {len(adapted)} adapted, "
-          f"{len(cxx_only)} C++-ABI-only, {len(deferred)} deferred "
+          f"{len(cxx_only)} C++-ABI-only, {len(preprocessor)} preprocessor-adapted, "
+          f"{len(editor_only)} editor-only, {len(deferred)} deferred "
           "(structural coverage only; not proof of behavioral parity).")
     for owner in sorted(adapted):
         print(f"Adapted: {owner} -> {ADAPTED_OWNERS[owner]}")
     for owner in sorted(cxx_only):
         print(f"C++-ABI-only: {owner}")
+    for owner in sorted(preprocessor):
+        print(f"Preprocessor-adapted (runtime callbacks only): {owner} -> {PREPROCESSOR_ADAPTED_OWNERS[owner]}")
+    for owner in sorted(editor_only):
+        print(f"Editor-only (unsupported WITH_RIVE_EDITOR): {owner}")
     for owner in sorted(deferred):
         print(f"Deferred (UNIV-3728): {owner}")
     return 0

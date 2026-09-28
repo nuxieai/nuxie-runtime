@@ -344,6 +344,11 @@ pub fn bitmask_passthrough_by_key_in_hierarchy(
     generated::bitmask_passthrough_by_key_in_hierarchy(type_key, property_key)
 }
 
+/// Selective Id dispatch overlaps Uint dispatch and shares its wire kind.
+pub fn is_id_property_key(key: u16) -> bool {
+    generated::schema::is_id_property_key(key)
+}
+
 pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistryFieldKind> {
     generated::core_registry_field_kind_by_property_key(key)
 }

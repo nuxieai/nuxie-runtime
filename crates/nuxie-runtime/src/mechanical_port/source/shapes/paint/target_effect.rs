@@ -42,6 +42,10 @@ impl std::ops::DerefMut for TargetEffect {
 }
 
 impl TargetEffect {
+    pub fn group_effect(&self) -> Option<CoreHandle> {
+        self.group_effect.clone()
+    }
+
     pub const TYPE_KEY: u16 = TargetEffectBase::TYPE_KEY;
 }
 
@@ -67,7 +71,7 @@ impl TargetEffect {
     ) {
         let (group, proxies) = handle
             .with_downcast_mut::<TargetEffect, _>(|target| {
-                let group = target.group_effect.clone();
+                let group = target.group_effect();
                 let proxies = if let Some(provider) = provider {
                     target
                         .stroke
@@ -151,7 +155,7 @@ impl TargetEffect {
         source: &ShapePaintPath,
         paint: &ShapePaint,
     ) {
-        let Some(group) = self.group_effect.clone() else {
+        let Some(group) = self.group_effect() else {
             return;
         };
         if let Some(path) = self.stroke.effect_paths.get_mut(&provider.identity()) {
@@ -168,7 +172,7 @@ impl TargetEffect {
         &mut self,
         provider: &PathProvider,
     ) -> Option<std::rc::Rc<std::cell::RefCell<ShapePaintPath>>> {
-        let group = self.group_effect.clone()?;
+        let group = self.group_effect()?;
         let path = self.stroke.effect_paths.get_mut(&provider.identity())?;
         group
             .with_downcast_mut::<GroupEffect, _>(|group| {
@@ -179,8 +183,9 @@ impl TargetEffect {
     pub fn add_path_provider(&mut self, provider: &PathProvider) {
         let path = self.create_effect_path();
         self.stroke.add_path_provider(provider, path);
+        let group = self.group_effect();
         if let Some(path) = self.stroke.effect_paths.get_mut(&provider.identity()) {
-            if let Some(group) = self.group_effect.as_ref() {
+            if let Some(group) = group {
                 group.with_downcast_mut::<GroupEffect, _>(|group| {
                     group.add_path_provider(path.as_target_mut().unwrap().path_provider_proxy());
                 });
@@ -191,7 +196,7 @@ impl TargetEffect {
         Box::new(TargetEffectPath::new())
     }
     pub fn invalidate_effect_direct(&mut self, provider: Option<&PathProvider>) {
-        let Some(group) = self.group_effect.clone() else {
+        let Some(group) = self.group_effect() else {
             return;
         };
         if let Some(provider) = provider {

@@ -8,6 +8,99 @@ use nuxie_schema::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+fn read_cpp_runtime_source(path: impl AsRef<Path>) -> std::io::Result<String> {
+    std::fs::read_to_string(path).map(|source| cpp_runtime_source(&source))
+}
+
+// Select the actual non-editor branches before inspecting declarations/bodies.
+// This deliberately does not load editor _ext.inl files or pretend their
+// members are runtime storage. Unknown conditionals fail rather than silently
+// removing code from the comparison.
+fn cpp_runtime_source(source: &str) -> String {
+    let mut branches = Vec::<bool>::new();
+    let mut selected = String::new();
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed == "#ifdef WITH_RIVE_EDITOR" {
+            branches.push(false);
+        } else if trimmed == "#ifndef WITH_RIVE_EDITOR" || trimmed.starts_with("#ifndef _RIVE_") {
+            branches.push(true);
+        } else if trimmed == "#else" {
+            let branch = branches.last_mut().expect("matched C++ #else");
+            *branch = !*branch;
+        } else if trimmed == "#endif" {
+            branches.pop().expect("matched C++ #endif");
+        } else {
+            assert!(
+                !trimmed.starts_with("#if") && !trimmed.starts_with("#elif"),
+                "unrecognized generated C++ conditional: {trimmed}"
+            );
+            if branches.iter().all(|active| *active) {
+                selected.push_str(line);
+                selected.push('\n');
+            }
+        }
+    }
+    assert!(
+        branches.is_empty(),
+        "unterminated generated C++ conditional"
+    );
+
+    // Expand exactly the non-editor definitions in core/editor_hooks.hpp.
+    // Calls can span lines; balance parentheses instead of discarding a line
+    // that might contain a callback or the start of the next method.
+    let mut result = String::new();
+    let mut remaining = selected.as_str();
+    while let Some(start) = remaining.find("RIVE_EDITOR_") {
+        result.push_str(&remaining[..start]);
+        let invocation = &remaining[start..];
+        let open = invocation.find('(').expect("editor hook invocation");
+        let name = invocation[..open].trim();
+        let mut depth = 1;
+        let mut close = None;
+        for (offset, ch) in invocation[open + 1..].char_indices() {
+            match ch {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(open + 1 + offset);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let close = close.expect("terminated editor hook invocation");
+        let after = invocation[close + 1..].trim_start();
+        remaining = after.strip_prefix(';').expect("editor hook semicolon");
+        match name {
+            "RIVE_EDITOR_CHANGED" => {
+                result.push_str(&invocation[open + 1..close]);
+                result.push(';');
+            }
+            "RIVE_EDITOR_CHANGING"
+            | "RIVE_EDITOR_STRING_CHANGING"
+            | "RIVE_EDITOR_FRACTIONAL_INDEX_CHANGING"
+            | "RIVE_EDITOR_COPY"
+            | "RIVE_EDITOR_COPY_VALIDATED"
+            | "RIVE_EDITOR_DESERIALIZE" => {}
+            _ => panic!("unrecognized editor hook {name}"),
+        }
+    }
+    result.push_str(remaining);
+    result
+}
+
+#[test]
+fn cpp_runtime_projection_selects_guards_and_preserves_changed_callback() {
+    let source = "#ifndef _RIVE_EXAMPLE_HPP_\n#ifdef WITH_RIVE_EDITOR\neditor();\n#else\nruntime();\n#endif\n#ifndef WITH_RIVE_EDITOR\nRIVE_EDITOR_CHANGING(key,\n &old, &new);\nRIVE_EDITOR_CHANGED(valueChanged());\n#endif\nRIVE_EDITOR_COPY(object);\n#endif\n";
+    assert_eq!(
+        cpp_trimmed_lines(&cpp_runtime_source(source)),
+        vec!["runtime();", "valueChanged();"]
+    );
+}
+
 fn reference_runtime_dir() -> PathBuf {
     std::env::var_os("RIVE_RUNTIME_DIR")
         .map(PathBuf::from)
@@ -55,7 +148,7 @@ fn generated_rust_runtime_mixins_match_cpp_interfaces_and_consumers() {
 
     for mixin in RUNTIME_MIXINS {
         let header = cpp_header_for(&runtime_dir, mixin.file);
-        let source = std::fs::read_to_string(&header)
+        let source = read_cpp_runtime_source(&header)
             .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
         assert!(
             source
@@ -106,7 +199,7 @@ fn generated_rust_runtime_mixins_match_cpp_interfaces_and_consumers() {
         );
         for definition in DEFINITIONS {
             let consumer_header = cpp_header_for(&runtime_dir, definition.file);
-            let consumer_source = std::fs::read_to_string(&consumer_header).unwrap_or_else(|err| {
+            let consumer_source = read_cpp_runtime_source(&consumer_header).unwrap_or_else(|err| {
                 panic!("failed to read {}: {err}", consumer_header.display())
             });
             assert_eq!(
@@ -293,7 +386,7 @@ fn generated_rust_schema_matches_cpp_value_setters() {
             let setter_body = cpp_property_setter_body(&header, property.name);
             assert_eq!(
                 setter_body.is_some(),
-                property.cpp_generates_value_setter_body(),
+                property.cpp_generates_value_setter_body() || cpp_has_stored_bool_bitmask(property),
                 "{}.{} generated setter body presence in {}",
                 definition.name,
                 property.name,
@@ -304,6 +397,28 @@ fn generated_rust_schema_matches_cpp_value_setters() {
                 continue;
             };
             let actual = cpp_trimmed_lines(&setter_body);
+
+            if cpp_has_stored_bool_bitmask(property) {
+                let mask = property.bitmask_passthrough.unwrap();
+                let member = cpp_member_name(mask.target);
+                let bitmask = format!("{}Bitmask", property.name);
+                let expected = format!(
+                    "const bool prev = (m_{member} & {bitmask}) != 0; \
+                     if (prev == value) {{ return; }} \
+                     m_{member} = value ? (m_{member} | {bitmask}) : (m_{member} & ~{bitmask}); \
+                     {target}Changed(); notifyPropertyChanged({target}PropertyKey);",
+                    target = mask.target,
+                );
+                assert_eq!(
+                    cpp_normalize_whitespace(&setter_body),
+                    cpp_normalize_whitespace(&expected),
+                    "{}.{} bool bitmask setter in {}",
+                    definition.name,
+                    property.name,
+                    header.display()
+                );
+                continue;
+            }
 
             if property.cpp_setter_uses_passthrough() {
                 assert_cpp_passthrough_setter_body(
@@ -349,7 +464,8 @@ fn generated_rust_schema_matches_cpp_value_getters() {
             assert_eq!(
                 getter.is_some(),
                 property.cpp_generates_stored_field_getter_body()
-                    || property.cpp_generates_passthrough_getter_declaration(),
+                    || property.cpp_generates_passthrough_getter_declaration()
+                    || cpp_has_stored_bool_bitmask(property),
                 "{}.{} generated getter presence in {}",
                 definition.name,
                 property.name,
@@ -359,6 +475,25 @@ fn generated_rust_schema_matches_cpp_value_getters() {
             let Some(getter) = getter else {
                 continue;
             };
+
+            if cpp_has_stored_bool_bitmask(property) {
+                let CppGetter::Body { signature, body } = &getter else {
+                    panic!(
+                        "{}.{} bool bitmask getter has no body",
+                        definition.name, property.name
+                    );
+                };
+                assert_eq!(signature, &format!("inline bool {}() const", property.name));
+                assert_eq!(
+                    body,
+                    &vec![format!(
+                        "return (m_{} & {}Bitmask) != 0;",
+                        cpp_member_name(property.bitmask_passthrough.unwrap().target),
+                        property.name
+                    )]
+                );
+                continue;
+            }
 
             if property.cpp_generates_passthrough_getter_declaration() {
                 assert_cpp_passthrough_getter_declaration(
@@ -1074,7 +1209,7 @@ fn cpp_generated_source_for(runtime_dir: &Path, definition_file: &str) -> PathBu
 }
 
 fn cpp_copy_method_body(header: &Path, definition_name: &str) -> Option<String> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let signature = format!("void copy(const {definition_name}Base& object)");
     let signature_start = source.find(&signature)?;
@@ -1108,7 +1243,7 @@ fn cpp_copy_method_body(header: &Path, definition_name: &str) -> Option<String> 
 }
 
 fn cpp_clone_method_body(source: &Path, definition_name: &str) -> Option<String> {
-    let source_text = std::fs::read_to_string(source)
+    let source_text = read_cpp_runtime_source(source)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", source.display()));
     let signature = format!("Core* {definition_name}Base::clone() const");
     let signature_start = source_text.find(&signature)?;
@@ -1142,7 +1277,7 @@ fn cpp_clone_method_body(source: &Path, definition_name: &str) -> Option<String>
 }
 
 fn cpp_header_declares_clone(header: &Path) -> bool {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     source
         .lines()
@@ -1150,7 +1285,7 @@ fn cpp_header_declares_clone(header: &Path) -> bool {
 }
 
 fn cpp_property_setter_body(header: &Path, property_name: &str) -> Option<String> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let signature = format!("void {property_name}(");
     let signature_start = source.find(&signature)?;
@@ -1271,7 +1406,7 @@ enum CppGetter {
 }
 
 fn cpp_property_getter(header: &Path, property_name: &str) -> Option<CppGetter> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let getter = format!(" {property_name}()");
     let lines = source.lines().map(str::trim).collect::<Vec<_>>();
@@ -1424,7 +1559,7 @@ fn assert_cpp_passthrough_getter_declaration(
 }
 
 fn cpp_zero_declarations(header: &Path) -> BTreeSet<String> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let mut declarations = BTreeSet::new();
     let mut current = Vec::<String>::new();
@@ -1635,7 +1770,7 @@ fn cpp_copy_parent_calls(copy_body: &str) -> BTreeSet<String> {
 }
 
 fn cpp_notified_property_names(header: &Path) -> BTreeSet<String> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
 
     source
@@ -1655,7 +1790,7 @@ fn cpp_notified_property_names(header: &Path) -> BTreeSet<String> {
 }
 
 fn cpp_changed_hook_names(header: &Path) -> BTreeSet<String> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
 
     source
@@ -1683,7 +1818,7 @@ fn parse_cpp_make_core_instance_type_keys(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeSet<u16> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
     let mut keys = BTreeSet::new();
     let mut in_function = false;
@@ -1698,7 +1833,7 @@ fn parse_cpp_make_core_instance_type_keys(
         if !in_function {
             continue;
         }
-        if line.starts_with("static void setUint") {
+        if line.starts_with("static void setId") {
             break;
         }
 
@@ -1720,7 +1855,7 @@ fn parse_cpp_is_type_of_type_keys(
     header: &Path,
     constants: &BTreeMap<String, u16>,
 ) -> BTreeSet<u16> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let mut keys = BTreeSet::new();
     let mut in_is_type_of = false;
@@ -1757,7 +1892,7 @@ fn parse_cpp_deserialize_property_keys(
     header: &Path,
     constants: &BTreeMap<String, u16>,
 ) -> BTreeSet<u16> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let mut keys = BTreeSet::new();
     let mut in_deserialize = false;
@@ -1818,7 +1953,7 @@ fn collect_generated_class_constants(dir: &Path, constants: &mut BTreeMap<String
             continue;
         }
 
-        let source = std::fs::read_to_string(&path)
+        let source = read_cpp_runtime_source(&path)
             .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
         let class_name = source
             .lines()
@@ -1844,7 +1979,7 @@ fn parse_cpp_runtime_mixin_consumers(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeSet<u16> {
     let path = cpp_generated_source_for(runtime_dir, mixin.file);
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
     let signature = format!("{0}Base* {0}Base::from(Core* object)", mixin.name);
     let (_, body) = source.split_once(&signature).unwrap_or_else(|| {
@@ -1917,7 +2052,7 @@ fn parse_cpp_core_registry_property_field_ids(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeMap<u16, CoreRegistryFieldKind> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
 
     let mut in_function = false;
@@ -1958,6 +2093,7 @@ fn parse_cpp_core_registry_property_field_ids(
         }
 
         let kind = if line.contains("return CoreUintType::id")
+            || line.contains("return CoreIdType::id")
             || line.contains("return CoreUint64Type::id")
         {
             Some(CoreRegistryFieldKind::Uint)
@@ -2000,7 +2136,7 @@ fn parse_cpp_core_registry_setter_field_kinds(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeMap<u16, FieldKind> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
 
     let mut current_kind = None::<FieldKind>;
@@ -2011,6 +2147,7 @@ fn parse_cpp_core_registry_setter_field_kinds(
         let line = line.trim();
 
         current_kind = match line {
+            line if line.starts_with("static void setId") => Some(FieldKind::Uint),
             line if line.starts_with("static void setUint") => Some(FieldKind::Uint),
             line if line.starts_with("static void setInt") => Some(FieldKind::Int),
             line if line.starts_with("static void setString") => Some(FieldKind::String),
@@ -2018,7 +2155,7 @@ fn parse_cpp_core_registry_setter_field_kinds(
             line if line.starts_with("static void setBool") => Some(FieldKind::Bool),
             line if line.starts_with("static void setDouble") => Some(FieldKind::Double),
             line if line.starts_with("static void setCallback") => Some(FieldKind::Callback),
-            line if line.starts_with("static uint32_t getUint") => break,
+            line if line.starts_with("static Id getId") => break,
             _ => current_kind,
         };
 
@@ -2070,7 +2207,7 @@ fn parse_cpp_core_registry_getter_field_kinds(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeMap<u16, FieldKind> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
 
     let mut current_kind = None::<FieldKind>;
@@ -2081,6 +2218,7 @@ fn parse_cpp_core_registry_getter_field_kinds(
         let line = line.trim();
 
         current_kind = match line {
+            line if line.starts_with("static Id getId") => Some(FieldKind::Uint),
             line if line.starts_with("static uint32_t getUint") => Some(FieldKind::Uint),
             line if line.starts_with("static uint64_t getUint64") => Some(FieldKind::Uint),
             line if line.starts_with("static int32_t getInt") => Some(FieldKind::Int),
@@ -2140,7 +2278,7 @@ fn parse_cpp_core_registry_callback_property_keys(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeSet<u16> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
 
     let mut in_function = false;
@@ -2203,7 +2341,7 @@ fn parse_cpp_core_registry_object_supports_property(
     constants: &BTreeMap<String, u16>,
 ) -> BTreeMap<u16, CppPropertyOwner> {
     let path = runtime_dir.join("include/rive/generated/core_registry.hpp");
-    let source = std::fs::read_to_string(&path)
+    let source = read_cpp_runtime_source(&path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", path.display()));
 
     let mut in_function = false;
@@ -2287,13 +2425,13 @@ fn parse_cpp_core_registry_object_supports_property(
 }
 
 fn parse_u16_constants(header: &Path) -> BTreeMap<String, u16> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     parse_u16_constants_from_source(&source, header)
 }
 
 fn parse_u32_constants(header: &Path) -> BTreeMap<String, u32> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let mut constants = BTreeMap::new();
 
@@ -2318,7 +2456,7 @@ fn parse_u32_constants(header: &Path) -> BTreeMap<String, u32> {
 }
 
 fn parse_cpp_member_initializers(header: &Path) -> BTreeMap<String, String> {
-    let source = std::fs::read_to_string(header)
+    let source = read_cpp_runtime_source(header)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", header.display()));
     let mut initializers = BTreeMap::new();
 
@@ -2342,6 +2480,7 @@ fn parse_cpp_member_initializers(header: &Path) -> BTreeMap<String, String> {
                 | "uint8_t"
                 | "uint16_t"
                 | "uint32_t"
+                | "Id"
                 | "uint64_t"
         ) {
             continue;
@@ -2370,6 +2509,13 @@ fn cpp_member_name(property_name: &str) -> String {
     member.push(first.to_ascii_uppercase());
     member.extend(chars);
     member
+}
+
+fn cpp_has_stored_bool_bitmask(property: &Property) -> bool {
+    property.runtime_type == FieldKind::Bool
+        && property
+            .bitmask_passthrough
+            .is_some_and(|mask| !mask.host_provided)
 }
 
 fn parse_cpp_stored_field_initializer(
@@ -2442,7 +2588,7 @@ fn parse_int_initializer(value: &str, label: &str) -> i32 {
 
 fn parse_uint_initializer(value: &str, label: &str) -> u64 {
     match value {
-        "-1" => u64::from(u32::MAX),
+        "-1" | "kEmptyId" => u64::from(u32::MAX),
         "Core::invalidPropertyKey" => 0,
         _ => value
             .parse::<u64>()

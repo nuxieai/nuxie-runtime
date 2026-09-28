@@ -66,10 +66,11 @@ impl Node {
     }
 
     pub fn computed_root_x(&mut self) -> f32 {
+        let Some(artboard) = self.base.artboard_handle() else {
+            return 0.0;
+        };
         let world = *self.base.base.world_transform();
-        self.base
-            .artboard_handle()
-            .expect("computedRootX requires an artboard")
+        artboard
             .with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
                 |artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).x,
             )
@@ -77,10 +78,11 @@ impl Node {
     }
 
     pub fn computed_root_y(&mut self) -> f32 {
+        let Some(artboard) = self.base.artboard_handle() else {
+            return 0.0;
+        };
         let world = *self.base.base.world_transform();
-        self.base
-            .artboard_handle()
-            .expect("computedRootY requires an artboard")
+        artboard
             .with_downcast_mut::<crate::mechanical_port::source::artboard::Artboard, _>(
                 |artboard| artboard.root_transform(Vec2D::new(world[4], world[5])).y,
             )

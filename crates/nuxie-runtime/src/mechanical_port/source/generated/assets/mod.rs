@@ -5,7 +5,6 @@ pub mod drawable_asset_base;
 pub mod export_audio_base;
 pub mod file_asset_base;
 pub mod file_asset_contents_base;
-pub mod folder_base;
 pub mod font_asset_base;
 pub mod image_asset_base;
 pub mod manifest_asset_base;

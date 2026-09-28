@@ -31,7 +31,9 @@ use crate::mechanical_port::source::{
         layout_enums::{LayoutDirection, LayoutStyleInterpolation},
         layout_node_provider::{LayoutNodeProvider, LayoutNodeProviderState},
     },
-    layout_component::LayoutComponent,
+    layout_component::{
+        LayoutComponent, is_transparent_layout_container, joins_layout_through_container,
+    },
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     renderer::Renderer,
     resetting_component::ResettingComponent,
@@ -2243,9 +2245,24 @@ impl ArtboardComponentList {
     }
 
     pub fn layout_parent_handle(&self) -> Option<CoreHandle> {
-        self.component()
-            .parent_handle()
-            .filter(|parent| parent.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY))
+        let direct = self.component().parent_handle()?;
+        if direct.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY) {
+            return Some(direct);
+        }
+        if !joins_layout_through_container(self) {
+            return None;
+        }
+        let mut parent = Some(direct);
+        while let Some(owner) = parent {
+            if owner.is_type_of(crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY) {
+                return Some(owner);
+            }
+            if !is_transparent_layout_container(&owner) {
+                return None;
+            }
+            parent = owner.with(|owner| owner.component_parent_handle())?;
+        }
+        None
     }
 
     fn layout_parent_ref<R>(&self, use_parent: impl FnOnce(&LayoutComponent) -> R) -> Option<R> {

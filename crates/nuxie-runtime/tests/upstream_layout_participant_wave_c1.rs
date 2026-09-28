@@ -444,6 +444,12 @@ fn an_artboard_component_list_inside_a_group_stays_out_of_the_layout() {
             .with(|owner| owner.as_layout_component().unwrap().is_leaf())
             .unwrap()
     );
+    assert!(
+        lists[0]
+            .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::layout_parent_handle)
+            .expect("component list")
+            .is_none()
+    );
 }
 
 #[test]
@@ -455,12 +461,19 @@ fn a_flagged_artboard_component_list_joins_the_layout_through_a_group() {
         parent(&lists[0]).expect("group").core_type(),
         Some(NodeBase::TYPE_KEY)
     );
+    let group = parent(&lists[0]).expect("group");
+    let stack = parent(&group).expect("stack");
+    assert!(stack.is_type_of(<LayoutComponent as CoreType>::TYPE_KEY));
     assert!(
-        !fixture
-            .artboard
+        !stack
             .with(|owner| owner.as_layout_component().unwrap().is_leaf())
             .unwrap()
     );
+    let layout_parent = lists[0]
+        .with_downcast::<ArtboardComponentList, _>(ArtboardComponentList::layout_parent_handle)
+        .expect("component list");
+    assert_eq!(layout_parent.as_ref(), Some(&stack));
+    assert_ne!(layout_parent.as_ref(), Some(&fixture.artboard));
 }
 
 #[test]

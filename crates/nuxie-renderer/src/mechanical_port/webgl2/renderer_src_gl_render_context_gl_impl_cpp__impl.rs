@@ -52,7 +52,7 @@ use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_gl_render_context_gl_impl.cpp");
-const _: [(); 153957] = [(); PINNED_SOURCE.len()];
+const _: [(); 155882] = [(); PINNED_SOURCE.len()];
 
 // Exact host-side bindings from shaders/constants.glsl.
 const FLUSH_UNIFORM_BUFFER_IDX: GLuint = 0;
@@ -749,6 +749,8 @@ fn initializeContext(context: &mut RenderContextGLImpl) {
         }
         features.clipSpaceBottomUp = true;
         features.framebufferBottomUp = true;
+        // GL state is dynamic, so combined subpasses share a single program.
+        features.supportsPipelineDynamicState = true;
         features.maxTextureSize = u32::try_from(execution.domain().getInteger(GL_MAX_TEXTURE_SIZE))
             .expect("GL_MAX_TEXTURE_SIZE is nonnegative");
         features.supportsClipScissor = !(context.m_capabilities.isAdreno()
@@ -3652,8 +3654,6 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                 | gpu::DrawType::outerCurvePatches
                 | gpu::DrawType::msaaStrokes
                 | gpu::DrawType::msaaMidpointFanBorrowedCoverage
-                | gpu::DrawType::msaaDynamicMidpointFans
-                | gpu::DrawType::msaaDynamicOuterCubics
                 | gpu::DrawType::msaaMidpointFans
                 | gpu::DrawType::msaaMidpointFanStencilReset
                 | gpu::DrawType::msaaMidpointFanPathsStencil
@@ -3683,6 +3683,43 @@ pub(crate) unsafe fn flush(context: &mut RenderContextGLImpl, desc: &gpu::FlushD
                         drawProgram.baseInstanceUniformLocation(),
                         &mut flushInjector,
                     );
+                }
+                gpu::DrawType::msaaDynamicMidpointFans
+                | gpu::DrawType::msaaDynamicOuterCubics => {
+                    // Both combined fills share a program and use the same
+                    // borrowed-coverage, main-fill, then stencil-reset states.
+                    context.m_state.borrow_mut().bindVAO(context.m_drawVAO.id());
+                    for pass in [
+                        gpu::DrawType::msaaMidpointFanBorrowedCoverage,
+                        gpu::DrawType::msaaMidpointFans,
+                        gpu::DrawType::msaaMidpointFanStencilReset,
+                    ] {
+                        let passState = crate::mechanical_port::source::renderer::src::gpu_cpp::get_pipeline_state(
+                            pass,
+                            desc.interlockMode,
+                            shaderMiscFlags,
+                            batch.drawContents,
+                            desc.fixedFunctionColorOutput,
+                            batch.firstBlendMode,
+                            context.platformFeatures(),
+                        );
+                        // Scissor was selected before this switch. GL uses
+                        // color masks here, not shader color-write emulation.
+                        context.m_state.borrow_mut().setPipelineState(
+                            &passState,
+                            ScissorAction::ignore,
+                        );
+                        drawIndexedInstancedNoInstancedAttribs(
+                            context,
+                            GL_TRIANGLES,
+                            batch.indexCountPerInstance,
+                            batch.baseIndex,
+                            batch.elementCount,
+                            batch.baseElement,
+                            drawProgram.baseInstanceUniformLocation(),
+                            &mut flushInjector,
+                        );
+                    }
                 }
                 gpu::DrawType::clipReset => {
                     context
@@ -4445,6 +4482,7 @@ impl Drop for RenderContextGLImpl {
 
 #[cfg(test)]
 mod tests {
+    include!("dynamic_msaa_flush_tests.rs");
     use super::*;
 
     struct CanvasTestProvider {
@@ -4546,8 +4584,8 @@ mod tests {
 
     #[test]
     fn frozen_implementation_receipt_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 4010);
-        assert_eq!(PINNED_SOURCE.len(), 153957);
+        assert_eq!(PINNED_SOURCE.lines().count(), 4024);
+        assert_eq!(PINNED_SOURCE.len(), 155882);
     }
 
     #[test]

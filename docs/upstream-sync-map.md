@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `8c7bb1ea1b502361e086324fc0187ad3ccfd9afd`
+- LAST_SYNCED_SHA: `ff8e6c4847c1686bbacbe4da5cf67b420769ff5f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 156 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 156 require a Rust translation.
+  There are 155 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 155 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `ff8e6c4847c1686bbacbe4da5cf67b420769ff5f` | Enable GL pipeline dynamic state and execute dynamic midpoint-fan/outer-cubic batches as borrowed coverage, main fill and stencil reset with one program, unchanged draw arguments and preserved scissor. Mirror the shared color-write-emulation commentary. | — |
 | `8c7bb1ea1b502361e086324fc0187ad3ccfd9afd` | Replace the defective high-surrogate bitwise shortcut in UTF::ToUTF16 with upstream arithmetic. Preserve BMP handling and low-surrogate behavior; translate the exact BMP, supplementary-pair and exhaustive supplementary round-trip tests. | — |
 | `73a477e2fb564886efeab870ee0884d0b20e8179` | Translate the shared lite_rtti_cast_or_assert helper. Canvas2D TestingWindow/JavaScript wrappers and Emscripten test-build options target an upstream test backend we do not ship; no Canvas2D renderer parity is claimed. Renderer fixes described outside this public Git delta are not treated as imported. | — |
 | `5ab9af03eb23e978abccc2dbd047bcde30e3cdbb` | Translate ORE GL scratch framebuffer/vertex-array loans, attachment scrubbing, resolve reuse and cleanup through the safe Rust context lifetime boundary; mirror Windows link inputs and removal of the standalone webgpu_player build root. Translate upstream regression scenarios. GLFW foreground behavior, testing-window EGL vsync, and deleted demo assets have no Rust product counterpart. | — |

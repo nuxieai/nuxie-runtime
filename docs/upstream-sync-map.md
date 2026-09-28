@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `e16f92461a8f3857b3b249946bc176818fe77efb`
+- LAST_SYNCED_SHA: `df50e6245122a3ebc2cbc8fad728b5cf497e8877`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 165 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 165 require a Rust translation.
+  There are 164 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 164 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `df50e6245122a3ebc2cbc8fad728b5cf497e8877` | Share transparent-container and list-participation predicates between layout collection and ArtboardComponentList parent resolution. Direct layouts still win; otherwise only flagged lists walk through transparent groups/Solos to the nearest layout. Translate all strengthened upstream assertions, including unflagged free-form placement and exact stack identity. | — |
 | `e16f92461a8f3857b3b249946bc176818fe77efb` | Move cold state-machine reporting, bindables, non-pointer input and scripting state into lazy clusters; move six cold data-binding work queues behind a sidecar while keeping the hot dirty queue inline. Preserve callback ordering and the Rust shared-ownership boundary; borrowed binding access snapshots explicitly only where ownership or re-entrant callbacks require it. | — |
 | `1c8e554f621dc088719b0ea31c8ccc89ac25d974` | **DEFERRED:** Wasm VM print callback installation before module instantiation and thread-local startup output routing, plus producer metadata. No shared/native Luau behavior changed; the existing native log sink is already installed before script execution. Do not introduce a dummy Wasm API. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `86fc70a74e0db7b747e04471bd4372cd38f6a0e7` | Add separate content-sizing and owning-layout ancestor walks. Nested layout axis queries and swaps resolve through containers, retaining the owning layout across the swap; nested leaves obtain fit bounds through the content-sizing walk. Port the Solo/column regression and complete enum-driven layout_solos Silver producer with original fixture bytes. Editor-only controls/fit-type changes are outside this runtime delta. | — |

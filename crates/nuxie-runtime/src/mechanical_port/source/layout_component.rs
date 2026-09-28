@@ -38,6 +38,25 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
+/// Only plain groups and Solos are transparent to layout collection.
+pub fn is_transparent_layout_container(component: &CoreHandle) -> bool {
+    component.core_type()
+        == Some(crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY)
+        || component
+            .is_type_of(crate::mechanical_port::source::generated::solo_base::SoloBase::TYPE_KEY)
+}
+
+/// Lists reached through containers join only when explicitly flagged.
+pub fn joins_layout_through_container(
+    component: &dyn crate::mechanical_port::source::core::CoreObject,
+) -> bool {
+    !crate::mechanical_port::source::core::CoreObject::is_type_of(
+        component,
+        crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY,
+    ) || component.as_drawable().expect("component list Drawable").base.drawable_flags()
+        & crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0 != 0
+}
+
 /// Content-sizing reach mirrors downward size propagation: groups, providers,
 /// and non-propagating sizeable components stop it. A layout is returned first.
 pub fn content_sizing_layout(mut parent: Option<CoreHandle>) -> Option<CoreHandle> {
@@ -437,19 +456,11 @@ impl LayoutComponent {
             {
                 let joins = !nested
                     || !child.is_type_of(crate::mechanical_port::source::generated::artboard_component_list_base::ArtboardComponentListBase::TYPE_KEY)
-                    || child.with(|object| {
-                        let drawable = object.as_drawable().expect("component list Drawable");
-                        drawable.base.drawable_flags() & crate::mechanical_port::source::drawable_flag::DrawableFlag::PARTICIPATES_IN_LAYOUT.0 != 0
-                    }).expect("live component list");
+                    || child.with(joins_layout_through_container).expect("live component list");
                 if joins {
                     result.push((child.clone(), provider));
                 }
-            } else if child.core_type()
-                == Some(crate::mechanical_port::source::generated::node_base::NodeBase::TYPE_KEY)
-                || child.is_type_of(
-                    crate::mechanical_port::source::generated::solo_base::SoloBase::TYPE_KEY,
-                )
-            {
+            } else if is_transparent_layout_container(child) {
                 result.extend(Self::layout_providers_nested_with_solo(
                     child,
                     true,

@@ -6,8 +6,6 @@ impl SemanticState {
     pub const NONE: Self = Self(0);
     pub const EXPANDED: Self = Self(1 << 0);
     pub const SELECTED: Self = Self(1 << 1);
-    pub const CHECKED: Self = Self(1 << 2);
-    pub const MIXED: Self = Self(1 << 3);
     pub const TOGGLED: Self = Self(1 << 4);
     pub const REQUIRED: Self = Self(1 << 5);
     pub const DISABLED: Self = Self(1 << 6);
@@ -42,4 +40,25 @@ impl core::ops::BitOrAssign for SemanticState {
 
 pub fn has_semantic_state(flags: u32, flag: SemanticState) -> bool {
     flags & flag.0 != 0
+}
+
+/// A checkable node's two-bit field, not an independent semantic flag.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SemanticCheckState {
+    Unchecked = 0,
+    Checked = 1,
+    Mixed = 2,
+}
+
+/// The unused fourth field value is read as Mixed.
+pub const fn check_state_of(flags: u32) -> SemanticCheckState {
+    use crate::mechanical_port::source::generated::semantic::semantic_data_base::SemanticDataBase;
+    let value = (flags & SemanticDataBase::IS_CHECKED_FIELD_MASK)
+        >> SemanticDataBase::IS_CHECKED_BIT_OFFSET;
+    match value {
+        0 => SemanticCheckState::Unchecked,
+        1 => SemanticCheckState::Checked,
+        _ => SemanticCheckState::Mixed,
+    }
 }

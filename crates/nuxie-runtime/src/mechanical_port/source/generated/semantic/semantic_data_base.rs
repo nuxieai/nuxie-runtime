@@ -74,9 +74,8 @@ impl SemanticDataBase {
     pub const IS_SELECTED_PROPERTY_KEY: u16 = 997;
     pub const IS_SELECTED_BITMASK: u32 = 1 << 1;
     pub const IS_CHECKED_PROPERTY_KEY: u16 = 998;
-    pub const IS_CHECKED_BITMASK: u32 = 1 << 2;
-    pub const IS_MIXED_PROPERTY_KEY: u16 = 999;
-    pub const IS_MIXED_BITMASK: u32 = 1 << 3;
+    pub const IS_CHECKED_BIT_OFFSET: u32 = 2;
+    pub const IS_CHECKED_FIELD_MASK: u32 = 12;
     pub const IS_TOGGLED_PROPERTY_KEY: u16 = 1000;
     pub const IS_TOGGLED_BITMASK: u32 = 1 << 4;
     pub const IS_REQUIRED_PROPERTY_KEY: u16 = 1001;

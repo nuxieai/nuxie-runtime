@@ -1783,9 +1783,12 @@ impl Schema {
                         property.name
                     )
                 })?;
-                if !matches!(property_type, "bool" | "uint") {
+                // The upstream registryType folds uint8/uint16 into uint;
+                // uint64 retains its distinct CoreUint64Type registry type.
+                let is_uint = matches!(property_type, "uint" | "uint8" | "uint16");
+                if property_type != "bool" && !is_uint {
                     bail!(
-                        "{file}:{} passthroughForBitmask requires bool or uint, got {property_type}",
+                        "{file}:{} passthroughForBitmask requires bool, uint or uint8, got {property_type}",
                         property.name
                     );
                 }
@@ -1795,7 +1798,7 @@ impl Schema {
                         property.name
                     );
                 }
-                if property_type == "uint"
+                if is_uint
                     && property
                         .raw
                         .passthrough_bit_width

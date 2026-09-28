@@ -10,5 +10,6 @@ pub mod font_asset_base;
 pub mod image_asset_base;
 pub mod manifest_asset_base;
 pub mod script_asset_base;
+pub mod script_module_asset_base;
 pub mod shader_asset_base;
 pub mod text_asset_base;

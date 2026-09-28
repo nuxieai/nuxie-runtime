@@ -7838,7 +7838,11 @@ fn file_asset_creates_importer(type_name: &str, script_assets_create_importers: 
     matches!(
         type_name,
         "VideoAsset" | "ImageAsset" | "FontAsset" | "AudioAsset" | "BlobAsset" | "ManifestAsset"
-    ) || (script_assets_create_importers && matches!(type_name, "ScriptAsset" | "ShaderAsset"))
+    ) || (script_assets_create_importers
+        && matches!(
+            type_name,
+            "ScriptAsset" | "ShaderAsset" | "ScriptModuleAsset"
+        ))
 }
 
 mod importers;

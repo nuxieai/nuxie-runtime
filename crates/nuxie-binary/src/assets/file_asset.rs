@@ -77,6 +77,7 @@ fn cpp_file_asset_extension(type_name: &str) -> Option<&'static str> {
         "AudioAsset" => Some("wav"),
         "BlobAsset" => Some(super::blob_asset::FILE_EXTENSION),
         "ScriptAsset" => Some("lua"),
+        "ScriptModuleAsset" => Some("wasm"),
         "ShaderAsset" => Some(super::shader_asset::FILE_EXTENSION),
         "ManifestAsset" => Some(super::manifest_asset::FILE_EXTENSION),
         _ => None,

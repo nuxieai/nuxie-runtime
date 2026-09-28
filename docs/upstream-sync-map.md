@@ -7,10 +7,21 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `5892bb05be7ae966b751625b4ee12239e6860dc1`
-- Current target: `54ce53ddddb5daae38514e62a626f2bbccf3c062` (fetched 2026-09-06).
+- LAST_SYNCED_SHA: `845a82a9b67136e0b37272170504659a8ab4ca67`
+  This is the accounted checkpoint excluding explicitly deferred Wasm execution
+  ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
+- Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
+  There are 173 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 173 require a Rust translation.
+- The 2026-09-28 audit accounts for all 58 upstream commits in
+  `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
+  The structural source-correspondence check covers 1,032 owners; it does not
+  prove behavioral parity. The three existing ignored serialized-output
+  comparisons remain expected-red under
+  [UNIV-3015](https://universe.basis.dev/issue/UNIV-3015); they were not rerun
+  during this audit.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
   anchor, constraint, scroll virtualization-buffer, and Luau 0.733 update, was ported
@@ -20,6 +31,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `845a82a9b67136e0b37272170504659a8ab4ca67` | Port shared ScriptModuleAsset metadata/decoding, FileAsset signature verification, DataContext global lookup, shader `rstb` access, and native Luau trigger/input dirt and keyboard/text wake behavior. Existing Rust backend-neutral traits retain the extracted Luau implementation. Wasm execution, module-VM routing, host bindings, browser engine and tiering are explicitly deferred; importing module bytes is not execution support. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5892bb05be7ae966b751625b4ee12239e6860dc1` | Content-size non-participating children through Solo containers, keeping plain groups as barriers and the layout-provider walk unchanged. Port the original 200x200 rectangle regression and exact fixture; preserve Taffy. | — |
 | `d7fff883fd802b46c92d5bf479a70712fd73ecba` | Merge actual vertex/fragment binding maps for split-file ORE pipelines; validate stage agreement and backend-specific slot collisions. Port allocator v2 admission, shared layout builders, Lua fragment selection and auto layouts, original binding-map/split-stage tests, and the exact generated GM shader header. Unsupported D3D backends and C++ test-build infrastructure are not added. Editor producer followup: UNIV-2958. | — |
 | `05058845faa261dace9eb0804e36cfa0a3676b05` | Enumerate dynamic-state MSAA draw types for ubershaders only when the platform supports them; share the exhaustive GPU predicate with Vulkan. Port the upstream permutation membership test. Upstream deploy_tests.py skip/window handling has no corresponding downstream tool; no shader source or artifact bytes changed. | — |
@@ -74,11 +86,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   is complete in [UNIV-1878](https://universe.basis.dev/issue/UNIV-1878).
 - Intervening `1de56230e9ea062a2da2e25eee00942eafe3bdb4` and
   `0a8499b87a7d722b982d9c444172cab94d8320f2` need no Rust translation: they
-  change upstream coverage and GMS test-host infrastructure, not runtime,
-  renderer, format, fixture, or supported product behavior.
-- Generated shader provenance remains
-  `3ed35ee0ded0d58fb8d380930a156041a4624a2f`: this commit changes no renderer
-  source or generated artifact.
+  change upstream coverage and GMS test-host infrastructure, plus C++-only
+  macro guards in `0a8499b8`. Those guards require no Rust equivalent; neither
+  commit changes supported product behavior, format, or fixture content.
+- Historical shader-provenance note for the preceding checkpoint:
+  `3ed35ee0ded0d58fb8d380930a156041a4624a2f` remained the artifact source at
+  that point because the intervening change did not modify renderer sources
+  or generated artifacts. This is not the current provenance of every shader;
+  later entries above account for subsequent changes.
 - Intervening `8efe18ec7b52a02139844ffe71438c00de13037e` needs no Rust
   translation: Apple products and verification links already explicitly set
   macOS 12. The current upstream oracle source retains its Premake macOS 11
@@ -86,8 +101,8 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 - This source checkpoint is not Adreno/PowerVR hardware qualification. The
   existing MoltenVK C-API content checks fail identically on the previous main
   and this update; follow-up: [UNIV-2875](https://universe.basis.dev/issue/UNIV-2875).
-- No new catch-up exclusions have been approved. The established Rust
-  adaptations below remain in force. The user authorized merging each reviewed
+- Apart from the explicitly deferred Wasm execution lane below, the established
+  Rust adaptations remain in force. The user authorized merging each reviewed
   manual update as it is completed on 2026-08-31. This is not standing automation
   authorization.
 - On 2026-08-31 the user approved the full deferred-rendering redesign in
@@ -100,24 +115,43 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   including API changes where needed: import and replay through an explicit
   deferred session so scripted GPUCanvas follows the new upstream contract.
   Do not restore immediate-context GPUCanvas as a compatibility fallback.
+- On 2026-09-28 the user explicitly deferred Wasm/AssemblyScript execution
+  beginning with `845a82a9b67136e0b37272170504659a8ab4ca67` and authorized
+  continuing all other applicable upstream changes in order. Follow-up:
+  [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728). Port shared and
+  native Luau behavior from mixed commits; record later Wasm-only dependencies
+  as deferred rather than treating their absence as parity. Importing module
+  metadata or bytes does not imply execution support. `LAST_SYNCED_SHA` may
+  advance through accounted commits under this explicit narrower scope, not
+  as a claim of full upstream feature parity.
+  The future execution lane must remain pure Rust; Wasmi is only a candidate,
+  and WAMR-specific AOT artifacts/live tier transfer are not promised. Its real
+  module qualification is also parked: producer packages `luau_wasm` and
+  `assemblyscript` at `.rive_head` `e6598b59dbdf470aa686aa8852b6913ff6e7c3b9`
+  and suitable generated guest modules were unavailable locally. Do not make
+  engine qualification a gate on this non-Wasm catch-up.
 
 ## Out-of-order ports
 
 These upstream commits were ported ahead of the incremental sync with the
 user's approval. `LAST_SYNCED_SHA` does not move for them. When the sync
 reaches one of these commits, confirm the Rust owners match the upstream diff
-at that point, account for any intervening upstream changes to the same files,
-and delete the matching file from `defs/upstream-overlay/`.
+at that point and account for any intervening upstream changes to the same
+files. Retire overlay definitions by covered source properties, not by file
+name: preserve properties from later commits in shared files. Upstream's
+removal of `dev/defs` at `d4fe1022` also requires a replacement schema source
+before reconstructed overlays can be removed without losing definitions.
 
 | Upstream SHA | Ported slice | Work |
 | --- | --- | --- |
+| `d4fe10229b3c148f315ba309924fa837135e7a76` | Semantic boolean registry getters only (keys 989–1009), added in local `a81c58e997dd59675ac699ebb44c8a1632596162`. The rest of this upstream commit remains to be accounted for. | — |
+| `7098a7c86220fefe6e0620d83b53d906f6fe8dae` | Raw and native TextInput alignment, added in local `3d21544107` and `5c731c6bac`. The bundled caret-blinking and linked-corner-radius changes remain unported. See [text-input-alignment-port.md](text-input-alignment-port.md). | — |
+| `bec99be4e4fecee71d0db012edeffdc561da319a` | Obscured TextInput, masking and selection-export behavior, added in local `1bcf034716`. See [obscured-text-input-port.md](obscured-text-input-port.md). | [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852) |
 | `a4dbc3ffa50fa4e9c0346c5fdeddb4a664911cec` | Cache as bitmap: the BitmapCache core type, the Artboard offscreen raster and composite, `Renderer::current_transform`/`current_modulated_opacity`, `Factory::canvas_content_host`, the three new `DeferredCanvasHost` methods, and the deferred recorder's CTM shadow. The serializing/replay utilities, player and deploy harness, and the silver-factory test are not ported. See [cache-as-bitmap-port.md](cache-as-bitmap-port.md). | [UNIV-3544](https://universe.basis.dev/issue/UNIV-3544) |
 
-The text input alignment (`7098a7c8`) and obscured input (`bec99be4`)
-properties were also added ahead of the sync (see
-[text-input-alignment-port.md](text-input-alignment-port.md)). Their schema
-definitions now live in `defs/upstream-overlay/text/text_input.json` so
-`make schema` reproduces the committed schema.
+The alignment and obscured-input schema definitions share
+`defs/upstream-overlay/text/text_input.json`; reaching `7098a7c8` does not
+retire the still-forward `obscured` property from `bec99be4`.
 
 ## One upstream commit at a time
 

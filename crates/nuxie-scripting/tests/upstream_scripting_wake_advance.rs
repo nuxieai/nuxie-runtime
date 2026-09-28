@@ -100,7 +100,11 @@ impl WakeFixture {
     }
 
     fn new(implemented_methods: u32) -> Self {
-        let bytecode = compile_source(WAKE_SCRIPT).expect("wake script compiles");
+        Self::with_source(implemented_methods, WAKE_SCRIPT)
+    }
+
+    fn with_source(implemented_methods: u32, source: &str) -> Self {
+        let bytecode = compile_source(source).expect("wake script compiles");
         let mut payload = Vec::with_capacity(bytecode.len() + 1);
         payload.push(0);
         payload.extend(bytecode);
@@ -312,6 +316,96 @@ fn pointer_event_rearms_an_idle_scripted_drawables_advance_loop() {
         ),
     );
     assert_eq!(drawable.counter("getAdvanceCount"), 2);
+}
+
+#[test]
+fn missing_keyboard_and_text_handlers_still_wake_the_native_owner() {
+    use nuxie_runtime::source::scripted::scripted_object::WANTS_TEXT_INPUT_BIT;
+    for keyboard in [true, false] {
+        let source = WAKE_SCRIPT.replace("keyboardEvent = keyboardEvent,", "keyboardEvent = nil,");
+        let mut fixture = WakeFixture::with_source(
+            ADVANCES | WANTS_KEYBOARD_INPUT | WANTS_TEXT_INPUT_BIT,
+            &source,
+        );
+        park_advance_loop(&mut fixture);
+        let handled = if keyboard {
+            ScriptedDrawable::key_input_occurrence(
+                &fixture.drawable,
+                Key::A,
+                KeyModifiers::NONE,
+                true,
+                false,
+            )
+        } else {
+            ScriptedDrawable::text_input_occurrence(&fixture.drawable, "a")
+        };
+        assert!(!handled);
+        assert_eq!(fixture.counter("getKeyCount"), 0);
+        ScriptedDrawable::advance_occurrence(
+            &fixture.drawable,
+            0.016,
+            AdvanceFlags(
+                AdvanceFlags::ANIMATE.0
+                    | AdvanceFlags::NEW_FRAME.0
+                    | AdvanceFlags::ADVANCE_NESTED.0,
+            ),
+        );
+        assert_eq!(fixture.counter("getAdvanceCount"), 2);
+    }
+}
+
+#[test]
+fn rejected_view_model_input_still_dirties_the_native_owner() {
+    use nuxie_runtime::source::{
+        component_dirt::ComponentDirt,
+        viewmodel::viewmodel_instance_number::ViewModelInstanceNumber,
+        viewmodel::viewmodel_instance_viewmodel::ViewModelInstanceViewModel,
+    };
+    let fixture = WakeFixture::new(ADVANCES);
+    let null_view_model = fixture._arena.insert(ViewModelInstanceViewModel::default());
+    // A different ViewModelInstanceValue subtype follows the unsupported branch.
+    let unsupported = fixture._arena.insert(ViewModelInstanceNumber::default());
+    for value in [null_view_model, unsupported] {
+        fixture.drawable.with_mut(|owner| {
+            owner.as_component_mut().unwrap().set_dirt(ComponentDirt(0));
+        });
+        ScriptedObject::set_view_model_input_occurrence(&fixture.drawable, "value".into(), value);
+        assert!(
+            fixture
+                .drawable
+                .with(|owner| {
+                    owner.as_component().unwrap().dirt().0 & ComponentDirt::SCRIPT_UPDATE.0 != 0
+                })
+                .unwrap()
+        );
+    }
+}
+
+#[test]
+fn missing_pointer_handler_does_not_wake_the_native_owner() {
+    let source = WAKE_SCRIPT.replace("pointerDown = pointerDown,", "pointerDown = nil,");
+    let mut fixture = WakeFixture::with_source(ADVANCES | WANTS_POINTER_DOWN, &source);
+    park_advance_loop(&mut fixture);
+    let hit = HitScriptedDrawable::new(fixture.drawable.clone());
+    fixture.machine.with_instance_mut(|machine| {
+        hit.process_event(
+            machine,
+            Vec2D::new(1.0, 1.0),
+            ListenerType::Down,
+            true,
+            0.0,
+            0,
+        );
+    });
+    ScriptedDrawable::advance_occurrence(
+        &fixture.drawable,
+        0.016,
+        AdvanceFlags(
+            AdvanceFlags::ANIMATE.0 | AdvanceFlags::NEW_FRAME.0 | AdvanceFlags::ADVANCE_NESTED.0,
+        ),
+    );
+    assert_eq!(fixture.counter("getPointerDownCount"), 0);
+    assert_eq!(fixture.counter("getAdvanceCount"), 1);
 }
 
 #[test]

@@ -269,6 +269,89 @@ impl DataContext {
             .and_then(|index| self.instances[index].clone())
     }
 
+    pub fn resolve_global_view_model(
+        &self,
+        file: &crate::mechanical_port::source::file::RuntimeFileHandle,
+        name: &[u8],
+    ) -> Option<CoreHandle> {
+        use crate::mechanical_port::source::{
+            view_model_type::ViewModelType, viewmodel::viewmodel::ViewModel,
+        };
+        // Match the upstream const-char name without requiring Lua strings to
+        // be UTF-8. C++ name lookup stops at the first NUL.
+        let name = name.split(|byte| *byte == 0).next().unwrap_or_default();
+        let (slot_key, count, global) = file.with_file(|file| {
+            let count = file.view_model_count();
+            let slot = (0..count)
+                .find(|index| {
+                    file.view_model(*index)
+                        .and_then(|model| {
+                            model.with_downcast::<ViewModel, _>(|model| {
+                                model.base.name().as_bytes() == name
+                            })
+                        })
+                        .unwrap_or(false)
+                })
+                .unwrap_or(count);
+            (slot as u32, count, file.view_model(slot))
+        });
+        if slot_key as usize >= count {
+            return None;
+        }
+        let global = global?;
+        if global.with_downcast::<ViewModel, _>(|model| {
+            model.base.view_model_type() == ViewModelType::Global as u32
+        }) != Some(true)
+        {
+            return None;
+        }
+
+        let mut root = self.parent();
+        while let Some(parent) = root
+            .as_ref()
+            .and_then(|root| root.with_context(DataContext::parent))
+        {
+            root = Some(parent);
+        }
+        let slotted = match root {
+            Some(root) => root.with_context(|root| root.instance_for_slot(slot_key)),
+            None => self.instance_for_slot(slot_key),
+        };
+        if slotted.is_some() {
+            return slotted;
+        }
+
+        let find = |instances: &[Option<CoreHandle>]| {
+            instances
+                .iter()
+                .flatten()
+                .find(|instance| {
+                    instance
+                        .with(|instance| {
+                            instance
+                                .as_view_model_instance()
+                                .and_then(|instance| instance.get_view_model())
+                                .is_some_and(|model| model == global)
+                        })
+                        .unwrap_or(false)
+                })
+                .cloned()
+        };
+        if let Some(instance) = find(self.view_model_instances()) {
+            return Some(instance);
+        }
+        let mut current = self.parent();
+        while let Some(context) = current {
+            let (instance, parent) = context
+                .with_context(|context| (find(context.view_model_instances()), context.parent()));
+            if instance.is_some() {
+                return instance;
+            }
+            current = parent;
+        }
+        None
+    }
+
     pub fn remove_main_view_model_instance(&mut self) {
         let mut index = 0;
         while index < self.instances.len() {

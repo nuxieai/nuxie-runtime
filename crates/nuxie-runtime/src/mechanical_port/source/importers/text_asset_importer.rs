@@ -24,14 +24,14 @@ pub const SCRIPT_VERIFICATION_PUBLIC_KEY: [u8; 32] = [
 ];
 
 pub struct InBandContent {
-    text_asset: CoreHandle,
+    asset: CoreHandle,
     bytes: Vec<u8>,
 }
 
 impl InBandContent {
-    pub fn new(text_asset: CoreHandle, bytes: &[u8]) -> Self {
+    pub fn new(asset: CoreHandle, bytes: &[u8]) -> Self {
         Self {
-            text_asset,
+            asset,
             bytes: bytes.to_vec(),
         }
     }
@@ -44,19 +44,15 @@ pub struct TextAssetImporter {
 
 impl TextAssetImporter {
     pub fn new(
-        text_asset: CoreHandle,
+        asset: CoreHandle,
         loader: Option<FileAssetLoaderRef>,
         factory: RuntimeFactoryHandle,
         verification_set: Rc<RefCell<Vec<InBandContent>>>,
     ) -> Self {
         Self {
-            base: FileAssetImporter::new(text_asset, loader, factory),
+            base: FileAssetImporter::new(asset, loader, factory),
             verification_set,
         }
-    }
-
-    pub fn text_asset(&self) -> CoreHandle {
-        self.base.file_asset.clone()
     }
 
     pub fn with_admission(
@@ -75,9 +71,10 @@ impl TextAssetImporter {
             })
             .expect("TextAssetImporter content is FileAssetContents");
         if let Some(raw_content) = raw_content {
-            self.verification_set
-                .borrow_mut()
-                .push(InBandContent::new(self.text_asset(), &raw_content));
+            self.verification_set.borrow_mut().push(InBandContent::new(
+                self.base.file_asset.clone(),
+                &raw_content,
+            ));
         }
         FileAssetImporterBehavior::on_file_asset_contents(&mut self.base, contents);
     }
@@ -125,10 +122,15 @@ impl ImportStackObject for TextAssetImporter {
         );
         for in_band in verification_set.iter() {
             in_band
-                .text_asset
-                .with_mut(|text_asset| text_asset.text_asset_set_verified(verified))
-                .filter(|set| *set)
-                .expect("verification participants remain TextAsset-derived");
+                .asset
+                .with_mut(|asset| {
+                    asset
+                        .as_file_asset_mut()
+                        .expect("verification participants remain FileAsset-derived")
+                        .file_asset_base_mut()
+                        .set_verified(verified);
+                })
+                .expect("verification participant remains alive");
         }
         verification_set.clear();
         StatusCode::Ok

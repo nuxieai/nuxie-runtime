@@ -494,6 +494,7 @@ impl File {
                     | crate::mechanical_port::source::generated::assets::audio_asset_base::AudioAssetBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::blob_asset_base::BlobAssetBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::script_asset_base::ScriptAssetBase::TYPE_KEY
+                    | crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY
                     | crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
                         self.file_assets.push(object.clone());
                         if object_type
@@ -623,7 +624,8 @@ impl File {
                     ));
                     stack_type = crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::TYPE_KEY;
                 }
-                crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
+                crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY
+                | crate::mechanical_port::source::generated::assets::shader_asset_base::ShaderAssetBase::TYPE_KEY => {
                     stack_object = Some(Box::new(
                         crate::mechanical_port::source::importers::text_asset_importer::TextAssetImporter::new(
                             object.clone(),

@@ -3201,15 +3201,15 @@ impl ScriptInstance for LuaScriptInstance {
         let table = self.live_table()?;
         let value: Value = table.get(name).map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
+            host.mark_script_update();
             return Ok(());
         };
         let result = function
             .protected_call::<()>(table)
             .map_err(|error| self.script_error(error));
-        // Pinned `ScriptedObject::trigger` dirties after the protected call,
-        // regardless of its ordinary success/failure result
-        // (`scripted_object.cpp:158-176`). Missing/non-function fields still
-        // return above without dirt.
+        // This direct-instance seam carries ScriptedObject::trigger's dirt
+        // effect as well as the backend call. Missing fields above and ordinary
+        // protected-call failures both dirty, matching the owner protocol.
         host.mark_script_update();
         result
     }
@@ -3228,6 +3228,7 @@ impl ScriptInstance for LuaScriptInstance {
         let key = lua.create_string(name.as_c_str_bytes());
         let value: Value = table.get(key).map_err(|error| self.script_error(error))?;
         let Value::Function(function) = value else {
+            host.mark_script_update();
             return Ok(());
         };
         let result = function
@@ -4630,10 +4631,10 @@ mod context_init_tests {
 
         instance
             .call_input_trigger("missing", &mut host)
-            .expect("missing trigger is inert");
+            .expect("missing trigger has no callback");
         assert_eq!(
-            host.updates, 1,
-            "missing/non-function trigger fields do not dirty"
+            host.updates, 2,
+            "ScriptedObject::trigger dirties after the backend call even when the field is missing"
         );
     }
 

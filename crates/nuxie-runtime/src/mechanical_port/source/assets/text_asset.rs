@@ -9,14 +9,12 @@ use crate::mechanical_port::source::{
 
 pub struct TextAsset {
     pub base: TextAssetBase,
-    verified: bool,
 }
 
 impl Default for TextAsset {
     fn default() -> Self {
         Self {
             base: TextAssetBase::default(),
-            verified: false,
         }
     }
 }
@@ -36,14 +34,6 @@ impl TextAsset {
                 .base
                 .notify_property_changed(TextAssetBase::FOLDER_PATH_PROPERTY_KEY);
         }
-    }
-
-    pub fn verified(&self) -> bool {
-        self.verified
-    }
-
-    pub(crate) fn set_verified(&mut self, verified: bool) {
-        self.verified = verified;
     }
 }
 

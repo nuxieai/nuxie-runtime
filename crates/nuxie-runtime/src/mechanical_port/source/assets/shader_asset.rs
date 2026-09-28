@@ -150,7 +150,8 @@ impl ShaderAsset {
     pub fn encoded_payload(&self) -> &[u8] {
         &self.encoded_payload
     }
-    pub fn content_bytes(&self) -> &[u8] {
+    /// Decoded RSTB container for forwarding across process or module boundaries.
+    pub fn rstb(&self) -> &[u8] {
         &self.bytes
     }
 

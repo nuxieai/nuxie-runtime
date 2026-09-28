@@ -358,6 +358,7 @@ pub enum ObjectKind {
     KeyFrameInt,
     GridItemPlacement,
     TextStyleBackground,
+    ScriptModuleAsset,
     VideoAsset,
     Video,
 }
@@ -716,8 +717,9 @@ impl ObjectKind {
             Self::KeyFrameInt => &DEFINITIONS[348],
             Self::GridItemPlacement => &DEFINITIONS[349],
             Self::TextStyleBackground => &DEFINITIONS[350],
-            Self::VideoAsset => &DEFINITIONS[351],
-            Self::Video => &DEFINITIONS[352],
+            Self::ScriptModuleAsset => &DEFINITIONS[351],
+            Self::VideoAsset => &DEFINITIONS[352],
+            Self::Video => &DEFINITIONS[353],
         }
     }
 
@@ -1083,6 +1085,7 @@ pub fn object_kind_by_type_key(key: u16) -> Option<ObjectKind> {
         1067 => Some(ObjectKind::KeyFrameInt),
         1068 => Some(ObjectKind::GridItemPlacement),
         1069 => Some(ObjectKind::TextStyleBackground),
+        1071 => Some(ObjectKind::ScriptModuleAsset),
         60000 => Some(ObjectKind::VideoAsset),
         60001 => Some(ObjectKind::Video),
         _ => None,
@@ -1446,8 +1449,9 @@ pub fn definition_by_name(name: &str) -> Option<&'static Definition> {
         "KeyFrameInt" => Some(&DEFINITIONS[348]),
         "GridItemPlacement" => Some(&DEFINITIONS[349]),
         "TextStyleBackground" => Some(&DEFINITIONS[350]),
-        "VideoAsset" => Some(&DEFINITIONS[351]),
-        "Video" => Some(&DEFINITIONS[352]),
+        "ScriptModuleAsset" => Some(&DEFINITIONS[351]),
+        "VideoAsset" => Some(&DEFINITIONS[352]),
+        "Video" => Some(&DEFINITIONS[353]),
         _ => None,
     }
 }
@@ -2077,6 +2081,7 @@ pub fn core_registry_field_kind_by_property_key(key: u16) -> Option<CoreRegistry
         1076 => Some(CoreRegistryFieldKind::Uint),
         1077 => Some(CoreRegistryFieldKind::Uint),
         1078 => Some(CoreRegistryFieldKind::Uint),
+        1087 => Some(CoreRegistryFieldKind::Uint),
         1094 => Some(CoreRegistryFieldKind::Uint),
         1095 => Some(CoreRegistryFieldKind::Bool),
         60000 => Some(CoreRegistryFieldKind::StringOrBytes),
@@ -2721,6 +2726,7 @@ pub fn core_registry_setter_field_kind_by_property_key(key: u16) -> Option<Field
         1076 => Some(FieldKind::Uint),
         1077 => Some(FieldKind::Uint),
         1078 => Some(FieldKind::Uint),
+        1087 => Some(FieldKind::Uint),
         1094 => Some(FieldKind::Uint),
         1095 => Some(FieldKind::Bool),
         60000 => Some(FieldKind::String),
@@ -3326,6 +3332,7 @@ pub fn core_registry_getter_field_kind_by_property_key(key: u16) -> Option<Field
         1076 => Some(FieldKind::Uint),
         1077 => Some(FieldKind::Uint),
         1078 => Some(FieldKind::Uint),
+        1087 => Some(FieldKind::Uint),
         1094 => Some(FieldKind::Uint),
         1095 => Some(FieldKind::Bool),
         60000 => Some(FieldKind::String),
@@ -27101,9 +27108,49 @@ static DEF_350_PROPERTIES: &[Property] = &[Property {
     bitmask_passthrough: None,
 }];
 
-static DEF_351_ANCESTORS: &[&str] = &["DrawableAsset", "FileAsset", "Asset"];
+static DEF_351_ANCESTORS: &[&str] = &["FileAsset", "Asset"];
 
-static DEF_351_PROPERTIES: &[Property] = &[
+static DEF_351_PROPERTIES: &[Property] = &[Property {
+    name: "language",
+    key: Key {
+        int: 1087,
+        name: "scriptmodulelanguage",
+    },
+    alternates: &[],
+    declared_type: "uint",
+    runtime_type: FieldKind::Uint,
+    description: Some(
+        "Source language of the module: 0 = Luau, 1 = AssemblyScript. One ScriptModuleAsset exists per language per file; its payload is a self contained wasm module (VM + bindings + compiled scripts) carried through FileAssetContents like other text backed assets, and ScriptAssets reference into it by registered module name.",
+    ),
+    initial_value: Some("0"),
+    initial_value_runtime: None,
+    group: None,
+    nullable: false,
+    override_set: false,
+    override_get: false,
+    virtual_: false,
+    editor_only: false,
+    coop: true,
+    with_rive_tools_only: false,
+    stores_data: true,
+    deserializes: true,
+    stores_field: true,
+    encoded: false,
+    bindable: false,
+    animates: false,
+    computed: false,
+    journal: None,
+    parentable: None,
+    records: None,
+    exports_to_runtime_conditionally: false,
+    pure_virtual: false,
+    passthrough: false,
+    bitmask_passthrough: None,
+}];
+
+static DEF_352_ANCESTORS: &[&str] = &["DrawableAsset", "FileAsset", "Asset"];
+
+static DEF_352_PROPERTIES: &[Property] = &[
     Property {
         name: "sourceKey",
         key: Key {
@@ -27211,7 +27258,7 @@ static DEF_351_PROPERTIES: &[Property] = &[
     },
 ];
 
-static DEF_352_ANCESTORS: &[&str] = &[
+static DEF_353_ANCESTORS: &[&str] = &[
     "Image",
     "Drawable",
     "Node",
@@ -27221,7 +27268,7 @@ static DEF_352_ANCESTORS: &[&str] = &[
     "Component",
 ];
 
-static DEF_352_PROPERTIES: &[Property] = &[
+static DEF_353_PROPERTIES: &[Property] = &[
     Property {
         name: "autoplay",
         key: Key {
@@ -29886,15 +29933,20 @@ pub fn property_by_key_in_hierarchy(
         (1069, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (1069, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (1069, 1071) => Some(("TextStyleBackground", &DEF_350_PROPERTIES[0])),
+        (1071, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
+        (1071, 204) => Some(("FileAsset", &DEF_98_PROPERTIES[0])),
+        (1071, 359) => Some(("FileAsset", &DEF_98_PROPERTIES[1])),
+        (1071, 362) => Some(("FileAsset", &DEF_98_PROPERTIES[2])),
+        (1071, 1087) => Some(("ScriptModuleAsset", &DEF_351_PROPERTIES[0])),
         (60000, 203) => Some(("Asset", &DEF_95_PROPERTIES[0])),
         (60000, 204) => Some(("FileAsset", &DEF_98_PROPERTIES[0])),
         (60000, 207) => Some(("DrawableAsset", &DEF_99_PROPERTIES[0])),
         (60000, 208) => Some(("DrawableAsset", &DEF_99_PROPERTIES[1])),
         (60000, 359) => Some(("FileAsset", &DEF_98_PROPERTIES[1])),
         (60000, 362) => Some(("FileAsset", &DEF_98_PROPERTIES[2])),
-        (60000, 60000) => Some(("VideoAsset", &DEF_351_PROPERTIES[0])),
-        (60000, 60001) => Some(("VideoAsset", &DEF_351_PROPERTIES[1])),
-        (60000, 60002) => Some(("VideoAsset", &DEF_351_PROPERTIES[2])),
+        (60000, 60000) => Some(("VideoAsset", &DEF_352_PROPERTIES[0])),
+        (60000, 60001) => Some(("VideoAsset", &DEF_352_PROPERTIES[1])),
+        (60000, 60002) => Some(("VideoAsset", &DEF_352_PROPERTIES[2])),
         (60001, 4) => Some(("Component", &DEF_9_PROPERTIES[0])),
         (60001, 5) => Some(("Component", &DEF_9_PROPERTIES[1])),
         (60001, 9) => Some(("Node", &DEF_1_PROPERTIES[0])),
@@ -29924,19 +29976,19 @@ pub fn property_by_key_in_hierarchy(
         (60001, 1076) => Some(("Image", &DEF_96_PROPERTIES[6])),
         (60001, 1077) => Some(("Image", &DEF_96_PROPERTIES[7])),
         (60001, 1078) => Some(("Image", &DEF_96_PROPERTIES[8])),
-        (60001, 60003) => Some(("Video", &DEF_352_PROPERTIES[0])),
-        (60001, 60004) => Some(("Video", &DEF_352_PROPERTIES[1])),
-        (60001, 60005) => Some(("Video", &DEF_352_PROPERTIES[2])),
-        (60001, 60006) => Some(("Video", &DEF_352_PROPERTIES[3])),
-        (60001, 60007) => Some(("Video", &DEF_352_PROPERTIES[4])),
-        (60001, 60008) => Some(("Video", &DEF_352_PROPERTIES[5])),
-        (60001, 60009) => Some(("Video", &DEF_352_PROPERTIES[6])),
-        (60001, 60010) => Some(("Video", &DEF_352_PROPERTIES[7])),
-        (60001, 60011) => Some(("Video", &DEF_352_PROPERTIES[8])),
-        (60001, 60012) => Some(("Video", &DEF_352_PROPERTIES[9])),
-        (60001, 60013) => Some(("Video", &DEF_352_PROPERTIES[10])),
-        (60001, 60014) => Some(("Video", &DEF_352_PROPERTIES[11])),
-        (60001, 60015) => Some(("Video", &DEF_352_PROPERTIES[12])),
+        (60001, 60003) => Some(("Video", &DEF_353_PROPERTIES[0])),
+        (60001, 60004) => Some(("Video", &DEF_353_PROPERTIES[1])),
+        (60001, 60005) => Some(("Video", &DEF_353_PROPERTIES[2])),
+        (60001, 60006) => Some(("Video", &DEF_353_PROPERTIES[3])),
+        (60001, 60007) => Some(("Video", &DEF_353_PROPERTIES[4])),
+        (60001, 60008) => Some(("Video", &DEF_353_PROPERTIES[5])),
+        (60001, 60009) => Some(("Video", &DEF_353_PROPERTIES[6])),
+        (60001, 60010) => Some(("Video", &DEF_353_PROPERTIES[7])),
+        (60001, 60011) => Some(("Video", &DEF_353_PROPERTIES[8])),
+        (60001, 60012) => Some(("Video", &DEF_353_PROPERTIES[9])),
+        (60001, 60013) => Some(("Video", &DEF_353_PROPERTIES[10])),
+        (60001, 60014) => Some(("Video", &DEF_353_PROPERTIES[11])),
+        (60001, 60015) => Some(("Video", &DEF_353_PROPERTIES[12])),
         (18, 118) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[0])),
         (18, 136) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[1])),
         (18, 210) => Some(("ColorChannels", &MIXIN_0_PROPERTIES[2])),
@@ -36845,6 +36897,25 @@ pub static DEFINITIONS: &[Definition] = &[
         ancestors: DEF_350_ANCESTORS,
     },
     Definition {
+        name: "ScriptModuleAsset",
+        rust_variant: "ScriptModuleAsset",
+        file: "assets/script_module_asset.json",
+        type_key: Key {
+            int: 1071,
+            name: "scriptmoduleasset",
+        },
+        runtime_parent: Some("FileAsset"),
+        raw_parent_file: Some("assets/file_asset.json"),
+        mixins: &[],
+        generic: None,
+        generic_pass_through: None,
+        exports_with_context: false,
+        abstract_: false,
+        cloneable: true,
+        properties: DEF_351_PROPERTIES,
+        ancestors: DEF_351_ANCESTORS,
+    },
+    Definition {
         name: "VideoAsset",
         rust_variant: "VideoAsset",
         file: "nuxie/videoasset.json",
@@ -36860,8 +36931,8 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_351_PROPERTIES,
-        ancestors: DEF_351_ANCESTORS,
+        properties: DEF_352_PROPERTIES,
+        ancestors: DEF_352_ANCESTORS,
     },
     Definition {
         name: "Video",
@@ -36879,7 +36950,7 @@ pub static DEFINITIONS: &[Definition] = &[
         exports_with_context: false,
         abstract_: false,
         cloneable: true,
-        properties: DEF_352_PROPERTIES,
-        ancestors: DEF_352_ANCESTORS,
+        properties: DEF_353_PROPERTIES,
+        ancestors: DEF_353_ANCESTORS,
     },
 ];

@@ -287,7 +287,12 @@ impl ScriptedDrawable {
         if host.take_requested() {
             ScriptedObject::apply_update_request(owner);
         }
-        if result.invoked {
+        if result.invoked
+            || matches!(
+                invocation.kind(),
+                ListenerInvocationKind::Keyboard | ListenerInvocationKind::TextInput
+            )
+        {
             owner.with_mut(|owner| {
                 owner
                     .as_scripted_drawable_mut()

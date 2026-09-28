@@ -1797,7 +1797,8 @@ impl ScriptedContextSource {
     pub fn global_view_model(&self, name: &[u8]) -> Option<ScriptViewModel> {
         let data_context = self.current_data_context()?;
         let file = self.current_file()?.upgrade()?;
-        let instance = resolve_global_view_model_instance(&data_context, &file, name)?;
+        let instance =
+            data_context.with_context(|context| context.resolve_global_view_model(&file, name))?;
         ScriptViewModel::from_native(instance, file)
     }
 
@@ -1950,81 +1951,6 @@ mod scripted_context_source_tests {
         );
         assert!(source.current_data_context().is_none());
     }
-}
-
-/// Resolve the exact global occurrence selected by upstream
-/// `resolveGlobalViewModel`.
-pub(crate) fn resolve_global_view_model_instance(
-    data_context: &crate::mechanical_port::source::data_bind::data_context::RuntimeDataContextHandle,
-    file: &crate::mechanical_port::source::file::RuntimeFileHandle,
-    name: &[u8],
-) -> Option<crate::mechanical_port::source::core::CoreHandle> {
-    use crate::mechanical_port::source::{
-        data_bind::data_context::DataContext, view_model_type::ViewModelType,
-        viewmodel::viewmodel::ViewModel,
-    };
-
-    let (slot_key, view_model_count, global_view_model) = file.with_file(|file| {
-        // `luaL_checkstring` returns arbitrary VM string bytes. Match those
-        // directly against the imported names rather than introducing a UTF-8
-        // conversion that upstream's `const char*` lookup does not perform.
-        let view_model_count = file.view_model_count();
-        let slot_key = (0..view_model_count)
-            .find(|index| {
-                file.view_model(*index)
-                    .and_then(|model| {
-                        model.with_downcast::<ViewModel, _>(|model| {
-                            model.base.name().as_bytes() == name
-                        })
-                    })
-                    .unwrap_or(false)
-            })
-            .unwrap_or(view_model_count) as u32;
-        (
-            slot_key,
-            view_model_count,
-            file.view_model(slot_key as usize),
-        )
-    });
-    if slot_key as usize >= view_model_count {
-        return None;
-    }
-    let global_view_model = global_view_model?;
-    if global_view_model.with_downcast::<ViewModel, _>(|view_model| {
-        view_model.base.view_model_type() == ViewModelType::Global as u32
-    }) != Some(true)
-    {
-        return None;
-    }
-
-    let mut root = data_context.clone();
-    while let Some(parent) = root.with_context(DataContext::parent) {
-        root = parent;
-    }
-    if let Some(instance) = root.with_context(|root| root.instance_for_slot(slot_key)) {
-        return Some(instance);
-    }
-
-    let mut current = Some(data_context.clone());
-    while let Some(context) = current {
-        let (instances, parent) = context
-            .with_context(|context| (context.view_model_instances().to_vec(), context.parent()));
-        for instance in instances.into_iter().flatten() {
-            let matches = instance
-                .with(|instance| {
-                    instance
-                        .as_view_model_instance()
-                        .and_then(|instance| instance.get_view_model())
-                        .is_some_and(|view_model| view_model == global_view_model)
-                })
-                .unwrap_or(false);
-            if matches {
-                return Some(instance);
-            }
-        }
-        current = parent;
-    }
-    None
 }
 
 impl ScriptValue {
@@ -2384,7 +2310,9 @@ pub trait ScriptInstance {
     }
 
     /// Invoke an authored `ScriptInputTrigger` callback by its input name.
-    /// Missing or non-function fields are a no-op, matching Rive's runtime.
+    /// Missing or non-function fields do not invoke a callback. Concrete
+    /// direct-instance adapters also report the owner's unconditional
+    /// post-call ScriptUpdate dirt through `host`.
     fn call_input_trigger(
         &mut self,
         _name: &str,

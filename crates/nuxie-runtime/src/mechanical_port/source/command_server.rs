@@ -137,6 +137,7 @@ impl FileAssetLoader for CommandFileAssetLoader {
         // These assets cannot be registered externally. Leave in-band decoding
         // to the importer. TextAsset includes both ScriptAsset and ShaderAsset.
         if asset.is_type_of(TextAssetBase::TYPE_KEY)
+            || asset.is_type_of(crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY)
             || asset.is_type_of(BlobAssetBase::TYPE_KEY)
             || asset.is_type_of(ManifestAssetBase::TYPE_KEY)
             || asset.with_downcast::<ImageAsset, _>(|_| ()).is_some()

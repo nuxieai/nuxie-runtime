@@ -113,7 +113,7 @@ impl ShaderAsset {
             .with_downcast::<NativeShaderAsset, _>(|asset| asset.encoded_payload().to_vec())
             .ok_or_else(|| Error::runtime("missing native ShaderAsset"))?;
         if asset
-            .with_downcast::<NativeShaderAsset, _>(|asset| asset.content_bytes().len())
+            .with_downcast::<NativeShaderAsset, _>(|asset| asset.rstb().len())
             .unwrap_or(0)
             > MAX_RSTB_BYTES
         {

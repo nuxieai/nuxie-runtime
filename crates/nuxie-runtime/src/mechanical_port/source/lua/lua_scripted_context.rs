@@ -126,7 +126,7 @@ impl ScriptedContext {
         let context = self.current_data_context();
         let file = self.current_file().and_then(|file| file.upgrade());
         if let Some(instance) = context.zip(file).and_then(|(context, file)| {
-            crate::scripting::resolve_global_view_model_instance(&context, &file, name)
+            context.with_context(|context| context.resolve_global_view_model(&file, name))
         }) {
             let model = instance
                 .with(|instance| instance.as_view_model_instance()?.get_view_model())

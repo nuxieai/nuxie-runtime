@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `86fc70a74e0db7b747e04471bd4372cd38f6a0e7`
+- LAST_SYNCED_SHA: `1c8e554f621dc088719b0ea31c8ccc89ac25d974`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 167 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 167 require a Rust translation.
+  There are 166 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 166 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `1c8e554f621dc088719b0ea31c8ccc89ac25d974` | **DEFERRED:** Wasm VM print callback installation before module instantiation and thread-local startup output routing, plus producer metadata. No shared/native Luau behavior changed; the existing native log sink is already installed before script execution. Do not introduce a dummy Wasm API. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `86fc70a74e0db7b747e04471bd4372cd38f6a0e7` | Add separate content-sizing and owning-layout ancestor walks. Nested layout axis queries and swaps resolve through containers, retaining the owning layout across the swap; nested leaves obtain fit bounds through the content-sizing walk. Port the Solo/column regression and complete enum-driven layout_solos Silver producer with original fixture bytes. Editor-only controls/fit-type changes are outside this runtime delta. | — |
 | `58c2f5e80bd7398496561197037f93e7fbe35d6f` | Retain sticky focus-backing history, reject defunct focus stops while traversing their children, restore subtree manager identities, and detach destroyed FocusData through the nearest live manager. Port all seven upstream regressions. Correct nine-slice Y analysis to use height. Adopt upstream's magnitude-relative finite scalar/vector SRIV tolerance; the existing stricter special-float bit checks remain unchanged. Opcode rejection, render-buffer type decoding and varuint indices already match. | — |
 | `89c04af7d13e4c72ab5fa95628d6a3e03dd1506d` | **DEFERRED:** Wasm-only handle generation checks, arena-epoch reaping, cleanup and leak reporting, plus Wasm-guarded `File::frameBoundary()` and producer metadata. No native Luau/shared behavior or fixtures changed. Do not add a no-op frame-boundary API or count this execution behavior as implemented. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

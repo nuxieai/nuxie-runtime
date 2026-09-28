@@ -20,7 +20,13 @@ use crate::{
         artboard_component_list::ArtboardComponentList,
         assets::image_asset::ImageAsset,
         constraints::scrolling::{scroll_constraint::ScrollConstraint, scroll_physics},
-        core::{CoreHandle, field_types::core_string_type::CoreStringType},
+        core::{
+            CoreHandle,
+            field_types::{
+                core_color_type::CoreColorType, core_double_type::CoreDoubleType,
+                core_string_type::CoreStringType,
+            },
+        },
         drawable::{Drawable, RuntimeDrawableOccurrence},
         generated::{
             assets::drawable_asset_base::DrawableAssetBase,
@@ -248,6 +254,32 @@ impl RuntimeNestedArtboardOccurrence {
         }
         CoreRegistry::get_string_handle(&object, i32::from(key))
             .is_some_and(|after| after != before)
+    }
+
+    /// Read a number from this exact, still-mounted occurrence. Wrong property
+    /// types and detached or recycled list rows fail closed.
+    pub fn double_property(&self, local_id: usize, key: u16) -> Option<f32> {
+        if CoreRegistry::property_field_id(i32::from(key)) != CoreDoubleType::ID {
+            return None;
+        }
+        let object = self.object_handle(local_id)?;
+        if !object.with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))? {
+            return None;
+        }
+        CoreRegistry::get_double_handle(&object, i32::from(key))
+    }
+
+    /// Read a packed color from this exact occurrence, preserving its current
+    /// evaluated value independently of the definition and sibling instances.
+    pub fn color_property(&self, local_id: usize, key: u16) -> Option<u32> {
+        if CoreRegistry::property_field_id(i32::from(key)) != CoreColorType::ID {
+            return None;
+        }
+        let object = self.object_handle(local_id)?;
+        if !object.with(|object| CoreRegistry::object_supports_property(object, u32::from(key)))? {
+            return None;
+        }
+        CoreRegistry::get_color_handle(&object, i32::from(key)).map(|value| value as u32)
     }
 
     pub fn set_double_property(&mut self, local_id: usize, key: u16, value: f32) -> bool {

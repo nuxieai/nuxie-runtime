@@ -1473,6 +1473,29 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
         authored_width + 0.25,
     ));
 
+    assert_eq!(
+        occurrence.double_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        Some(authored_width + 0.25)
+    );
+    assert_eq!(
+        sibling.double_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        Some(authored_width)
+    );
+    assert_eq!(
+        occurrence.double_property(usize::MAX, LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        None
+    );
+    assert_eq!(
+        occurrence.double_property(0, ComponentBase::NAME_PROPERTY_KEY),
+        None
+    );
+    assert_eq!(
+        occurrence.color_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        None
+    );
+    assert_eq!(occurrence.double_property(0, u16::MAX), None);
+    assert_eq!(occurrence.color_property(0, u16::MAX), None);
+
     let (color_local_id, color_before) = child
         .with_artboard(|child| {
             child
@@ -1507,6 +1530,23 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
         color_after,
     ));
 
+    assert_eq!(
+        occurrence.color_property(color_local_id, SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+        Some(color_after)
+    );
+    assert_eq!(
+        sibling.color_property(color_local_id, SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+        Some(color_before as u32)
+    );
+    assert_eq!(
+        occurrence.double_property(color_local_id, SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+        None
+    );
+    assert_eq!(
+        occurrence.color_property(usize::MAX, SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+        None
+    );
+
     let (width, height) = occurrence
         .artboard_dimensions()
         .expect("retained child remains mounted");
@@ -1532,6 +1572,14 @@ fn named_nested_artboard_projection_weakly_fences_and_mutates_the_exact_occurren
         "the host projection must not extend an outgoing child's lifetime"
     );
     assert!(!occurrence.is_current());
+    assert_eq!(
+        occurrence.double_property(0, LayoutComponentBase::WIDTH_PROPERTY_KEY),
+        None
+    );
+    assert_eq!(
+        occurrence.color_property(color_local_id, SolidColorBase::COLOR_VALUE_PROPERTY_KEY),
+        None
+    );
     assert_eq!(occurrence.artboard_dimensions(), None);
     assert!(!occurrence.set_artboard_dimensions(width, height));
     assert_eq!(occurrence.string_property(0, name_key), None);

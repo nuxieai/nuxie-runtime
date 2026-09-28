@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `fea5ac511579cb40ae3d8c8baa39b0125918b546`
+- LAST_SYNCED_SHA: `8e8492f8312c67ac54558adce2f0798baabcdce3`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 171 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 171 require a Rust translation.
+  There are 170 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 170 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -22,6 +22,12 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
   comparisons remain expected-red under
   [UNIV-3015](https://universe.basis.dev/issue/UNIV-3015); they were not rerun
   during this audit.
+- Runtime Silver validation at `8e8492f8` also found `animated_clipping-layout`
+  failing at frame 6, operation 114 (expected `drawPath`, got `rewind`). A clean
+  `c22b630257` baseline reproduces the same failure; this is not an 8e regression.
+  Nine targeted layout Silver cases pass. Full-runtime Silver remains red:
+  [UNIV-3734](https://universe.basis.dev/issue/UNIV-3734). No assertion or
+  manifest classification was relaxed.
 - The user authorized manual, one-commit-at-a-time work on 2026-08-31.
   The preceding accounted change, upstream's Rive 7.3 layout translation,
   anchor, constraint, scroll virtualization-buffer, and Luau 0.733 update, was ported
@@ -31,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `8e8492f8312c67ac54558adce2f0798baabcdce3` | Honor nested-artboard effective fill/hug overrides in grid and stack item sizing. Translate all seven upstream layout assertions and pin both original fixtures. Retain Taffy and adapt its grid min-content measurement to the pinned Yoga dependency behavior. | — |
 | `fea5ac511579cb40ae3d8c8baa39b0125918b546` | **SKIP for current runtime:** `.rive_head` and the generated AssemblyScript binding output path move from `assemblyscript/std/rive/bindings.as` to `rasc/assemblyscript/std/rive/bindings.as`; no ABI or binding-content change. Retain this producer-location change with the parked execution work. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `370e5926631d5790276b21bf86d73ffda22dbe27` | **SKIP:** only `.rive_head` and an Unreal-only raster-order atlas-blit shader wrapper change. No shared shader, supported backend, fixture, or runtime delta. | — |
 | `845a82a9b67136e0b37272170504659a8ab4ca67` | Port shared ScriptModuleAsset metadata/decoding, FileAsset signature verification, DataContext global lookup, shader `rstb` access, and native Luau trigger/input dirt and keyboard/text wake behavior. Existing Rust backend-neutral traits retain the extracted Luau implementation. Wasm execution, module-VM routing, host bindings, browser engine and tiering are explicitly deferred; importing module bytes is not execution support. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

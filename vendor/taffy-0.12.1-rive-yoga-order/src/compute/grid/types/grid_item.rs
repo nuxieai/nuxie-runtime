@@ -424,7 +424,33 @@ impl GridItem {
         grid_area_size: Size<Option<f32>>,
         available_space: Size<Option<f32>>,
     ) -> f32 {
-        let known_dimensions = self.known_dimensions(tree, grid_area_size);
+        let mut known_dimensions = self.known_dimensions(tree, grid_area_size);
+        // Rive Yoga rive_changes_v2_0_1_3_grid, TrackSizing::measureItemMinContent:
+        // definite authored lengths keep ordinary measurement; other items
+        // require a complete intrinsic layout, not the size-only fast path.
+        // Taffy's MinContent carries that intrinsic constraint; the wrapping
+        // flex main-size calculation applies Yoga's zero-space AtMost rule.
+        let has_definite_length =
+            self.size.get(axis).maybe_resolve(grid_area_size.get(axis), |val, basis| tree.calc(val, basis)).is_some();
+        if !has_definite_length {
+            // Stretch into the provisional grid area is not an authored
+            // definite length and must not determine its own content floor.
+            known_dimensions.set(axis, None);
+            let available_space = available_space
+                .map(|opt| opt.map_or(AvailableSpace::MaxContent, AvailableSpace::Definite))
+                .with(axis, AvailableSpace::MinContent);
+            return tree
+                .perform_child_layout(
+                    self.node,
+                    known_dimensions,
+                    grid_area_size,
+                    available_space,
+                    SizingMode::InherentSize,
+                    Line::FALSE,
+                )
+                .size
+                .get(axis);
+        }
         // The child sees the grid area as its containing block during intrinsic measurement, so
         // percentage box properties resolve against the grid area when that size is definite.
         // Spec:

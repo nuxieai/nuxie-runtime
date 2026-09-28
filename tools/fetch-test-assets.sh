@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-fea5ac511579cb40ae3d8c8baa39b0125918b546}
+ref=${RIVE_RUNTIME_REF:-8e8492f8312c67ac54558adce2f0798baabcdce3}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/grid_min_content.riv|43dac6bb5f85261807ddfc271ecfaf4fbb4b660f4e5272043bdb6afaecc2ee36|8e8492f8312c67ac54558adce2f0798baabcdce3|layout/grid_min_content.riv"
+  "sync/nested_artboard_fill.riv|c78896a9f7c2b340c374c14178428ec4062f238c4060b6bb3625509cb970134f|8e8492f8312c67ac54558adce2f0798baabcdce3|layout/nested_artboard_fill.riv"
   "sync/solo_legacy_child.riv|250efc7d785b3ca7f89a07615786f7d83dfb0f7352db50a74aaa07fa1760cc13|5892bb05be7ae966b751625b4ee12239e6860dc1|layout/solo_legacy_child.riv"
   "sync/gamepad_inputs_test.riv|77278e320b77b1d3610d15ad4cb80722eeb1a59333e06548f1efc89c9d3f2433|9cb2205f06aa5e599554e7382889f4cf5bec382e|gamepad_inputs_test.riv"
   "sync/layout_order_pointer_test.riv|039c181c5acb8c8eef63dab84ac473606c93876821ffc0877efc832a90e557ae|61f00897013eba8c57ee2002c33e6ee47d476eff|layout_order_pointer_test.riv"

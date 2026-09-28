@@ -831,6 +831,8 @@ pub struct LayoutSyncContext {
     pub parent_is_stack: bool,
     pub container_justify_items: u32,
     pub inline_hugs: bool,
+    /// Resolved by the owner, including a hosted artboard's sizing override.
+    pub width_fills: bool,
     pub parent_is_row: bool,
     pub is_ltr: bool,
     pub has_layout_parent: bool,

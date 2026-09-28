@@ -8,7 +8,6 @@ use crate::mechanical_port::source::{
     },
     layout::{
         grid_track::GridTrack,
-        layout_enums::LayoutScaleType,
         layout_style_applier::{LayoutStyleApplier, LayoutSyncContext},
     },
 };
@@ -109,9 +108,7 @@ impl LayoutSizingStyle {
             context.inline_hugs,
             context.container_justify_items,
         );
-        if context.parent_is_grid
-            && self.base.layout_width_scale_type() == LayoutScaleType::Fill as u8
-        {
+        if context.parent_is_grid && context.width_fills {
             style.set_justify_self(YGJustify::Stretch);
         }
     }

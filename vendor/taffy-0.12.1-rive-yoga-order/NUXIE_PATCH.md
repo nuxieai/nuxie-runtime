@@ -48,7 +48,37 @@ against 490 as `188.99997`; normalizing it to Taffy's [0, 1] representation
 first resolves as `188.99998`. The resulting remaining flex width differs by
 one ULP (`301.00003` versus `301`).
 
-## Differential evidence
+## Grid min-content at runtime 8e8492f8
+
+Runtime `8e8492f8312c67ac54558adce2f0798baabcdce3` updates Yoga to
+`rive_changes_v2_0_1_3_grid`, commit
+`dc9e0e9f7c29c2a910e76f3738a800ca3c73e7fa`. Its `yoga/grid/TrackSizing.h`
+adds `measureItemMinContent`: definite authored lengths use normal measurement;
+otherwise a complete layout runs at zero available space on the measured axis.
+The other axis and containing-block dimensions remain intact. Both min-content
+and limited-min-content contributions use this helper. Flexible-track growth
+also requires an intrinsic minimum; Taffy's existing track distribution already
+applies that filter.
+
+This fork retains Taffy's intrinsic constraint representation. Grid items with
+indefinite authored size use full child layout under `MinContent` on the measured
+axis, without a stretch-derived known size overriding that constraint. The
+wrapping flex main-size path applies Yoga.cpp's overflowing AtMost-to-Exactly
+rule to that zero-space probe. Its available inner main space is first bounded
+by the resolved minimum and maximum, with margins and box insets removed,
+matching `YGNodeCalculateAvailableInnerDim`; both line collection and intrinsic
+main sizing use that bound. Layout then continues through the existing min/max and
+padding/border clamps and child layout. Definite authored dimensions and nowrap
+content retain their sizing paths. Unconstrained cross-axis space is MaxContent;
+the runtime's native measurement bridge maps MinContent to AtMost(0) and
+MaxContent to Undefined. No fixture names or expected container widths enter
+the implementation.
+
+This adaptation is awaiting source/integration review and differential
+validation; the pre-change seven-case runtime test passed six cases and failed
+WrapRigidGrid (600 rather than 400).
+
+## Prior differential evidence
 
 `wave_b_focus_test_078_direct_port_expected_red` compares the complete native
 render stream with the pinned C++ silver. It fails at frame 0, operation 78

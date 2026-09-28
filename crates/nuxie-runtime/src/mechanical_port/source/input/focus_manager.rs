@@ -205,9 +205,10 @@ fn eligible_for_focus(node: &FocusNodeRef) -> bool {
     if node.is_collapsed {
         return false;
     }
-    node.focusable
-        .as_ref()
-        .is_none_or(|focusable| focusable.borrow().is_eligible_for_focus_traversal())
+    match node.focusable.as_ref() {
+        Some(focusable) => focusable.borrow().is_eligible_for_focus_traversal(),
+        None => !node.had_focusable(),
+    }
 }
 
 fn eligible_for_traversal(node: &FocusNodeRef) -> bool {
@@ -748,9 +749,7 @@ impl FocusManager {
         } else {
             self.erase_root(&child);
         }
-        // Source assigns only this child. Do not recursively rewrite its
-        // descendants' manager identities during a hierarchy reorder.
-        child.borrow_mut().manager = manager;
+        Self::assign_manager(&child, &manager);
         if let Some(parent) = parent {
             FocusNode::insert_child(&parent, index, child);
         } else {
@@ -776,6 +775,14 @@ impl FocusManager {
         } else {
             self.erase_root(child);
         }
+    }
+
+    fn assign_manager(node: &FocusNodeRef, manager: &RuntimeFocusManagerWeakHandle) {
+        let children = node.borrow().children().to_vec();
+        for child in children {
+            Self::assign_manager(&child, manager);
+        }
+        node.borrow_mut().manager = manager.clone();
     }
 
     fn remove_manager(node: &FocusNodeRef) {

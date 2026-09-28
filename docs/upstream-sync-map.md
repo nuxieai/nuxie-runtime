@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `89c04af7d13e4c72ab5fa95628d6a3e03dd1506d`
+- LAST_SYNCED_SHA: `58c2f5e80bd7398496561197037f93e7fbe35d6f`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 169 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 169 require a Rust translation.
+  There are 168 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 168 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `58c2f5e80bd7398496561197037f93e7fbe35d6f` | Retain sticky focus-backing history, reject defunct focus stops while traversing their children, restore subtree manager identities, and detach destroyed FocusData through the nearest live manager. Port all seven upstream regressions. Correct nine-slice Y analysis to use height. Adopt upstream's magnitude-relative finite scalar/vector SRIV tolerance; the existing stricter special-float bit checks remain unchanged. Opcode rejection, render-buffer type decoding and varuint indices already match. | — |
 | `89c04af7d13e4c72ab5fa95628d6a3e03dd1506d` | **DEFERRED:** Wasm-only handle generation checks, arena-epoch reaping, cleanup and leak reporting, plus Wasm-guarded `File::frameBoundary()` and producer metadata. No native Luau/shared behavior or fixtures changed. Do not add a no-op frame-boundary API or count this execution behavior as implemented. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `8e8492f8312c67ac54558adce2f0798baabcdce3` | Honor nested-artboard effective fill/hug overrides in grid and stack item sizing. Translate all seven upstream layout assertions and pin both original fixtures. Retain Taffy and adapt its grid min-content measurement to the pinned Yoga dependency behavior. | — |
 | `fea5ac511579cb40ae3d8c8baa39b0125918b546` | **SKIP for current runtime:** `.rive_head` and the generated AssemblyScript binding output path move from `assemblyscript/std/rive/bindings.as` to `rasc/assemblyscript/std/rive/bindings.as`; no ABI or binding-content change. Retain this producer-location change with the parked execution work. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

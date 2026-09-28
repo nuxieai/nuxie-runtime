@@ -465,9 +465,25 @@ impl Drop for FocusData {
             return;
         };
         node.borrow_mut().clear_focusable();
-        let manager = node.borrow().manager();
+        let mut manager = node.borrow().manager();
+        if manager.is_none() {
+            let mut parent = node.borrow().parent();
+            while let Some(ancestor) = parent {
+                let (ancestor_manager, next_parent) = {
+                    let ancestor = ancestor.borrow();
+                    (ancestor.manager(), ancestor.parent())
+                };
+                if ancestor_manager.is_some() {
+                    manager = ancestor_manager;
+                    break;
+                }
+                parent = next_parent;
+            }
+        }
         if let Some(manager) = manager {
             manager.with_focus_manager_mut(|manager| manager.remove_child(&node));
+        } else {
+            FocusNode::remove_from_parent(&node);
         }
     }
 }

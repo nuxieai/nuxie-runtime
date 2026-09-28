@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `845a82a9b67136e0b37272170504659a8ab4ca67`
+- LAST_SYNCED_SHA: `370e5926631d5790276b21bf86d73ffda22dbe27`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 173 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 173 require a Rust translation.
+  There are 172 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 172 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -31,6 +31,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `370e5926631d5790276b21bf86d73ffda22dbe27` | **SKIP:** only `.rive_head` and an Unreal-only raster-order atlas-blit shader wrapper change. No shared shader, supported backend, fixture, or runtime delta. | — |
 | `845a82a9b67136e0b37272170504659a8ab4ca67` | Port shared ScriptModuleAsset metadata/decoding, FileAsset signature verification, DataContext global lookup, shader `rstb` access, and native Luau trigger/input dirt and keyboard/text wake behavior. Existing Rust backend-neutral traits retain the extracted Luau implementation. Wasm execution, module-VM routing, host bindings, browser engine and tiering are explicitly deferred; importing module bytes is not execution support. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `5892bb05be7ae966b751625b4ee12239e6860dc1` | Content-size non-participating children through Solo containers, keeping plain groups as barriers and the layout-provider walk unchanged. Port the original 200x200 rectangle regression and exact fixture; preserve Taffy. | — |
 | `d7fff883fd802b46c92d5bf479a70712fd73ecba` | Merge actual vertex/fragment binding maps for split-file ORE pipelines; validate stage agreement and backend-specific slot collisions. Port allocator v2 admission, shared layout builders, Lua fragment selection and auto layouts, original binding-map/split-stage tests, and the exact generated GM shader header. Unsupported D3D backends and C++ test-build infrastructure are not added. Editor producer followup: UNIV-2958. | — |

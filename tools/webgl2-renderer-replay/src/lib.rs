@@ -8,6 +8,11 @@ mod wasm {
     use web_sys::HtmlCanvasElement;
 
     #[wasm_bindgen]
+    pub fn run_webgl2_scratch_pass_tests(canvas: HtmlCanvasElement) -> Result<String, JsValue> {
+        nuxie_renderer::run_scratch_pass_browser_tests(canvas).map_err(js_error)
+    }
+
+    #[wasm_bindgen]
     pub struct WebGl2ReplayResult {
         width: u32,
         height: u32,

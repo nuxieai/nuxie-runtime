@@ -332,6 +332,11 @@ pub fn render_pass_depth_format(pass: &render_pass::RenderPass) -> types::Textur
 }
 
 #[doc(hidden)]
+pub fn render_pass_color_count(pass: &render_pass::RenderPass) -> u32 {
+    pass.m_colorCount
+}
+
+#[doc(hidden)]
 pub fn render_pass_retain_bound_group(
     pass: &mut render_pass::RenderPass,
     group_index: u32,

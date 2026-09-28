@@ -81,6 +81,13 @@ pub(crate) mod webgl2 {
     ))]
     #[path = "product_root.rs"]
     mod product_root;
+    #[cfg(all(
+        feature = "webgl2-test-support",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ))]
+    #[path = "scratch_pass_browser_tests.rs"]
+    pub(crate) mod scratch_pass_browser_tests;
     // This module is the Rust equivalent of the source's member/friend
     // boundary. Only the cross-backend load/store dependency and opaque
     // ContextGL type escape; coupled GL owner records stay unnameable outside

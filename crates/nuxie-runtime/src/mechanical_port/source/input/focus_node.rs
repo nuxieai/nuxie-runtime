@@ -37,7 +37,13 @@ impl FocusNode {
     const CAN_TOUCH: u8 = 2;
     const CAN_TRAVERSE: u8 = 4;
     const HAS_FOCUS: u8 = 32;
+    const HAD_FOCUSABLE: u8 = 1 << 6;
     pub fn new(focusable: Option<FocusableRef>) -> FocusNodeRef {
+        let flags = 7 | if focusable.is_some() {
+            Self::HAD_FOCUSABLE
+        } else {
+            0
+        };
         Rc::new(RefCell::new(Self {
             focusable,
             parent: Weak::new(),
@@ -45,7 +51,7 @@ impl FocusNode {
             children: Vec::new(),
             name: String::new(),
             world_bounds: Bounds::default(),
-            flags: 7,
+            flags,
             tab_index: 0,
             #[cfg(feature = "tools")]
             is_collapsed: false,
@@ -67,12 +73,19 @@ impl FocusNode {
     pub fn set_focusable(&mut self, focusable: Option<FocusableRef>) {
         let backing_changed = self.focusable.is_none() != focusable.is_none();
         self.focusable = focusable;
+        if self.focusable.is_some() {
+            self.set_flag(Self::HAD_FOCUSABLE, true);
+        }
         if backing_changed {
             self.invalidate_focusable_content();
         }
     }
     pub fn clear_focusable(&mut self) {
         self.set_focusable(None);
+    }
+    /// Sticky distinction between a defunct backing and a host-created target.
+    pub fn had_focusable(&self) -> bool {
+        self.flag(Self::HAD_FOCUSABLE)
     }
     fn flag(&self, f: u8) -> bool {
         self.flags & f != 0

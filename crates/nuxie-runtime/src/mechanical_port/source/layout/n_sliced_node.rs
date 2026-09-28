@@ -117,8 +117,7 @@ impl NSlicedNode {
         let x_uv_stops = axis_stops(&self.details.xs, size.x, true);
         let y_uv_stops = axis_stops(&self.details.ys, size.y, true);
         let x_scale_info = NSlicerHelpers::analyze_uv_stops(&x_uv_stops, size.x, scale.x.abs());
-        // Preserve the pinned size.x argument for the Y-axis analysis.
-        let y_scale_info = NSlicerHelpers::analyze_uv_stops(&y_uv_stops, size.x, scale.y.abs());
+        let y_scale_info = NSlicerHelpers::analyze_uv_stops(&y_uv_stops, size.y, scale.y.abs());
         let resolved_width = self.base.width().abs();
         let resolved_height = self.base.height().abs();
         self.map_world_point = Box::new(move |world_point| {

@@ -3,6 +3,11 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
 pub const SRIV_EPSILON: f32 = 0.001;
+const SRIV_RELATIVE_EPSILON: f32 = 1e-5;
+
+fn tolerance_for(magnitude: f32) -> f32 {
+    SRIV_EPSILON + SRIV_RELATIVE_EPSILON * magnitude.abs()
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Sriv {
@@ -342,7 +347,11 @@ fn values_match(expected: &Value, actual: &Value) -> bool {
                 expected_x.to_bits() == actual_x.to_bits()
                     && expected_y.to_bits() == actual_y.to_bits()
             } else {
-                (expected_x - actual_x).hypot(expected_y - actual_y) <= SRIV_EPSILON
+                let magnitude = expected_x
+                    .abs()
+                    .max(expected_y.abs())
+                    .max(actual_x.abs().max(actual_y.abs()));
+                (expected_x - actual_x).hypot(expected_y - actual_y) <= tolerance_for(magnitude)
             }
         }
         _ => false,
@@ -353,7 +362,8 @@ fn floats_match(expected: u32, actual: u32) -> bool {
     let expected_value = f32::from_bits(expected);
     let actual_value = f32::from_bits(actual);
     if ordinary_finite(expected_value, actual_value) {
-        (expected_value - actual_value).abs() <= SRIV_EPSILON
+        (expected_value - actual_value).abs()
+            <= tolerance_for(expected_value.abs().max(actual_value.abs()))
     } else {
         expected == actual
     }
@@ -799,6 +809,25 @@ mod tests {
         assert_eq!(difference.operation, 0);
         assert_eq!(difference.field, Some("value"));
         assert!(difference.to_string().contains("thickness"));
+    }
+
+    #[test]
+    fn comparator_scales_finite_scalar_tolerance_with_magnitude() {
+        assert!(floats_match(1000.0_f32.to_bits(), 1000.008_f32.to_bits()));
+        assert!(!floats_match(100.0_f32.to_bits(), 100.003_f32.to_bits()));
+        assert!(floats_match(
+            (-1000.0_f32).to_bits(),
+            (-1000.008_f32).to_bits()
+        ));
+    }
+
+    #[test]
+    fn comparator_uses_largest_coordinate_and_vector_distance() {
+        let expected = Value::Vec2(1000.0_f32.to_bits(), 0.0_f32.to_bits());
+        let within = Value::Vec2(1000.007_f32.to_bits(), 0.007_f32.to_bits());
+        let outside = Value::Vec2(1000.009_f32.to_bits(), 0.009_f32.to_bits());
+        assert!(values_match(&expected, &within));
+        assert!(!values_match(&expected, &outside));
     }
 
     #[test]

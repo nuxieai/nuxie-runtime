@@ -26,6 +26,10 @@ use crate::mechanical_port::source::{
         state_machine_input_instance::{
             InputInstanceNotifier, SMIBool, SMIInput, SMINumber, SMITrigger,
         },
+        state_machine_instance_clusters::{
+            QueuedFocusEvent, QueuedSemanticEvent, SMIBindables, SMIInputExtras, SMIReporting,
+            SMIScripting,
+        },
         state_machine_layer::StateMachineLayer,
         state_machine_listener::StateMachineListener,
         state_machine_listener_single::StateMachineListenerSingle,
@@ -83,6 +87,7 @@ use crate::mechanical_port::source::{
         semantic_manager::{RuntimeSemanticManagerHandle, SemanticManager},
         semantic_node::{SemanticNode, SemanticNodeRef},
     },
+    sidecar::Sidecar,
     view_model_type::ViewModelType,
     viewmodel::{
         viewmodel::ViewModel,
@@ -122,18 +127,6 @@ pub struct EventReport {
 pub struct FocusState {
     pub has_focus: bool,
     pub expects_keyboard_input: bool,
-}
-
-#[derive(Clone)]
-pub struct QueuedFocusEvent {
-    pub group: RuntimeFocusListenerGroupHandle,
-    pub is_focus: bool,
-}
-
-#[derive(Clone)]
-pub struct QueuedSemanticEvent {
-    pub group: RuntimeSemanticListenerGroupHandle,
-    pub action_type: SemanticActionType,
 }
 
 pub enum InputInstance {
@@ -1826,7 +1819,7 @@ struct ListenerViewModel {
 }
 
 #[derive(Clone)]
-struct RuntimeListenerViewModelHandle(Rc<RefCell<ListenerViewModel>>);
+pub(super) struct RuntimeListenerViewModelHandle(Rc<RefCell<ListenerViewModel>>);
 
 #[derive(Clone, Default)]
 pub struct RuntimeListenerViewModelWeakHandle(Weak<RefCell<ListenerViewModel>>);
@@ -1956,7 +1949,7 @@ pub struct RuntimeStateMachineInstanceHandle(
     DataBindContainer,
     RuntimeArtboardInstanceWeakHandle,
     Rc<RefCell<Option<RuntimeDataContextHandle>>>,
-    Rc<RefCell<Vec<QueuedFocusEvent>>>,
+    Rc<RefCell<Sidecar<SMIInputExtras>>>,
     Rc<Cell<bool>>,
 );
 
@@ -1966,14 +1959,22 @@ pub struct RuntimeStateMachineInstanceWeakHandle(
     crate::mechanical_port::source::data_bind::data_bind_container::DataBindContainerWeak,
     RuntimeArtboardInstanceWeakHandle,
     Weak<RefCell<Option<RuntimeDataContextHandle>>>,
-    Weak<RefCell<Vec<QueuedFocusEvent>>>,
+    Weak<RefCell<Sidecar<SMIInputExtras>>>,
     Weak<Cell<bool>>,
 );
 
 impl RuntimeStateMachineInstanceHandle {
     pub fn submit_gamepads_from_buffer(&self, data: &[u8]) -> bool {
-        let (gamepads, focus_manager) = self
-            .with_instance(|machine| (machine.embedder_gamepads.clone(), machine.focus_manager()));
+        // Upstream validates the batch version before creating input state.
+        if !GamepadBatchState::has_valid_header(data) {
+            return false;
+        }
+        let (gamepads, focus_manager) = self.with_instance(|machine| {
+            (
+                machine.ensure_input_extras().embedder_gamepads.clone(),
+                machine.focus_manager(),
+            )
+        });
         let mut dispatcher = StateMachineGamepadDispatcher {
             machine: self.clone(),
             focus_manager,
@@ -1996,7 +1997,12 @@ impl RuntimeStateMachineInstanceHandle {
             hit_something |= result != HitResult::None;
             hit_opaque |= result == HitResult::HitOpaque;
         }
-        let drawables = self.with_instance(|machine| machine.gamepad_scripted_drawables.clone());
+        let drawables = self.with_instance(|machine| {
+            machine
+                .input_extras()
+                .map(|extras| extras.gamepad_scripted_drawables.clone())
+                .unwrap_or_default()
+        });
         for drawable in drawables {
             if Some(&drawable) == already_dispatched {
                 continue;
@@ -2124,11 +2130,7 @@ impl RuntimeStateMachineInstanceHandle {
         if advance_view_models {
             Artboard::advance_scripted_view_models_handle(&artboard.core_handle());
         }
-        keep_going
-            || self.with_instance(|machine| {
-                !machine.reported_events.is_empty()
-                    || !machine.reported_listener_view_models.borrow().is_empty()
-            })
+        keep_going || self.with_instance(StateMachineInstance::has_pending_reports)
     }
 
     pub fn set_number(&self, name: &str, value: f32) {
@@ -2161,14 +2163,14 @@ impl RuntimeStateMachineInstanceHandle {
         let container = instance.data_bind_container.clone();
         let artboard = instance.artboard_instance.clone();
         let context = instance.data_context_handle.clone();
-        let focus_events = instance.queued_focus_events.clone();
+        let input_extras = instance.input_extras.clone();
         let needs_advance = instance.needs_advance.clone();
         Self(
             Rc::new(RefCell::new(instance)),
             container,
             artboard,
             context,
-            focus_events,
+            input_extras,
             needs_advance,
         )
     }
@@ -2207,7 +2209,7 @@ impl RuntimeStateMachineInstanceWeakHandle {
                     .expect("live machine owns its data-context field"),
                 self.4
                     .upgrade()
-                    .expect("live machine owns its focus-event queue"),
+                    .expect("live machine owns its input-extras cell"),
                 self.5
                     .upgrade()
                     .expect("live machine owns its advance flag"),
@@ -2251,6 +2253,8 @@ impl RuntimeStateMachineInstanceWeakHandle {
         machine
             .4
             .borrow_mut()
+            .ensure_allocated()
+            .queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
         machine.5.set(true);
     }
@@ -2273,9 +2277,6 @@ impl RuntimeStateMachineInstanceWeakHandle {
 
 pub struct StateMachineInstance {
     occurrence: RuntimeStateMachineInstanceWeakHandle,
-    reported_events: Vec<EventReport>,
-    reporting_events: Vec<EventReport>,
-    events_applied_during_loop: Vec<EventReport>,
     machine: CoreHandle,
     artboard_instance: RuntimeArtboardInstanceWeakHandle,
     needs_advance: Rc<Cell<bool>>,
@@ -2289,27 +2290,16 @@ pub struct StateMachineInstance {
     // this same cell without reborrowing the active pointer-event owner.
     data_context_handle: Rc<RefCell<Option<RuntimeDataContextHandle>>>,
     pub(crate) data_bind_container: DataBindContainer,
-    listener_view_models: Vec<RuntimeListenerViewModelHandle>,
-    reported_listener_view_models: Rc<RefCell<Vec<RuntimeListenerViewModelWeakHandle>>>,
-    reporting_listener_view_models: Vec<RuntimeListenerViewModelWeakHandle>,
-    bindable_property_instances: HashMap<CoreHandle, CoreHandle>,
-    scripted_objects_map: HashMap<CoreHandle, CoreHandle>,
-    bindable_data_binds_to_target: HashMap<CoreHandle, CoreHandle>,
-    bindable_data_binds_to_source: HashMap<CoreHandle, CoreHandle>,
-    transition_property_instances: HashMap<CoreHandle, HashMap<u32, CoreHandle>>,
     draw_order_change_counter: u8,
     focus_manager: RuntimeFocusManagerHandle,
     external_focus_manager: Option<RuntimeFocusManagerHandle>,
-    focus_listener_groups: Vec<RuntimeFocusListenerGroupHandle>,
-    keyboard_listener_groups: Vec<RuntimeKeyboardListenerGroupHandle>,
-    gamepad_listener_groups: Vec<RuntimeGamepadListenerGroupHandle>,
-    gamepad_scripted_drawables: Vec<CoreHandle>,
-    embedder_gamepads: Rc<GamepadBatchState>,
-    semantic_manager: Option<RuntimeSemanticManagerHandle>,
-    external_semantic_manager: Option<RuntimeSemanticManagerHandle>,
-    queued_focus_events: Rc<RefCell<Vec<QueuedFocusEvent>>>,
-    semantic_listener_groups: Vec<RuntimeSemanticListenerGroupHandle>,
-    queued_semantic_events: Vec<QueuedSemanticEvent>,
+    reporting: Sidecar<SMIReporting>,
+    bindables: Sidecar<SMIBindables>,
+    // Shared cell preserves synchronous focus enqueue while the SMI is borrowed.
+    // Only the cell is eager; its cluster stays absent until an input feature writes.
+    // Never retain a cell guard across callbacks. Drop explicitly before managers.
+    input_extras: Rc<RefCell<Sidecar<SMIInputExtras>>>,
+    scripting: Sidecar<SMIScripting>,
     nested_event_listeners: Vec<RuntimeStateMachineInstanceWeakHandle>,
     nested_artboard: Option<CoreHandle>,
     #[cfg(feature = "tools")]
@@ -2344,15 +2334,39 @@ impl GamepadDispatcher for StateMachineGamepadDispatcher {
 }
 
 impl StateMachineInstance {
+    fn ensure_reporting(&mut self) -> &mut SMIReporting {
+        self.reporting.ensure_allocated()
+    }
+
+    fn ensure_bindables(&mut self) -> &mut SMIBindables {
+        self.bindables.ensure_allocated()
+    }
+
+    fn input_extras(&self) -> Option<std::cell::Ref<'_, SMIInputExtras>> {
+        std::cell::Ref::filter_map(self.input_extras.borrow(), Sidecar::get).ok()
+    }
+
+    fn ensure_input_extras(&self) -> std::cell::RefMut<'_, SMIInputExtras> {
+        std::cell::RefMut::map(self.input_extras.borrow_mut(), Sidecar::ensure_allocated)
+    }
+
+    fn ensure_scripting(&mut self) -> &mut SMIScripting {
+        self.scripting.ensure_allocated()
+    }
+
+    fn has_pending_reports(&self) -> bool {
+        self.reporting.get().is_some_and(|reporting| {
+            !reporting.reported_events.is_empty()
+                || !reporting.reported_listener_view_models.borrow().is_empty()
+        })
+    }
+
     pub fn new(
         machine: CoreHandle,
         artboard_instance: RuntimeArtboardInstanceWeakHandle,
     ) -> RuntimeStateMachineInstanceHandle {
         let instance = Self {
             occurrence: RuntimeStateMachineInstanceWeakHandle::default(),
-            reported_events: Vec::new(),
-            reporting_events: Vec::new(),
-            events_applied_during_loop: Vec::new(),
             machine,
             artboard_instance: artboard_instance.clone(),
             needs_advance: Rc::new(Cell::new(false)),
@@ -2364,27 +2378,13 @@ impl StateMachineInstance {
             parent_nested_artboard: None,
             data_context_handle: Rc::new(RefCell::new(None)),
             data_bind_container: DataBindContainer::default(),
-            listener_view_models: Vec::new(),
-            reported_listener_view_models: Rc::new(RefCell::new(Vec::new())),
-            reporting_listener_view_models: Vec::new(),
-            bindable_property_instances: HashMap::new(),
-            scripted_objects_map: HashMap::new(),
-            bindable_data_binds_to_target: HashMap::new(),
-            bindable_data_binds_to_source: HashMap::new(),
-            transition_property_instances: HashMap::new(),
             draw_order_change_counter: 0,
             focus_manager: RuntimeFocusManagerHandle::new(FocusManager::new()),
             external_focus_manager: None,
-            focus_listener_groups: Vec::new(),
-            keyboard_listener_groups: Vec::new(),
-            gamepad_listener_groups: Vec::new(),
-            gamepad_scripted_drawables: Vec::new(),
-            embedder_gamepads: Rc::new(GamepadBatchState::default()),
-            semantic_manager: None,
-            external_semantic_manager: None,
-            queued_focus_events: Rc::new(RefCell::new(Vec::new())),
-            semantic_listener_groups: Vec::new(),
-            queued_semantic_events: Vec::new(),
+            reporting: Sidecar::default(),
+            bindables: Sidecar::default(),
+            input_extras: Rc::new(RefCell::new(Sidecar::default())),
+            scripting: Sidecar::default(),
             nested_event_listeners: Vec::new(),
             nested_artboard: None,
             #[cfg(feature = "tools")]
@@ -2619,7 +2619,8 @@ impl StateMachineInstance {
             self.add_data_bind(clone.clone());
             if original_target.is_type_of(BindablePropertyBase::TYPE_KEY) {
                 let property = if let Some(property) = self
-                    .bindable_property_instances
+                    .ensure_bindables()
+                    .property_instances
                     .get(&original_target)
                     .cloned()
                 {
@@ -2628,7 +2629,8 @@ impl StateMachineInstance {
                     let property = original_target.clone_occurrence().expect(
                         "a state-machine BindableProperty must be cloneable in its authored arena",
                     );
-                    self.bindable_property_instances
+                    self.ensure_bindables()
+                        .property_instances
                         .insert(original_target.clone(), property.clone());
                     property
                 };
@@ -2645,9 +2647,13 @@ impl StateMachineInstance {
                     })
                     .unwrap_or(false);
                 if to_source {
-                    self.bindable_data_binds_to_source.insert(property, clone);
+                    self.ensure_bindables()
+                        .data_binds_to_source
+                        .insert(property, clone);
                 } else {
-                    self.bindable_data_binds_to_target.insert(property, clone);
+                    self.ensure_bindables()
+                        .data_binds_to_target
+                        .insert(property, clone);
                 }
             } else {
                 clone.with_mut(|clone| {
@@ -2667,7 +2673,8 @@ impl StateMachineInstance {
                         })
                         .flatten()
                         .unwrap_or_default();
-                    self.transition_property_instances
+                    self.ensure_bindables()
+                        .transition_property_instances
                         .entry(original_target)
                         .or_default()
                         .insert(property_key, property.clone());
@@ -2702,8 +2709,9 @@ impl StateMachineInstance {
                 continue;
             }
             if self.listener_has(&listener, ListenerType::ViewModel) {
-                self.listener_view_models.push(ListenerViewModel::new(
-                    self.reported_listener_view_models.clone(),
+                let reporting = self.ensure_reporting();
+                reporting.listener_view_models.push(ListenerViewModel::new(
+                    reporting.reported_listener_view_models.clone(),
                     listener,
                 ));
                 continue;
@@ -2718,7 +2726,7 @@ impl StateMachineInstance {
                         listener.clone(),
                         machine.clone(),
                     );
-                    self.focus_listener_groups.push(group);
+                    self.ensure_input_extras().focus_listener_groups.push(group);
                 }
             }
             if self.listener_has(&listener, ListenerType::Keyboard)
@@ -2730,7 +2738,9 @@ impl StateMachineInstance {
                         Some(listener.clone()),
                         machine.clone(),
                     );
-                    self.keyboard_listener_groups.push(group);
+                    self.ensure_input_extras()
+                        .keyboard_listener_groups
+                        .push(group);
                 }
             }
             if self.listener_has(&listener, ListenerType::SemanticAction) {
@@ -2740,7 +2750,9 @@ impl StateMachineInstance {
                         listener.clone(),
                         machine.clone(),
                     );
-                    self.semantic_listener_groups.push(group);
+                    self.ensure_input_extras()
+                        .semantic_listener_groups
+                        .push(group);
                 }
             }
             if listener
@@ -2783,7 +2795,9 @@ impl StateMachineInstance {
                         Some(listener.clone()),
                         machine.clone(),
                     );
-                    self.gamepad_listener_groups.push(group);
+                    self.ensure_input_extras()
+                        .gamepad_listener_groups
+                        .push(group);
                 }
             }
         }
@@ -2917,6 +2931,11 @@ impl StateMachineInstance {
             .machine
             .with_downcast::<StateMachine, _>(StateMachine::scripted_objects)
             .unwrap_or_default();
+        if !scripted_objects.is_empty() {
+            self.ensure_scripting()
+                .objects
+                .reserve(scripted_objects.len());
+        }
         for source in scripted_objects {
             let mut host = ScriptUpdateRequestHost::default();
             let clone = if source.is_type_of(crate::mechanical_port::source::generated::animation::scripted_listener_action_base::ScriptedListenerActionBase::TYPE_KEY) {
@@ -2927,13 +2946,18 @@ impl StateMachineInstance {
             if host.take_requested() {
                 ScriptedObject::apply_update_request(&clone);
             }
-            self.scripted_objects_map.insert(source, clone);
+            self.ensure_scripting().objects.push((source, clone));
         }
         let context = self
             .artboard_instance
             .with_artboard(|artboard| artboard.data_context())
             .flatten();
-        for object in self.scripted_objects_map.values() {
+        for (_, object) in self
+            .scripting
+            .get()
+            .into_iter()
+            .flat_map(|scripting| &scripting.objects)
+        {
             object.with_mut(|object| {
                 if let Some(object) = object.as_scripted_object_mut() {
                     object.set_data_context(context.clone());
@@ -2976,11 +3000,15 @@ impl StateMachineInstance {
                         None,
                         self.occurrence.clone(),
                     );
-                    self.keyboard_listener_groups.push(group);
+                    self.ensure_input_extras()
+                        .keyboard_listener_groups
+                        .push(group);
                 }
             }
             if wants_gamepad {
-                self.gamepad_scripted_drawables.push(object);
+                self.ensure_input_extras()
+                    .gamepad_scripted_drawables
+                    .push(object);
             }
         }
     }
@@ -3238,12 +3266,12 @@ impl StateMachineInstance {
     }
 
     pub fn apply_events(&mut self) {
-        self.events_applied_during_loop.clear();
+        let Some(reporting) = self.reporting.get_mut() else {
+            return;
+        };
+        reporting.events_applied_during_loop.clear();
         let mut iteration = 0;
-        while (!self.reported_events.is_empty()
-            || !self.reported_listener_view_models.borrow().is_empty())
-            && iteration < 100
-        {
+        while self.has_pending_reports() && iteration < 100 {
             iteration += 1;
             self.data_bind_container.update_data_binds(false);
 
@@ -3252,22 +3280,25 @@ impl StateMachineInstance {
             // local only while callbacks need `&mut self`; restoring them
             // afterward preserves that two-buffer ownership without cloning
             // the complete batches solely for Rust's borrow boundary.
-            let mut reporting_events = std::mem::take(&mut self.reporting_events);
+            let reporting = self.reporting.get_mut().expect("reporting batch exists");
+            let mut reporting_events = std::mem::take(&mut reporting.reporting_events);
             reporting_events.clear();
-            reporting_events.append(&mut self.reported_events);
+            reporting_events.append(&mut reporting.reported_events);
             let mut reporting_listener_view_models =
-                std::mem::take(&mut self.reporting_listener_view_models);
+                std::mem::take(&mut reporting.reporting_listener_view_models);
             reporting_listener_view_models.clear();
             reporting_listener_view_models
-                .append(&mut self.reported_listener_view_models.borrow_mut());
+                .append(&mut reporting.reported_listener_view_models.borrow_mut());
             if iteration > 1 {
-                self.events_applied_during_loop
+                reporting
+                    .events_applied_during_loop
                     .extend(reporting_events.iter().cloned());
             }
             self.notify_event_listeners(&reporting_events, None);
             self.notify_listener_view_models(&reporting_listener_view_models);
-            self.reporting_events = reporting_events;
-            self.reporting_listener_view_models = reporting_listener_view_models;
+            let reporting = self.reporting.get_mut().expect("reporting batch exists");
+            reporting.reporting_events = reporting_events;
+            reporting.reporting_listener_view_models = reporting_listener_view_models;
         }
         if iteration >= 100 {
             eprintln!(
@@ -3321,7 +3352,8 @@ impl StateMachineInstance {
         if self.semantic_manager().is_some() {
             return;
         }
-        self.semantic_manager = Some(RuntimeSemanticManagerHandle::new(SemanticManager::new()));
+        self.ensure_input_extras().semantic_manager =
+            Some(RuntimeSemanticManagerHandle::new(SemanticManager::new()));
         let manager = self.semantic_manager();
         if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.build_semantic_tree(manager, None);
@@ -3329,9 +3361,11 @@ impl StateMachineInstance {
     }
 
     pub fn semantic_manager(&self) -> Option<RuntimeSemanticManagerHandle> {
-        self.external_semantic_manager
+        let extras = self.input_extras()?;
+        extras
+            .external_semantic_manager
             .clone()
-            .or_else(|| self.semantic_manager.clone())
+            .or_else(|| extras.semantic_manager.clone())
     }
 
     pub fn set_external_semantic_manager(
@@ -3339,7 +3373,10 @@ impl StateMachineInstance {
         manager: Option<RuntimeSemanticManagerHandle>,
         parent_node: Option<SemanticNodeRef>,
     ) {
-        let unchanged = match (&self.external_semantic_manager, &manager) {
+        let current = self
+            .input_extras()
+            .and_then(|extras| extras.external_semantic_manager.clone());
+        let unchanged = match (&current, &manager) {
             (Some(current), Some(manager)) => current.ptr_eq(manager),
             (None, None) => true,
             _ => false,
@@ -3347,12 +3384,14 @@ impl StateMachineInstance {
         if unchanged {
             return;
         }
+        // Ensure before cleanup, but release the cell before callbacks.
+        drop(self.ensure_input_extras());
         if let Some(artboard) = self.artboard_instance.upgrade() {
             if artboard.with_artboard(|artboard| artboard.semantic_manager().is_some()) {
                 artboard.cleanup_semantic_tree();
             }
         }
-        self.external_semantic_manager = manager;
+        self.ensure_input_extras().external_semantic_manager = manager;
         let manager = self.semantic_manager();
         if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.build_semantic_tree(manager, parent_node);
@@ -3368,8 +3407,8 @@ impl StateMachineInstance {
     }
 
     pub fn queue_focus_event(&mut self, group: RuntimeFocusListenerGroupHandle, is_focus: bool) {
-        self.queued_focus_events
-            .borrow_mut()
+        self.ensure_input_extras()
+            .queued_focus_events
             .push(QueuedFocusEvent { group, is_focus });
         self.needs_advance.set(true);
     }
@@ -3446,7 +3485,13 @@ impl StateMachineInstance {
     }
 
     fn process_focus_events(&mut self) {
-        let events = std::mem::take(&mut *self.queued_focus_events.borrow_mut());
+        let events = {
+            let mut storage = self.input_extras.borrow_mut();
+            let Some(extras) = storage.get_mut() else {
+                return;
+            };
+            std::mem::take(&mut extras.queued_focus_events)
+        };
         for event in events {
             let (listener, listens) = event.group.with_group(|group| {
                 (
@@ -3462,9 +3507,13 @@ impl StateMachineInstance {
                 continue;
             }
             let listener_index = self
-                .focus_listener_groups
-                .iter()
-                .position(|group| group.ptr_eq(&event.group))
+                .input_extras()
+                .and_then(|extras| {
+                    extras
+                        .focus_listener_groups
+                        .iter()
+                        .position(|group| group.ptr_eq(&event.group))
+                })
                 .expect("a queued focus listener remains owned until dispatch");
             let invocation = ListenerInvocation::focus(listener_index, event.is_focus);
             self.perform_listener_changes(&listener, invocation);
@@ -3476,13 +3525,20 @@ impl StateMachineInstance {
         group: RuntimeSemanticListenerGroupHandle,
         action_type: SemanticActionType,
     ) {
-        self.queued_semantic_events
+        self.ensure_input_extras()
+            .queued_semantic_events
             .push(QueuedSemanticEvent { group, action_type });
         self.needs_advance.set(true);
     }
 
     fn process_semantic_events(&mut self) {
-        let events = std::mem::take(&mut self.queued_semantic_events);
+        let events = {
+            let mut storage = self.input_extras.borrow_mut();
+            let Some(extras) = storage.get_mut() else {
+                return;
+            };
+            std::mem::take(&mut extras.queued_semantic_events)
+        };
         for event in events {
             let eligible = event
                 .group
@@ -3499,11 +3555,12 @@ impl StateMachineInstance {
                 continue;
             }
             let listener = event.group.with_group(|group| group.listener());
-            let Some(listener_index) = self
-                .semantic_listener_groups
-                .iter()
-                .position(|group| group.ptr_eq(&event.group))
-            else {
+            let Some(listener_index) = self.input_extras().and_then(|extras| {
+                extras
+                    .semantic_listener_groups
+                    .iter()
+                    .position(|group| group.ptr_eq(&event.group))
+            }) else {
                 continue;
             };
             let invocation = ListenerInvocation::semantic(listener_index, event.action_type as u8);
@@ -3522,15 +3579,25 @@ impl StateMachineInstance {
         }
         if new_frame {
             self.process_focus_events();
-            let semantic_report_start = self.reported_events.len();
+            let semantic_report_start = self
+                .reporting
+                .get()
+                .map_or(0, |reporting| reporting.reported_events.len());
             self.process_semantic_events();
-            let semantic_reports = self.reported_events[semantic_report_start..].to_vec();
+            let semantic_reports = self
+                .reporting
+                .get()
+                .map(|reporting| reporting.reported_events[semantic_report_start..].to_vec())
+                .unwrap_or_default();
             self.apply_events();
             // Queued semantic input executes inside this frame, unlike pointer
             // input reported between frames. Preserve its initial reports for
             // the host after native event delivery has consumed the queue.
-            self.events_applied_during_loop
-                .splice(0..0, semantic_reports);
+            if let Some(reporting) = self.reporting.get_mut() {
+                reporting
+                    .events_applied_during_loop
+                    .splice(0..0, semantic_reports);
+            }
             self.needs_advance.set(false);
         }
         self.data_bind_container.update_data_binds(false);
@@ -3550,9 +3617,7 @@ impl StateMachineInstance {
         for input in self.input_instances.iter_mut().flatten() {
             input.advanced();
         }
-        self.needs_advance.get()
-            || !self.reported_events.is_empty()
-            || !self.reported_listener_view_models.borrow().is_empty()
+        self.needs_advance.get() || self.has_pending_reports()
     }
 
     pub fn advance_seconds(&mut self, seconds: f32) -> bool {
@@ -3973,7 +4038,7 @@ impl StateMachineInstance {
 
     pub fn report_event(&mut self, event: CoreHandle, seconds_delay: f32) {
         static NEXT_HOST_EVENT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        self.reported_events.push(EventReport {
+        let report = EventReport {
             event: Some(event),
             seconds_delay,
             host_sequence: NEXT_HOST_EVENT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
@@ -3985,27 +4050,41 @@ impl StateMachineInstance {
                 })
                 .as_ref()
                 .map(crate::host_viewmodel::view_model_identity),
-        });
+        };
+        self.ensure_reporting().reported_events.push(report);
     }
 
     pub fn reported_event_count(&self) -> usize {
-        self.events_applied_during_loop.len() + self.reported_events.len()
+        self.reporting.get().map_or(0, |reporting| {
+            reporting.events_applied_during_loop.len() + reporting.reported_events.len()
+        })
     }
 
     pub fn has_pending_listener_view_model_reports(&self) -> bool {
-        !self.reported_listener_view_models.borrow().is_empty()
+        self.reporting
+            .get()
+            .is_some_and(|reporting| !reporting.reported_listener_view_models.borrow().is_empty())
     }
 
     pub fn has_pending_event_reports(&self) -> bool {
-        !self.reported_events.is_empty()
+        self.reporting
+            .get()
+            .is_some_and(|reporting| !reporting.reported_events.is_empty())
     }
 
     pub fn reported_event_at(&self, mut index: usize) -> EventReport {
-        if index < self.events_applied_during_loop.len() {
-            return self.events_applied_during_loop[index].clone();
+        let Some(reporting) = self.reporting.get() else {
+            return EventReport::default();
+        };
+        if index < reporting.events_applied_during_loop.len() {
+            return reporting.events_applied_during_loop[index].clone();
         }
-        index -= self.events_applied_during_loop.len();
-        self.reported_events.get(index).cloned().unwrap_or_default()
+        index -= reporting.events_applied_during_loop.len();
+        reporting
+            .reported_events
+            .get(index)
+            .cloned()
+            .unwrap_or_default()
     }
 
     pub fn notify(&mut self, events: &[EventReport], context: CoreHandle) {
@@ -4025,9 +4104,14 @@ impl StateMachineInstance {
                 continue;
             };
             let index = self
-                .listener_view_models
-                .iter()
-                .position(|candidate| candidate.downgrade().ptr_eq(view_model))
+                .reporting
+                .get()
+                .and_then(|reporting| {
+                    reporting
+                        .listener_view_models
+                        .iter()
+                        .position(|candidate| candidate.downgrade().ptr_eq(view_model))
+                })
                 .expect("a reported view-model listener remains owned until dispatch");
             self.perform_listener_changes(&listener, ListenerInvocation::view_model_change(index));
         }
@@ -4492,9 +4576,10 @@ impl StateMachineInstance {
 
     fn init_scripted_objects(&mut self) {
         for object in self
-            .scripted_objects_map
-            .values()
-            .cloned()
+            .scripting
+            .get()
+            .into_iter()
+            .flat_map(|scripting| scripting.objects.iter().map(|(_, object)| object.clone()))
             .collect::<Vec<_>>()
         {
             let properties = object.with_downcast::<crate::mechanical_port::source::animation::scripted_listener_action::ScriptedListenerAction, _>(|object| object.properties.clone())
@@ -4512,10 +4597,20 @@ impl StateMachineInstance {
         self.data_context_handle.replace(Some(data_context.clone()));
         self.data_bind_container
             .bind_data_binds_from_context(data_context.clone());
-        for listener in &self.listener_view_models {
+        for listener in self
+            .reporting
+            .get()
+            .into_iter()
+            .flat_map(|reporting| &reporting.listener_view_models)
+        {
             listener.with_listener_mut(|listener| listener.bind_from_context(data_context.clone()));
         }
-        for object in self.scripted_objects_map.values() {
+        for (_, object) in self
+            .scripting
+            .get()
+            .into_iter()
+            .flat_map(|scripting| &scripting.objects)
+        {
             object.with_mut(|object| {
                 if let Some(object) = object.as_scripted_object_mut() {
                     object.set_data_context(Some(data_context.clone()));
@@ -4543,7 +4638,12 @@ impl StateMachineInstance {
             });
             self.data_context_handle.replace(None);
         }
-        for listener in &self.listener_view_models {
+        for listener in self
+            .reporting
+            .get()
+            .into_iter()
+            .flat_map(|reporting| &reporting.listener_view_models)
+        {
             listener.with_listener_mut(ListenerViewModel::clear_data_context);
         }
     }
@@ -4572,15 +4672,27 @@ impl StateMachineInstance {
     }
 
     pub fn bindable_property_instance(&self, property: &CoreHandle) -> Option<CoreHandle> {
-        self.bindable_property_instances.get(property).cloned()
+        self.bindables
+            .get()?
+            .property_instances
+            .get(property)
+            .cloned()
     }
 
     pub fn bindable_data_bind_to_source(&self, property: &CoreHandle) -> Option<CoreHandle> {
-        self.bindable_data_binds_to_source.get(property).cloned()
+        self.bindables
+            .get()?
+            .data_binds_to_source
+            .get(property)
+            .cloned()
     }
 
     pub fn bindable_data_bind_to_target(&self, property: &CoreHandle) -> Option<CoreHandle> {
-        self.bindable_data_binds_to_target.get(property).cloned()
+        self.bindables
+            .get()?
+            .data_binds_to_target
+            .get(property)
+            .cloned()
     }
 
     pub fn find_transition_property_instance(
@@ -4588,14 +4700,16 @@ impl StateMachineInstance {
         transition: &CoreHandle,
         property_key: u32,
     ) -> Option<CoreHandle> {
-        self.transition_property_instances
+        self.bindables
+            .get()?
+            .transition_property_instances
             .get(transition)
             .and_then(|properties| properties.get(&property_key))
             .cloned()
     }
 
     pub fn scripted_object(&self, source: &CoreHandle) -> Option<CoreHandle> {
-        self.scripted_objects_map.get(source).cloned()
+        self.scripting.get()?.find(source)
     }
 
     pub fn perform_scripted_listener(
@@ -4764,7 +4878,7 @@ impl StateMachineInstance {
 
     #[cfg(feature = "tools")]
     pub fn on_data_bind_changed(&mut self, callback: fn()) {
-        for data_bind in self.data_bind_container.data_binds() {
+        for data_bind in self.data_bind_container.data_binds().iter() {
             data_bind.with_downcast_mut::<crate::mechanical_port::source::data_bind::data_bind::DataBind, _>(|data_bind| {
                 data_bind.set_changed_callback(callback);
             });
@@ -4779,31 +4893,48 @@ impl Drop for StateMachineInstance {
                 artboard.cleanup_focus_tree();
             }
         }
-        if self.external_semantic_manager.is_none() && self.semantic_manager.is_some() {
+        let owns_semantic_manager = self.input_extras().is_some_and(|extras| {
+            extras.external_semantic_manager.is_none() && extras.semantic_manager.is_some()
+        });
+        if owns_semantic_manager {
             if let Some(artboard) = self.artboard_instance.upgrade() {
                 artboard.cleanup_semantic_tree();
             }
         }
+        if let Some(extras) = self.input_extras() {
+            extras.embedder_gamepads.clear();
+        }
         self.unbind();
         self.input_instances.clear();
         self.listener_groups.clear();
-        let data_binds = self.data_bind_container.data_binds();
+        let data_binds = self.data_bind_container.data_binds().to_vec();
         self.data_bind_container.delete_data_binds();
         for data_bind in data_binds {
             data_bind.remove_occurrence();
         }
         self.layers.clear();
-        for (_, property) in self.bindable_property_instances.drain() {
-            property.remove_occurrence();
-        }
-        for (_, properties) in self.transition_property_instances.drain() {
-            for (_, property) in properties {
+        if let Some(bindables) = self.bindables.get_mut() {
+            for (_, property) in bindables.property_instances.drain() {
                 property.remove_occurrence();
             }
+            for (_, properties) in bindables.transition_property_instances.drain() {
+                for (_, property) in properties {
+                    property.remove_occurrence();
+                }
+            }
         }
-        self.listener_view_models.clear();
-        for (_, object) in self.scripted_objects_map.drain() {
-            object.remove_occurrence();
+        if let Some(reporting) = self.reporting.get_mut() {
+            reporting.listener_view_models.clear();
         }
+        if let Some(scripting) = self.scripting.get_mut() {
+            for (_, object) in scripting.objects.drain(..) {
+                object.remove_occurrence();
+            }
+        }
+        // Rust fields drop in declaration order, unlike C++ members. Detach
+        // listener groups before the inline focus manager, without a cell guard
+        // across their destructors (which may synchronously invoke callbacks).
+        let extras = std::mem::take(&mut *self.input_extras.borrow_mut());
+        drop(extras);
     }
 }

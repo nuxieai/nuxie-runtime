@@ -199,7 +199,8 @@ impl DataConverter {
         else {
             return false;
         };
-        for source_bind in source_container.data_binds() {
+        let source_binds = source_container.data_binds().to_vec();
+        for source_bind in source_binds {
             let Some(file) = source_bind
                 .with(|bind| bind.as_data_bind().map(|bind| bind.file()))
                 .flatten()
@@ -437,7 +438,10 @@ impl DataConverter {
         // Clone construction has not acquired its arena identity yet. The
         // inherited complete_clone hook installs these same owned bindings
         // against the real clone after insertion, never against a null target.
-        for source in target.iter().flat_map(|_| object.data_binds.data_binds()) {
+        for source in target
+            .iter()
+            .flat_map(|_| object.data_binds.data_binds().to_vec())
+        {
             let Some(cloned) = source.clone_occurrence() else {
                 continue;
             };
@@ -465,7 +469,7 @@ impl DataConverter {
     pub fn reset(&mut self) {}
 
     pub fn data_binds(&self) -> Vec<CoreHandle> {
-        self.data_binds.data_binds()
+        self.data_binds.data_binds().to_vec()
     }
 }
 

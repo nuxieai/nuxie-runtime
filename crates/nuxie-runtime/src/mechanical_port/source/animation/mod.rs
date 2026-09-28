@@ -90,6 +90,7 @@ pub mod state_machine_fire_trigger;
 pub mod state_machine_input;
 pub mod state_machine_input_instance;
 pub mod state_machine_instance;
+mod state_machine_instance_clusters;
 pub mod state_machine_layer;
 pub mod state_machine_layer_component;
 pub mod state_machine_listener;

@@ -397,8 +397,8 @@ impl DataConverterFormula {
         }) else {
             return false;
         };
-        let source_binds = source.data_bind_container().unwrap().data_binds();
-        let cloned_binds = cloned.data_bind_container().unwrap().data_binds();
+        let source_binds = source.data_bind_container().unwrap().data_binds().to_vec();
+        let cloned_binds = cloned.data_bind_container().unwrap().data_binds().to_vec();
         for (token, count) in tokens {
             let Some(cloned_token) = token.clone_occurrence() else {
                 return false;

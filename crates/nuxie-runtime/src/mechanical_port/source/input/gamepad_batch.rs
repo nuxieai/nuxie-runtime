@@ -69,6 +69,14 @@ fn mask(s: &mut GamepadSnapshot) {
     }
 }
 impl GamepadBatchState {
+    pub(crate) fn has_valid_header(data: &[u8]) -> bool {
+        Reader { b: data, p: 0 }.u32() == Some(GAMEPAD_BATCH_WIRE_VERSION)
+    }
+
+    pub(crate) fn clear(&self) {
+        self.gamepads.borrow_mut().clear();
+    }
+
     pub fn submit(&self, data: Option<&[u8]>, dispatcher: &mut dyn GamepadDispatcher) -> bool {
         let Some(data) = data else { return false };
         let mut r = Reader { b: data, p: 0 };

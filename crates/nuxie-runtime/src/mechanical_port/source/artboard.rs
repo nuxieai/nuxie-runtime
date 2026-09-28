@@ -539,13 +539,13 @@ impl Artboard {
     }
 
     pub fn data_bind_handles(&self) -> Vec<CoreHandle> {
-        self.data_bind_container.data_binds()
+        self.data_bind_container.data_binds().to_vec()
     }
 
     fn build_key_frame_source_binds_index(&self) {
         self.key_frame_source_binds_built.set(true);
         let mut index = self.key_frame_source_binds.borrow_mut();
-        for bind in self.data_bind_container.data_binds() {
+        for bind in self.data_bind_container.data_binds().iter() {
             let Some(target) = bind
                 .with(|bind| bind.as_data_bind().and_then(|bind| bind.target()))
                 .flatten()
@@ -555,7 +555,7 @@ impl Artboard {
             if !target.is_type_of(crate::mechanical_port::source::generated::animation::keyframe_base::KeyFrameBase::TYPE_KEY) {
                 continue;
             }
-            index.entry(target).or_insert(bind);
+            index.entry(target).or_insert_with(|| bind.clone());
         }
     }
 
@@ -4248,7 +4248,7 @@ impl Artboard {
                 (
                     source.clone_instance_definition(),
                     source.objects.clone(),
-                    source.data_bind_container.data_binds(),
+                    source.data_bind_container.data_binds().to_vec(),
                     source.animations.clone(),
                     source.state_machines.clone(),
                 )

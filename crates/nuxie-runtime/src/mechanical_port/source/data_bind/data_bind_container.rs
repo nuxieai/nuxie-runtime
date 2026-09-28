@@ -1,5 +1,5 @@
 use std::{
-    cell::RefCell,
+    cell::{Ref, RefCell},
     rc::{Rc, Weak},
 };
 
@@ -10,6 +10,7 @@ use crate::mechanical_port::source::{
         data_bind::DataBind, data_bind_context::DataBindContext,
         data_context::RuntimeDataContextHandle,
     },
+    sidecar::Sidecar,
 };
 
 pub const NONE: u32 = 0;
@@ -31,7 +32,7 @@ impl DataBindContainerOwner {
 
     pub fn data_binds(&self) -> Vec<CoreHandle> {
         self.container()
-            .map(|container| container.data_binds())
+            .map(|container| container.data_binds().to_vec())
             .unwrap_or_default()
     }
 
@@ -153,15 +154,22 @@ struct DataBindContainerState {
     owner: Option<DataBindContainerOwner>,
     parent_data_bind: Option<CoreHandle>,
     data_binds: Vec<CoreHandle>,
+    dirty: Vec<CoreHandle>,
+    queues: Sidecar<DataBindQueues>,
+    data_context: Option<RuntimeDataContextHandle>,
+    is_processing: bool,
+}
+
+/// Cold queues allocate only on first use; the common toTarget dirty queue
+/// remains inline in the retained container state.
+#[derive(Default)]
+struct DataBindQueues {
     persisting: Vec<CoreHandle>,
     dirty_to_source: Vec<CoreHandle>,
     pending_dirty_to_source: Vec<CoreHandle>,
-    dirty: Vec<CoreHandle>,
     pending_dirty: Vec<CoreHandle>,
     pending_additions: Vec<CoreHandle>,
     pending_removals: Vec<CoreHandle>,
-    data_context: Option<RuntimeDataContextHandle>,
-    is_processing: bool,
 }
 
 impl DataBindContainer {
@@ -191,7 +199,8 @@ impl DataBindContainer {
     }
 
     pub fn delete_data_binds(&self) {
-        for bind in self.data_binds() {
+        let binds = self.data_binds().to_vec();
+        for bind in binds {
             DataBind::unbind_handle(&bind);
             // Retire after detaching, while source observers could still use
             // the bind's live identity. Drop then releases its owned converter.
@@ -200,14 +209,16 @@ impl DataBindContainer {
     }
 
     pub fn unbind_data_binds(&self) {
-        for bind in self.data_binds() {
+        let binds = self.data_binds().to_vec();
+        for bind in binds {
             DataBind::unbind_handle(&bind);
         }
         self.0.borrow_mut().data_context = None;
     }
 
     pub fn bind_data_binds_from_context(&self, context: RuntimeDataContextHandle) {
-        for bind in self.data_binds() {
+        let binds = self.data_binds().to_vec();
+        for bind in binds {
             DataBindContext::bind_from_context_handle(&bind, Some(context.clone()));
         }
         self.0.borrow_mut().data_context = Some(context);
@@ -239,7 +250,7 @@ impl DataBindContainer {
         {
             let mut state = self.0.borrow_mut();
             if state.is_processing {
-                state.pending_removals.push(bind);
+                state.queues.ensure_allocated().pending_removals.push(bind);
                 return;
             }
             Self::erase(&mut state.data_binds, &bind);
@@ -250,14 +261,18 @@ impl DataBindContainer {
                 .expect("container owns DataBind occurrences");
             let mut state = self.0.borrow_mut();
             if bind_value.in_persisting_list() {
-                Self::erase(&mut state.persisting, &bind);
+                if let Some(queues) = state.queues.get_mut() {
+                    Self::erase(&mut queues.persisting, &bind);
+                }
                 bind_value.set_in_persisting_list(false);
             }
             if bind_value.in_dirty_list() {
-                Self::erase(&mut state.dirty_to_source, &bind);
-                Self::erase(&mut state.pending_dirty_to_source, &bind);
                 Self::erase(&mut state.dirty, &bind);
-                Self::erase(&mut state.pending_dirty, &bind);
+                if let Some(queues) = state.queues.get_mut() {
+                    Self::erase(&mut queues.dirty_to_source, &bind);
+                    Self::erase(&mut queues.pending_dirty_to_source, &bind);
+                    Self::erase(&mut queues.pending_dirty, &bind);
+                }
                 bind_value.set_in_dirty_list(false);
             }
             bind_value.set_container(None);
@@ -268,7 +283,7 @@ impl DataBindContainer {
         {
             let mut state = self.0.borrow_mut();
             if state.is_processing {
-                state.pending_additions.push(bind);
+                state.queues.ensure_allocated().pending_additions.push(bind);
                 return;
             }
             state.data_binds.push(bind.clone());
@@ -282,7 +297,12 @@ impl DataBindContainer {
             })
             .unwrap_or(false);
         if persist {
-            self.0.borrow_mut().persisting.push(bind.clone());
+            self.0
+                .borrow_mut()
+                .queues
+                .ensure_allocated()
+                .persisting
+                .push(bind.clone());
             bind.with_mut(|bind| {
                 bind.as_data_bind_mut()
                     .unwrap()
@@ -303,26 +323,25 @@ impl DataBindContainer {
     pub fn update_data_binds(&self, apply_target_to_source: bool) {
         let (persisting_count, dirty_to_source_count, dirty_count) = {
             let mut state = self.0.borrow_mut();
-            if state.is_processing
-                || (state.persisting.is_empty()
-                    && state.dirty_to_source.is_empty()
-                    && state.dirty.is_empty())
-            {
+            if state.is_processing {
+                return;
+            }
+            let (persisting_count, dirty_to_source_count) =
+                state.queues.get().map_or((0, 0), |queues| {
+                    (queues.persisting.len(), queues.dirty_to_source.len())
+                });
+            if persisting_count == 0 && dirty_to_source_count == 0 && state.dirty.is_empty() {
                 return;
             }
             state.is_processing = true;
-            (
-                state.persisting.len(),
-                state.dirty_to_source.len(),
-                state.dirty.len(),
-            )
+            (persisting_count, dirty_to_source_count, state.dirty.len())
         };
         for index in 0..persisting_count {
             // add/remove and new dirt are deferred while is_processing is
             // true, exactly like the pinned retained-pointer vectors. Borrow
             // only long enough to retain the current handle, then release it
             // before update callbacks re-enter the container.
-            let bind = self.0.borrow().persisting[index].clone();
+            let bind = self.0.borrow().queues.get().unwrap().persisting[index].clone();
             let can_skip = bind
                 .with(|bind| bind.as_data_bind().unwrap().can_skip())
                 .unwrap_or(false);
@@ -331,7 +350,7 @@ impl DataBindContainer {
             }
         }
         for index in 0..dirty_to_source_count {
-            let bind = self.0.borrow().dirty_to_source[index].clone();
+            let bind = self.0.borrow().queues.get().unwrap().dirty_to_source[index].clone();
             bind.with_mut(|bind| bind.as_data_bind_mut().unwrap().set_in_dirty_list(false));
             DataBind::update_data_bind_handle(&bind, apply_target_to_source);
         }
@@ -342,26 +361,39 @@ impl DataBindContainer {
         }
         let additions = {
             let mut state = self.0.borrow_mut();
-            state.dirty_to_source.clear();
             state.dirty.clear();
             let state = &mut *state;
-            if !state.pending_dirty_to_source.is_empty() {
-                std::mem::swap(
-                    &mut state.dirty_to_source,
-                    &mut state.pending_dirty_to_source,
-                );
-            }
-            if !state.pending_dirty.is_empty() {
-                std::mem::swap(&mut state.dirty, &mut state.pending_dirty);
+            // Callbacks may have allocated the sidecar during this drain.
+            if let Some(queues) = state.queues.get_mut() {
+                queues.dirty_to_source.clear();
+                if !queues.pending_dirty_to_source.is_empty() {
+                    std::mem::swap(
+                        &mut queues.dirty_to_source,
+                        &mut queues.pending_dirty_to_source,
+                    );
+                }
+                if !queues.pending_dirty.is_empty() {
+                    std::mem::swap(&mut state.dirty, &mut queues.pending_dirty);
+                }
             }
             state.is_processing = false;
             // Exactly the upstream deferred addition queue, not delayed user callbacks.
-            std::mem::take(&mut state.pending_additions)
+            state
+                .queues
+                .get_mut()
+                .map(|queues| std::mem::take(&mut queues.pending_additions))
+                .unwrap_or_default()
         };
         for bind in additions {
             self.add_data_bind(bind);
         }
-        let removals = std::mem::take(&mut self.0.borrow_mut().pending_removals);
+        let removals = self
+            .0
+            .borrow_mut()
+            .queues
+            .get_mut()
+            .map(|queues| std::mem::take(&mut queues.pending_removals))
+            .unwrap_or_default();
         for bind in removals {
             self.remove_data_bind(bind);
         }
@@ -395,24 +427,31 @@ impl DataBindContainer {
         let handle = bind.base.base.handle().expect("registered DataBind");
         {
             let mut state = self.0.borrow_mut();
+            if !bind.to_source() && !state.is_processing {
+                state.dirty.push(handle);
+                bind.set_in_dirty_list(true);
+                return;
+            }
+            let is_processing = state.is_processing;
+            let queues = state.queues.ensure_allocated();
             let list = if bind.to_source() {
-                if state.is_processing {
-                    &mut state.pending_dirty_to_source
+                if is_processing {
+                    &mut queues.pending_dirty_to_source
                 } else {
-                    &mut state.dirty_to_source
+                    &mut queues.dirty_to_source
                 }
-            } else if state.is_processing {
-                &mut state.pending_dirty
             } else {
-                &mut state.dirty
+                &mut queues.pending_dirty
             };
             list.push(handle);
         }
         bind.set_in_dirty_list(true);
     }
 
-    pub fn data_binds(&self) -> Vec<CoreHandle> {
-        self.0.borrow().data_binds.clone()
+    /// Borrow the retained list without cloning it. Release this guard before
+    /// callbacks that can re-enter the container; snapshot explicitly if needed.
+    pub fn data_binds(&self) -> Ref<'_, [CoreHandle]> {
+        Ref::map(self.0.borrow(), |state| state.data_binds.as_slice())
     }
 
     pub fn rebind(&self) {}

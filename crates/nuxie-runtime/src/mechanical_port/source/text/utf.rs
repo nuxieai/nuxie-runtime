@@ -39,7 +39,7 @@ impl Utf {
     }
     pub fn to_utf16(codepoint: u32, output: &mut [u16; 2]) -> i32 {
         if codepoint > 0xffff {
-            output[0] = ((0xd800 - 64) | (codepoint >> 10)) as u16;
+            output[0] = (0xd800 + ((codepoint - 0x10000) >> 10)) as u16;
             output[1] = (0xdc00 | (codepoint & 0x3ff)) as u16;
             2
         } else {

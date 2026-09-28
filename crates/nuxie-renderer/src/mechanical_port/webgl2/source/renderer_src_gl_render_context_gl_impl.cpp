@@ -66,10 +66,15 @@ static bool is_tessellation_draw(gpu::DrawType drawType)
         case gpu::DrawType::msaaStrokes:
         case gpu::DrawType::msaaMidpointFanBorrowedCoverage:
         case gpu::DrawType::msaaDynamicMidpointFans:
+        case gpu::DrawType::msaaDynamicOuterCubics:
         case gpu::DrawType::msaaMidpointFans:
         case gpu::DrawType::msaaMidpointFanStencilReset:
         case gpu::DrawType::msaaMidpointFanPathsStencil:
         case gpu::DrawType::msaaMidpointFanPathsCover:
+        case gpu::DrawType::msaaOuterCubicBorrowedCoverage:
+        case gpu::DrawType::msaaOuterCubicStencilReset:
+        case gpu::DrawType::msaaOuterCubicPathsStencil:
+        case gpu::DrawType::msaaOuterCubicPathsCover:
         case gpu::DrawType::msaaOuterCubics:
             return true;
         case gpu::DrawType::imageRect:
@@ -204,6 +209,9 @@ RenderContextGLImpl::RenderContextGLImpl(
     }
     m_platformFeatures.clipSpaceBottomUp = true;
     m_platformFeatures.framebufferBottomUp = true;
+    // Every GL state change is "dynamic", so save ourselves the overhead of
+    // splitting out subpasses into separate draws with different pipelines.
+    m_platformFeatures.supportsPipelineDynamicState = true;
 
     GLint maxTextureSize;
     glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
@@ -738,25 +746,6 @@ public:
         }
     }
 
-    // Deferred replay backs an id 0 canvas with a worker texture so all reads
-    // resolve coherently on the worker. The registry entry for that texture
-    // belongs to the context that allocated it, which on threaded web is the
-    // worker's impl and not the producer this texture was constructed with, so
-    // the owner moves with the backing. Otherwise the destructor unregisters
-    // from the producer: the worker keeps a stale entry wrapRiveTexture can
-    // resurrect, and the producer loses whatever it held under the same GL
-    // name, GL names being per context and both starting from 1.
-    void rebindBacking(RenderContextGLImpl* owner, GLuint id)
-    {
-        if (m_owner != nullptr && m_glID != 0)
-        {
-            m_owner->releaseCanvasTarget(m_glID);
-        }
-        setGLTexture(id);
-        m_owner = owner;
-        m_glID = id;
-    }
-
 private:
     RenderContextGLImpl* m_owner;
     GLuint m_glID;
@@ -886,10 +875,21 @@ rcp<Texture> RenderContextGLImpl::adoptImageTexture(uint32_t width,
 }
 
 #ifdef RIVE_CANVAS
-rcp<RenderCanvas> RenderContextGLImpl::wrapCanvasBacking(uint32_t width,
-                                                         uint32_t height,
-                                                         GLuint tex)
+void RenderContextGLImpl::ensureCanvasBacking(gpu::RenderCanvas* canvas)
 {
+    if (canvas->isBacked())
+    {
+        return;
+    }
+
+    uint32_t width = canvas->width(), height = canvas->height();
+    GLuint tex;
+    glGenTextures(1, &tex);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
     // Wrap as a CanvasSourceTextureGLImpl so the registry entry is
     // unregistered automatically when the source texture is destroyed.
     // The texture takes ownership of `tex` (RAII via glutils::Texture).
@@ -899,68 +899,17 @@ rcp<RenderCanvas> RenderContextGLImpl::wrapCanvasBacking(uint32_t width,
                                                          tex,
                                                          m_capabilities,
                                                          this));
-    auto renderImage = make_rcp<RiveRenderImage>(std::move(sourceTexture));
 
-    // Wrap as TextureRenderTargetGL. It references the same GLuint without
-    // taking ownership.
+    // TextureRenderTargetGL references the same GLuint without taking
+    // ownership.
     auto renderTarget = make_rcp<TextureRenderTargetGL>(width, height);
     renderTarget->setTargetTexture(tex);
 
-    return make_rcp<RenderCanvas>(std::move(renderImage),
-                                  std::move(renderTarget));
-}
-
-rcp<RenderCanvas> RenderContextGLImpl::makeRenderCanvas(uint32_t width,
-                                                        uint32_t height)
-{
-    GLuint tex;
-    glGenTextures(1, &tex);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
-
-    auto canvas = wrapCanvasBacking(width, height, tex);
+    canvas->setBacking(std::move(sourceTexture), std::move(renderTarget));
 
     // GL renders into the canvas with row 0 = visual bottom, so an Ore
     // pipeline sampling it needs a Y-flipped companion. Registering is
     // bookkeeping only; nothing is allocated until the first import.
-    registerCanvasTarget(tex);
-
-    return canvas;
-}
-
-rcp<RenderCanvas> RenderContextGLImpl::makeDeferredRenderCanvas(uint32_t width,
-                                                                uint32_t height)
-{
-    // No GPU work here; the replay worker owns the canvas texture, backs it
-    // on first use, and registers the mirror target then.
-    return wrapCanvasBacking(width, height, 0);
-}
-
-void RenderContextGLImpl::ensureCanvasBacking(gpu::RenderCanvas* canvas)
-{
-    // Set the texture on both the render target and image source so every
-    // read resolves coherently here.
-    auto* rt = static_cast<gpu::TextureRenderTargetGL*>(canvas->renderTarget());
-    if (rt->externalTextureID() != 0)
-    {
-        return;
-    }
-
-    GLuint tex;
-    glGenTextures(1, &tex);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, tex);
-    glTexStorage2D(GL_TEXTURE_2D,
-                   1,
-                   GL_RGBA8,
-                   canvas->width(),
-                   canvas->height());
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    rt->setTargetTexture(tex);
-    static_cast<CanvasSourceTextureGLImpl*>(canvas->renderImage()->getTexture())
-        ->rebindBacking(this, tex);
     registerCanvasTarget(tex);
 }
 
@@ -1759,10 +1708,15 @@ RenderContextGLImpl::DrawShader::DrawShader(
         case gpu::DrawType::msaaStrokes:
         case gpu::DrawType::msaaMidpointFanBorrowedCoverage:
         case gpu::DrawType::msaaDynamicMidpointFans:
+        case gpu::DrawType::msaaDynamicOuterCubics:
         case gpu::DrawType::msaaMidpointFans:
         case gpu::DrawType::msaaMidpointFanStencilReset:
         case gpu::DrawType::msaaMidpointFanPathsStencil:
         case gpu::DrawType::msaaMidpointFanPathsCover:
+        case gpu::DrawType::msaaOuterCubicBorrowedCoverage:
+        case gpu::DrawType::msaaOuterCubicStencilReset:
+        case gpu::DrawType::msaaOuterCubicPathsStencil:
+        case gpu::DrawType::msaaOuterCubicPathsCover:
         case gpu::DrawType::msaaOuterCubics:
             if (shaderType == GL_VERTEX_SHADER)
             {
@@ -1855,10 +1809,15 @@ RenderContextGLImpl::DrawShader::DrawShader(
                 case gpu::DrawType::msaaStrokes:
                 case gpu::DrawType::msaaMidpointFanBorrowedCoverage:
                 case gpu::DrawType::msaaDynamicMidpointFans:
+                case gpu::DrawType::msaaDynamicOuterCubics:
                 case gpu::DrawType::msaaMidpointFans:
                 case gpu::DrawType::msaaMidpointFanStencilReset:
                 case gpu::DrawType::msaaMidpointFanPathsStencil:
                 case gpu::DrawType::msaaMidpointFanPathsCover:
+                case gpu::DrawType::msaaOuterCubicBorrowedCoverage:
+                case gpu::DrawType::msaaOuterCubicStencilReset:
+                case gpu::DrawType::msaaOuterCubicPathsStencil:
+                case gpu::DrawType::msaaOuterCubicPathsCover:
                 case gpu::DrawType::msaaOuterCubics:
                 case gpu::DrawType::clipReset:
                 case gpu::DrawType::renderPassInitialize:
@@ -1878,10 +1837,15 @@ RenderContextGLImpl::DrawShader::DrawShader(
                 case gpu::DrawType::msaaStrokes:
                 case gpu::DrawType::msaaMidpointFanBorrowedCoverage:
                 case gpu::DrawType::msaaDynamicMidpointFans:
+                case gpu::DrawType::msaaDynamicOuterCubics:
                 case gpu::DrawType::msaaMidpointFans:
                 case gpu::DrawType::msaaMidpointFanStencilReset:
                 case gpu::DrawType::msaaMidpointFanPathsStencil:
                 case gpu::DrawType::msaaMidpointFanPathsCover:
+                case gpu::DrawType::msaaOuterCubicBorrowedCoverage:
+                case gpu::DrawType::msaaOuterCubicStencilReset:
+                case gpu::DrawType::msaaOuterCubicPathsStencil:
+                case gpu::DrawType::msaaOuterCubicPathsCover:
                 case gpu::DrawType::msaaOuterCubics:
                 case gpu::DrawType::interiorTriangulation:
                     sources.push_back(gpu::glsl::draw_path_common);
@@ -2985,11 +2949,14 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
             case DrawType::outerCurvePatches:
             case DrawType::msaaStrokes:
             case DrawType::msaaMidpointFanBorrowedCoverage:
-            case DrawType::msaaDynamicMidpointFans:
             case DrawType::msaaMidpointFans:
             case DrawType::msaaMidpointFanStencilReset:
             case DrawType::msaaMidpointFanPathsStencil:
             case DrawType::msaaMidpointFanPathsCover:
+            case DrawType::msaaOuterCubicBorrowedCoverage:
+            case DrawType::msaaOuterCubicStencilReset:
+            case DrawType::msaaOuterCubicPathsStencil:
+            case DrawType::msaaOuterCubicPathsCover:
             case DrawType::msaaOuterCubics:
             {
                 m_state->bindVAO(m_drawVAO);
@@ -3005,6 +2972,53 @@ void RenderContextGLImpl::flush(const FlushDescriptor& desc)
                     batch.baseElement,
                     drawProgram->baseInstanceUniformLocation(),
                     &flushInjector);
+                break;
+            }
+
+            case DrawType::msaaDynamicMidpointFans:
+            case DrawType::msaaDynamicOuterCubics:
+            {
+                // Combined fast-path fill: borrowed coverage, main fill, and
+                // stencil reset are one batch sharing one program. Draw it
+                // three times, changing state between passes. The outer-cubic
+                // passes use identical state to their midpoint-fan
+                // counterparts, so drive both from the midpoint-fan types.
+                m_state->bindVAO(m_drawVAO);
+                for (DrawType pass : {DrawType::msaaMidpointFanBorrowedCoverage,
+                                      DrawType::msaaMidpointFans,
+                                      DrawType::msaaMidpointFanStencilReset})
+                {
+                    gpu::PipelineState passState =
+                        gpu::get_pipeline_state(pass,
+                                                desc.interlockMode,
+                                                shaderMiscFlags,
+                                                batch.drawContents,
+                                                desc.fixedFunctionColorOutput,
+                                                batch.firstBlendMode,
+                                                m_platformFeatures);
+                    // The scissor was already decided before the switch, so
+                    // don't let a per-pass state change disturb it.
+                    //
+                    // NOTE on ShaderMiscFlags::emulateDynamicColorWriteDisable:
+                    // If we were to emulate colorWrite disables via a uniform,
+                    // right here would be the place to set that uniform.
+                    // On Vulkan, we emulate colorWrite disables for Adreno and
+                    // PowerVR instead of turning off the color mask. (We do
+                    // this for correctness and possible performance reasons.)
+                    // glColorMask seems to work though on GL, and performance
+                    // of the emulated path looks empirically worse on PowerVR,
+                    // so we just use glColorMask for now on GL, instead of the
+                    // emulated path.
+                    m_state->setPipelineState(passState, ScissorAction::ignore);
+                    drawIndexedInstancedNoInstancedAttribs(
+                        GL_TRIANGLES,
+                        batch.indexCountPerInstance,
+                        batch.baseIndex,
+                        batch.elementCount,
+                        batch.baseElement,
+                        drawProgram->baseInstanceUniformLocation(),
+                        &flushInjector);
+                }
                 break;
             }
 

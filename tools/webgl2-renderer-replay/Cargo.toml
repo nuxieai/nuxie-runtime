@@ -17,4 +17,4 @@ web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
 [dependencies.nuxie-renderer]
 path = "../../crates/nuxie-renderer"
 default-features = false
-features = ["renderer-webgl2", "rive-decoders"]
+features = ["renderer-webgl2", "rive-decoders", "webgl2-test-support"]

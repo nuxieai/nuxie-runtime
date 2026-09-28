@@ -50,6 +50,13 @@ mod native_webgl2;
 ))]
 pub use native_webgl2::{WebGl2Factory, WebGl2Frame};
 
+#[cfg(all(
+    feature = "webgl2-test-support",
+    target_arch = "wasm32",
+    target_os = "unknown"
+))]
+pub use mechanical_port::webgl2::scratch_pass_browser_tests::run_scratch_pass_browser_tests;
+
 mod tessellation_relocation;
 pub(crate) use tessellation_relocation::relocate_tessellation_logically;
 #[cfg(test)]

@@ -8,14 +8,14 @@ use super::ore_bind_group_gl_decl::{
     BindGroupGL, BindGroupLayoutGL, GLSamplerBinding, GLTexBinding, GLUBOBinding,
 };
 use super::ore_buffer_gl_decl::BufferGL;
-use super::ore_context_gl_decl::ContextGL;
+use super::ore_context_gl_decl::{ContextGL, ScratchPassObjects};
 use super::ore_pipeline_gl_decl::PipelineGL;
 use super::ore_render_pass_gl_decl::{GLResolveEntry, RenderPassGL};
 use super::ore_sampler_gl_decl::SamplerGL;
 use super::ore_shader_module_gl_decl::ShaderModuleGL;
 use super::ore_texture_gl_decl::{TextureGL, TextureViewGL};
 use super::render_target_gl_decl::{
-    RenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID, TextureRenderTargetGL,
+    RenderTargetGL, TextureRenderTargetGL, TEXTURE_RENDER_TARGET_GL_LITE_RTTI_TYPE_ID,
 };
 use crate::mechanical_port::source::include::utils::lite_rtti_hpp::LiteRttiBase;
 use crate::mechanical_port::source::renderer::include::rive::renderer::render_canvas_hpp::RenderCanvas;
@@ -23,16 +23,18 @@ use crate::mechanical_port::source::renderer::include::rive::renderer::texture_h
 use nuxie_ore_metal::bind_group_layout::BindGroupLayout;
 use nuxie_ore_metal::binding_map::BindingMap;
 use nuxie_ore_metal::buffer::BufferApi;
-use nuxie_ore_metal::context::{ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget};
+use nuxie_ore_metal::context::{
+    ActiveRenderPass, Context, ContextApi, FrameDescriptor, ShaderTarget,
+};
 use nuxie_ore_metal::gpu_resource::{AnyResourceHandle, ResourceHandle};
 use nuxie_ore_metal::render_pass::RenderPassApi;
 use nuxie_ore_metal::shader_module::GLFixupKind;
 use nuxie_ore_metal::texture::TextureApi;
 use nuxie_ore_metal::types::{
-    BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind, BufferDesc, BufferUsage,
-    CompareFunction, Features, Filter, LoadOp, PipelineDesc, RenderPassDesc, SamplerDesc,
-    ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc, TextureFormat, TextureType,
-    TextureViewDesc, TextureViewDimension, WrapMode, kMaxBindGroups,
+    kMaxBindGroups, BindGroupDesc, BindGroupLayoutDesc, BindGroupLayoutEntry, BindingKind,
+    BufferDesc, BufferUsage, CompareFunction, Features, Filter, LoadOp, PipelineDesc,
+    RenderPassDesc, SamplerDesc, ShaderModuleDesc, ShaderStage, TextureAspect, TextureDesc,
+    TextureFormat, TextureType, TextureViewDesc, TextureViewDimension, WrapMode,
 };
 use std::ffi::c_void;
 use std::rc::Weak as RcWeak;
@@ -244,8 +246,97 @@ pub(crate) fn Make(
     )))
 }
 
-/// The authored destructor body is empty.
-pub(crate) fn destroy(_context: &mut ContextGL) {}
+/// Release the context's scratch ownership. Unfinished Rust passes retain the
+/// shared state until its final owner performs generation-safe GL deletion.
+pub(crate) fn destroy(context: &mut ContextGL) {
+    context.rust_scratch = None;
+}
+
+pub(super) fn destroyScratch(scratch: &mut ScratchPassObjects) {
+    let state = scratch.state.get_mut();
+    let _ = scratch.execution.withDeleteCurrent(|| {
+        if state.m_scratchFBO != 0 {
+            recordGLCommand(GLCommand::DeleteFramebuffer(state.m_scratchFBO));
+        }
+        if state.m_scratchResolveFBO != 0 {
+            recordGLCommand(GLCommand::DeleteFramebuffer(state.m_scratchResolveFBO));
+        }
+        if state.m_scratchVAO != 0 {
+            recordGLCommand(GLCommand::DeleteVertexArray(state.m_scratchVAO));
+        }
+    });
+}
+
+impl ScratchPassObjects {
+    pub(super) fn acquireScratchFBO(&self) -> GLuint {
+        let mut state = self.state.borrow_mut();
+        if state.m_scratchFBOLent {
+            return 0;
+        }
+        state.m_scratchFBOLent = true;
+        if state.m_scratchFBO == 0 {
+            state.m_scratchFBO = generateGLObject(GLObjectKind::Framebuffer);
+            return state.m_scratchFBO;
+        }
+        recordGLCommand(GLCommand::BindFramebuffer(
+            GL_FRAMEBUFFER,
+            state.m_scratchFBO,
+        ));
+        for index in 0..state.m_scratchFBOColorCount {
+            recordGLCommand(GLCommand::FramebufferTexture2D {
+                target: GL_FRAMEBUFFER,
+                attachment: GL_COLOR_ATTACHMENT0 + index,
+                texture_target: GL_TEXTURE_2D,
+                texture: 0,
+                level: 0,
+            });
+        }
+        if state.m_scratchFBODepthAttachment != 0 {
+            recordGLCommand(GLCommand::FramebufferTexture2D {
+                target: GL_FRAMEBUFFER,
+                attachment: state.m_scratchFBODepthAttachment,
+                texture_target: GL_TEXTURE_2D,
+                texture: 0,
+                level: 0,
+            });
+        }
+        recordGLCommand(GLCommand::ReadBuffer(GL_COLOR_ATTACHMENT0));
+        state.m_scratchFBOColorCount = 0;
+        state.m_scratchFBODepthAttachment = 0;
+        state.m_scratchFBO
+    }
+
+    pub(super) fn releaseScratchFBO(&self, colorCount: u32, depthAttachment: GLuint) {
+        let mut state = self.state.borrow_mut();
+        state.m_scratchFBOColorCount = colorCount;
+        state.m_scratchFBODepthAttachment = depthAttachment;
+        state.m_scratchFBOLent = false;
+    }
+
+    pub(super) fn acquireScratchVAO(&self) -> GLuint {
+        let mut state = self.state.borrow_mut();
+        if state.m_scratchVAOLent {
+            return 0;
+        }
+        state.m_scratchVAOLent = true;
+        if state.m_scratchVAO == 0 {
+            state.m_scratchVAO = generateGLObject(GLObjectKind::VertexArray);
+        }
+        state.m_scratchVAO
+    }
+
+    pub(super) fn releaseScratchVAO(&self) {
+        self.state.borrow_mut().m_scratchVAOLent = false;
+    }
+
+    pub(super) fn scratchResolveFBO(&self) -> GLuint {
+        let mut state = self.state.borrow_mut();
+        if state.m_scratchResolveFBO == 0 {
+            state.m_scratchResolveFBO = generateGLObject(GLObjectKind::Framebuffer);
+        }
+        state.m_scratchResolveFBO
+    }
+}
 
 fn beginFrameCurrent(context: &mut ContextGL, _descriptor: &FrameDescriptor) {
     let program = context.executionDomain().getInteger(GL_CURRENT_PROGRAM);
@@ -270,6 +361,17 @@ fn beginFrameCurrent(context: &mut ContextGL, _descriptor: &FrameDescriptor) {
 fn waitForGPUCurrent(_context: &mut ContextGL) {}
 
 fn endFrameCurrent(context: &mut ContextGL) {
+    let active = context
+        .base
+        .activeRenderPass()
+        .and_then(|pass| pass.upgrade());
+    if active.as_ref().is_none_or(|pass| pass.isFinished()) {
+        let mut scratch = context.rust_scratch.as_ref().unwrap().state.borrow_mut();
+        debug_assert!(!scratch.m_scratchFBOLent);
+        debug_assert!(!scratch.m_scratchVAOLent);
+        scratch.m_scratchFBOLent = false;
+        scratch.m_scratchVAOLent = false;
+    }
     let program = context.m_savedState.program;
     if program == 0
         || context
@@ -937,9 +1039,7 @@ fn makePipelineCurrent(
         None => None,
     };
 
-    use nuxie_ore_metal::bind_group_layout::{
-        validatePipelineDesc, NativeSlotScope,
-    };
+    use nuxie_ore_metal::bind_group_layout::{validatePipelineDesc, NativeSlotScope};
     let layoutCount = desc.bindGroupLayoutCount().ok()? as usize;
     let layoutHandles = desc
         .bindGroupLayouts
@@ -1403,6 +1503,7 @@ fn beginRenderPassCurrent(
 
     let pass = RenderPassGL::new(&context.base, context.executionStamp().clone());
     let mut state = pass.inner.borrowState();
+    state.rust_scratch = context.rust_scratch.clone();
 
     let mut colorFormats = [TextureFormat::r8unorm; 4];
     let mut sampleCount = 1;
@@ -1436,8 +1537,11 @@ fn beginRenderPassCurrent(
         .getInteger(GL_VERTEX_ARRAY_BINDING) as GLuint;
     state.m_prevFBO = context.executionDomain().getInteger(GL_FRAMEBUFFER_BINDING) as GLuint;
 
-    state.m_glFBO = generateName(context, GLObjectKind::Framebuffer);
-    state.m_ownsFBO = true;
+    state.m_glFBO = context.rust_scratch.as_ref().unwrap().acquireScratchFBO();
+    if state.m_glFBO == 0 {
+        state.m_glFBO = generateName(context, GLObjectKind::Framebuffer);
+        state.m_ownsFBO = true;
+    }
     submit(
         context,
         GLCommand::BindFramebuffer(GL_FRAMEBUFFER, state.m_glFBO),
@@ -1512,6 +1616,8 @@ fn beginRenderPassCurrent(
     }
     if desc.colorCount > 0 {
         submit(context, GLCommand::DrawBuffers(drawBuffers));
+    } else {
+        submit(context, GLCommand::DrawBuffers(vec![GL_COLOR_ATTACHMENT0]));
     }
 
     if let Some((view, texture)) = depth {
@@ -1524,6 +1630,7 @@ fn beginRenderPassCurrent(
         } else {
             GL_DEPTH_ATTACHMENT
         };
+        state.m_glDepthAttachment = attachment;
         if texture.m_glRenderbuffer != 0 {
             submit(
                 context,
@@ -1625,8 +1732,11 @@ fn beginRenderPassCurrent(
         }
     }
 
-    state.m_glVAO = generateName(context, GLObjectKind::VertexArray);
-    state.m_ownsVAO = true;
+    state.m_glVAO = context.rust_scratch.as_ref().unwrap().acquireScratchVAO();
+    if state.m_glVAO == 0 {
+        state.m_glVAO = generateName(context, GLObjectKind::VertexArray);
+        state.m_ownsVAO = true;
+    }
     submit(context, GLCommand::BindVertexArray(state.m_glVAO));
 
     let (defaultWidth, defaultHeight) = colors[0]
@@ -1643,7 +1753,8 @@ fn beginRenderPassCurrent(
     }
 
     drop(state);
-    context.base.setActiveRenderPass(Some(&pass));
+    // ContextGL does not register m_activeRenderPass upstream. Overlapping
+    // passes therefore retain their loans and use the owned fallback pair.
     Some(Box::new(pass))
 }
 
@@ -2047,12 +2158,13 @@ impl ContextApi for ContextGL {
 }
 
 pub(crate) const SOURCE_STATIC_HELPER_COUNT: usize = 8;
-pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 16;
+pub(crate) const SOURCE_CONTEXT_METHOD_DEFINITION_COUNT: usize = 21;
 pub(crate) const SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT: usize = 15;
-const _: [(); 47374] = [(); PINNED_SOURCE.len()];
+const _: [(); 51227] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
+    include!("ore_scratch_pass_objects_tests.rs");
     use super::*;
     use crate::mechanical_port::source::include::rive::refcnt_hpp::{
         make_rcp, rcp, static_rcp_cast,
@@ -2228,9 +2340,7 @@ mod tests {
             state
                 .enabledExtensions
                 .push("EXT_texture_filter_anisotropic".to_owned());
-            state
-                .floats
-                .insert(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, 8.0);
+            state.floats.insert(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, 8.0);
         }
         let mut context = context(&domain);
         clearTrace(&state);
@@ -2244,13 +2354,14 @@ mod tests {
             )
             .expect("sampler")
         });
-        assert!(state.borrow().commands.contains(
-            &GLCommand::SamplerParameterFloat {
+        assert!(state
+            .borrow()
+            .commands
+            .contains(&GLCommand::SamplerParameterFloat {
                 sampler: 71,
                 parameter: GL_TEXTURE_MAX_ANISOTROPY_EXT,
                 value: 8.0,
-            }
-        ));
+            }));
         drop(sampler);
         drop(context);
         domain.shutdown();
@@ -2532,9 +2643,9 @@ mod tests {
 
     #[test]
     fn complete_source_denominator_is_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 1297);
+        assert_eq!(PINNED_SOURCE.lines().count(), 1414);
         assert_eq!(SOURCE_STATIC_HELPER_COUNT, 8);
-        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 16);
+        assert_eq!(SOURCE_CONTEXT_METHOD_DEFINITION_COUNT, 21);
         assert_eq!(SOURCE_FEATURE_BOOLEAN_ASSIGNMENT_COUNT, 15);
     }
 
@@ -2612,12 +2723,10 @@ mod tests {
 
         drop(bufferOwner);
         domain.withCurrent(|| {});
-        assert!(
-            state
-                .borrow()
-                .commands
-                .contains(&GLCommand::DeleteBuffer(701))
-        );
+        assert!(state
+            .borrow()
+            .commands
+            .contains(&GLCommand::DeleteBuffer(701)));
         drop(context);
         domain.shutdown();
     }
@@ -2700,11 +2809,9 @@ mod tests {
             ..TextureViewDesc::default()
         };
         assert!(makeTextureView(&mut second, &viewDesc).is_none());
-        assert!(
-            second
-                .lastError()
-                .contains("different GL execution generation")
-        );
+        assert!(second
+            .lastError()
+            .contains("different GL execution generation"));
 
         let lifecycle = firstState
             .borrow()
@@ -2748,12 +2855,10 @@ mod tests {
         drop(buffer);
         drop(context);
         domain.shutdown();
-        assert!(
-            !state
-                .borrow()
-                .commands
-                .contains(&GLCommand::DeleteBuffer(31337))
-        );
+        assert!(!state
+            .borrow()
+            .commands
+            .contains(&GLCommand::DeleteBuffer(31337)));
     }
 
     #[test]
@@ -2965,10 +3070,13 @@ mod tests {
                 GLCommand::DepthMask(true),
                 GLCommand::ColorMask(true, true, true, true),
                 GLCommand::BindBuffer(GL_ARRAY_BUFFER, 0),
-                GLCommand::DeleteVertexArray(6022),
+                GLCommand::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0),
                 GLCommand::BindVertexArray(73),
-                GLCommand::DeleteFramebuffer(5011),
                 GLCommand::BindFramebuffer(GL_FRAMEBUFFER, 89),
+                // The final scratch owner is this outliving pass. Its loan
+                // return restores host bindings before shared-owner teardown.
+                GLCommand::DeleteFramebuffer(5011),
+                GLCommand::DeleteVertexArray(6022),
             ]
         );
 

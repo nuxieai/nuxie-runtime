@@ -12,6 +12,7 @@ use std::mem::ManuallyDrop;
 use std::rc::{Rc, Weak as RcWeak};
 
 use super::gles3_decl::GLExecutionStamp;
+use super::ore_context_gl_decl::ScratchPassObjects;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_src_ore_gl_ore_render_pass_gl.hpp");
@@ -37,6 +38,7 @@ pub(crate) struct RenderPassGLState {
     pub(crate) m_glVAO: u32,
     pub(crate) m_prevVAO: u32,
     pub(crate) m_prevFBO: u32,
+    pub(crate) m_glDepthAttachment: u32,
     pub(crate) m_ownsFBO: bool,
     pub(crate) m_ownsVAO: bool,
     pub(crate) m_currentPipeline: ManuallyDrop<Option<AnyResourceHandle>>,
@@ -55,6 +57,7 @@ pub(crate) struct RenderPassGLState {
     /// The source default constructor is deliberately unstamped and inert;
     /// every context-created pass carries the concrete domain generation.
     pub(crate) rust_execution: Option<GLExecutionStamp>,
+    pub(super) rust_scratch: Option<Rc<ScratchPassObjects>>,
 }
 
 impl RenderPassGLState {
@@ -65,6 +68,7 @@ impl RenderPassGLState {
             m_glVAO: 0,
             m_prevVAO: 0,
             m_prevFBO: 0,
+            m_glDepthAttachment: 0,
             m_ownsFBO: false,
             m_ownsVAO: false,
             m_currentPipeline: ManuallyDrop::new(None),
@@ -80,6 +84,7 @@ impl RenderPassGLState {
             m_glResolveCount: 0,
             m_glResolves: [GLResolveEntry::default(); 4],
             rust_execution: execution,
+            rust_scratch: None,
         }
     }
 
@@ -112,9 +117,7 @@ impl RenderPassGLState {
 impl Drop for RenderPassGLState {
     fn drop(&mut self) {
         // The C++ destructor calls finish only for a live, unfinished pass.
-        if !nuxie_ore_metal::render_pass_is_finished(&self.base)
-            && self.rust_execution.is_some()
-        {
+        if !nuxie_ore_metal::render_pass_is_finished(&self.base) && self.rust_execution.is_some() {
             let execution = self.executionStamp().clone();
             if execution
                 .withDeleteCurrent(|| super::ore_render_pass_gl_impl::finish(self))
@@ -332,7 +335,7 @@ impl RenderPassApi for RenderPassGL {
 }
 
 pub(crate) const SOURCE_PUBLIC_CALLABLE_COUNT: usize = 17;
-pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 18;
+pub(crate) const SOURCE_BACKEND_FIELD_COUNT: usize = 19;
 pub(crate) const SOURCE_RESOLVE_FIELD_COUNT: usize = 5;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 1;
-const _: [(); 3195] = [(); PINNED_SOURCE.len()];
+const _: [(); 3699] = [(); PINNED_SOURCE.len()];

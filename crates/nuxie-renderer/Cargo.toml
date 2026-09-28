@@ -13,6 +13,8 @@ default = []
 renderer-vulkan = ["native-ore-vulkan-experimental", "rive-decoders"]
 renderer-webgpu = ["native-webgpu-experimental", "rive-decoders"]
 renderer-webgl2 = ["native-webgl2-experimental", "rive-decoders"]
+# Browser regression entry points; never enabled by a product renderer root.
+webgl2-test-support = ["renderer-webgl2", "with-rive-tools"]
 renderer-metal = ["native-ore-metal-experimental", "rive-decoders"]
 # Exact native Metal renderer used by Apple product roots.
 native-metal-experimental = []

@@ -777,11 +777,24 @@ pub(crate) fn finish(pass: &mut RenderPassGLState) {
     if pass.m_ownsVAO && pass.m_glVAO != 0 {
         recordGLCommand(GLCommand::DeleteVertexArray(pass.m_glVAO));
         pass.m_glVAO = 0;
+    } else if pass.m_glVAO != 0 {
+        if let Some(scratch) = &pass.rust_scratch {
+            recordGLCommand(GLCommand::BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0));
+            scratch.releaseScratchVAO();
+            pass.m_glVAO = 0;
+        }
     }
     recordGLCommand(GLCommand::BindVertexArray(pass.m_prevVAO));
 
     if pass.m_glResolveCount > 0 {
-        let resolveFBO = generateGLObject(GLObjectKind::Framebuffer);
+        let mut resolveFBO = pass
+            .rust_scratch
+            .as_ref()
+            .map_or(0, |scratch| scratch.scratchResolveFBO());
+        let ownsResolveFBO = resolveFBO == 0;
+        if ownsResolveFBO {
+            resolveFBO = generateGLObject(GLObjectKind::Framebuffer);
+        }
         for resolveIndex in 0..pass.m_glResolveCount {
             let resolve = pass.m_glResolves[resolveIndex as usize];
             recordGLCommand(GLCommand::BindFramebuffer(
@@ -814,15 +827,35 @@ pub(crate) fn finish(pass: &mut RenderPassGLState) {
                 GL_NEAREST,
             ));
         }
-        recordGLCommand(GLCommand::DeleteFramebuffer(resolveFBO));
+        if ownsResolveFBO {
+            recordGLCommand(GLCommand::DeleteFramebuffer(resolveFBO));
+        } else {
+            recordGLCommand(GLCommand::FramebufferTexture2D {
+                target: GL_DRAW_FRAMEBUFFER,
+                attachment: GL_COLOR_ATTACHMENT0,
+                texture_target: GL_TEXTURE_2D,
+                texture: 0,
+                level: 0,
+            });
+        }
     }
 
     if pass.m_ownsFBO && pass.m_glFBO != 0 {
         recordGLCommand(GLCommand::DeleteFramebuffer(pass.m_glFBO));
+        pass.m_glFBO = 0;
+    } else if pass.m_glFBO != 0 {
+        if let Some(scratch) = &pass.rust_scratch {
+            scratch.releaseScratchFBO(
+                nuxie_ore_metal::render_pass_color_count(&pass.base),
+                pass.m_glDepthAttachment,
+            );
+            pass.m_glFBO = 0;
+        }
     }
     recordGLCommand(GLCommand::BindFramebuffer(GL_FRAMEBUFFER, pass.m_prevFBO));
 
     nuxie_ore_metal::render_pass_clear_context(&mut pass.base);
+    pass.rust_scratch = None;
 }
 
 /// Context-loss teardown for a pass whose creation generation is no longer
@@ -836,29 +869,39 @@ pub(crate) fn abandonAfterContextLoss(pass: &mut RenderPassGLState) {
     nuxie_ore_metal::render_pass_set_finished(&mut pass.base, true);
     *pass.m_currentPipeline = None;
     nuxie_ore_metal::render_pass_clear_bound_groups(&mut pass.base);
+    if let Some(scratch) = &pass.rust_scratch {
+        if !pass.m_ownsVAO && pass.m_glVAO != 0 {
+            scratch.releaseScratchVAO();
+        }
+        if !pass.m_ownsFBO && pass.m_glFBO != 0 {
+            scratch.releaseScratchFBO(
+                nuxie_ore_metal::render_pass_color_count(&pass.base),
+                pass.m_glDepthAttachment,
+            );
+        }
+    }
     pass.m_glFBO = 0;
     pass.m_glVAO = 0;
     pass.m_ownsFBO = false;
     pass.m_ownsVAO = false;
     pass.m_glResolveCount = 0;
     nuxie_ore_metal::render_pass_clear_context(&mut pass.base);
+    pass.rust_scratch = None;
 }
 
 pub(crate) const SOURCE_STATIC_MAPPING_COUNT: usize = 6;
 pub(crate) const SOURCE_MAPPING_CASE_COUNT: usize = 57;
 pub(crate) const SOURCE_METHOD_DEFINITION_COUNT: usize = 14;
-pub(crate) const SOURCE_GL_CALL_SITE_COUNT: usize = 73;
+pub(crate) const SOURCE_GL_CALL_SITE_COUNT: usize = 75;
 pub(crate) const SOURCE_ASSERT_COUNT: usize = 11;
-pub(crate) const SOURCE_IF_COUNT: usize = 23;
-pub(crate) const SOURCE_LOOP_COUNT: usize = 8;
-const _: [(); 21907] = [(); PINNED_SOURCE.len()];
+pub(crate) const SOURCE_IF_COUNT: usize = 34;
+pub(crate) const SOURCE_LOOP_COUNT: usize = 11;
+const _: [(); 23566] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mechanical_port::webgl2::ore_bind_group_gl_impl::{
-        GLSamplerBinding, GLTexBinding,
-    };
+    use crate::mechanical_port::webgl2::ore_bind_group_gl_impl::{GLSamplerBinding, GLTexBinding};
     use nuxie_ore_metal::gpu_resource::{GPUResource, GpuResourcePayload, ResourceHandle};
     use nuxie_ore_metal::pipeline::Pipeline;
     use nuxie_ore_metal::shader_module::TextureSamplerPair;
@@ -901,7 +944,9 @@ mod tests {
             0
         }
 
-        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat { 0.0 }
+        fn getFloat(&mut self, _parameter: GLenum) -> GLfloat {
+            0.0
+        }
 
         fn getString(&mut self, _parameter: GLenum) -> Option<Vec<u8>> {
             None
@@ -1049,12 +1094,15 @@ mod tests {
         let mut desc = PipelineDesc::default();
         desc.colorCount = 0;
         let mut pipeline = PipelineGL::new(&desc, domain.stamp()).unwrap();
-        pipeline.base.m_textureSamplerPairs.push(TextureSamplerPair {
-            textureGroup: 0,
-            textureBinding: 3,
-            samplerGroup: 1,
-            samplerBinding: 7,
-        });
+        pipeline
+            .base
+            .m_textureSamplerPairs
+            .push(TextureSamplerPair {
+                textureGroup: 0,
+                textureBinding: 3,
+                samplerGroup: 1,
+                samplerBinding: 7,
+            });
         let pipeline = ResourceHandle::new_in_domain(
             None,
             nuxie_ore_metal::context_backend_domain(&context),

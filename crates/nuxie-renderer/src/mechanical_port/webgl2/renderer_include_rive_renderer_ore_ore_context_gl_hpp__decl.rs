@@ -6,8 +6,10 @@
 use super::gles3_decl::{GLExecutionDomain, GLExecutionStamp, GLint};
 use nuxie_ore_metal::context::{Context, ShaderTarget};
 use nuxie_ore_metal::types::Features;
+use std::cell::RefCell;
 use std::mem::ManuallyDrop;
 use std::ops::{Deref, DerefMut};
+use std::rc::Rc;
 
 pub(crate) const PINNED_SOURCE: &str =
     include_str!("source/renderer_include_rive_renderer_ore_ore_context_gl.hpp");
@@ -23,15 +25,38 @@ pub(crate) struct GLSavedState {
     pub(crate) vertexArray: GLint,
 }
 
-/// Source `Context` base and all six field-ledger rows remain the prefix of
-/// this declaration. `m_executionStamp` is a Rust execution sidecar outside
-/// that field authority and follows the complete source prefix.
+/// Source scratch fields shared with unfinished passes instead of retaining
+/// C++'s raw ContextGL pointer. The last owner performs generation-safe deletion.
+#[derive(Default)]
+pub(super) struct ScratchPassState {
+    pub(super) m_scratchFBO: u32,
+    pub(super) m_scratchVAO: u32,
+    pub(super) m_scratchResolveFBO: u32,
+    pub(super) m_scratchFBOLent: bool,
+    pub(super) m_scratchVAOLent: bool,
+    pub(super) m_scratchFBOColorCount: u32,
+    pub(super) m_scratchFBODepthAttachment: u32,
+}
+
+pub(super) struct ScratchPassObjects {
+    pub(super) state: RefCell<ScratchPassState>,
+    pub(super) execution: GLExecutionStamp,
+}
+
+impl Drop for ScratchPassObjects {
+    fn drop(&mut self) {
+        super::ore_context_gl_impl::destroyScratch(self);
+    }
+}
+
+/// The source scratch field group uses shared ownership for Rust pass lifetimes.
 #[repr(C)]
 pub(crate) struct ContextGL {
     pub(super) base: ManuallyDrop<Context>,
     pub(super) m_renderContextImpl: *mut std::ffi::c_void,
     pub(super) m_savedState: GLSavedState,
     pub(super) m_executionStamp: ManuallyDrop<GLExecutionStamp>,
+    pub(super) rust_scratch: Option<Rc<ScratchPassObjects>>,
 }
 
 impl ContextGL {
@@ -49,6 +74,10 @@ impl ContextGL {
             base: ManuallyDrop::new(base),
             m_savedState: GLSavedState::default(),
             m_renderContextImpl: renderContextImpl,
+            rust_scratch: Some(Rc::new(ScratchPassObjects {
+                state: RefCell::new(ScratchPassState::default()),
+                execution: executionStamp.clone(),
+            })),
             m_executionStamp: ManuallyDrop::new(executionStamp),
         }
     }
@@ -111,10 +140,10 @@ impl DerefMut for ContextGL {
 
 pub(crate) const SOURCE_PUBLIC_METHOD_COUNT: usize = 19;
 pub(crate) const SOURCE_FRIEND_COUNT: usize = 3;
-pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 7;
+pub(crate) const SOURCE_FIELD_LEDGER_COUNT: usize = 14;
 pub(crate) const SOURCE_DELETED_COPY_OPERATION_COUNT: usize = 2;
 pub(crate) const RUST_EXECUTION_SIDECAR_COUNT: usize = 1;
-const _: [(); 3176] = [(); PINNED_SOURCE.len()];
+const _: [(); 4764] = [(); PINNED_SOURCE.len()];
 
 #[cfg(test)]
 mod tests {
@@ -123,10 +152,10 @@ mod tests {
 
     #[test]
     fn complete_header_and_field_denominators_are_locked() {
-        assert_eq!(PINNED_SOURCE.lines().count(), 91);
+        assert_eq!(PINNED_SOURCE.lines().count(), 120);
         assert_eq!(SOURCE_PUBLIC_METHOD_COUNT, 19);
         assert_eq!(SOURCE_FRIEND_COUNT, 3);
-        assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 7);
+        assert_eq!(SOURCE_FIELD_LEDGER_COUNT, 14);
         assert_eq!(SOURCE_DELETED_COPY_OPERATION_COUNT, 2);
         assert_eq!(RUST_EXECUTION_SIDECAR_COUNT, 1);
         assert_eq!(std::mem::size_of::<GLSavedState>(), 20);

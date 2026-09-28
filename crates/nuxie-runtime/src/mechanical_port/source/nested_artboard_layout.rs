@@ -13,7 +13,7 @@ use crate::mechanical_port::source::{
         layout_node_provider::{LayoutNodeProvider, LayoutNodeProviderState},
         style_overrider::{StyleOverrideProvider, StyleOverrider},
     },
-    layout_component::LayoutComponent,
+    layout_component::{LayoutComponent, owning_layout},
     math::{aabb::Aabb, mat2d::Mat2D, vec2d::Vec2D},
     status_code::StatusCode,
 };
@@ -182,9 +182,10 @@ impl NestedArtboardLayout {
                     .parent_handle()
             })
             .expect("live NestedArtboardLayout");
-        if let Some(parent) = parent.as_ref() {
-            parent.with_mut(|parent| {
-                if let Some(layout) = parent.as_layout_component_mut() {
+        let layout = owning_layout(parent);
+        if let Some(layout) = layout.as_ref() {
+            layout.with_mut(|owner| {
+                if let Some(layout) = owner.as_layout_component_mut() {
                     layout.clear_layout_children();
                 }
             });
@@ -194,25 +195,13 @@ impl NestedArtboardLayout {
         );
         owner.with_downcast_mut::<Self, _>(|owner| owner.update_width_override());
         owner.with_downcast_mut::<Self, _>(|owner| owner.update_height_override());
-        let parent = owner
-            .with(|owner| {
-                owner
-                    .as_component()
-                    .expect("NestedArtboardLayout component")
-                    .parent_handle()
-            })
-            .expect("live NestedArtboardLayout");
-        if let Some(parent) = parent.filter(|parent| parent.is_type_of(
-            crate::mechanical_port::source::generated::layout_component_base::LayoutComponentBase::TYPE_KEY,
-        )) {
-            crate::mechanical_port::source::layout_component::LayoutComponent::sync_layout_children_occurrence(&parent);
+        if let Some(layout) = layout {
+            LayoutComponent::sync_layout_children_occurrence(&layout);
         }
     }
 
     pub fn is_row(&self) -> bool {
-        self.base
-            .base
-            .parent_handle()
+        owning_layout(self.base.base.parent_handle())
             .and_then(|parent| {
                 parent
                     .with(|parent| {
@@ -226,9 +215,7 @@ impl NestedArtboardLayout {
     }
 
     pub fn is_stack(&self) -> bool {
-        self.base
-            .base
-            .parent_handle()
+        owning_layout(self.base.base.parent_handle())
             .and_then(|parent| {
                 parent.with(|parent| {
                     parent

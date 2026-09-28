@@ -2,11 +2,13 @@
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "$0")/.." && pwd)
-ref=${RIVE_RUNTIME_REF:-58c2f5e80bd7398496561197037f93e7fbe35d6f}
+ref=${RIVE_RUNTIME_REF:-86fc70a74e0db7b747e04471bd4372cd38f6a0e7}
 runtime_dir=${RIVE_RUNTIME_DIR:-}
 base_url="https://raw.githubusercontent.com/rive-app/rive-runtime"
 
 assets=(
+  "sync/layout_solos.riv|9ef8d3b289e54433f5498a9a95a3171a6994677be9c1b82b8cea192b00c965c7|86fc70a74e0db7b747e04471bd4372cd38f6a0e7|layout/layout_solos.riv"
+  "sync/solo_nested_artboard_layout.riv|334f9b679dfbb611ad1332d14e22200d9743cb77aaf56592021a9a4b5673e8e4|86fc70a74e0db7b747e04471bd4372cd38f6a0e7|layout/solo_nested_artboard_layout.riv"
   "sync/grid_min_content.riv|43dac6bb5f85261807ddfc271ecfaf4fbb4b660f4e5272043bdb6afaecc2ee36|8e8492f8312c67ac54558adce2f0798baabcdce3|layout/grid_min_content.riv"
   "sync/nested_artboard_fill.riv|c78896a9f7c2b340c374c14178428ec4062f238c4060b6bb3625509cb970134f|8e8492f8312c67ac54558adce2f0798baabcdce3|layout/nested_artboard_fill.riv"
   "sync/solo_legacy_child.riv|250efc7d785b3ca7f89a07615786f7d83dfb0f7352db50a74aaa07fa1760cc13|5892bb05be7ae966b751625b4ee12239e6860dc1|layout/solo_legacy_child.riv"

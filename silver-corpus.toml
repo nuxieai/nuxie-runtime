@@ -3,13 +3,13 @@
 
 [corpus]
 version = 1
-upstream_ref = "58c2f5e80bd7398496561197037f93e7fbe35d6f"
-expected_entries = 265
-expected_runtime = 217
+upstream_ref = "86fc70a74e0db7b747e04471bd4372cd38f6a0e7"
+expected_entries = 266
+expected_runtime = 218
 expected_scripted = 45
 max_provenance_unknown = 3
-min_cpp_rust_exact = 188
-cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_converter_to_number", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "deterministic_mode", "drag_event", "draw_index_list", "event_trigger_event", "fill_trim_path", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
+min_cpp_rust_exact = 189
+cpp_rust_exact_ids = ["advance_blend_mode-inputs", "advance_blend_mode-vms", "ai_assitant", "animated_clipping-layout", "animated_clipping-nodes", "artboard_list_map_rules", "artboard_list_overrides_horizontal", "artboard_list_overrides_vertical", "artboard_width_test", "bankcard", "bidirectional_precedence-source_first", "bidirectional_precedence-target_first", "bidirectional_stateful_property", "clear_viewmodel_list", "clipping_and_draw_order", "collapsable_data_binding", "collapse_data_binds-test_2", "collapse_data_binds-test_3", "collapsing_elements", "color_passthrough_test", "component_based_conditions", "component_based_conditions-Artboard2", "component_list_child_origin", "component_list_follow_path", "component_list_follow_path_distance", "component_list_grouped", "component_list_hit_order", "component_list_virtualized_scroll_manual", "component_stateful", "component_stateful_vm_instance", "component_stateful_vm_instance_2", "computed_root_transform-list", "computed_root_transform-nested_artboard", "computed_values_test", "custom_property_enum", "custom_property_trigger_bind", "data_bind_artboard_input", "data_bind_font_test", "data_bind_keyframes_test", "data_bind_solo-solos-to-values", "data_bind_solo-values-to-solos", "data_binding_artboards_default_test", "data_binding_artboards_test_recursive", "data_converter_interpolator_reset", "data_converter_to_number", "databind_artboard", "databind_external_artboard_main", "databind_solo_to_enum", "databind_viewmodel", "deterministic_mode", "drag_event", "draw_index_list", "event_trigger_event", "fill_trim_path", "fit_font_size_test", "focus_collapsing", "focus_test", "focus_traversal", "focusable_element", "follow_path_animate_shape", "follow_path_animate_solo", "follow_path_animate_target", "follow_path_constraint", "format_number_with_commas", "formula_random-always", "formula_random-once", "formula_random-source_change", "gamepad_inputs_test", "gamepad_inputs_test-collapsing", "gamepad_test", "global_variables_test", "global_view_models_scripting_test", "global_viewmodels_test-auto_instance", "global_viewmodels_test-set_instance", "group_effect", "group_effect-main-missing-targets", "hide_test", "hittest_ab1", "hittest_ab1_grand_parent", "hittest_ab1_parent", "hittest_ab_2_non_virtualized", "hittest_ab_2_virtualized", "hittest_ab_shape_parent", "hittest_ab_text_parent", "hittest_collapsed_layouts", "hittest_nested", "ik_anim_test", "image_fit_alignment", "image_fit_alignment_2", "image_fit_alignment_3", "image_fit_alignment_updated_test", "interactive_scrolling", "interpolate_to_end", "interpolation_zero_duration", "joystick_databound_keyframe_test", "keyboard_listener", "keyboard_listener-KeyboardInput", "layout_anim_bound", "layout_anim_component_list", "layout_anim_nested", "layout_display", "layout_fixed_fill", "layout_grid_stack_grid_with_layouts_size_changing", "layout_grid_stack_grid_with_layouts_size_span_changing", "layout_grid_stack_grid_with_layouts_span", "layout_hug_artboard", "layout_order_pointer_test", "layout_paint", "layout_scroll_drag_multiplier_layouts", "layout_scroll_drag_multiplier_list", "layout_scroll_drag_multiplier_virtualized", "layout_scroll_snap_carousel", "layout_scroll_snap_padding_layouts", "layout_scroll_snap_padding_list", "layout_scroll_snap_padding_virtualized", "layout_scroll_visibility", "layout_solos", "list_focus_order", "list_items", "list_to_length_test", "list_to_path", "listener_view_model", "lock_icon_demo", "multi_listeners", "multitouch", "multitouch_enter", "multitouch_enter-MainList", "multitouch_enter-MultiScroll", "n_slice_triangle", "nested_artboard_origin_override_test", "nested_artboard_quantize_and_speed", "nested_events", "nested_hug", "nested_needs_advance", "number_to_list_nested_children", "path_effect_with_feathers", "pause_nested_artboard", "paused_nested_artboard_opacity", "pointer_exit", "recursive_data_bind", "relative_data_bind_path", "relative_data_bind_path-fire-trigger", "relative_data_bind_path-listener", "relative_data_bind_path-scripted-input", "relative_data_binding", "reset_phase_multi_main", "saturation", "scripted_animated_oval", "scripted_oval", "scroll_intent", "scroll_test", "scroll_threshold-all-scroll", "scroll_threshold-horizontal-scroll", "scroll_threshold-vertical-scroll", "sorted_listeners", "spotify_kids_app_icon", "spotify_kids_demo", "stacked_path_effects", "state_transition_fire_trigger", "stateful_keyed_trigger", "stateful_multi_property", "stateful_nested", "superbowl", "target_event", "text_background_feather_test", "text_feather_falloff", "text_fit_test", "text_follow_path_shape_length", "text_input", "text_listener_simpler", "text_stroke_test", "text_vertical_trim_test", "time_based_interpolation", "transition_actions", "transition_artboard_condition_test", "transition_duration_bind_list", "transition_duration_bind_nested", "transition_index_condition", "trigger_based_listeners", "trigger_fires_single_change", "unbound_stateful_component", "vertical_align_ellipsis", "viewmodel_based_condition", "viewmodel_image_reset", "viewmodel_list_trigger", "virtualize_blendmode", "virtualized_artboard_databound_children", "word_joiner_test", "zero_width_space_line_break"]
 
 [[case]]
 id = "advance_blend_mode-inputs"
@@ -30,7 +30,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply inputs"
-producer_line = 1649
+producer_line = 1648
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -52,7 +52,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Advance two consecutive blend modes and apply view model"
-producer_line = 1681
+producer_line = 1680
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -74,7 +74,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "ai assistant data binding"
-producer_line = 347
+producer_line = 346
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -228,7 +228,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Artboard properties conditions work without binding"
-producer_line = 2399
+producer_line = 2403
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -250,7 +250,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "bank card data binding"
-producer_line = 305
+producer_line = 304
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -272,7 +272,7 @@ status = "diverges"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bound artboards with multiple targets bound to same property bidirectionally"
-producer_line = 552
+producer_line = 556
 note = "Genuine Rust-vs-C++ divergence after replaying the pinned TEST_CASE actions; first difference: frame 0, op 31 (makeRenderPaint): expected makeRenderPaint, got save."
 
 [[case]]
@@ -338,7 +338,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Bidirectional stateful property binding"
-producer_line = 134
+producer_line = 138
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -360,7 +360,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bound artboard with view model instance resets its properties"
-producer_line = 477
+producer_line = 481
 note = "Unsupported feature: missing runtime surface external-bindable-artboard-with-bound-view-model-injection; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -382,7 +382,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "car widgets data binding"
-producer_line = 622
+producer_line = 621
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 10306 (addRawPath): expected 60 fields, got 56."
 
 [[case]]
@@ -404,7 +404,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_bind_lists_test.cpp"
 provenance_test = "Clear view model list"
-producer_line = 165
+producer_line = 168
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -448,7 +448,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsable data binds get added when object is uncollapsed"
-producer_line = 1575
+producer_line = 1574
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -470,7 +470,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from layouts with display hidden"
-producer_line = 716
+producer_line = 715
 note = "Approved Yoga-to-Taffy layout-solver adaptation divergence; the translated layout owner matches pinned source at the solver boundary; first difference: frame 0, op 100 (transform), field tx: expected 411.31592, got 410.13672."
 
 [[case]]
@@ -492,7 +492,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data binds from property groups in solos"
-producer_line = 750
+producer_line = 749
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -514,7 +514,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Collapsed data bound layout styles still update"
-producer_line = 802
+producer_line = 801
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -580,7 +580,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Component based transition conditions"
-producer_line = 874
+producer_line = 883
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -602,7 +602,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Component based transition conditions with other props"
-producer_line = 914
+producer_line = 923
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -932,7 +932,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Test Scripted Artboard Input data bound to internal and external artboards"
-producer_line = 389
+producer_line = 392
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -954,7 +954,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_blobs_test.cpp"
 provenance_test = "Data bind blobs internally and externally"
-producer_line = 149
+producer_line = 152
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1174,7 +1174,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "data viz demo data binding"
-producer_line = 272
+producer_line = 271
 note = "Unsupported feature: missing runtime surface runtime-frame-loop-nontermination-after-nested-view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1218,7 +1218,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_artboards_test.cpp"
 provenance_test = "Data bind external artboard with no initial source artboard"
-producer_line = 428
+producer_line = 432
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1240,7 +1240,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bound solos with enums work in both directions"
-producer_line = 450
+producer_line = 452
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1262,7 +1262,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Data bind view model to view model instance from set value, externally and from scripting"
-producer_line = 51
+producer_line = 54
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1284,7 +1284,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "health tracker data binding"
-producer_line = 562
+producer_line = 561
 note = "Unsupported feature: missing runtime surface runtime-frame-loop-nontermination; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1328,7 +1328,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Pointer drag event"
-producer_line = 1465
+producer_line = 1464
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1372,7 +1372,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "echo show demo data binding"
-producer_line = 380
+producer_line = 379
 note = "Unsupported feature: missing runtime surface renderer-paint-allocation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -1394,7 +1394,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Event triggers another event"
-producer_line = 682
+producer_line = 681
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1460,7 +1460,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
-producer_line = 1971
+producer_line = 2172
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1482,7 +1482,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 2533
+producer_line = 2738
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1504,7 +1504,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
-producer_line = 2297
+producer_line = 2498
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1526,7 +1526,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
-producer_line = 2348
+producer_line = 2549
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1658,7 +1658,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization on every change"
-producer_line = 956
+producer_line = 955
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1680,7 +1680,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization only once"
-producer_line = 905
+producer_line = 904
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1702,7 +1702,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Reset randomization on value change"
-producer_line = 853
+producer_line = 852
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1724,7 +1724,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Game menu ad script test"
-producer_line = 36
+producer_line = 40
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
 
 [[case]]
@@ -1746,7 +1746,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus change with gamepad navigation"
-producer_line = 3062
+producer_line = 3267
 note = "Exact comparison contract for the literal gamepad/focus producer at 9cb2205f. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1768,7 +1768,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Uncollapse and focus element on the same action"
-producer_line = 3096
+producer_line = 3301
 note = "Exact comparison contract for the literal gamepad/focus producer at 9cb2205f. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1790,7 +1790,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/gamepad_test.cpp"
 provenance_test = "File loads and processes multiple types of gamepad inputs"
-producer_line = 424
+producer_line = 428
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1834,7 +1834,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/global_viewmodels_test.cpp"
 provenance_test = "Global view models access through scripting"
-producer_line = 172
+producer_line = 175
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1900,7 +1900,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect to multiple paths"
-producer_line = 675
+producer_line = 678
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1922,7 +1922,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Apply group effect with missing items"
-producer_line = 700
+producer_line = 704
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1944,7 +1944,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hide silver"
-producer_line = 81
+producer_line = 80
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2164,7 +2164,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "hunter x demo data binding"
-producer_line = 528
+producer_line = 527
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 5055 (addRawPath): expected 20 fields, got 22."
 
 [[case]]
@@ -2362,7 +2362,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "interactive and non interactive scrolling"
-producer_line = 1068
+producer_line = 1067
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2384,7 +2384,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Interpolator returns advance status as true until it settles"
-producer_line = 1108
+producer_line = 1107
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2450,7 +2450,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Inventory script test"
-producer_line = 57
+producer_line = 61
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
 
 [[case]]
@@ -2494,7 +2494,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "juice silver"
-producer_line = 56
+producer_line = 55
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 1, op 360 (addRawPath): expected 40 fields, got 42."
 
 [[case]]
@@ -2516,7 +2516,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focused elements receive keyboard inputs"
-producer_line = 2051
+producer_line = 2252
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2538,7 +2538,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Keyboard inputs with different key combinations"
-producer_line = 2167
+producer_line = 2368
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3054,6 +3054,28 @@ producer_line = 652
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
+id = "layout_solos"
+expected = "tests/unit_tests/silvers/layout_solos.sriv"
+source = "layout/layout_solos.riv"
+dependencies = []
+artboard = "Main"
+animation = "none"
+state_machine = "default"
+lane = "runtime"
+deterministic = "cpp-test-defined"
+random = "cpp-test-defined"
+view_model = "cpp-test-defined"
+sample_times = [0.016]
+actions = [{ kind = "frame-size" }, { kind = "bind-authored-view-model" }, { kind = "render-view-model-enum-states", property = "states", seconds = 0.016 }]
+verification = "sriv-v1-epsilon"
+status = "exact"
+producer_class = "runtime-literal"
+provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
+provenance_test = "solo children of a layout render for every state"
+producer_line = 594
+note = "Exact comparison contract for 86fc70a7: bind the authored view-model instance (or create the artboard default when unset), walk every DataEnum state with a successful setter, then advance/apply 0.016, draw and addFrame for each. Enrollment alone is not a validation result."
+
+[[case]]
 id = "layout_text_match"
 expected = "tests/unit_tests/silvers/layout_text_match.sriv"
 source = "layout_text_match.riv"
@@ -3094,7 +3116,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/serialized_scripts_test.cpp"
 provenance_test = "Layout Planets script test"
-producer_line = 77
+producer_line = 81
 note = "Literal authored instance-0 binding, 0.1-second advance, initial draw, and recorded pointer log replay at 30 fps are executable. Replay completes; original output comparison is expected-red, tracked in UNIV-3015. No exact-parity claim."
 
 [[case]]
@@ -3116,7 +3138,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus is correctly built and updated for lists"
-producer_line = 2499
+producer_line = 2703
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3248,7 +3270,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Listen to view model value changes in state machines"
-producer_line = 2381
+producer_line = 2385
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3270,7 +3292,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "lock icon listener silver"
-producer_line = 135
+producer_line = 134
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3292,7 +3314,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners with multiple types of events"
-producer_line = 647
+producer_line = 650
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3314,7 +3336,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Listeners with multiple types of events and rebinding"
-producer_line = 716
+producer_line = 724
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-view-model-reference-replacement-by-handle; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3446,7 +3468,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "n-slice silver"
-producer_line = 96
+producer_line = 95
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3600,7 +3622,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/path_test.cpp"
 provenance_test = "Path effects with inner & outer feathers"
-producer_line = 726
+producer_line = 733
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3644,7 +3666,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Paused state machine changes opacity and relayouts when parent's opacity or layout changes"
-producer_line = 996
+producer_line = 1005
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3688,7 +3710,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Replace view model instances with multiple view model levels"
-producer_line = 834
+producer_line = 843
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-view-model-reference-replacement-by-handle; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3710,7 +3732,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Recursive data binding artboards are skipped"
-producer_line = 1522
+producer_line = 1521
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3798,7 +3820,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_test.cpp"
 provenance_test = "Relative data binding view model scripted input"
-producer_line = 2342
+producer_line = 2345
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3886,7 +3908,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "View models keep reference to their dependents and parents"
-producer_line = 1235
+producer_line = 1234
 note = "Unsupported feature: missing runtime surface runtime-owned-shared-view-model-graph-reparenting; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3908,7 +3930,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Replace view model instance in nested list"
-producer_line = 1406
+producer_line = 1405
 note = "Unsupported feature: missing runtime surface runtime-owned-nested-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -3930,7 +3952,7 @@ status = "unsupported-feature"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Replace view model instance in list"
-producer_line = 1318
+producer_line = 1317
 note = "Unsupported feature: missing runtime surface runtime-owned-list-view-model-reference-replacement; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -4018,7 +4040,7 @@ status = "diverges"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "rewards demo data binding"
-producer_line = 426
+producer_line = 425
 note = "Narrow producer-build-mode divergence: the pinned upstream unit-test silvers are built with --no_ffp_contract, while upstream production defaults to -ffp-contract=on; first difference: frame 0, op 1461 (addRawPath): expected 44 fields, got 46."
 
 [[case]]
@@ -4040,7 +4062,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Target to source with different data types on source and target"
-producer_line = 992
+producer_line = 991
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4304,7 +4326,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_input_test.cpp"
 provenance_test = "scripted input color and trigger test"
-producer_line = 860
+producer_line = 864
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4436,7 +4458,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "scripted string converter"
-producer_line = 464
+producer_line = 465
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4546,7 +4568,7 @@ status = "pending-scripted"
 producer_class = "scripted-literal"
 provenance_file = "tests/unit_tests/runtime/scripting/scripting_converter_test.cpp"
 provenance_test = "Data converter with bound inputs in artboard and state machine"
-producer_line = 494
+producer_line = 495
 note = "Scripted producer provenance is catalogued; scripted action/output replay is explicitly deferred to the next adoption step."
 
 [[case]]
@@ -4854,7 +4876,7 @@ status = "unsupported-feature"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/solo_test.cpp"
 provenance_test = "Data bind by index skipping non hierarchical children"
-producer_line = 540
+producer_line = 546
 note = "Unsupported feature: missing runtime surface view-model-mutation; the pinned C++ action stream requires that unported runtime surface."
 
 [[case]]
@@ -4898,7 +4920,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids app icon data binding"
-producer_line = 494
+producer_line = 493
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -4920,7 +4942,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "spotify kids demo data binding"
-producer_line = 460
+producer_line = 459
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5162,7 +5184,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "superbowl data binding"
-producer_line = 225
+producer_line = 224
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5316,7 +5338,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "validate text run listener works"
-producer_line = 163
+producer_line = 162
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5338,7 +5360,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "validate text with modifiers and dashes render correctly"
-producer_line = 190
+producer_line = 189
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5404,7 +5426,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transitions and state layers can trigger actions"
-producer_line = 960
+producer_line = 969
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5426,7 +5448,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Test State machine transition conditions based on artboards"
-producer_line = 1720
+producer_line = 1719
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5448,7 +5470,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition duration in artboard list state machines is bindable"
-producer_line = 779
+producer_line = 788
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5470,7 +5492,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/state_machine_test.cpp"
 provenance_test = "Transition duration in nested state machines is bindable"
-producer_line = 747
+producer_line = 756
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5580,7 +5602,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/data_binding_viewmodels_test.cpp"
 provenance_test = "Stateful component is bound before binding the view model instance"
-producer_line = 75
+producer_line = 79
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5602,7 +5624,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Vertical align on text with ellipsis"
-producer_line = 640
+producer_line = 639
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -5778,7 +5800,7 @@ status = "exact"
 producer_class = "serialized-rendering"
 provenance_file = "tests/unit_tests/runtime/serialized_rendering_test.cpp"
 provenance_test = "Virtualized list with blended animations as initial state correctly render their mixed values"
-producer_line = 1618
+producer_line = 1617
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

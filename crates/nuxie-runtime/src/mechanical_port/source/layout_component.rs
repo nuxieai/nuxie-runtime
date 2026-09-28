@@ -38,6 +38,45 @@ use crate::mechanical_port::source::{
     status_code::StatusCode,
 };
 
+/// Content-sizing reach mirrors downward size propagation: groups, providers,
+/// and non-propagating sizeable components stop it. A layout is returned first.
+pub fn content_sizing_layout(mut parent: Option<CoreHandle>) -> Option<CoreHandle> {
+    while let Some(component) = parent {
+        if component.is_type_of(LayoutComponentBase::TYPE_KEY) {
+            return Some(component);
+        }
+        if component.with(LayoutComponent::stops_content_sizing)?
+            || crate::mechanical_port::source::layout::layout_node_provider::from_component(
+                &component,
+            )
+            .is_some()
+        {
+            return None;
+        }
+        if component.with_mut(|component| {
+            component
+                .as_intrinsically_sizeable_mut()
+                .is_some_and(|sizeable| !sizeable.should_propagate_size_to_children())
+        })? {
+            return None;
+        }
+        parent = component.with(|component| component.component_parent_handle())?;
+    }
+    None
+}
+
+/// Provider ownership crosses containers, but follows only component parents:
+/// the artboard is a layout and neither walk escapes into its hosting artboard.
+pub fn owning_layout(mut component: Option<CoreHandle>) -> Option<CoreHandle> {
+    while let Some(owner) = component {
+        if owner.is_type_of(LayoutComponentBase::TYPE_KEY) {
+            return Some(owner);
+        }
+        component = owner.with(|owner| owner.component_parent_handle())?;
+    }
+    None
+}
+
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Layout {
     left: f32,

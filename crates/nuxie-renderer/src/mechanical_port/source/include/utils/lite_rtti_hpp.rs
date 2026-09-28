@@ -17,6 +17,7 @@
 
 // #include "utils/compile_time_string_hash.hpp"
 // #include "rive/refcnt.hpp"
+// #include <cassert>
 // #include <stdint.h>
 // #include <type_traits>
 
@@ -256,6 +257,24 @@ where
     core::ptr::null_mut()
 }
 
+/// Like `lite_rtti_cast`, but asserts that the cast succeeded in debug builds.
+/// The source's `assert` is disabled by NDEBUG; release builds retain a null
+/// result on failure instead of manufacturing a valid pointer.
+///
+/// # Safety
+/// A non-null `t` must point to a live `T` base subobject, and a matching type ID
+/// must identify a complete `U`, as required by `lite_rtti_cast`.
+pub unsafe fn lite_rtti_cast_or_assert<U, T>(t: *mut T) -> *mut U
+where
+    U: LiteRttiCastFrom<T>,
+    T: LiteRttiBase,
+{
+    // SAFETY: the caller provides the same base-subobject contract as the cast.
+    let cast = unsafe { lite_rtti_cast::<U, T>(t) };
+    debug_assert!(!cast.is_null());
+    cast
+}
+
 // template <class U, class T> rcp<U> lite_rtti_rcp_cast(rcp<T> t)
 // {
 //     if (t != nullptr &&
@@ -350,3 +369,53 @@ macro_rules! LITE_RTTI_CAST_OR_CONTINUE {
 // clang-format on
 
 // } // namespace rive
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Root;
+    struct Derived;
+    type Base = enable_lite_rtti<Root, 1>;
+    type MostDerived = lite_rtti_override<Base, Derived, 2>;
+
+    #[test]
+    fn cast_or_assert_preserves_the_matching_complete_object_pointer() {
+        let mut value = MostDerived::default();
+        let expected = &mut value as *mut MostDerived;
+        let base = value.base_mut() as *mut Base;
+        // SAFETY: base is the live, offset-zero Base subobject of MostDerived.
+        assert_eq!(
+            unsafe { lite_rtti_cast_or_assert::<MostDerived, _>(base) },
+            expected
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn cast_or_assert_rejects_null_in_debug() {
+        // SAFETY: null is a permitted cast input; the assertion rejects it.
+        unsafe { lite_rtti_cast_or_assert::<MostDerived, Base>(core::ptr::null_mut()) };
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic]
+    fn cast_or_assert_rejects_mismatched_identity_in_debug() {
+        let mut base = Base::default();
+        // SAFETY: base is live and its nonmatching ID prevents a downcast.
+        unsafe { lite_rtti_cast_or_assert::<MostDerived, _>(&mut base) };
+    }
+
+    #[cfg(not(debug_assertions))]
+    #[test]
+    fn cast_or_assert_returns_null_for_failed_casts_in_release() {
+        let mut base = Base::default();
+        // SAFETY: null and a live base with a nonmatching ID are cast inputs.
+        unsafe {
+            assert!(lite_rtti_cast_or_assert::<MostDerived, Base>(core::ptr::null_mut()).is_null());
+            assert!(lite_rtti_cast_or_assert::<MostDerived, _>(&mut base).is_null());
+        }
+    }
+}

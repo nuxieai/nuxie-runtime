@@ -19,7 +19,7 @@ impl KeyFrameId {
         _mix: f32,
         _context: Option<&dyn KeyFrameValueContext>,
     ) {
-        CoreRegistry::set_uint(object, property_key, self.base.value());
+        CoreRegistry::set_id(object, property_key, self.base.value());
     }
 
     pub fn apply_interpolation(
@@ -31,6 +31,6 @@ impl KeyFrameId {
         _mix: f32,
         _context: Option<&dyn KeyFrameValueContext>,
     ) {
-        CoreRegistry::set_uint(object, property_key, self.base.value());
+        CoreRegistry::set_id(object, property_key, self.base.value());
     }
 }

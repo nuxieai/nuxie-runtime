@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9b3319623a210449145097e9f7c7447cf2e50f3b`
+- LAST_SYNCED_SHA: `d4fe10229b3c148f315ba309924fa837135e7a76`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 163 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 163 require a Rust translation.
+  There are 162 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 162 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `d4fe10229b3c148f315ba309924fa837135e7a76` | Translate runtime ID vocabulary/registry dispatch while retaining the single-varuint u32 wire representation; remove Folder runtime registration, preserve semantic bitmask getters and pending text/cache overlays, return zero for unrooted computed coordinates, and move the fire-event owner to its upstream handwritten path. Retain explicitly pinned last-public definitions for schema generation and reconcile runtime metadata against current generated headers; upstream no longer publishes the canonical JSON. Native C++ editor-only arena, fractional ordering and mutation/journal extensions are outside the runtime build, not claimed as implemented. | — |
 | `9b3319623a210449145097e9f7c7447cf2e50f3b` | Invalidate text-input layout after every reshape, including single-line auto-width measurement. Keep the already-present shape/layout dirt helper and remove the duplicate text-change invalidation; preserve separately audited ahead-ported text properties. | — |
 | `df50e6245122a3ebc2cbc8fad728b5cf497e8877` | Share transparent-container and list-participation predicates between layout collection and ArtboardComponentList parent resolution. Direct layouts still win; otherwise only flagged lists walk through transparent groups/Solos to the nearest layout. Translate all strengthened upstream assertions, including unflagged free-form placement and exact stack identity. | — |
 | `e16f92461a8f3857b3b249946bc176818fe77efb` | Move cold state-machine reporting, bindables, non-pointer input and scripting state into lazy clusters; move six cold data-binding work queues behind a sidecar while keeping the hot dirty queue inline. Preserve callback ordering and the Rust shared-ownership boundary; borrowed binding access snapshots explicitly only where ownership or re-entrant callbacks require it. | — |

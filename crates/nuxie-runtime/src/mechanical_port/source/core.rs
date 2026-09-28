@@ -16,6 +16,7 @@ pub mod binary_reader;
 pub mod binary_stream;
 pub mod binary_writer;
 pub mod field_types;
+pub mod id;
 pub mod type_conversions;
 pub mod vector_binary_stream;
 pub mod vector_binary_writer;

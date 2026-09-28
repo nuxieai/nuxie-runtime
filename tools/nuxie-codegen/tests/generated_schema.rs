@@ -70,7 +70,11 @@ fn generated_schema_is_reproducible_from_cpp_defs() {
         std::process::id()
     ));
     let _ = std::fs::remove_dir_all(&defs_dir);
-    copy_dir(&runtime_dir.join("dev/defs"), &defs_dir);
+    copy_dir(&workspace_root().join("defs/upstream-runtime"), &defs_dir);
+    copy_dir(
+        &workspace_root().join("defs/upstream-reconciliation"),
+        &defs_dir,
+    );
     copy_dir(&workspace_root().join("defs/upstream-overlay"), &defs_dir);
 
     let output = Command::new(env!("CARGO_BIN_EXE_nuxie-codegen"))
@@ -117,15 +121,9 @@ fn generated_schema_is_reproducible_from_cpp_defs() {
 }
 
 #[test]
-fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
-    let runtime_dir = reference_runtime_dir();
-    assert!(
-        runtime_dir.exists(),
-        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
-        runtime_dir.display()
-    );
-
-    let defs_dir = runtime_dir.join("dev/defs");
+fn pinned_seed_runtime_type_surface_is_explicitly_tracked() {
+    // Audit the immutable last-public input separately from current headers.
+    let defs_dir = workspace_root().join("defs/upstream-runtime");
     let mut files = Vec::new();
     collect_json_paths(&defs_dir, &mut files);
 
@@ -204,10 +202,11 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         }
     }
 
-    // Pinned upstream 5892bb05 includes sampler metadata and narrower
-    // integer declarations; the registry still uses the uint wire family.
-    assert_eq!(runtime_definition_count, 351);
-    assert_eq!(runtime_property_count, 616);
+    // The 9b331962 seed adds ScriptModuleAsset (1071) and its uint language
+    // property (1087) to the 5892bb05 inventory. Folder remains in this raw
+    // historical seed; current-runtime reconciliation is tested separately.
+    assert_eq!(runtime_definition_count, 352);
+    assert_eq!(runtime_property_count, 617);
     assert_eq!(
         declared_types,
         [
@@ -244,7 +243,7 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
         (("List<Id>", Some("Bytes")), 8),
         (("String", None), 23),
         (("String", Some("String")), 1),
-        (("uint", None), 115),
+        (("uint", None), 116),
         (("uint", Some("uint")), 4),
         (("uint16", None), 3),
         (("uint8", None), 58),
@@ -338,16 +337,16 @@ fn cpp_defs_runtime_type_surface_is_explicitly_tracked() {
 }
 
 #[test]
-fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
-    let runtime_dir = reference_runtime_dir();
-    assert!(
-        runtime_dir.exists(),
-        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
-        runtime_dir.display()
-    );
-
-    let properties = runtime_json_properties(&runtime_dir.join("dev/defs"));
-    assert_eq!(properties.len(), 616);
+fn pinned_seed_runtime_property_metadata_surface_is_explicitly_tracked() {
+    let properties = runtime_json_properties(&workspace_root().join("defs/upstream-runtime"));
+    // Includes ScriptModuleAsset.language (1087), added after 5892bb05.
+    assert_eq!(properties.len(), 617);
+    assert!(properties.iter().any(|entry| {
+        entry.file == "assets/script_module_asset.json"
+            && entry.name == "language"
+            && entry.key == 1087
+            && entry.property.get("type").and_then(Value::as_str) == Some("uint")
+    }));
 
     let encoded = properties
         .iter()
@@ -875,7 +874,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("description").is_some())
             .count(),
-        465,
+        466, // ScriptModuleAsset.language adds one description in the pinned seed.
         "dev/defs description coverage changed; audit generated description metadata"
     );
     assert_eq!(
@@ -917,7 +916,7 @@ fn cpp_defs_runtime_property_metadata_surface_is_explicitly_tracked() {
             .iter()
             .filter(|entry| entry.property.get("initialValue").is_some())
             .count(),
-        572,
+        573, // ScriptModuleAsset.language has initialValue "0".
         "dev/defs initialValue coverage changed; audit generated stored-field initializers"
     );
 

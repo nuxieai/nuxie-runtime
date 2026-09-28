@@ -625,13 +625,6 @@ impl crate::mechanical_port::source::core::CoreType
 }
 
 impl crate::mechanical_port::source::core::CoreType
-    for crate::mechanical_port::source::assets::folder::Folder
-{
-    const TYPE_KEY: u16 =
-        crate::mechanical_port::source::generated::assets::folder_base::FolderBase::TYPE_KEY;
-}
-
-impl crate::mechanical_port::source::core::CoreType
     for crate::mechanical_port::source::assets::font_asset::FontAsset
 {
     const TYPE_KEY: u16 =
@@ -2686,7 +2679,6 @@ pub enum CoreConcreteType {
     CustomPropertyEnum,
     BlobAsset,
     ScriptModuleAsset,
-    Folder,
     ScriptAsset,
     ManifestAsset,
     ImageAsset,
@@ -6829,7 +6821,6 @@ impl CoreRegistry {
             616 => CoreConcreteType::CustomPropertyEnum,
             649 => CoreConcreteType::BlobAsset,
             1071 => CoreConcreteType::ScriptModuleAsset,
-            102 => CoreConcreteType::Folder,
             529 => CoreConcreteType::ScriptAsset,
             642 => CoreConcreteType::ManifestAsset,
             105 => CoreConcreteType::ImageAsset,
@@ -6846,6 +6837,95 @@ impl CoreRegistry {
             _ => return None,
         };
         Some(factory.make(concrete_type))
+    }
+    pub fn set_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
+        let field = match property_key {
+            549 => CoreField::ViewModelInstanceListItemViewModelId,
+            550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
+            5 => CoreField::ComponentParentId,
+            554 => CoreField::ViewModelInstanceValueViewModelPropertyId,
+            574 => CoreField::ViewModelPropertyEnumCustomEnumId,
+            560 => CoreField::ViewModelInstanceEnumPropertyValue,
+            824 => CoreField::ViewModelInstanceAssetPropertyValue,
+            846 => CoreField::ViewModelInstanceArtboardPropertyValue,
+            565 => CoreField::ViewModelPropertyViewModelViewModelReferenceId,
+            566 => CoreField::ViewModelInstanceViewModelId,
+            966 => CoreField::ViewModelInstanceListListSource,
+            577 => CoreField::ViewModelInstanceViewModelPropertyValue,
+            119 => CoreField::DrawTargetDrawableId,
+            173 => CoreField::TargetedConstraintTargetId,
+            731 => CoreField::ScrollPhysicsConstraintId,
+            726 => CoreField::ScrollConstraintPhysicsId,
+            725 => CoreField::ScrollBarConstraintScrollConstraintId,
+            197 => CoreField::NestedArtboardArtboardId,
+            800 => CoreField::ArtboardComponentListListSource,
+            198 => CoreField::NestedAnimationAnimationId,
+            296 => CoreField::SoloActiveComponentId,
+            848 => CoreField::ScriptedDrawableScriptAssetId,
+            892 => CoreField::ScriptedDataConverterScriptAssetId,
+            1015 => CoreField::ScriptedInterpolatorScriptAssetId,
+            912 => CoreField::ScriptedPathEffectScriptAssetId,
+            591 => CoreField::LayoutComponentStyleInterpolatorId,
+            858 => CoreField::ArtboardComponentListOverrideArtboardId,
+            389 => CoreField::ListenerFireEventEventId,
+            69 => CoreField::InterpolatingKeyFrameInterpolatorId,
+            227 => CoreField::ListenerInputChangeInputId,
+            400 => CoreField::ListenerInputChangeNestedInputId,
+            149 => CoreField::AnimationStateAnimationId,
+            237 => CoreField::NestedInputInputId,
+            930 => CoreField::ScriptedListenerActionScriptAssetId,
+            51 => CoreField::KeyedObjectObjectId,
+            165 => CoreField::BlendAnimationAnimationId,
+            168 => CoreField::BlendAnimationDirectInputId,
+            224 => CoreField::StateMachineListenerTargetId,
+            399 => CoreField::StateMachineListenerSingleEventId,
+            155 => CoreField::TransitionInputConditionInputId,
+            122 => CoreField::KeyFrameIdValue,
+            240 => CoreField::ListenerAlignTargetTargetId,
+            931 => CoreField::ScriptedTransitionConditionScriptAssetId,
+            167 => CoreField::BlendState1DInputInputId,
+            952 => CoreField::FocusActionTargetTargetId,
+            653 => CoreField::TransitionValueIdComparatorValue,
+            151 => CoreField::StateTransitionStateToId,
+            350 => CoreField::StateTransitionInterpolatorId,
+            392 => CoreField::StateMachineFireEventEventId,
+            977 => CoreField::TransitionPropertyComponentComparatorObjectId,
+            962 => CoreField::ListenerInputTypeEventEventId,
+            171 => CoreField::BlendStateTransitionExitBlendAnimationId,
+            922 => CoreField::TargetEffectTargetId,
+            874 => CoreField::ListPathListSource,
+            92 => CoreField::ClippingShapeSourceId,
+            206 => CoreField::ImageAssetId,
+            121 => CoreField::DrawRulesDrawTargetId,
+            494 => CoreField::LayoutComponentStyleId,
+            236 => CoreField::ArtboardDefaultStateMachineId,
+            583 => CoreField::ArtboardViewModelId,
+            301 => CoreField::JoystickXId,
+            302 => CoreField::JoystickYId,
+            313 => CoreField::JoystickHandleSourceId,
+            823 => CoreField::BindablePropertyIdPropertyValue,
+            660 => CoreField::DataBindConverterId,
+            816 => CoreField::DataConverterNumberToListViewModelId,
+            714 => CoreField::DataConverterRangeMapperInterpolatorId,
+            758 => CoreField::DataConverterInterpolatorInterpolatorId,
+            679 => CoreField::DataConverterGroupItemConverterId,
+            835 => CoreField::BindablePropertyListPropertyValue,
+            637 => CoreField::BindablePropertyEnumPropertyValue,
+            95 => CoreField::TendonBoneId,
+            378 => CoreField::TextModifierRangeRunId,
+            778 => CoreField::TextTargetModifierTargetId,
+            279 => CoreField::TextStyleFontAssetId,
+            932 => CoreField::TextTextRunListSource,
+            272 => CoreField::TextValueRunStyleId,
+            934 => CoreField::ArtboardListMapRuleArtboardId,
+            935 => CoreField::ArtboardListMapRuleViewModelId,
+            872 => CoreField::CustomPropertyEnumPropertyValue,
+            873 => CoreField::CustomPropertyEnumEnumId,
+            408 => CoreField::AudioEventAssetId,
+            876 => CoreField::ScriptInputArtboardArtboardId,
+            _ => return,
+        };
+        object.set_uint(field, value);
     }
     pub fn set_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32, value: u32) {
         let field = match property_key {
@@ -7543,6 +7623,95 @@ impl CoreRegistry {
         };
         object.set_int(field, value);
     }
+    pub fn get_id<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
+        let field = match property_key {
+            549 => CoreField::ViewModelInstanceListItemViewModelId,
+            550 => CoreField::ViewModelInstanceListItemViewModelInstanceId,
+            5 => CoreField::ComponentParentId,
+            554 => CoreField::ViewModelInstanceValueViewModelPropertyId,
+            574 => CoreField::ViewModelPropertyEnumCustomEnumId,
+            560 => CoreField::ViewModelInstanceEnumPropertyValue,
+            824 => CoreField::ViewModelInstanceAssetPropertyValue,
+            846 => CoreField::ViewModelInstanceArtboardPropertyValue,
+            565 => CoreField::ViewModelPropertyViewModelViewModelReferenceId,
+            566 => CoreField::ViewModelInstanceViewModelId,
+            966 => CoreField::ViewModelInstanceListListSource,
+            577 => CoreField::ViewModelInstanceViewModelPropertyValue,
+            119 => CoreField::DrawTargetDrawableId,
+            173 => CoreField::TargetedConstraintTargetId,
+            731 => CoreField::ScrollPhysicsConstraintId,
+            726 => CoreField::ScrollConstraintPhysicsId,
+            725 => CoreField::ScrollBarConstraintScrollConstraintId,
+            197 => CoreField::NestedArtboardArtboardId,
+            800 => CoreField::ArtboardComponentListListSource,
+            198 => CoreField::NestedAnimationAnimationId,
+            296 => CoreField::SoloActiveComponentId,
+            848 => CoreField::ScriptedDrawableScriptAssetId,
+            892 => CoreField::ScriptedDataConverterScriptAssetId,
+            1015 => CoreField::ScriptedInterpolatorScriptAssetId,
+            912 => CoreField::ScriptedPathEffectScriptAssetId,
+            591 => CoreField::LayoutComponentStyleInterpolatorId,
+            858 => CoreField::ArtboardComponentListOverrideArtboardId,
+            389 => CoreField::ListenerFireEventEventId,
+            69 => CoreField::InterpolatingKeyFrameInterpolatorId,
+            227 => CoreField::ListenerInputChangeInputId,
+            400 => CoreField::ListenerInputChangeNestedInputId,
+            149 => CoreField::AnimationStateAnimationId,
+            237 => CoreField::NestedInputInputId,
+            930 => CoreField::ScriptedListenerActionScriptAssetId,
+            51 => CoreField::KeyedObjectObjectId,
+            165 => CoreField::BlendAnimationAnimationId,
+            168 => CoreField::BlendAnimationDirectInputId,
+            224 => CoreField::StateMachineListenerTargetId,
+            399 => CoreField::StateMachineListenerSingleEventId,
+            155 => CoreField::TransitionInputConditionInputId,
+            122 => CoreField::KeyFrameIdValue,
+            240 => CoreField::ListenerAlignTargetTargetId,
+            931 => CoreField::ScriptedTransitionConditionScriptAssetId,
+            167 => CoreField::BlendState1DInputInputId,
+            952 => CoreField::FocusActionTargetTargetId,
+            653 => CoreField::TransitionValueIdComparatorValue,
+            151 => CoreField::StateTransitionStateToId,
+            350 => CoreField::StateTransitionInterpolatorId,
+            392 => CoreField::StateMachineFireEventEventId,
+            977 => CoreField::TransitionPropertyComponentComparatorObjectId,
+            962 => CoreField::ListenerInputTypeEventEventId,
+            171 => CoreField::BlendStateTransitionExitBlendAnimationId,
+            922 => CoreField::TargetEffectTargetId,
+            874 => CoreField::ListPathListSource,
+            92 => CoreField::ClippingShapeSourceId,
+            206 => CoreField::ImageAssetId,
+            121 => CoreField::DrawRulesDrawTargetId,
+            494 => CoreField::LayoutComponentStyleId,
+            236 => CoreField::ArtboardDefaultStateMachineId,
+            583 => CoreField::ArtboardViewModelId,
+            301 => CoreField::JoystickXId,
+            302 => CoreField::JoystickYId,
+            313 => CoreField::JoystickHandleSourceId,
+            823 => CoreField::BindablePropertyIdPropertyValue,
+            660 => CoreField::DataBindConverterId,
+            816 => CoreField::DataConverterNumberToListViewModelId,
+            714 => CoreField::DataConverterRangeMapperInterpolatorId,
+            758 => CoreField::DataConverterInterpolatorInterpolatorId,
+            679 => CoreField::DataConverterGroupItemConverterId,
+            835 => CoreField::BindablePropertyListPropertyValue,
+            637 => CoreField::BindablePropertyEnumPropertyValue,
+            95 => CoreField::TendonBoneId,
+            378 => CoreField::TextModifierRangeRunId,
+            778 => CoreField::TextTargetModifierTargetId,
+            279 => CoreField::TextStyleFontAssetId,
+            932 => CoreField::TextTextRunListSource,
+            272 => CoreField::TextValueRunStyleId,
+            934 => CoreField::ArtboardListMapRuleArtboardId,
+            935 => CoreField::ArtboardListMapRuleViewModelId,
+            872 => CoreField::CustomPropertyEnumPropertyValue,
+            873 => CoreField::CustomPropertyEnumEnumId,
+            408 => CoreField::AudioEventAssetId,
+            876 => CoreField::ScriptInputArtboardArtboardId,
+            _ => return 0,
+        };
+        object.get_uint(field)
+    }
     pub fn get_uint<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> u32 {
         let field = match property_key {
             118 => return ColorChannelsBase::from(object).map_or(0, |color| color.color_red()),
@@ -7861,6 +8030,9 @@ impl CoreRegistry {
     }
     pub fn get_bool<O: CoreRegistryObject + ?Sized>(object: &mut O, property_key: i32) -> bool {
         let field = match property_key {
+            953 => CoreField::FocusDataCanFocus,
+            954 => CoreField::FocusDataCanTouch,
+            955 => CoreField::FocusDataCanTraverse,
             419 => CoreField::BitmapCacheCacheEnabled,
             420 => CoreField::BitmapCacheDither,
             // Virtual semantic getters added upstream in d4fe1022. These must
@@ -8191,6 +8363,16 @@ impl CoreRegistry {
 
     /// Dispatch a generated unsigned property write through a stable object
     /// occurrence. A stale or currently borrowed occurrence is not writable.
+    pub fn set_id_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
+        handle
+            .with_mut(|object| Self::set_id(object, property_key, value))
+            .is_some()
+    }
+
+    pub fn get_id_handle(handle: &CoreHandle, property_key: i32) -> Option<u32> {
+        handle.with_mut(|object| Self::get_id(object, property_key))
+    }
+
     pub fn set_uint_handle(handle: &CoreHandle, property_key: i32, value: u32) -> bool {
         handle
             .with_mut(|object| Self::set_uint(object, property_key, value))
@@ -50897,108 +51079,7 @@ impl crate::mechanical_port::source::core::CoreObject
         result
     }
 }
-impl CoreRegistryObject for crate::mechanical_port::source::assets::folder::Folder {
-    fn as_registry_any(&self) -> &dyn Any {
-        self
-    }
-    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
-        self
-    }
-    fn is_type_of(&self, type_key: u16) -> bool {
-        crate::mechanical_port::source::generated::assets::folder_base::FolderBase::is_type_of(
-            type_key,
-        )
-    }
-    fn set_uint(&mut self, field: CoreField, value: u32) {
-        let _ = (field, value);
-    }
-    fn set_string(&mut self, field: CoreField, value: String) {
-        match field {
-            CoreField::AssetName => {
-                if self.base.base.base.set_name_value(value) {
-                    <crate::mechanical_port::source::assets::folder::Folder as crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks>::name_changed(self);
-                    <crate::mechanical_port::source::assets::folder::Folder as crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::asset_base::AssetBase::NAME_PROPERTY_KEY);
-                }
-            }
-            _ => {}
-        }
-    }
-    fn set_color(&mut self, field: CoreField, value: i32) {
-        let _ = (field, value);
-    }
-    fn set_bool(&mut self, field: CoreField, value: bool) {
-        let _ = (field, value);
-    }
-    fn set_double(&mut self, field: CoreField, value: f32) {
-        let _ = (field, value);
-    }
-    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
-        let _ = (field, value);
-    }
-    fn set_int(&mut self, field: CoreField, value: i32) {
-        let _ = (field, value);
-    }
-    fn get_uint(&mut self, field: CoreField) -> u32 {
-        let _ = field;
-        0
-    }
-    fn get_string(&mut self, field: CoreField) -> String {
-        match field {
-            CoreField::AssetName => self.base.base.base.name().to_owned(),
-            _ => String::new(),
-        }
-    }
-    fn get_color(&mut self, field: CoreField) -> i32 {
-        let _ = field;
-        0
-    }
-    fn get_bool(&mut self, field: CoreField) -> bool {
-        let _ = field;
-        false
-    }
-    fn get_double(&mut self, field: CoreField) -> f32 {
-        let _ = field;
-        0.0
-    }
-    fn get_int(&mut self, field: CoreField) -> i32 {
-        let _ = field;
-        0
-    }
-}
-impl crate::mechanical_port::source::core::CoreObject
-    for crate::mechanical_port::source::assets::folder::Folder
-{
-    fn type_predicate(&self) -> fn(u16) -> bool {
-        crate::mechanical_port::source::generated::assets::folder_base::FolderBase::is_type_of
-    }
-    fn core(&self) -> &crate::mechanical_port::source::core::Core {
-        &self.base.base.base.base
-    }
-    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
-        &mut self.base.base.base.base
-    }
-    fn core_type(&self) -> u16 {
-        crate::mechanical_port::source::generated::assets::folder_base::FolderBase::TYPE_KEY
-    }
-    fn is_type_of(&self, type_key: u16) -> bool {
-        crate::mechanical_port::source::generated::assets::folder_base::FolderBase::is_type_of(
-            type_key,
-        )
-    }
-    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
-        Some(Box::new(self.base.clone_into()))
-    }
-    fn deserialize(
-        &mut self,
-        property_key: u16,
-        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
-    ) -> bool {
-        let mut base = std::mem::take(&mut self.base);
-        let result = base.base.base.deserialize(property_key, reader);
-        self.base = base;
-        result
-    }
-}
+
 impl CoreRegistryObject for crate::mechanical_port::source::assets::script_asset::ScriptAsset {
     fn as_registry_any(&self) -> &dyn Any {
         self
@@ -67880,7 +67961,7 @@ impl CoreCapabilities for crate::mechanical_port::source::assets::blob_asset::Bl
         Some(self)
     }
 }
-impl CoreCapabilities for crate::mechanical_port::source::assets::folder::Folder {}
+
 impl CoreCapabilities for crate::mechanical_port::source::assets::script_asset::ScriptAsset {
     fn lifecycle_import(
         &mut self,
@@ -75669,16 +75750,7 @@ impl crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCal
         )
     }
 }
-impl crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks
-    for crate::mechanical_port::source::assets::folder::Folder
-{
-    fn notify_property_changed(&mut self, property_key: u16) {
-        crate::mechanical_port::source::core::Core::notify_property_changed(
-            &mut self.base.base,
-            property_key,
-        )
-    }
-}
+
 impl crate::mechanical_port::source::generated::assets::script_asset_base::ScriptAssetBaseCallbacks
     for crate::mechanical_port::source::assets::script_asset::ScriptAsset
 {
@@ -76225,7 +76297,6 @@ impl CoreRegistry {
             616 => Some(Box::new(<crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum>::default())),
             649 => Some(Box::new(<crate::mechanical_port::source::assets::blob_asset::BlobAsset>::default())),
             1071 => Some(Box::new(<crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset>::default())),
-            102 => Some(Box::new(<crate::mechanical_port::source::assets::folder::Folder>::default())),
             529 => Some(Box::new(<crate::mechanical_port::source::assets::script_asset::ScriptAsset>::default())),
             642 => Some(Box::new(<crate::mechanical_port::source::assets::manifest_asset::ManifestAsset>::default())),
             105 => Some(Box::new(<crate::mechanical_port::source::assets::image_asset::ImageAsset>::default())),

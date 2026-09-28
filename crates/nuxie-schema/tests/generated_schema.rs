@@ -9,15 +9,12 @@ use serde_json::Value;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-fn reference_runtime_dir() -> PathBuf {
-    std::env::var_os("RIVE_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("/Users/levi/dev/oss/rive-runtime"))
-}
-
 #[test]
 fn generated_schema_exposes_current_runtime_definition_set() {
-    assert_eq!(DEFINITIONS.len(), 354);
+    // d4fe removes Folder; the forward text/cache and Nuxie video definitions remain.
+    assert_eq!(DEFINITIONS.len(), 353);
+    assert!(definition_by_name("Folder").is_none());
+    assert!(definition_by_type_key(102).is_none());
     assert_eq!(
         definition_by_name("ViewModelPropertyAssetBlob")
             .expect("blob property definition")
@@ -69,15 +66,8 @@ fn generated_schema_exposes_current_runtime_definition_set() {
 }
 
 #[test]
-fn generated_schema_metadata_matches_cpp_defs_json() {
-    let runtime_dir = reference_runtime_dir();
-    assert!(
-        runtime_dir.exists(),
-        "reference runtime not found at {}; set RIVE_RUNTIME_DIR",
-        runtime_dir.display()
-    );
-
-    let defs = schema_defs_json(&runtime_dir);
+fn generated_schema_metadata_matches_reconciled_pinned_seed_json() {
+    let defs = schema_defs_json();
     let expected_files = defs
         .iter()
         .filter_map(|(file, json)| {
@@ -94,7 +84,7 @@ fn generated_schema_metadata_matches_cpp_defs_json() {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         actual_files, expected_files,
-        "generated definition set should exactly match runtime dev/defs files"
+        "generated definition set should exactly match reconciled pinned seed and forward-overlay files"
     );
 
     for definition in DEFINITIONS
@@ -351,7 +341,7 @@ fn object_kind_and_type_key_lookup_agree() {
 
 #[test]
 fn runtime_color_mixin_is_shared_metadata_not_a_core_type() {
-    let defs = read_defs_json(&reference_runtime_dir().join("dev/defs"));
+    let defs = schema_defs_json();
     let expected_files = defs
         .iter()
         .filter(|(_, json)| {
@@ -510,7 +500,7 @@ fn passthrough_properties_are_known_but_not_deserialized_fields() {
 }
 
 #[test]
-fn animates_metadata_matches_cpp_defs_surface() {
+fn animates_metadata_matches_pinned_seed_surface() {
     let node = definition_by_name("Node").expect("Node exists");
     let x = node.property_by_key(13).expect("Node.x");
     assert_eq!(x.group, Some("position"));
@@ -631,7 +621,7 @@ fn cpp_generated_value_setter_metadata_matches_generator_shapes() {
 }
 
 #[test]
-fn cpp_generator_metadata_matches_defs_surface() {
+fn cpp_generator_metadata_matches_pinned_seed_surface() {
     let artboard = definition_by_name("Artboard").expect("Artboard exists");
     assert_eq!(artboard.mixins, &["publishable.json"]);
     assert_eq!(artboard.generic, None);
@@ -935,7 +925,12 @@ fn core_registry_getter_field_kind_matches_cpp_getter_families() {
         Some(FieldKind::Uint)
     );
 
-    assert_eq!(core_registry_getter_field_kind_by_property_key(989), None);
+    for key in 989..=1009 {
+        assert_eq!(
+            core_registry_getter_field_kind_by_property_key(key),
+            Some(FieldKind::Bool)
+        );
+    }
     assert_eq!(core_registry_getter_field_kind_by_property_key(401), None);
     assert_eq!(core_registry_getter_field_kind_by_property_key(212), None);
 }
@@ -951,15 +946,15 @@ fn object_supports_property_follows_cpp_registry_semantics() {
     assert!(!object_supports_property(65_000, 4)); // Unknown object type.
 }
 
-/// The upstream definitions `make schema` generates from: the pinned
-/// `dev/defs` with the out-of-order upstream definitions in
-/// `defs/upstream-overlay` replacing the file at the same relative path. The
-/// port's own `defs/nuxie` extensions are not upstream metadata and are
-/// excluded from these comparisons.
-fn schema_defs_json(runtime_dir: &Path) -> BTreeMap<String, Value> {
-    let overlay = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../defs/upstream-overlay");
-    let mut defs = read_defs_json(&runtime_dir.join("dev/defs"));
-    defs.extend(read_defs_json(&overlay));
+/// `make schema` input order: public 9b331962 seed, d4fe runtime reconciliation,
+/// then pending text/cache forward overlays. The seed is historical metadata,
+/// not the current C++ authority (checked separately in cpp_generated_headers).
+/// Nuxie extensions are not upstream metadata and are excluded here.
+fn schema_defs_json() -> BTreeMap<String, Value> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../defs");
+    let mut defs = read_defs_json(&root.join("upstream-runtime"));
+    defs.extend(read_defs_json(&root.join("upstream-reconciliation")));
+    defs.extend(read_defs_json(&root.join("upstream-overlay")));
     defs
 }
 

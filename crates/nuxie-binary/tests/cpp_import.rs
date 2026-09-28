@@ -11190,6 +11190,12 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
     let data_bind_header = std::fs::read_to_string(&data_bind_header_path)
         .unwrap_or_else(|err| panic!("failed to read {}: {err}", data_bind_header_path.display()));
     let compact_data_bind_header = compact_cpp_source(&data_bind_header);
+    // d4fe routes shared reads through target(); the default runtime accessor
+    // still exposes the same pointer (editor handle resolution is separate).
+    assert!(
+        compact_data_bind_header.contains("#elseCore*target()const{returnm_target;};"),
+        "DataBind runtime target accessor changed; audit binary target resolution"
+    );
     assert_compact_contains_in_order(
         &compact_data_bind_header,
         &[
@@ -11273,7 +11279,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
         .unwrap_or_else(|| panic!("missing DataBind::canSkip in {}", source_path.display()));
     assert_eq!(
         can_skip,
-        "returnm_target&&m_target->is<Component>()&&m_target->as<Component>()->isCollapsed()&&propertyKey()!=LayoutComponentStyleBase::displayValuePropertyKey;",
+        "auto*t=target();returnt&&t->is<Component>()&&t->as<Component>()->isCollapsed()&&propertyKey()!=LayoutComponentStyleBase::displayValuePropertyKey;",
         "DataBind::canSkip changed; audit RuntimeFile::data_bind_can_skip"
     );
 
@@ -11304,7 +11310,7 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
             "autoflagsValue=static_cast<DataBindFlags>(flags());",
             "if(toTarget()){",
             "suppressDirt(true);",
-            "m_ContextValue->apply(m_target,propertyKey(),(flagsValue&DataBindFlags::Direction)==DataBindFlags::ToTarget,this);",
+            "m_ContextValue->apply(target(),propertyKey(),(flagsValue&DataBindFlags::Direction)==DataBindFlags::ToTarget,this);",
             "suppressDirt(false);",
         ],
         "DataBind::update changed; audit RuntimeFile::data_bind_update_effect",
@@ -11337,9 +11343,9 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
     assert_compact_contains_in_order(
         &update_source_binding,
         &[
-            "if(toSource()&&m_target&&m_ContextValue!=nullptr){",
+            "if(toSource()&&target()&&m_ContextValue!=nullptr){",
             "if(invalidate){m_ContextValue->invalidate();}",
-            "m_ContextValue->applyToSource(m_target,propertyKey(),isMainToSource(),this);",
+            "m_ContextValue->applyToSource(target(),propertyKey(),isMainToSource(),this);",
         ],
         "DataBind::updateSourceBinding changed; audit RuntimeFile::data_bind_update_effect",
     );
@@ -11596,6 +11602,8 @@ fn cpp_data_bind_flag_helpers_are_tracked_by_binary_import_model() {
 
 #[test]
 fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
+    // e16 moves cold storage behind a sidecar. The binary model projects queue
+    // membership and drain effects, not whether the cold vectors are allocated.
     let include_path =
         reference_runtime_dir().join("include/rive/data_bind/data_bind_container.hpp");
     let source_path = reference_runtime_dir().join("src/data_bind/data_bind_container.cpp");
@@ -11614,14 +11622,16 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
     assert_compact_contains_in_order(
         &compact_header,
         &[
+            "structDataBindQueues{",
+            "std::vector<DataBind*>persisting;",
+            "std::vector<DataBind*>dirtyToSource;",
+            "std::vector<DataBind*>pendingDirtyToSource;",
+            "std::vector<DataBind*>pendingDirty;",
+            "std::vector<DataBind*>pendingAdditions;",
+            "std::vector<DataBind*>pendingRemovals;",
             "std::vector<DataBind*>m_dataBinds;",
-            "std::vector<DataBind*>m_persistingDataBinds;",
-            "std::vector<DataBind*>m_dirtyToSourceDataBinds;",
-            "std::vector<DataBind*>m_pendingDirtyToSourceDataBinds;",
             "std::vector<DataBind*>m_dirtyDataBinds;",
-            "std::vector<DataBind*>m_pendingDirtyDataBinds;",
-            "std::vector<DataBind*>m_pendingAdditions;",
-            "std::vector<DataBind*>m_pendingRemovals;",
+            "Sidecar<DataBindQueues>m_queues;",
             "DataContext*m_dataContext=nullptr;",
             "boolm_isProcessing=false;",
         ],
@@ -11707,10 +11717,10 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
     assert_compact_contains_in_order(
         &add_data_bind,
         &[
-            "if(m_isProcessing){m_pendingAdditions.push_back(dataBind);return;}",
+            "if(m_isProcessing){m_queues.ensureAllocated()->pendingAdditions.push_back(dataBind);return;}",
             "m_dataBinds.push_back(dataBind);",
             "if(dataBind->toSource()&&!dataBind->targetSupportsPush()){",
-            "m_persistingDataBinds.push_back(dataBind);",
+            "m_queues.ensureAllocated()->persisting.push_back(dataBind);",
             "dataBind->inPersistingList(true);",
             "dataBind->container(this);",
             "if(m_dataContext&&dataBind->is<DataBindContext>()){",
@@ -11733,18 +11743,20 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
     assert_compact_contains_in_order(
         &remove_data_bind,
         &[
-            "if(m_isProcessing){m_pendingRemovals.push_back(dataBind);return;}",
+            "if(m_isProcessing){m_queues.ensureAllocated()->pendingRemovals.push_back(dataBind);return;}",
             "autoeraseOne=[dataBind](std::vector<DataBind*>&v){",
             "v.erase(std::remove(v.begin(),v.end(),dataBind),v.end());",
             "eraseOne(m_dataBinds);",
+            "auto*queues=m_queues.get();",
             "if(dataBind->inPersistingList()){",
-            "eraseOne(m_persistingDataBinds);",
+            "if(queues!=nullptr){eraseOne(queues->persisting);}",
             "dataBind->inPersistingList(false);",
             "if(dataBind->inDirtyList()){",
-            "eraseOne(m_dirtyToSourceDataBinds);",
-            "eraseOne(m_pendingDirtyToSourceDataBinds);",
             "eraseOne(m_dirtyDataBinds);",
-            "eraseOne(m_pendingDirtyDataBinds);",
+            "if(queues!=nullptr){",
+            "eraseOne(queues->dirtyToSource);",
+            "eraseOne(queues->pendingDirtyToSource);",
+            "eraseOne(queues->pendingDirty);",
             "dataBind->inDirtyList(false);",
             "dataBind->container(nullptr);",
         ],
@@ -11766,9 +11778,11 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
         &[
             "if(dataBind->toSource()&&dataBind->inPersistingList()){return;}",
             "if(dataBind->inDirtyList()){return;}",
+            "if(!dataBind->toSource()&&!m_isProcessing){m_dirtyDataBinds.push_back(dataBind);dataBind->inDirtyList(true);return;}",
+            "auto*queues=m_queues.ensureAllocated();",
             "auto&insertingList=dataBind->toSource()?",
-            "(m_isProcessing?m_pendingDirtyToSourceDataBinds:m_dirtyToSourceDataBinds)",
-            ":(m_isProcessing?m_pendingDirtyDataBinds:m_dirtyDataBinds);",
+            "(m_isProcessing?queues->pendingDirtyToSource:queues->dirtyToSource)",
+            ":queues->pendingDirty;",
             "insertingList.push_back(dataBind);",
             "dataBind->inDirtyList(true);",
         ],
@@ -11838,29 +11852,34 @@ fn cpp_data_bind_container_update_queues_are_tracked_by_binary_import_model() {
         &update_data_binds,
         &[
             "if(m_isProcessing){return;}",
-            "if(m_persistingDataBinds.size()==0&&m_dirtyToSourceDataBinds.size()==0&&m_dirtyDataBinds.size()==0){return;}",
+            "auto*queues=m_queues.get();",
+            "constboolhaveColdWork=queues!=nullptr&&(!queues->persisting.empty()||!queues->dirtyToSource.empty());",
+            "if(m_dirtyDataBinds.empty()&&!haveColdWork){return;}",
             "m_isProcessing=true;",
-            "for(auto&dataBind:m_persistingDataBinds){",
+            "if(auto*queues=m_queues.get()){",
+            "for(auto&dataBind:queues->persisting){",
             "if(!dataBind->canSkip()){updateDataBind(dataBind,applyTargetToSource);}",
-            "for(auto&dataBind:m_dirtyToSourceDataBinds){",
+            "for(auto&dataBind:queues->dirtyToSource){",
             "dataBind->inDirtyList(false);",
             "updateDataBind(dataBind,applyTargetToSource);",
             "for(auto&dataBind:m_dirtyDataBinds){",
             "dataBind->inDirtyList(false);",
             "updateDataBind(dataBind,applyTargetToSource);",
-            "m_dirtyToSourceDataBinds.clear();",
             "m_dirtyDataBinds.clear();",
-            "if(m_pendingDirtyToSourceDataBinds.size()>0){m_dirtyToSourceDataBinds.swap(m_pendingDirtyToSourceDataBinds);}",
-            "if(m_pendingDirtyDataBinds.size()>0){m_dirtyDataBinds.swap(m_pendingDirtyDataBinds);}",
+            "if(auto*queues=m_queues.get()){",
+            "queues->dirtyToSource.clear();",
+            "if(queues->pendingDirtyToSource.size()>0){queues->dirtyToSource.swap(queues->pendingDirtyToSource);}",
+            "if(queues->pendingDirty.size()>0){m_dirtyDataBinds.swap(queues->pendingDirty);}",
             "m_isProcessing=false;",
-            "if(!m_pendingAdditions.empty()){",
+            "if(auto*queues=m_queues.get()){",
+            "if(!queues->pendingAdditions.empty()){",
             "std::vector<DataBind*>additions;",
-            "additions.swap(m_pendingAdditions);",
+            "additions.swap(queues->pendingAdditions);",
             "for(auto*dataBind:additions){",
             "addDataBind(dataBind);",
-            "if(!m_pendingRemovals.empty()){",
+            "if(!queues->pendingRemovals.empty()){",
             "std::vector<DataBind*>removals;",
-            "removals.swap(m_pendingRemovals);",
+            "removals.swap(queues->pendingRemovals);",
             "for(auto*dataBind:removals){",
             "removeDataBind(dataBind);",
         ],

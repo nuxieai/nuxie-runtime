@@ -1,7 +1,9 @@
 # Upstream definition overlay
 
-`make schema` copies these files over the pinned upstream `dev/defs`
-(`RIVE_RUNTIME_REF`) before generating `crates/nuxie-schema/src/generated/schema.rs`.
+`make schema` copies these files over the vendored last-public definitions
+(`defs/upstream-runtime`) and current runtime reconciliation
+(`defs/upstream-reconciliation`) before generating
+`crates/nuxie-schema/src/generated/schema.rs`.
 Each file replaces the upstream file at the same relative path. They carry
 definitions that were ported ahead of the incremental sync, as recorded in
 `docs/upstream-sync-map.md`. Retire definitions only when the sequential sync's

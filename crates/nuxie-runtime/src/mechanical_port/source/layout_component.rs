@@ -1085,16 +1085,20 @@ impl LayoutComponent {
         (*self.base.base.base.base.world_transform() * self.local_anchor()).y
     }
     pub fn computed_root_x(&self) -> f32 {
+        let Some(artboard) = self.artboard_handle() else {
+            return 0.0;
+        };
         let point = *self.base.base.base.base.world_transform() * self.local_anchor();
-        self.artboard_handle()
-            .expect("computedRootX requires an artboard")
+        artboard
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point).x)
             .expect("computedRootX requires a live artboard")
     }
     pub fn computed_root_y(&self) -> f32 {
+        let Some(artboard) = self.artboard_handle() else {
+            return 0.0;
+        };
         let point = *self.base.base.base.base.world_transform() * self.local_anchor();
-        self.artboard_handle()
-            .expect("computedRootY requires an artboard")
+        artboard
             .with_downcast_mut::<Artboard, _>(|artboard| artboard.root_transform(point).y)
             .expect("computedRootY requires a live artboard")
     }

@@ -1,0 +1,6 @@
+{
+  "name": "Folder",
+  "key": { "int": 102, "string": "folder" },
+  "extends": "assets/asset.json",
+  "runtime": false
+}

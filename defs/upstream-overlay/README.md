@@ -4,12 +4,16 @@
 (`RIVE_RUNTIME_REF`) before generating `crates/nuxie-schema/src/generated/schema.rs`.
 Each file replaces the upstream file at the same relative path. They carry
 definitions that were ported ahead of the incremental sync, as recorded in
-`docs/upstream-sync-map.md`. Delete a file here once the sync reaches the
-upstream commit that introduced it.
+`docs/upstream-sync-map.md`. Retire definitions only when the sequential sync's
+schema source covers those properties. A shared file can represent multiple
+upstream commits: preserve later properties when an earlier commit is reached,
+and delete the file only when all its definitions are covered.
 
 Upstream removed `dev/defs` from the runtime repository in d4fe1022, so these
 files are reconstructed from the generated C++ headers of the introducing
-commit rather than copied.
+commit rather than copied. Crossing that removal does not make these overlays
+redundant; the replacement schema source must reproduce their definitions
+before they can be removed.
 
 | File | Upstream commit | Adds |
 |------|-----------------|------|

@@ -11,5 +11,6 @@ pub mod font_asset;
 pub mod image_asset;
 pub mod manifest_asset;
 pub mod script_asset;
+pub mod script_module_asset;
 pub mod shader_asset;
 pub mod text_asset;

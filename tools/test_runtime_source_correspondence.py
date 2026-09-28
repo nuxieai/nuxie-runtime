@@ -2,7 +2,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tools.check_runtime_source_correspondence import OWNER_ROOT, missing_owners, upstream_owners
+from tools.check_runtime_source_correspondence import (
+    ADAPTED_OWNERS, OWNER_ROOT, missing_owners, upstream_owners,
+)
 
 
 class RuntimeSourceCorrespondenceTests(unittest.TestCase):
@@ -30,6 +32,25 @@ class RuntimeSourceCorrespondenceTests(unittest.TestCase):
             owner.parent.mkdir(parents=True)
             owner.write_text("pub struct TextEngine;\n")
             self.assertEqual(missing_owners(repo, {"text_engine"}), [])
+
+    def test_adapted_owner_requires_real_nonempty_implementation_file(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory)
+            name = "lua/lua_asset_reference"
+            self.assertEqual(len(missing_owners(repo, {name})), 1)
+            target = repo / ADAPTED_OWNERS[name]
+            target.parent.mkdir(parents=True)
+            target.write_text("\n")
+            self.assertEqual(len(missing_owners(repo, {name})), 1)
+            target.write_text("pub struct ScopedAssetReference;\n")
+            self.assertEqual(missing_owners(repo, {name}), [])
+
+    def test_deferred_scope_is_exact_not_a_wasm_directory_exemption(self):
+        with tempfile.TemporaryDirectory() as directory:
+            missing = missing_owners(Path(directory), {
+                "wasm/wasm_scripting_vm", "scripting_slots", "wasm/new_owner",
+            })
+            self.assertEqual([row.split(" -> ")[0] for row in missing], ["wasm/new_owner"])
 
 
 if __name__ == "__main__":

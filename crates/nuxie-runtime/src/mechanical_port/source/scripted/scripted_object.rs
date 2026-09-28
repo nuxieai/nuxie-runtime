@@ -616,14 +616,13 @@ impl ScriptedObject {
             return;
         };
         let mut host = ScriptUpdateRequestHost::default();
-        // The native trigger adapter marks this host only after it finds and
-        // attempts a function, including an ordinary protected-call failure.
+        // ScriptedObject::trigger owns dirt propagation after the backend
+        // call, including when the named field is missing or is not a function.
+        // The backend's optional-method result does not gate this dirt.
         let _ = instance
             .borrow_mut()
             .call_input_trigger_core(&ScriptCoreString::from_bytes(name.into_bytes()), &mut host);
-        if host.take_requested() {
-            Self::add_input_dirt(owner);
-        }
+        Self::add_input_dirt(owner);
     }
 
     pub fn set_view_model_input_occurrence(owner: &CoreHandle, name: String, value: CoreHandle) {
@@ -646,9 +645,17 @@ impl ScriptedObject {
             )
             .flatten();
         let Some(view_model) = view_model else {
-            eprintln!(
-                "riveLuaPushViewModelInstanceValue - passed in a ViewModelInstanceViewModel with no associated ViewModelInstance."
-            );
+            if value
+                .with_downcast::<ViewModelInstanceViewModel, _>(|_| ())
+                .is_some()
+            {
+                eprintln!(
+                    "setInputViewModel - passed in a ViewModelInstanceViewModel with no associated ViewModelInstance."
+                );
+            }
+            // The backend leaves self untouched for null or unsupported
+            // values, but ScriptedObject dirties after that backend return.
+            Self::add_input_dirt(owner);
             return;
         };
         let definition = view_model
@@ -665,13 +672,10 @@ impl ScriptedObject {
             .expect("bound view-model definition retains a live file");
         let facade = ScriptViewModel::from_native(view_model, file)
             .expect("resolved native view-model can be projected");
-        let assigned = instance
+        let _ = instance
             .borrow_mut()
-            .set_view_model_input_core(&ScriptCoreString::from_bytes(name.into_bytes()), facade)
-            .is_ok();
-        if assigned {
-            Self::add_input_dirt(owner);
-        }
+            .set_view_model_input_core(&ScriptCoreString::from_bytes(name.into_bytes()), facade);
+        Self::add_input_dirt(owner);
     }
 
     pub fn set_artboard_input_occurrence(owner: &CoreHandle, name: String, source: CoreHandle) {

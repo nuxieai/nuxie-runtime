@@ -12,6 +12,7 @@ pub struct FileAsset {
     pub base: FileAssetBase,
     cdn_uuid: Vec<u8>,
     file_asset_referencers: Vec<CoreHandle>,
+    verified: bool,
 }
 
 impl AssetBaseCallbacks for FileAsset {
@@ -54,11 +55,20 @@ impl Default for FileAsset {
             base: FileAssetBase::default(),
             cdn_uuid: Vec::new(),
             file_asset_referencers: Vec::new(),
+            verified: false,
         }
     }
 }
 
 impl FileAsset {
+    pub fn verified(&self) -> bool {
+        self.verified
+    }
+
+    pub(crate) fn set_verified(&mut self, verified: bool) {
+        self.verified = verified;
+    }
+
     pub fn asset_id(&self) -> u32 {
         self.base.asset_id()
     }

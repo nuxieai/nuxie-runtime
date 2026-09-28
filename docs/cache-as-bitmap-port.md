@@ -94,10 +94,13 @@ records the exception. The checkpoint does not move.
 - The earlier cases in `modulate_opacity_test.cpp` have no Rust port yet. Only
   the new query case is added.
 
-Intervening upstream commits that also touch these files are not ported:
+Intervening upstream commits that also touch these files remain to be accounted
+for in full:
 `845a82a9`, `d4fe1022`, `c55840a8`, `d8727299` (the artboard watermark branch
 in `draw`), `6951a4b3`, `85d7f952`, `d9747935`. The sync applies them in
-order later.
+order later. The semantic boolean registry getters from `d4fe1022` were already
+ported separately in `a81c58e997`; that narrow slice does not account for the
+rest of the commit.
 
 ## Qualification
 

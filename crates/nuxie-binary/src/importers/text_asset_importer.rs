@@ -121,8 +121,11 @@ pub(crate) fn verified_text_asset_ids(file: &RuntimeFile) -> BTreeSet<u32> {
                 asset,
                 creates_importer: true,
             } => {
-                let next = matches!(asset.type_name, "ScriptAsset" | "ShaderAsset")
-                    .then(|| TextAssetImporter::new(asset));
+                let next = matches!(
+                    asset.type_name,
+                    "ScriptAsset" | "ShaderAsset" | "ScriptModuleAsset"
+                )
+                .then(|| TextAssetImporter::new(asset));
                 if let Some(previous) = current.take() {
                     previous.resolve(&mut verification_set, &mut verified_text_assets);
                 }

@@ -2685,6 +2685,7 @@ pub enum CoreConcreteType {
     ArtboardListMapRule,
     CustomPropertyEnum,
     BlobAsset,
+    ScriptModuleAsset,
     Folder,
     ScriptAsset,
     ManifestAsset,
@@ -2837,6 +2838,7 @@ pub enum CoreField {
     FeatherSpaceValue,
     FeatherStrength,
     FileAssetAssetId,
+    ScriptModuleAssetLanguage,
     FileAssetCdnBaseUrl,
     FillFillRule,
     FocusActionTargetTargetId,
@@ -4871,12 +4873,6 @@ pub trait CoreCapabilities: Any {
     fn file_asset_referencer_asset_updated(&mut self) -> bool {
         false
     }
-    fn text_asset_verified(&self) -> Option<bool> {
-        None
-    }
-    fn text_asset_set_verified(&mut self, _verified: bool) -> bool {
-        false
-    }
     fn transition_comparator_component_object_id(&self) -> Option<u32> {
         None
     }
@@ -6832,6 +6828,7 @@ impl CoreRegistry {
             648 => CoreConcreteType::ArtboardListMapRule,
             616 => CoreConcreteType::CustomPropertyEnum,
             649 => CoreConcreteType::BlobAsset,
+            1071 => CoreConcreteType::ScriptModuleAsset,
             102 => CoreConcreteType::Folder,
             529 => CoreConcreteType::ScriptAsset,
             642 => CoreConcreteType::ManifestAsset,
@@ -7123,6 +7120,7 @@ impl CoreRegistry {
             872 => CoreField::CustomPropertyEnumPropertyValue,
             873 => CoreField::CustomPropertyEnumEnumId,
             204 => CoreField::FileAssetAssetId,
+            1087 => CoreField::ScriptModuleAssetLanguage,
             893 => CoreField::ScriptAssetGeneratorFunctionRef,
             1022 => CoreField::ScriptAssetSerializedImplementedMethods,
             1073 => CoreField::ImageAssetSamplerFilter,
@@ -7798,6 +7796,7 @@ impl CoreRegistry {
             872 => CoreField::CustomPropertyEnumPropertyValue,
             873 => CoreField::CustomPropertyEnumEnumId,
             204 => CoreField::FileAssetAssetId,
+            1087 => CoreField::ScriptModuleAssetLanguage,
             893 => CoreField::ScriptAssetGeneratorFunctionRef,
             1022 => CoreField::ScriptAssetSerializedImplementedMethods,
             1073 => CoreField::ImageAssetSamplerFilter,
@@ -67896,13 +67895,6 @@ impl CoreCapabilities for crate::mechanical_port::source::assets::script_asset::
     fn as_file_asset_mut(&mut self) -> Option<&mut dyn FileAssetCapability> {
         Some(self)
     }
-    fn text_asset_verified(&self) -> Option<bool> {
-        Some(self.base.base.verified())
-    }
-    fn text_asset_set_verified(&mut self, verified: bool) -> bool {
-        self.base.base.set_verified(verified);
-        true
-    }
 }
 impl FileAssetCapability for crate::mechanical_port::source::assets::script_asset::ScriptAsset {
     fn file_asset_base(&self) -> &crate::mechanical_port::source::assets::file_asset::FileAsset {
@@ -68016,13 +68008,6 @@ impl CoreCapabilities for crate::mechanical_port::source::assets::shader_asset::
     }
     fn as_file_asset_mut(&mut self) -> Option<&mut dyn FileAssetCapability> {
         Some(self)
-    }
-    fn text_asset_verified(&self) -> Option<bool> {
-        Some(self.base.base.verified())
-    }
-    fn text_asset_set_verified(&mut self, verified: bool) -> bool {
-        self.base.base.set_verified(verified);
-        true
     }
 }
 impl FileAssetCapability for crate::mechanical_port::source::assets::shader_asset::ShaderAsset {
@@ -76239,6 +76224,7 @@ impl CoreRegistry {
             648 => Some(Box::new(<crate::mechanical_port::source::artboard_list_map_rule::ArtboardListMapRule>::default())),
             616 => Some(Box::new(<crate::mechanical_port::source::custom_property_enum::CustomPropertyEnum>::default())),
             649 => Some(Box::new(<crate::mechanical_port::source::assets::blob_asset::BlobAsset>::default())),
+            1071 => Some(Box::new(<crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset>::default())),
             102 => Some(Box::new(<crate::mechanical_port::source::assets::folder::Folder>::default())),
             529 => Some(Box::new(<crate::mechanical_port::source::assets::script_asset::ScriptAsset>::default())),
             642 => Some(Box::new(<crate::mechanical_port::source::assets::manifest_asset::ManifestAsset>::default())),
@@ -76492,6 +76478,220 @@ impl crate::mechanical_port::source::core::CoreType
 {
     const TYPE_KEY: u16 = crate::mechanical_port::source::generated::text::text_style_background_base::TextStyleBackgroundBase::TYPE_KEY;
 }
+
+impl crate::mechanical_port::source::core::CoreType
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    const TYPE_KEY: u16 =
+        crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY;
+}
+impl CoreRegistryObject
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    fn as_registry_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_registry_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::is_type_of(type_key)
+    }
+    fn set_uint(&mut self, field: CoreField, value: u32) {
+        match field {
+            CoreField::ScriptModuleAssetLanguage => {
+                if self.base.set_language_value(value) {
+                    <Self as crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBaseCallbacks>::language_changed(self);
+                    <Self as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, 1087);
+                }
+            }
+            CoreField::FileAssetAssetId => {
+                if self.base.base.base.set_asset_id_value(value) {
+                    <crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::asset_id_changed(self);
+                    <crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::ASSET_ID_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_string(&mut self, field: CoreField, value: String) {
+        match field {
+            CoreField::AssetName => {
+                if self.base.base.base.base.base.set_name_value(value) {
+                    <crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset as crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks>::name_changed(self);
+                    <crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset as crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::asset_base::AssetBase::NAME_PROPERTY_KEY);
+                }
+            }
+            CoreField::FileAssetCdnBaseUrl => {
+                if self.base.base.base.set_cdn_base_url_value(value) {
+                    <crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::cdn_base_url_changed(self);
+                    <crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset as crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks>::notify_property_changed(self, crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::CDN_BASE_URL_PROPERTY_KEY);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn set_color(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn set_bool(&mut self, field: CoreField, value: bool) {
+        let _ = (field, value);
+    }
+    fn set_double(&mut self, field: CoreField, value: f32) {
+        let _ = (field, value);
+    }
+    fn set_callback(&mut self, field: CoreField, mut value: CallbackData<'_>) {
+        let _ = (field, value);
+    }
+    fn set_int(&mut self, field: CoreField, value: i32) {
+        let _ = (field, value);
+    }
+    fn get_uint(&mut self, field: CoreField) -> u32 {
+        match field {
+            CoreField::ScriptModuleAssetLanguage => self.base.language(),
+            CoreField::FileAssetAssetId => self.base.base.base.asset_id(),
+            _ => 0,
+        }
+    }
+    fn get_string(&mut self, field: CoreField) -> String {
+        match field {
+            CoreField::AssetName => self.base.base.base.base.base.name().to_owned(),
+            CoreField::FileAssetCdnBaseUrl => self.base.base.base.cdn_base_url().to_owned(),
+            _ => String::new(),
+        }
+    }
+    fn get_color(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+    fn get_bool(&mut self, field: CoreField) -> bool {
+        let _ = field;
+        false
+    }
+    fn get_double(&mut self, field: CoreField) -> f32 {
+        let _ = field;
+        0.0
+    }
+    fn get_int(&mut self, field: CoreField) -> i32 {
+        let _ = field;
+        0
+    }
+}
+impl crate::mechanical_port::source::core::CoreObject
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    fn type_predicate(&self) -> fn(u16) -> bool {
+        crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::is_type_of
+    }
+    fn core(&self) -> &crate::mechanical_port::source::core::Core {
+        &self.base.base.base.base.base.base
+    }
+    fn core_mut(&mut self) -> &mut crate::mechanical_port::source::core::Core {
+        &mut self.base.base.base.base.base.base
+    }
+    fn core_type(&self) -> u16 {
+        crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::TYPE_KEY
+    }
+    fn is_type_of(&self, type_key: u16) -> bool {
+        crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBase::is_type_of(type_key)
+    }
+    fn clone_boxed(&self) -> Option<Box<dyn crate::mechanical_port::source::core::CoreObject>> {
+        {
+            let mut callbacks = Self::default();
+            Some(Box::new(self.base.clone_into(&mut callbacks)))
+        }
+    }
+    fn deserialize(
+        &mut self,
+        property_key: u16,
+        reader: &mut crate::mechanical_port::source::core::binary_reader::BinaryReader<'_>,
+    ) -> bool {
+        if property_key == crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase::CDN_UUID_PROPERTY_KEY {
+            let bytes = crate::mechanical_port::source::core::field_types::core_bytes_type::CoreBytesType::deserialize(reader);
+            crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks::decode_cdn_uuid(self, bytes.as_slice());
+            return true;
+        }
+        let mut base = std::mem::take(&mut self.base);
+        let result = base.deserialize(property_key, reader, self);
+        self.base = base;
+        result
+    }
+}
+impl FileAssetCapability
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    fn file_asset_base(&self) -> &crate::mechanical_port::source::assets::file_asset::FileAsset {
+        &self.base.base
+    }
+    fn file_asset_base_mut(
+        &mut self,
+    ) -> &mut crate::mechanical_port::source::assets::file_asset::FileAsset {
+        &mut self.base.base
+    }
+    fn file_asset_decode(
+        &mut self,
+        data: &mut Vec<u8>,
+        factory: &crate::mechanical_port::source::factory::RuntimeFactoryHandle,
+    ) -> bool {
+        self.decode(data, factory)
+    }
+    fn file_extension(&self) -> &'static str {
+        self.file_extension()
+    }
+    fn adds_to_backboard(&self) -> bool {
+        true
+    }
+}
+impl CoreCapabilities
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    fn lifecycle_import(
+        &mut self,
+        stack: &mut crate::mechanical_port::source::importers::import_stack::ImportStack,
+    ) -> Option<crate::mechanical_port::source::status_code::StatusCode> {
+        let adds_to_backboard = FileAssetCapability::adds_to_backboard(self);
+        Some(FileAssetCapability::file_asset_base_mut(self).import(adds_to_backboard, stack))
+    }
+    fn as_file_asset(&self) -> Option<&dyn FileAssetCapability> {
+        Some(self)
+    }
+    fn as_file_asset_mut(&mut self) -> Option<&mut dyn FileAssetCapability> {
+        Some(self)
+    }
+}
+impl crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBaseCallbacks
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        <crate::mechanical_port::source::assets::asset::Asset as crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks>::notify_property_changed(&mut self.base.base.base.base, property_key)
+    }
+    fn decode_cdn_uuid(&mut self, value: &[u8]) {
+        crate::mechanical_port::source::assets::file_asset::FileAsset::decode_cdn_uuid(
+            &mut self.base.base,
+            value,
+        )
+    }
+    fn copy_cdn_uuid(
+        &mut self,
+        object: &crate::mechanical_port::source::generated::assets::file_asset_base::FileAssetBase,
+    ) {
+        crate::mechanical_port::source::assets::file_asset::FileAsset::copy_cdn_uuid(
+            &mut self.base.base,
+            object,
+        )
+    }
+}
+impl crate::mechanical_port::source::generated::assets::asset_base::AssetBaseCallbacks
+    for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset
+{
+    fn notify_property_changed(&mut self, property_key: u16) {
+        crate::mechanical_port::source::core::Core::notify_property_changed(
+            &mut self.base.base.base.base,
+            property_key,
+        )
+    }
+}
+impl crate::mechanical_port::source::generated::assets::script_module_asset_base::ScriptModuleAssetBaseCallbacks for crate::mechanical_port::source::assets::script_module_asset::ScriptModuleAsset {}
 
 impl CoreRegistryObject for crate::mechanical_port::source::bitmap_cache::BitmapCache {
     fn as_registry_any(&self) -> &dyn Any {

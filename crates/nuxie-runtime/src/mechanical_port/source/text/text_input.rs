@@ -264,9 +264,7 @@ impl TextInput {
                     .base
                     .world_transform()
                     .map_bounding_box(self.raw_text_input.bounds());
-                if self.raw_text_input.sizing() == TextSizing::AutoHeight {
-                    self.base.mark_layout_node_dirty();
-                }
+                self.base.mark_layout_node_dirty();
             }
             if changed & Flags::SelectionDirty as u8 != 0 {
                 for child in self.base.children().to_vec() {
@@ -362,7 +360,6 @@ impl TextInput {
     pub fn text_changed(&mut self) {
         self.source_text = self.base.text().to_owned();
         self.sync_displayed_text_from_source(false);
-        self.base.mark_layout_node_dirty();
         self.mark_shape_dirty();
     }
     pub fn selection_radius_changed(&mut self) {

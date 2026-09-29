@@ -2155,6 +2155,14 @@ impl RuntimeStateMachineInstanceHandle {
     }
 
     pub fn advance_and_apply(&self, seconds: f32) -> bool {
+        let artboard = self.with_instance(|machine| {
+            machine.artboard_instance.upgrade().expect("live state machine artboard")
+        });
+        if artboard.with_artboard_mut(|artboard| artboard.advance_watermark(seconds)) {
+            // Settle the host at time zero while keeping its ticker running.
+            self.advance_and_apply_view_models(0.0, true);
+            return true;
+        }
         self.advance_and_apply_view_models(seconds, true)
     }
 

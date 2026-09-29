@@ -126,4 +126,5 @@ pub mod typed_children;
 pub mod view_model_type;
 pub mod viewmodel;
 pub mod virtualizing_component;
+pub mod watermark;
 pub mod world_transform_component;

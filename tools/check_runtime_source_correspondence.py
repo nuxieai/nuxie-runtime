@@ -48,7 +48,7 @@ DEFERRED_OWNERS = {
     "wasm/artboard_wire", "wasm/browser_scripting_vm", "wasm/data_convert_wire",
     "wasm/gamepad_wire", "wasm/listener_wire", "wasm/module/gpu_proxy",
     "wasm/module/module_context", "wasm/module/render_proxy", "wasm/module_render",
-    "wasm/module_tier_ladder", "wasm/path_effect_wire", "wasm/wamr_state_transplant",
+    "wasm/module_tier_ladder", "wasm/path_effect_wire", "wasm/prelinked_aot", "wasm/wamr_state_transplant",
     "wasm/wasm_scripting_vm",
 }
 

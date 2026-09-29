@@ -34,12 +34,17 @@ pub use native_vulkan::{NativeVulkanPresentation, NativeVulkanSurfaceAdmission};
 
 #[cfg(feature = "renderer-webgpu")]
 mod native_webgpu;
-#[cfg(all(
-    feature = "renderer-webgpu",
-    target_arch = "wasm32",
-    target_os = "unknown"
+#[cfg(any(
+    all(
+        feature = "renderer-webgpu",
+        target_arch = "wasm32",
+        target_os = "unknown"
+    ),
+    all(feature = "native-vulkan-experimental", target_os = "android")
 ))]
-pub use native_webgpu::ExternalImageTextures;
+pub use external_image::ExternalImageTextures;
+#[cfg(all(feature = "native-vulkan-experimental", target_os = "android"))]
+pub use mechanical_port::vulkan::hardware_buffer::{hardware_buffer_size, VideoColor, VideoMatrix};
 #[cfg(feature = "renderer-webgpu")]
 pub use native_webgpu::{NativeWebGpuFactory, NativeWebGpuFrame};
 
@@ -49,7 +54,8 @@ pub use native_webgpu::{NativeWebGpuFactory, NativeWebGpuFrame};
         feature = "renderer-webgpu",
         target_arch = "wasm32",
         target_os = "unknown"
-    )
+    ),
+    all(feature = "native-vulkan-experimental", target_os = "android")
 ))]
 mod external_image;
 

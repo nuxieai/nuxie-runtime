@@ -11,22 +11,13 @@ use std::sync::Arc;
 
 use crate::exact_source_adapter::{ExactSourceFactoryCore, ExactSourceFrameCore};
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-use crate::external_image::TextureRing;
+use crate::external_image::ExternalImageTextures;
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use crate::mechanical_port::source::renderer::include::rive::renderer::rive_render_image_hpp::RiveRenderImageHandle;
 use crate::mechanical_port::webgpu::WebGpuProductBackend;
 use crate::{RenderMode, RendererError};
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 use std::rc::Rc;
-
-/// Textures that receive one stream of browser images, such as one video's
-/// decoded frames, through [`NativeWebGpuFactory::copy_external_image`]. The
-/// stream never rewrites an image someone still holds, so an image handed out
-/// earlier keeps its pixels. In steady state it alternates between two
-/// textures and allocates again only when the image size changes.
-#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
-#[derive(Default)]
-pub struct ExternalImageTextures(TextureRing<RiveRenderImageHandle>);
 
 /// A headless exact-source native Dawn WebGPU renderer factory.
 pub struct NativeWebGpuFactory {

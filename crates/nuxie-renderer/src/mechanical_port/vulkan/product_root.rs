@@ -15,6 +15,8 @@ use std::sync::Arc;
 use ash::vk;
 use ash::vk::Handle;
 
+#[cfg(target_os = "android")]
+use super::hardware_buffer::{FrameRegion, HardwareBufferConverter, VideoColor};
 use super::render_context_vulkan_decl::{ContextOptions, RenderContextVulkanImpl};
 use super::render_target_vulkan_decl::{RenderTargetVulkanApi, RenderTargetVulkanImpl};
 use super::vkutil_decl::{ImageAccess, ImageAccessAction};
@@ -126,6 +128,12 @@ pub(crate) struct VulkanProductBackend {
     surface: Option<super::android_surface::AndroidSurface>,
     #[cfg(target_os = "android")]
     pending_surface: Option<bool>,
+    /// Whether the device imports Android hardware buffers with Y'CbCr
+    /// conversion; the converter is created on the first video frame.
+    #[cfg(target_os = "android")]
+    hardware_buffer_import: bool,
+    #[cfg(target_os = "android")]
+    hardware_buffers: Option<HardwareBufferConverter>,
 }
 
 impl VulkanProductBackend {
@@ -146,14 +154,17 @@ impl VulkanProductBackend {
         let adapter_name = unsafe { CStr::from_ptr(properties.device_name.as_ptr()) }
             .to_string_lossy()
             .into_owned();
-        let (device, features, presentation_extensions_enabled) = create_device(
-            &instance,
-            physical_device,
-            queue_family_index,
-            // Core features require both the instance request and device support.
-            instance_api_version.min(properties.api_version),
-            surface_extensions_enabled,
-        )?;
+        let (device, features, presentation_extensions_enabled, hardware_buffer_import) =
+            create_device(
+                &instance,
+                physical_device,
+                queue_family_index,
+                // Core features require both the instance request and device support.
+                instance_api_version.min(properties.api_version),
+                surface_extensions_enabled,
+            )?;
+        #[cfg(not(target_os = "android"))]
+        let _ = hardware_buffer_import;
         let queue = unsafe { device.get_device_queue(queue_family_index, 0) };
         let context = unsafe {
             super::render_context_vulkan_decl::MakeContext(
@@ -225,7 +236,113 @@ impl VulkanProductBackend {
             surface: None,
             #[cfg(target_os = "android")]
             pending_surface: None,
+            #[cfg(target_os = "android")]
+            hardware_buffer_import,
+            #[cfg(target_os = "android")]
+            hardware_buffers: None,
         })
+    }
+
+    /// A texture the renderer samples like a decoded image and a hardware
+    /// buffer conversion draws into: the RGBA8 format and single level decoded
+    /// images use, plus color-attachment usage.
+    #[cfg(target_os = "android")]
+    pub(crate) fn make_frame_texture(
+        &mut self,
+        width: u32,
+        height: u32,
+    ) -> Result<
+        rcp<
+            crate::mechanical_port::source::renderer::include::rive::renderer::texture_hpp::Texture,
+        >,
+        RendererError,
+    > {
+        let context = unsafe { Pin::get_unchecked_mut(self.context_pin()) };
+        let implementation = unsafe { &mut *context.static_impl_cast::<RenderContextVulkanImpl>() };
+        let texture = implementation.m_vk.makeTexture2D(
+            vk::ImageCreateInfo::default()
+                .format(HardwareBufferConverter::TARGET_FORMAT)
+                .extent(vk::Extent3D {
+                    width,
+                    height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .usage(vk::ImageUsageFlags::SAMPLED | vk::ImageUsageFlags::COLOR_ATTACHMENT),
+            Some(c"hardware buffer frame"),
+        );
+        let created = unsafe { texture.get().as_ref() }
+            .is_some_and(|texture| texture.vkImageView() != vk::ImageView::null());
+        if !created {
+            return Err(RendererError::Device(
+                "create Vulkan hardware buffer frame texture".into(),
+            ));
+        }
+        Ok(unsafe {
+            crate::mechanical_port::source::include::rive::refcnt_hpp::static_rcp_cast(texture)
+        })
+    }
+
+    /// Convert the picture in `buffer` into the texture behind `image`, which
+    /// `make_frame_texture` created at the region's display extent and no
+    /// one else holds. The conversion completes before this returns.
+    ///
+    /// # Safety
+    /// `buffer` is a live AHardwareBuffer whose producer has finished writing
+    /// it, and `image` was created by this backend's `make_frame_texture`.
+    #[cfg(target_os = "android")]
+    pub(crate) unsafe fn convert_hardware_buffer(
+        &mut self,
+        buffer: NonNull<c_void>,
+        region: FrameRegion,
+        color: Option<VideoColor>,
+        image: &RiveRenderImageHandle,
+    ) -> Result<(), RendererError> {
+        if self.active_frame {
+            return Err(RendererError::Device(
+                "cannot convert a video frame while recording a frame".into(),
+            ));
+        }
+        if !self.hardware_buffer_import {
+            return Err(RendererError::Unsupported(
+                "Vulkan Android hardware buffer import",
+            ));
+        }
+        let texture = image.source().refTexture();
+        // SAFETY: make_frame_texture published a Vulkan Texture2D, which
+        // begins with its renderer texture base.
+        let Some(texture) = (unsafe {
+            texture
+                .get()
+                .cast::<super::vkutil_decl::Texture2D>()
+                .as_ref()
+        }) else {
+            return Err(RendererError::InvalidImageUpload(
+                "hardware buffer frame has no texture".into(),
+            ));
+        };
+        if self.hardware_buffers.is_none() {
+            self.hardware_buffers = Some(unsafe {
+                HardwareBufferConverter::new(
+                    &self.instance,
+                    &self.device,
+                    self.queue,
+                    self.queue_family_index,
+                )
+            }?);
+        }
+        let converter = self
+            .hardware_buffers
+            .as_mut()
+            .expect("converter created above");
+        unsafe { converter.convert(buffer, region, color, texture.vkImageView()) }?;
+        // The conversion's render pass leaves the texture ready to sample.
+        texture.overrideLastAccess(ImageAccess {
+            pipelineStages: vk::PipelineStageFlags::FRAGMENT_SHADER,
+            accessMask: vk::AccessFlags::SHADER_READ,
+            layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+        });
+        Ok(())
     }
 
     #[cfg(target_os = "android")]
@@ -1009,6 +1126,8 @@ impl Drop for VulkanProductBackend {
         }
         #[cfg(feature = "native-ore-vulkan-experimental")]
         self.gpu_canvas.take();
+        #[cfg(target_os = "android")]
+        self.hardware_buffers.take();
         self.target.operator_assign_null();
         self.context.take();
         unsafe {
@@ -1139,7 +1258,7 @@ fn create_device(
     queue_family_index: u32,
     api_version: u32,
     surface_extensions_enabled: bool,
-) -> Result<(ash::Device, VulkanFeatures, bool), RendererError> {
+) -> Result<(ash::Device, VulkanFeatures, bool, bool), RendererError> {
     let supported_features = unsafe { instance.get_physical_device_features(physical_device) };
     let requested_features = vk::PhysicalDeviceFeatures::default()
         .independent_blend(supported_features.independent_blend != 0)
@@ -1210,6 +1329,19 @@ fn create_device(
             ash::ext::swapchain_maintenance1::NAME.as_ptr(),
         ]);
     }
+    // Android video frames arrive in hardware buffers the renderer imports
+    // and converts from YUV; without this support video frames fail.
+    let mut ycbcr_features = vk::PhysicalDeviceSamplerYcbcrConversionFeatures::default();
+    let hardware_buffer_import = cfg!(target_os = "android")
+        && HARDWARE_BUFFER_EXTENSIONS.iter().all(|name| supports(name))
+        && {
+            let mut query = vk::PhysicalDeviceFeatures2::default().push_next(&mut ycbcr_features);
+            unsafe { instance.get_physical_device_features2(physical_device, &mut query) };
+            ycbcr_features.sampler_ycbcr_conversion != 0
+        };
+    if hardware_buffer_import {
+        extensions.extend(HARDWARE_BUFFER_EXTENSIONS.iter().map(|name| name.as_ptr()));
+    }
     let priority = [1.0f32];
     let queues = [vk::DeviceQueueCreateInfo::default()
         .queue_family_index(queue_family_index)
@@ -1226,6 +1358,9 @@ fn create_device(
     }
     if presentation_extensions_enabled {
         create = create.push_next(&mut presentation_features);
+    }
+    if hardware_buffer_import {
+        create = create.push_next(&mut ycbcr_features);
     }
     let device = unsafe { instance.create_device(physical_device, &create, None) }
         .map_err(|error| RendererError::Device(format!("create Vulkan device: {error:?}")))?;
@@ -1246,8 +1381,14 @@ fn create_device(
             textureCompressionETC2: requested_features.texture_compression_etc2 != 0,
         },
         presentation_extensions_enabled,
+        hardware_buffer_import,
     ))
 }
+
+#[cfg(target_os = "android")]
+const HARDWARE_BUFFER_EXTENSIONS: [&CStr; 2] = HardwareBufferConverter::EXTENSIONS;
+#[cfg(not(target_os = "android"))]
+const HARDWARE_BUFFER_EXTENSIONS: [&CStr; 0] = [];
 
 fn create_target_resources(
     device: &ash::Device,

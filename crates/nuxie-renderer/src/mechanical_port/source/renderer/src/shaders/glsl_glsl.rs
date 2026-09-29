@@ -2,7 +2,7 @@
  * Exact pinned upstream source bytes and provenance for
  * renderer/src/shaders/glsl.glsl.
  *
- * Upstream source revision: c18b32511bfeaeee6b7c54e35152aea3fdbb5964
+ * Upstream source revision: 27a2876815e282c9f235def8b7c529c77d8bb105
  */
 
 #![allow(dead_code)]
@@ -10,12 +10,12 @@
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 
-pub const PINNED_UPSTREAM_COMMIT: &str = "c18b32511bfeaeee6b7c54e35152aea3fdbb5964";
+pub const PINNED_UPSTREAM_COMMIT: &str = "27a2876815e282c9f235def8b7c529c77d8bb105";
 pub const PINNED_SOURCE_PATH: &str = "renderer/src/shaders/glsl.glsl";
 pub const PINNED_SOURCE_SHA256: &str =
-    "95ed8ed5e9e35b0d34c30b4415ccc204f113406b83a833ac738d659b418a4cb6";
-pub const PINNED_SOURCE_LINE_COUNT: usize = 736;
-pub const PINNED_SOURCE_BYTE_COUNT: usize = 30772;
+    "3e4d37c7f175ed6f12b3660ed3057559df88b83249f97d930e6270521267ada5";
+pub const PINNED_SOURCE_LINE_COUNT: usize = 737;
+pub const PINNED_SOURCE_BYTE_COUNT: usize = 30834;
 
 /// Exact pinned upstream source bytes.
 pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
@@ -381,7 +381,7 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
 #define PLS_CONTEXT_UNPACK , _plsIdx
 
 #ifdef @TARGET_WGSL
-// WGSL has no `coherent` qualifier — naga would propagate it as an invalid
+// WGSL has no `coherent` qualifier - naga would propagate it as an invalid
 // `@coherent` attribute that Tint rejects. WGSL's storage memory model
 // already guarantees the visibility we need across the atomic ops below.
 #define PLS_DECLUI_UAV(IDX, NAME)                                              \
@@ -679,7 +679,8 @@ pub const PINNED_GLSL_GLSL_SOURCE: &str = r###"/*
     layout(location = 0) out DATA_TYPE _fd;                                    \
     void main()
 
-#define FRAG_DATA_MAIN_WITH_CLOCKWISE FRAG_DATA_MAIN
+#define FRAG_DATA_MAIN_WITH_CLOCKWISE(DATA_TYPE, NAME)                         \
+    FRAG_DATA_MAIN(DATA_TYPE, NAME)
 
 #define _clockwise gl_FrontFacing
 

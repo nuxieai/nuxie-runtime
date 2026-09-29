@@ -21,9 +21,9 @@ uniform mediump vec4 TE;
 #endif
 #ifdef GL_EXT_shader_pixel_local_storage
 #ifdef STORE_COLOR
-__pixel_local_inEXT R1
+__pixel_local_inEXT S1
 #else
-__pixel_local_outEXT R1
+__pixel_local_outEXT S1
 #endif
 {layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 l4;layout(r32ui)highp uint H7;};
 #ifndef GL_ARM_shader_framebuffer_fetch

@@ -1,5 +1,5 @@
 #ifdef FRAGMENT
-I1 x0(S2,j0);j1(T2,h0);x0(h6,l4);j1(K6,H7);J1 L1(JB){r(f1,g);
+J1 x0(S2,j0);j1(T2,h0);x0(h6,l4);j1(K6,H7);K1 M1(JB){r(f1,g);
 #ifdef ENABLE_MODULATED_IMAGE
 r(A2,R);
 #endif
@@ -62,22 +62,22 @@ i j=M7(f1,
 #ifdef ENABLE_MODULATED_IMAGE
 A2,
 #endif
-n U2);i K1;if(i9!=B0){K1=I0(j0);
+n U2);i L1;if(i9!=B0){L1=I0(j0);
 #ifndef DRAW_INTERIOR_TRIANGLES
-y0(l4,K1);
+y0(l4,L1);
 #endif
-}else{K1=I0(l4);
+}else{L1=I0(l4);
 #ifndef DRAW_INTERIOR_TRIANGLES
 w2(l4);
 #endif
 }
 #ifdef ENABLE_ADVANCED_BLEND
-if(ENABLE_ADVANCED_BLEND){if(f2!=a6(R5)){j.xyz=U4(j.xyz,K1,c6(f2));}j.xyz*=j.w;}
+if(ENABLE_ADVANCED_BLEND){if(f2!=a6(R5)){j.xyz=U4(j.xyz,L1,c6(f2));}j.xyz*=j.w;}
 #endif
 #ifdef NEEDS_GAMMA_CORRECTION
 if(NEEDS_GAMMA_CORRECTION){j=m3(j);}
 #endif
-c v2=j.w;j+=K1*(1.-v2);j.xyz=F2(j.xyz,v2,a0.xy,m.B3,m.C3);y0(j0,j);e2(h0);}
+c v2=j.w;j+=L1*(1.-v2);j.xyz=F2(j.xyz,v2,a0.xy,m.B3,m.C3);y0(j0,j);e2(h0);}
 #if!defined(DRAW_INTERIOR_TRIANGLES)
 y2;
 #endif

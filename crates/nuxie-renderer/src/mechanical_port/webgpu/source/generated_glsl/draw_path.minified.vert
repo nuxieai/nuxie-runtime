@@ -56,7 +56,7 @@ g2
 #ifdef EMULATE_DYNAMIC_COLOR_WRITE_DISABLE
 Bd(gh)Cd(float,Rh)Dd(Sh)
 #endif
-y1(HC,e0,F,B,v){
+z1(HC,e0,F,B,v){
 #if defined(DRAW_INTERIOR_TRIANGLES)||defined(FEATHER_ATLAS_BLIT)
 M(B,F,LB,R);
 #else
@@ -206,14 +206,14 @@ c0(f2);
 #ifdef RENDER_MODE_CLOCKWISE_ATOMIC
 c0(f3);c0(o4);
 #endif
-z1(W);}
+A1(W);}
 #endif
 #ifdef FRAGMENT
 Q3 R3 e i M7(g K5,
 #ifdef ENABLE_MODULATED_IMAGE
 R qb,
 #endif
-float n L6){i j;if(K5.w>=.0){j=c5(K5);if(I5)j.w*=n;else j*=n;}else{float t=K5.z>.0?K5.x:length(K5.xy);t=clamp(t,.0,1.);float le=abs(K5.z);float x=le>1.?(1.-1./ma)*t+(.5/ma):(1./ma)*t+le;float Vh=-K5.w;j=o2(MD,Qb,d(x,Vh),.0);j.w*=n;if(I5){}else{j.xyz*=j.w;}}
+float n L6){i j;if(K5.w>=.0){j=c5(K5);if(I5)j.w*=n;else j*=n;}else{float t=K5.z>.0?K5.x:length(K5.xy);t=clamp(t,.0,1.);float le=abs(K5.z);float x=le>1.?(1.-1./ma)*t+(.5/ma):(1./ma)*t+le;float Vh=-K5.w;j=o2(ND,Qb,d(x,Vh),.0);j.w*=n;if(I5){}else{j.xyz*=j.w;}}
 #if defined(ENABLE_MODULATED_IMAGE)
 if(ENABLE_MODULATED_IMAGE&&qb.z>0.0){c Wh=qb.z-1.;i G2=U6(JC,W5,qb.xy,Wh);if(I5)G2=C0(G6(G2),G2.w);j*=G2;}
 #endif

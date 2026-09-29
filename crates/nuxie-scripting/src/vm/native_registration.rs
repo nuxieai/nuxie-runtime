@@ -189,18 +189,9 @@ fn attempt(
         let cached = vm.registered_module(script.name)?;
         let value = if matches!(cached, Value::Nil) {
             // ScriptAsset has already stripped/verified the signed envelope.
-            let chunk = vm.load_bytecode(script.name, script.bytecode)?;
+            let chunk = vm.load_module(script.name, script.bytecode)?;
             vm.reset_execution_budget();
-            let values: MultiValue = vm.execute_loaded_module(script.name, chunk)?;
-            let value = values.back().cloned().ok_or_else(|| {
-                Error::runtime(format!("{}:1: module must return a value", script.name))
-            })?;
-            if !matches!(value, Value::Table(_) | Value::Function(_)) {
-                return Err(Error::runtime(format!(
-                    "{}:1: module must return a table or function",
-                    script.name
-                )));
-            }
+            let value: Value = vm.execute_module(script.name, chunk)?;
             if !script.is_protocol {
                 vm.cache_registered_module(script.name, value.clone())?;
             }

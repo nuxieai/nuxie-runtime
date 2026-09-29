@@ -1,5 +1,17 @@
 # Nuxie patches for luaur-rt 0.1.8
 
+## Module lifecycle inspection (runtime c5faa1fa)
+
+- `Lua::create_module_thread` installs the module closure's sandbox as the
+  coroutine globals and inherits host thread data. `Thread::resume_module`
+  reports nonzero statuses, including yields, while the normalized error and
+  original frames are still on the coroutine, before transferring the error.
+- `Thread::stack_value` provides non-consuming inspection and retained closure
+  handles; the existing raw `Thread::state` supports debug-frame inspection.
+- These are pure-Rust VM boundaries for Rive's default-no-op module hooks,
+  not a debugger or a compatibility C implementation. Generic coroutine resume
+  behavior is unchanged.
+
 ## Bytecode-only device runtime (UNIV-1644)
 
 - Source compilation and the `Chunk`/`Compiler` API are behind the default-on

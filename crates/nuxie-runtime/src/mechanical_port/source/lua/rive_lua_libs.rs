@@ -2303,6 +2303,12 @@ pub trait ScriptingContext {
         false
     }
 
+    // The module thread still has its loaded, unexecuted closure on top.
+    fn on_module_loaded(&mut self, _module_thread: &mut LuaState, _chunk_name: &str) {}
+
+    // A failed (including yielded) module still has its frames and error on top.
+    fn on_module_error(&mut self, _module_thread: &mut LuaState) {}
+
     fn factory(&mut self) -> &mut Factory {
         unsafe { &mut *self.data().factory }
     }

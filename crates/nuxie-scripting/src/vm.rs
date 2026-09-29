@@ -59,7 +59,7 @@ use lua_math::install_math_globals;
 use lua_rive_base::install_host_print;
 use luaur_rt::ffi::lua_error;
 use luaur_rt::{
-    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Value,
+    AnyUserData, FromLuaMulti, Function, IntoLuaMulti, Lua, MultiValue, Table, Thread, Value,
     Vector as LuaVector, VmState,
 };
 use luaur_vm::functions::lua_callbacks::lua_callbacks;
@@ -759,6 +759,14 @@ pub(crate) fn script_pixel_ratio(lua: &Lua) -> f32 {
         .map_or(1.0, |ratio| ratio.0)
 }
 
+/// Module lifecycle hooks corresponding to ScriptingContext's default no-ops.
+/// The loaded closure or normalized error is still on the supplied thread's
+/// stack. Hosts may retain a closure and inspect the thread's live frames.
+pub trait ModuleHooks {
+    fn on_module_loaded(&self, _module_thread: &Thread, _chunk_name: &str) {}
+    fn on_module_error(&self, _module_thread: &Thread) {}
+}
+
 /// A booted Luau VM.
 ///
 /// Thin wrapper over [`luaur_rt::Lua`] with the Rive-specific entry points;
@@ -787,6 +795,7 @@ pub struct ScriptVm {
     native_shader_authorities:
         RefCell<Vec<(Arc<[u8]>, nuxie_render_api::GpuCanvasShaderProvenance)>>,
     logging: LoggingScriptingContext,
+    module_hooks: RefCell<Option<Rc<dyn ModuleHooks>>>,
 }
 
 #[cfg(test)]
@@ -921,10 +930,7 @@ fn exit_script_call_gpu_scope(lua: &Lua, scope: &crate::gpu_canvas::ScriptCallGp
             Err(error) => logging.log_error(&error),
         };
         report(
-            crate::gpu_canvas::close_orphan_render_pass(
-                &bindings,
-                scope.open_render_pass_token,
-            ),
+            crate::gpu_canvas::close_orphan_render_pass(&bindings, scope.open_render_pass_token),
             "GPU render pass left open at script return. Call :finish() on render passes before returning.",
         );
         report(
@@ -1515,7 +1521,7 @@ impl ScriptVm {
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
         let generator = self
-            .execute_loaded_module(name, chunk)
+            .execute_module(name, chunk)
             .map_err(|error| self.script_error(error))?;
         Ok(ScriptProgram { generator })
     }
@@ -1826,6 +1832,7 @@ impl ScriptVm {
             gpu_canvas_shaders: Rc::new(RefCell::new(Vec::new())),
             native_shader_authorities: RefCell::new(Vec::new()),
             logging: LoggingScriptingContext::default(),
+            module_hooks: RefCell::new(None),
         }
     }
 
@@ -2232,8 +2239,8 @@ impl ScriptVm {
     }
 
     /// Load precompiled Luau *bytecode* (the payload `.riv` files carry)
-    /// into an unexecuted closure — the Rust twin of C++
-    /// `ScriptingVM::loadModule`'s `luau_load` call.
+    /// into an unexecuted closure for generic tooling. Runtime modules use
+    /// [`Self::load_module`] to install their sandbox and lifecycle hooks.
     ///
     /// Structural bytecode errors are rejected before reaching `luau_load`.
     /// The pinned luaur loader mirrors C++ pointer-heavy deserialization, so
@@ -2275,9 +2282,9 @@ impl ScriptVm {
     /// `executeModule`. Every chunk executes with its own writable global proxy,
     /// so one ScriptAsset cannot overwrite another ScriptAsset's globals.
     pub fn run_bytecode<R: FromLuaMulti>(&self, chunk_name: &str, bytecode: &[u8]) -> Result<R> {
-        let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        let chunk = self.load_module(chunk_name, bytecode)?;
         self.reset_execution_budget();
-        self.execute_loaded_module(chunk_name, chunk)
+        self.execute_module(chunk_name, chunk)
     }
 
     /// Evaluate precompiled Luau bytecode in the VM's shared global
@@ -2296,17 +2303,28 @@ impl ScriptVm {
         self.track_resource_result(result)
     }
 
-    /// Execute a loaded script/module with the same environment isolation as
-    /// C++ `loadModule`: the chunk gets a fresh writable globals proxy whose
-    /// reads fall through to the VM's sandboxed Rive globals. C++ installs this
-    /// table on a temporary coroutine; setting the loaded closure environment
-    /// directly preserves the same retained-closure behavior without relying
-    /// on a coroutine after registration returns.
+    /// Source-compilation test seam; production modules use load_module.
+    #[cfg(all(test, feature = "compiler"))]
     fn execute_loaded_module<R: FromLuaMulti>(
         &self,
         display_name: &str,
         chunk: Function,
     ) -> Result<R> {
+        let thread = self.prepare_module(display_name, chunk)?;
+        self.execute_module(display_name, thread)
+    }
+
+    pub fn set_module_hooks(&self, hooks: Option<Rc<dyn ModuleHooks>>) {
+        *self.module_hooks.borrow_mut() = hooks;
+    }
+
+    /// Load a sandboxed module thread without running its closure.
+    pub fn load_module(&self, chunk_name: &str, bytecode: &[u8]) -> Result<Thread> {
+        let chunk = self.load_bytecode(chunk_name, bytecode)?;
+        self.prepare_module(chunk_name, chunk)
+    }
+
+    fn prepare_module(&self, display_name: &str, chunk: Function) -> Result<Thread> {
         let environment = self.lua.create_table();
         let metatable = self.lua.create_table();
         // This metatable is fresh and private, so no __newindex behavior can
@@ -2320,17 +2338,35 @@ impl ScriptVm {
                 "module '{display_name}' could not install its sandbox environment"
             )));
         }
-        self.track_resource_result(chunk.protected_call(()))
+        let thread = self.lua.create_module_thread(chunk)?;
+        let hooks = self.module_hooks.borrow().clone();
+        if let Some(hooks) = hooks {
+            hooks.on_module_loaded(&thread, display_name);
+        }
+        Ok(thread)
+    }
+
+    /// Execute the same thread previously returned by [`Self::load_module`].
+    pub fn execute_module<R: FromLuaMulti>(&self, display_name: &str, thread: Thread) -> Result<R> {
+        let hooks = self.module_hooks.borrow().clone();
+        let scope = crate::gpu_canvas::enter_script_call_gpu_scope(&self.lua);
+        let result = thread.resume_module(display_name, |thread| {
+            if let Some(hooks) = &hooks {
+                hooks.on_module_error(thread);
+            }
+        });
+        exit_script_call_gpu_scope(&self.lua, &scope);
+        self.track_resource_result(result)
     }
 
     /// Load a raw `ScriptAsset` payload as it appears in a `.riv` file:
     /// strip the signed-content envelope, then load the inner Luau bytecode.
     /// Signature *verification* is out of scope for the spike (unsigned
     /// in-band bytecode is the corpus norm; C++ merely marks unverified).
-    pub fn load_script_asset_payload(&self, name: &str, payload: &[u8]) -> Result<Function> {
+    pub fn load_script_asset_payload(&self, name: &str, payload: &[u8]) -> Result<Thread> {
         let envelope = SignedContent::parse(payload)
             .map_err(|e| Error::runtime(format!("ScriptAsset '{name}': {e}")))?;
-        self.load_bytecode(name, envelope.content)
+        self.load_module(name, envelope.content)
     }
 
     /// The registered-module cache table (stored in the Lua named registry,
@@ -2415,7 +2451,7 @@ impl ScriptVm {
         }
         let chunk = self.load_script_asset_payload(name, payload)?;
         self.reset_execution_budget();
-        let result = self.execute_loaded_module(name, chunk)?;
+        let result = self.execute_module(name, chunk)?;
         self.cache_registered_module(name, result)
     }
 
@@ -2673,7 +2709,7 @@ impl RuntimeScriptingVm for ScriptVm {
             .map_err(|error| self.script_error(error))?;
         self.reset_execution_budget();
         let generator: Function = self
-            .execute_loaded_module(name, chunk)
+            .execute_module(name, chunk)
             .map_err(|error| self.script_error(error))?;
         let context_view_model = Rc::new(RefCell::new(self.default_context_view_model.clone()));
         let context_present = Rc::new(Cell::new(

@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148`
+- LAST_SYNCED_SHA: `bb7200ef181d72f0e83e737636a41b1e43601d7a`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 139 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 139 require a Rust translation.
+  There are 138 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 138 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `bb7200ef181d72f0e83e737636a41b1e43601d7a` | **DEFER/SKIP:** Windows WAMR build/platform fixes, tier-ladder process layout, and Wasm execution clock portability remain deferred with UNIV-3728. The only renderer edit adds an ORE header to the unsupported D3D12 path-fiddle host. No shared/native-Luau runtime or supported renderer behavior changes; no Windows Wasm execution or D3D12 support is claimed. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `9d2e7d04d1bd5ee5863c7155d059b1e7b5810148` | Re-home hidden focus within its ancestor chain and descend renewed scopes to eligible leaves after the owning root's update. Preserve root-scoped visibility checks, unattributed host-node behavior, and all-roots entry points; reuse filtered children in leaf selection. Translate the focus regressions and same-frame collapsing assertion, using upstream's changed focus_collapsing Silver recording. | — |
 | `a6b6723ba291f6f00888c09a1f975c6c23936095` | Apply nested-artboard layout placement after constraints, using the mounted instance's origin and the parent's linear transform; remove the superseded world-composition override. Translate all six constraint/follow-path/origin-override regressions with the three exact upstream fixtures and original tolerances. Retain the approved Taffy boundary. | — |
 | `bc97fa18fdd658f7c0c80f935121276d3b28ffaf` | Carry backend display scale into Luau layout-resize callbacks, with upstream default/equality behavior, snapshot-based registered-object notifications, and known-size guarding before redispatch. Preserve the separate local context pixel-ratio extension. The Wasm execution owner's v2/legacy export dispatch remains deferred under UNIV-3728; shared runtime and Luau behavior are not deferred. | — |

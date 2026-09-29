@@ -58,10 +58,21 @@ adb -s <selected-device> shell am start -n ai.nuxie.videoqualification/.MainActi
 adb -s <selected-device> shell run-as ai.nuxie.videoqualification cat files/video-proof-result.txt
 ```
 
-The proof uses MediaPlayer with a private SurfaceTexture and bounded RGBA
-readback, followed by the runtime's Vulkan upload and scene draw. It does not
-use a VideoView overlay. The build generates a local debug signing key under
-ignored `target/`; that key is only for this disposable qualification app.
+The proof decodes with MediaPlayer into an ImageReader and hands each frame
+to the runtime in the decoder's hardware buffer. The Vulkan renderer imports
+the buffer with no copy and converts it from YUV to RGBA on the GPU
+(`NativeVulkanFactory::import_hardware_buffer`) before the scene draw. It does
+not use a VideoView overlay. The build generates a local debug signing key
+under ignored `target/`; that key is only for this disposable qualification
+app.
+
+Launching with `--ez parity true` checks the conversion's colors. It decodes
+every frame of the asymmetric `parity-opaque.mp4` through the hardware buffer
+path and compares it with FFmpeg's decode of the same file
+(`fixtures/video/parity-opaque.rgba`), which every channel must match within
+2, and with the SurfaceTexture and GL readback path it replaced
+(`GlReadbackPlayer`), which must match within 4 where the picture is flat: the
+GL path resamples edges.
 
 ## Evidence so far (2026-09-16)
 
@@ -420,3 +431,17 @@ views and composition, not custom shader execution on every backend.
 Evidence: `target/video-image-view-*-live.log`,
 `target/video-image-view-ios-*.log`, and
 `target/video-image-view-android-embedded.log`.
+
+Android hardware buffer frames (2026-09-29, API 36 emulator): decoded frames
+now reach Vulkan in the decoder's hardware buffer instead of through a GL
+readback and a CPU copy. The proof passed with 47 frames, and the parity mode
+matched FFmpeg's decode with a maximum channel difference of 1 (mean 0.20)
+over 10 frames and the replaced GL path with a maximum of 3 in flat areas.
+Colors come from the video's own matrix and range, falling back to Android's
+defaults, because the emulator's driver suggests full range for
+limited-range video. Frames with non-square pixels convert at the display
+size MediaPlayer reports. In the 720p benchmark, three interleaved runs each,
+the app used 8.0, 12.5 and 11.1 s of CPU against 14.7, 22.2 and 19.8 s before,
+while render-thread frame work at p50 went from 4.9 to 6.9 ms to 5.3 to
+7.6 ms: the conversion now waits on the emulated GPU, which runs on the host. These
+are emulator figures; a physical Android device has not been measured.

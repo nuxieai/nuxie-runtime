@@ -1622,6 +1622,29 @@
       ]
     },
     {
+      "name": "NuxVideoPixelBufferFrame",
+      "size": 32,
+      "alignment": 8,
+      "fields": [
+        {
+          "name": "struct_size",
+          "offset": 0
+        },
+        {
+          "name": "generation",
+          "offset": 8
+        },
+        {
+          "name": "presentation_seconds",
+          "offset": 16
+        },
+        {
+          "name": "pixel_buffer",
+          "offset": 24
+        }
+      ]
+    },
+    {
       "name": "NuxVideoPlaybackCapabilities",
       "size": 16,
       "alignment": 8,

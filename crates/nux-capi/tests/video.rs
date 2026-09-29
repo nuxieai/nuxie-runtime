@@ -538,6 +538,225 @@ fn metal_video_frames_validate_renderer_domain_dimensions_and_generation() {
     }
 }
 
+/// Core Video buffers for the pixel buffer tests; each value owns one reference.
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+mod pixel_buffers {
+    use std::ffi::c_void;
+    use std::ptr;
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        static kCFTypeDictionaryKeyCallBacks: [usize; 6];
+        static kCFTypeDictionaryValueCallBacks: [usize; 5];
+        static kCFBooleanTrue: *const c_void;
+        fn CFDictionaryCreate(
+            allocator: *const c_void,
+            keys: *const *const c_void,
+            values: *const *const c_void,
+            count: isize,
+            key_callbacks: *const c_void,
+            value_callbacks: *const c_void,
+        ) -> *const c_void;
+        fn CFGetRetainCount(object: *const c_void) -> isize;
+        fn CFRelease(object: *const c_void);
+    }
+
+    #[link(name = "CoreVideo", kind = "framework")]
+    unsafe extern "C" {
+        static kCVPixelBufferIOSurfacePropertiesKey: *const c_void;
+        static kCVPixelBufferMetalCompatibilityKey: *const c_void;
+        fn CVPixelBufferCreate(
+            allocator: *const c_void,
+            width: usize,
+            height: usize,
+            format: u32,
+            attributes: *const c_void,
+            out: *mut *mut c_void,
+        ) -> i32;
+    }
+
+    pub const BGRA: u32 = u32::from_be_bytes(*b"BGRA");
+
+    pub struct PixelBuffer(pub *mut c_void);
+
+    impl PixelBuffer {
+        pub fn new(width: usize, height: usize, format: u32, surface_backed: bool) -> Self {
+            unsafe {
+                let dictionary = |keys: &[*const c_void], values: &[*const c_void]| {
+                    CFDictionaryCreate(
+                        ptr::null(),
+                        keys.as_ptr(),
+                        values.as_ptr(),
+                        keys.len() as isize,
+                        ptr::addr_of!(kCFTypeDictionaryKeyCallBacks).cast(),
+                        ptr::addr_of!(kCFTypeDictionaryValueCallBacks).cast(),
+                    )
+                };
+                let empty = dictionary(&[], &[]);
+                let attributes = if surface_backed {
+                    dictionary(
+                        &[
+                            kCVPixelBufferIOSurfacePropertiesKey,
+                            kCVPixelBufferMetalCompatibilityKey,
+                        ],
+                        &[empty, kCFBooleanTrue],
+                    )
+                } else {
+                    dictionary(&[], &[])
+                };
+                let mut buffer = ptr::null_mut();
+                let status = CVPixelBufferCreate(
+                    ptr::null(),
+                    width,
+                    height,
+                    format,
+                    attributes,
+                    &mut buffer,
+                );
+                CFRelease(attributes);
+                CFRelease(empty);
+                assert_eq!(status, 0, "CVPixelBufferCreate");
+                Self(buffer)
+            }
+        }
+
+        pub fn retain_count(&self) -> isize {
+            unsafe { CFGetRetainCount(self.0) }
+        }
+    }
+
+    impl Drop for PixelBuffer {
+        fn drop(&mut self) {
+            unsafe { CFRelease(self.0) };
+        }
+    }
+}
+
+#[cfg(all(feature = "apple-metal", any(target_os = "ios", target_os = "macos")))]
+#[test]
+fn metal_pixel_buffer_frames_validate_and_hold_the_buffer_while_presented() {
+    use pixel_buffers::{BGRA, PixelBuffer};
+    unsafe {
+        let (mut renderer, mut other, mut result) =
+            (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        assert_eq!(
+            nux_renderer_new_metal(64, 32, &mut renderer, &mut result),
+            NuxStatus::Ok
+        );
+        nux_capi_result_free(result);
+        assert_eq!(
+            nux_renderer_new_metal(64, 32, &mut other, &mut result),
+            NuxStatus::Ok
+        );
+        nux_capi_result_free(result);
+        let bytes = scene();
+        let capabilities = NuxVideoPlaybackCapabilities {
+            playback_available: 1,
+            ..Default::default()
+        };
+        let (mut file, mut artboard, mut player) =
+            (ptr::null_mut(), ptr::null_mut(), ptr::null_mut());
+        assert_eq!(
+            nux_file_import_metal(
+                renderer,
+                bytes.as_ptr(),
+                bytes.len(),
+                &NuxFileImportConfig {
+                    video_playback: &capabilities,
+                    ..Default::default()
+                },
+                &mut file,
+                &mut result
+            ),
+            NuxStatus::Ok
+        );
+        nux_capi_result_free(result);
+        assert_eq!(
+            nux_artboard_instance_new(file, 0, &mut artboard),
+            NuxStatus::Ok
+        );
+        assert_eq!(nux_player_new_static(artboard, &mut player), NuxStatus::Ok);
+
+        let buffer = PixelBuffer::new(64, 32, BGRA, true);
+        let unheld = buffer.retain_count();
+        let mut frame = NuxVideoPixelBufferFrame {
+            struct_size: std::mem::size_of::<NuxVideoPixelBufferFrame>() as u32,
+            generation: 0,
+            presentation_seconds: 0.5,
+            pixel_buffer: buffer.0,
+        };
+        let present = |renderer, frame: &NuxVideoPixelBufferFrame| {
+            nux_player_video_present_metal_pixel_buffer(renderer, player, 1, frame)
+        };
+
+        assert_eq!(present(other, &frame), NuxStatus::HandleMismatch);
+        assert_eq!(
+            nux_player_video_present_metal_pixel_buffer(renderer, player, 1, ptr::null()),
+            NuxStatus::NullArgument
+        );
+        frame.struct_size -= 8;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidStructSize);
+        frame.struct_size += 8;
+        frame.pixel_buffer = ptr::null_mut();
+        assert_eq!(present(renderer, &frame), NuxStatus::NullArgument);
+        let memory_backed = PixelBuffer::new(64, 32, BGRA, false);
+        frame.pixel_buffer = memory_backed.0;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument);
+        let biplanar = PixelBuffer::new(64, 32, u32::from_be_bytes(*b"420f"), true);
+        frame.pixel_buffer = biplanar.0;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument);
+        frame.pixel_buffer = buffer.0;
+        frame.presentation_seconds = -1.0;
+        assert_eq!(present(renderer, &frame), NuxStatus::InvalidArgument);
+        frame.presentation_seconds = 0.5;
+        assert_eq!(
+            buffer.retain_count(),
+            unheld,
+            "rejected frames never hold the buffer"
+        );
+
+        assert_eq!(present(renderer, &frame), NuxStatus::Ok);
+        let mut readiness = 99;
+        assert_eq!(
+            nux_player_video_readiness(player, 1, 0.0, 2.0, 0, &mut readiness),
+            NuxStatus::Ok
+        );
+        assert_eq!(readiness, 1, "a presented pixel buffer admits presentation");
+        assert_eq!(
+            buffer.retain_count(),
+            unheld + 1,
+            "the presented frame holds the buffer"
+        );
+
+        let stale = PixelBuffer::new(64, 32, BGRA, true);
+        let stale_unheld = stale.retain_count();
+        frame.generation = 999;
+        frame.pixel_buffer = stale.0;
+        assert_eq!(present(renderer, &frame), NuxStatus::Ok);
+        assert_eq!(
+            stale.retain_count(),
+            stale_unheld,
+            "an old generation's frame is ignored without wrapping its buffer"
+        );
+        assert_eq!(
+            buffer.retain_count(),
+            unheld + 1,
+            "the current frame stays presented"
+        );
+
+        nux_player_free(player);
+        nux_artboard_instance_free(artboard);
+        nux_file_free(file);
+        assert_eq!(
+            buffer.retain_count(),
+            unheld,
+            "freeing the player releases the buffer"
+        );
+        assert_eq!(nux_renderer_free(renderer), NuxStatus::Ok);
+        assert_eq!(nux_renderer_free(other), NuxStatus::Ok);
+    }
+}
+
 unsafe extern "C" fn caption(data: *mut c_void, language: NuxStringView, text: NuxStringView) {
     let output = unsafe { &mut *data.cast::<(String, String)>() };
     let copy = |view: NuxStringView| {

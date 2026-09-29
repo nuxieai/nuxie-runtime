@@ -1235,6 +1235,28 @@ typedef struct NuxVideoFrame {
   struct NuxByteView pixels;
 } NuxVideoFrame;
 
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * A decoded video frame held in a Core Video pixel buffer.
+ */
+typedef struct NuxVideoPixelBufferFrame {
+  /**
+   * Must be initialized to `sizeof(NuxVideoPixelBufferFrame)`.
+   */
+  uint32_t struct_size;
+  uint64_t generation;
+  double presentation_seconds;
+  /**
+   * Borrowed `CVPixelBufferRef`: 32BGRA and IOSurface-backed, as
+   * AVFoundation provides when `kCVPixelBufferMetalCompatibilityKey` is
+   * requested. Its bytes are read like `NuxVideoFrame` pixels, top row
+   * first. The renderer samples the buffer in place and retains it while
+   * the frame is in use, so the caller may release it after the call.
+   */
+  void *pixel_buffer;
+} NuxVideoPixelBufferFrame;
+#endif
+
 /**
  * Current native media clock, in the same order as group creation. Mark an
  * unavailable/seeking clock available=0. Boolean fields must be 0 or 1.
@@ -2358,6 +2380,19 @@ NuxStatus nux_player_video_present_metal(const struct NuxRenderer *renderer,
                                          const struct NuxPlayer *player,
                                          size_t component_id,
                                          const struct NuxVideoFrame *frame);
+#endif
+
+#if (defined(NUX_CAPI_APPLE_METAL) && (defined(__APPLE__) || defined(__APPLE__)))
+/**
+ * Present a video frame without copying its pixels: the renderer draws the
+ * pixel buffer's IOSurface directly. Generation and renderer-domain rules
+ * match `nux_player_video_present_metal`; the same 64 MiB frame limit applies
+ * to width * height * 4.
+ */
+NuxStatus nux_player_video_present_metal_pixel_buffer(const struct NuxRenderer *renderer,
+                                                      const struct NuxPlayer *player,
+                                                      size_t component_id,
+                                                      const struct NuxVideoPixelBufferFrame *frame);
 #endif
 
 /**

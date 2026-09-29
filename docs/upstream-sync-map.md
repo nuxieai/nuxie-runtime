@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `4ca3b88a34e02d534bb800a803e81217ee11cc60`
+- LAST_SYNCED_SHA: `4217c6378d0934c784a467abcaac9e9684c98411`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 133 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 133 require a Rust translation.
+  There are 132 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 132 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `4217c6378d0934c784a467abcaac9e9684c98411` | **DEFERRED:** tools-only Wasm tier-ladder/state-transplant guards, disabled-engine inline singleton surface, and WAMR internal-header build gating belong to the parked Wasm execution lane. No native Luau, shared runtime, browser renderer or fixture behavior changes occur in this public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |
 | `4ca3b88a34e02d534bb800a803e81217ee11cc60` | Gate layout-controlled text box sizing and overflow at file version 7.3; preserve content-sized legacy boxes, in-memory defaults and clone state while leaving effective text dimensions unchanged. Translate the four exact five-frame text-layout Silver scenarios and consume the updated upstream assets/recordings through the pinned harness. Preserve approved Rust text and Taffy boundaries. | — |
 | `2210ed8799c0128504dd664a7179f4f8f299e85a` | Split image rectangle and mesh instance streams, resource counts, allocation/mapping and backend bindings; translate the seven-attribute vertex layout and shared shader changes across Metal, Vulkan, WebGPU and WebGL2. Regenerate shader artifacts and preserve the existing Metal and WebGPU host adaptations. Translate resource-count and map-failure regressions. D3D backends are not shipped; ORE GM namespace qualifications require no Rust behavior change. | — |
 | `6cd8fccc90dc3c30dff0f71175648b4417246212` | **DEFERRED:** Wasm frame-collector hooks, leak reporting, guest decode/error/sampler handling, WAMR AOT cache/tiering and memory-growth fixes, Android engine build support and the Wasm-only GC benchmark remain with the parked execution lane. No native Luau, shared runtime, supported renderer or fixture changes occur in this public delta. | [UNIV-3728](https://universe.basis.dev/issue/UNIV-3728) |

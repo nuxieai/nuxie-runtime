@@ -18,8 +18,9 @@ nuxie-renderer = { path = "../../crates/nuxie-renderer", features = ["renderer-m
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 nuxie-renderer = { path = "../../crates/nuxie-renderer", features = ["renderer-webgl2"] }
+js-sys = "0.3"
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["HtmlCanvasElement", "Window", "Performance"] }
+web-sys = { version = "0.3", features = ["CanvasRenderingContext2d", "Document", "Element", "HtmlCanvasElement", "ImageData", "Window", "Performance"] }
 
 [features]
 webgpu = ["nuxie-renderer/renderer-webgpu"]

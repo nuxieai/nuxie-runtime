@@ -35,7 +35,30 @@ pub struct Frame {
     pub pts: f64,
     pub width: u32,
     pub height: u32,
-    pub rgba: Vec<u8>,
+    pub pixels: FramePixels,
+}
+
+/// Where a decoded frame's pixels are.
+pub enum FramePixels {
+    /// `width * height * 4` sRGB bytes, top row first, copied to the CPU by
+    /// the platform adapter.
+    Rgba(Vec<u8>),
+    /// A browser frame drawn into its player's GPU-backed canvas. Copy it on
+    /// the GPU, or read it back with `CanvasFrame::read_rgba` where the
+    /// renderer cannot. Valid until the player captures its next frame.
+    #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+    Canvas(crate::browser::CanvasFrame),
+}
+
+impl Frame {
+    /// The frame's bytes when the platform adapter copied them to the CPU.
+    pub fn rgba(&self) -> Option<&[u8]> {
+        match &self.pixels {
+            FramePixels::Rgba(rgba) => Some(rgba),
+            #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+            FramePixels::Canvas(_) => None,
+        }
+    }
 }
 pub use nuxie_runtime::video::sync::MediaClock;
 /// Implementations release all decoder/audio resources when dropped.

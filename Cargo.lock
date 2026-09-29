@@ -2133,6 +2133,7 @@ name = "video-qualification"
 version = "0.1.0"
 dependencies = [
  "jni",
+ "js-sys",
  "nuxie-binary",
  "nuxie-render-api",
  "nuxie-renderer",

@@ -168,17 +168,13 @@ impl MetalProof {
         if self
             .player
             .tick_allocated(allocation, |frame| {
+                let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
                 assert_eq!((frame.width, frame.height), (64, 32));
-                decoded = Some((frame.pts, frame.rgba[..4].to_vec()));
+                decoded = Some((frame.pts, rgba[..4].to_vec()));
                 let image = self
                     .factory
                     .borrow()
-                    .upload_rgba8_premul_srgb(
-                        frame.width,
-                        frame.height,
-                        frame.width * 4,
-                        &frame.rgba,
-                    )
+                    .upload_rgba8_premul_srgb(frame.width, frame.height, frame.width * 4, rgba)
                     .unwrap();
                 let image: std::rc::Rc<dyn nuxie_render_api::RenderImage> =
                     std::rc::Rc::from(image);
@@ -941,17 +937,13 @@ impl MetalBenchmark {
         let status = self
             .player
             .tick_allocated(Allocation::PlatformManaged, |frame| {
+                let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
                 assert_eq!((frame.width, frame.height), (1280, 720));
-                pixel = Some(frame.rgba[..4].to_vec());
+                pixel = Some(rgba[..4].to_vec());
                 let image = self
                     .factory
                     .borrow()
-                    .upload_rgba8_premul_srgb(
-                        frame.width,
-                        frame.height,
-                        frame.width * 4,
-                        &frame.rgba,
-                    )
+                    .upload_rgba8_premul_srgb(frame.width, frame.height, frame.width * 4, rgba)
                     .unwrap();
                 Ok(std::rc::Rc::from(image))
             })

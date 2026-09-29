@@ -23,5 +23,9 @@ cp "$proof_dir/sync.html" "$video_output/sync.html"
 cp "$repo_dir/fixtures/video/red-blue-sync.mp4" "$video_output/"
 cp "$repo_dir/fixtures/video/red-blue-audio.mp4" "$video_output/"
 
+cp "$proof_dir/parity.html" "$video_output/parity.html"
+cp "$repo_dir/fixtures/video/parity-alpha.webm" "$video_output/"
+cp "$repo_dir/fixtures/video/parity-opaque.mp4" "$video_output/"
+
 cp "$proof_dir/benchmark.html" "$video_output/benchmark.html"
 cp "$repo_dir/fixtures/video/red-blue-720p.mp4" "$video_output/"

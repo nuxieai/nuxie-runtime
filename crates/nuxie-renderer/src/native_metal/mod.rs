@@ -54,6 +54,7 @@ pub(crate) mod pipeline_cache;
 #[cfg(test)]
 #[allow(dead_code)]
 mod pipeline_names;
+mod pixel_buffer;
 #[cfg(test)]
 mod pixel_stability_tests;
 mod readback;

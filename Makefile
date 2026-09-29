@@ -654,10 +654,10 @@ capi-smoke: fixtures
 	@if [ "$$(uname -s)" = Darwin ]; then \
 		$(CC) -std=c11 -Wall -Wextra -Werror -Icrates/nux-capi/include \
 			-o target/capi-smoke/capi_smoke_static crates/nux-capi/smoke/capi_smoke.c \
-			target/debug/libnux_capi.a -framework CoreFoundation -framework CoreGraphics -framework ImageIO; \
+			target/debug/libnux_capi.a -framework CoreFoundation -framework CoreGraphics -framework ImageIO -framework CoreVideo; \
 		target/capi-smoke/capi_smoke_static "$(CAPI_SMOKE_FIXTURE)"; \
 		xcrun swiftc -I crates/nux-capi/include crates/nux-capi/smoke/capi_lifetime.swift \
-			target/debug/libnux_capi.a -framework CoreGraphics -framework ImageIO \
+			target/debug/libnux_capi.a -framework CoreGraphics -framework ImageIO -framework CoreVideo \
 			-o target/capi-smoke/capi_lifetime; \
 		target/capi-smoke/capi_lifetime "$(CAPI_SMOKE_FIXTURE)"; \
 	else \

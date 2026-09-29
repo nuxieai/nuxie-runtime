@@ -42,6 +42,7 @@ frameworks=(
     -framework CoreFoundation
     -framework CoreGraphics
     -framework ImageIO
+    -framework CoreVideo
     -framework QuartzCore
     -framework Metal
     -framework Foundation
@@ -155,7 +156,7 @@ for target in "${targets[@]}"; do
         -target "$swift_target" -sdk "$sdk_path" \
         -I "$headers_dir" \
         "$repo_dir/crates/nux-capi/smoke/capi_metal_smoke.swift" "$archive" \
-        -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+        -framework CoreFoundation -framework CoreGraphics -framework ImageIO -framework CoreVideo \
         -framework QuartzCore -framework Metal -framework Foundation -framework Security \
         -Xlinker -liconv -o "$swift_output"
     xcrun --sdk "$sdk" clang -std=c11 -Wall -Wextra -Werror \

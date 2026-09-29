@@ -346,6 +346,7 @@ build_full_link() { # profile variant features
     -framework CoreFoundation \
     -framework CoreGraphics \
     -framework ImageIO \
+    -framework CoreVideo \
     -framework QuartzCore \
     -framework Metal \
     -framework Foundation \

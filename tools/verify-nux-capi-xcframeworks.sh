@@ -188,7 +188,7 @@ xcrun --sdk macosx clang \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.c" \
     "${full_macos}" \
     -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreGraphics -framework ImageIO -framework Security \
+    -framework CoreGraphics -framework ImageIO -framework CoreVideo -framework Security \
     -o "${consumer_root}/c-consumer"
 "${consumer_root}/c-consumer"
 
@@ -210,7 +210,7 @@ xcrun --sdk macosx clang \
     "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.c" \
     "${full_macos}" \
     -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreGraphics -framework ImageIO -framework Security \
+    -framework CoreGraphics -framework ImageIO -framework CoreVideo -framework Security \
     -o "${consumer_root}/c-product-extension-consumer"
 "${consumer_root}/c-product-extension-consumer"
 
@@ -232,7 +232,7 @@ xcrun --sdk macosx clang \
     "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.c" \
     "${full_macos}" \
     -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO -framework CoreVideo \
     -framework Security -liconv \
     -o "${consumer_root}/c-behavior-consumer"
 "${consumer_root}/c-behavior-consumer" "${composed_fixture}" --composed
@@ -244,7 +244,7 @@ xcrun --sdk macosx swiftc \
     -I "${headers_dir}" \
     "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.swift" \
     "${full_macos}" \
-    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO -framework CoreVideo \
     -framework QuartzCore -framework Metal -framework Foundation -framework Security \
     -Xlinker -liconv \
     -o "${consumer_root}/swift-behavior-consumer"
@@ -260,7 +260,7 @@ xcrun --sdk iphoneos clang \
     "${repo_root}/crates/nux-capi/smoke/distribution_consumer.c" \
     "${full_device}" \
     -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreGraphics -framework ImageIO -framework Security \
+    -framework CoreGraphics -framework ImageIO -framework CoreVideo -framework Security \
     -o "${consumer_root}/c-consumer-ios"
 xcrun --sdk iphoneos swiftc \
     -parse-as-library \
@@ -286,7 +286,7 @@ xcrun --sdk iphoneos clang \
     "${repo_root}/crates/nux-apple-product-extension/smoke/product_extension_consumer.c" \
     "${full_device}" \
     -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreGraphics -framework ImageIO -framework Security \
+    -framework CoreGraphics -framework ImageIO -framework CoreVideo -framework Security \
     -o "${consumer_root}/c-product-extension-consumer-ios"
 
 xcrun --sdk iphoneos clang \
@@ -297,7 +297,7 @@ xcrun --sdk iphoneos clang \
     "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.c" \
     "${full_device}" \
     -framework Foundation -framework QuartzCore -framework Metal \
-    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO -framework CoreVideo \
     -framework Security -liconv \
     -o "${consumer_root}/c-behavior-consumer-ios"
 xcrun --sdk iphoneos swiftc \
@@ -307,7 +307,7 @@ xcrun --sdk iphoneos swiftc \
     -I "${device_headers}" \
     "${repo_root}/crates/nux-capi/smoke/capi_metal_smoke.swift" \
     "${full_device}" \
-    -framework CoreFoundation -framework CoreGraphics -framework ImageIO \
+    -framework CoreFoundation -framework CoreGraphics -framework ImageIO -framework CoreVideo \
     -framework QuartzCore -framework Metal -framework Foundation -framework Security \
     -Xlinker -liconv \
     -o "${consumer_root}/swift-behavior-consumer-ios"

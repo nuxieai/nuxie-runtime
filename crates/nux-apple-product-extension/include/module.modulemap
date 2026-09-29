@@ -6,5 +6,6 @@ module NuxieRuntimeC {
     link framework "Metal"
     link framework "CoreGraphics"
     link framework "ImageIO"
+    link framework "CoreVideo"
     link framework "Security"
 }

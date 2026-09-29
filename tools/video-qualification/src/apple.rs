@@ -6,9 +6,35 @@ use nuxie_runtime::{
     source::{artboard::RuntimeArtboardInstanceHandle, core::CoreHandle},
     video::{Video, playback::*},
 };
-use nuxie_video_host::apple::{AppleScenePlayer, AudioSessionOwnership, pump_run_loop};
+use nuxie_video_host::apple::{
+    ApplePlayer, AppleScenePlayer, AudioSessionOwnership, Frame, FramePixels, Observation,
+    pump_run_loop,
+};
 use nuxie_video_host::pool::{ManagedPlayer, PlayerPool};
 use std::time::{Duration, Instant};
+
+/// Wraps an AVPlayer frame's pixel buffer as a renderer image, as the product
+/// does: no CPU copy and no new texture storage.
+fn import_frame(
+    factory: &NativeMetalFactory,
+    frame: &Frame,
+) -> Box<dyn nuxie_render_api::RenderImage> {
+    let FramePixels::PixelBuffer(buffer) = &frame.pixels else {
+        panic!("AVPlayer frames arrive in pixel buffers");
+    };
+    unsafe { factory.import_pixel_buffer(buffer.as_ptr()) }.expect("pixel buffer import")
+}
+
+/// The decoded frame's top-left pixel as RGBA.
+fn decoded_pixel(frame: &Frame) -> Vec<u8> {
+    let FramePixels::PixelBuffer(buffer) = &frame.pixels else {
+        panic!("AVPlayer frames arrive in pixel buffers");
+    };
+    buffer
+        .first_pixel()
+        .expect("readable pixel buffer")
+        .to_vec()
+}
 
 pub struct MetalProof {
     factory: PersistentFactory<NativeMetalFactory>,
@@ -168,14 +194,9 @@ impl MetalProof {
         if self
             .player
             .tick_allocated(allocation, |frame| {
-                let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
                 assert_eq!((frame.width, frame.height), (64, 32));
-                decoded = Some((frame.pts, rgba[..4].to_vec()));
-                let image = self
-                    .factory
-                    .borrow()
-                    .upload_rgba8_premul_srgb(frame.width, frame.height, frame.width * 4, rgba)
-                    .unwrap();
+                decoded = Some((frame.pts, decoded_pixel(frame)));
+                let image = import_frame(&self.factory.borrow(), frame);
                 let image: std::rc::Rc<dyn nuxie_render_api::RenderImage> =
                     std::rc::Rc::from(image);
                 let view = nuxie_render_api::Factory::make_gpu_canvas_image_view(
@@ -697,6 +718,76 @@ impl AppleProof {
     }
 }
 
+/// Draws every frame AVFoundation decodes from `source` twice: from its pixel
+/// buffer in place, and from the RGBA bytes the copying path uploaded. Both
+/// draws must produce the same pixels. Use an asymmetric fixture, so a
+/// flipped, mirrored or swizzled import cannot match.
+pub fn run_metal_parity(source: &str) {
+    use nuxie_render_api::{BlendMode, ImageSampler, Renderer};
+    let mut player = ApplePlayer::open(source, 1, 8 * 1024 * 1024).expect("open parity fixture");
+    let mut factory: Option<NativeMetalFactory> = None;
+    let deadline = Instant::now() + Duration::from_secs(10);
+    let mut compared = 0;
+    while Instant::now() < deadline {
+        pump_run_loop(0.01).unwrap();
+        let frame = match player.poll().expect("parity decode") {
+            Some(Observation::Ready { .. }) => {
+                player.apply(DecoderAction::Play).unwrap();
+                continue;
+            }
+            Some(Observation::Ended(_)) => break,
+            Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => frame,
+            _ => continue,
+        };
+        // A fixed shader mode draws both images through the same shader.
+        let factory = factory.get_or_insert_with(|| {
+            NativeMetalFactory::new_with_context_options(
+                frame.width,
+                frame.height,
+                nuxie_renderer::NativeMetalContextOptions {
+                    shader_compilation_mode:
+                        nuxie_renderer::ShaderCompilationMode::AlwaysSynchronous,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        });
+        let FramePixels::PixelBuffer(buffer) = &frame.pixels else {
+            panic!("AVPlayer frames arrive in pixel buffers");
+        };
+        let rgba = buffer.read_rgba().expect("readable pixel buffer");
+        let uploaded = factory
+            .upload_rgba8_premul_srgb(frame.width, frame.height, frame.width * 4, &rgba)
+            .unwrap();
+        let imported = import_frame(factory, &frame);
+        let draw = |image: &dyn nuxie_render_api::RenderImage| {
+            let mut render = factory.begin_frame(0xff000000).unwrap();
+            render.draw_image(
+                Some(image),
+                ImageSampler::LINEAR_CLAMP,
+                BlendMode::SrcOver,
+                1.0,
+            );
+            render.finish().unwrap()
+        };
+        let (expected, actual) = (draw(uploaded.as_ref()), draw(imported.as_ref()));
+        let max_difference = expected
+            .iter()
+            .zip(&actual)
+            .map(|(expected, actual)| expected.abs_diff(*actual))
+            .max()
+            .unwrap_or(0);
+        assert_eq!(
+            max_difference, 0,
+            "frame at {:.3}s: import differs from the RGBA upload",
+            frame.pts
+        );
+        compared += 1;
+    }
+    assert!(compared >= 5, "compared only {compared} frames");
+    println!("NUX_VIDEO_PARITY frames={compared} max_difference=0");
+}
+
 pub fn run_metal_proof(source: &str) {
     run_sync_proof(source);
     run_pool_proof(source);
@@ -933,19 +1024,14 @@ impl MetalBenchmark {
             return true;
         }
         let tick_start = Instant::now();
-        let mut pixel = None;
         let status = self
             .player
             .tick_allocated(Allocation::PlatformManaged, |frame| {
-                let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
                 assert_eq!((frame.width, frame.height), (1280, 720));
-                pixel = Some(rgba[..4].to_vec());
-                let image = self
-                    .factory
-                    .borrow()
-                    .upload_rgba8_premul_srgb(frame.width, frame.height, frame.width * 4, rgba)
-                    .unwrap();
-                Ok(std::rc::Rc::from(image))
+                Ok(std::rc::Rc::from(import_frame(
+                    &self.factory.borrow(),
+                    frame,
+                )))
             })
             .unwrap();
         if status.presented {
@@ -963,9 +1049,10 @@ impl MetalBenchmark {
                 }
             }
             super::verify_composition(&pixels).unwrap();
-            let pixel = pixel.unwrap();
-            let center = &pixels[(16 * 64 + 32) * 4..(16 * 64 + 32) * 4 + 4];
-            assert!(center[0].abs_diff(pixel[0]) < 8 && center[2].abs_diff(pixel[2]) < 8);
+            // The frame never touches the CPU, so the fixture's color is judged
+            // where it lands: the composed frame's center. Reading the decoded
+            // buffer on the CPU would add work the product never does.
+            let pixel = &pixels[(16 * 64 + 32) * 4..(16 * 64 + 32) * 4 + 4];
             if pixel[0] > 200 && pixel[2] < 30 {
                 self.red += 1;
             } else if pixel[2] > 200 && pixel[0] < 30 {

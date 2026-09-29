@@ -5,7 +5,9 @@ mod proof {
     use nux_capi::*;
     use nuxie_binary::{FixtureProperty as P, FixtureRecord as R, FixtureValue as V};
     use nuxie_runtime::video::playback::DecoderAction;
-    use nuxie_video_host::apple::{ApplePlayer, Observation, pump_run_loop};
+    use nuxie_video_host::apple::{
+        ApplePlayer, Frame, FramePixels, Observation, PixelBuffer, pump_run_loop,
+    };
     use objc2::{
         rc::{Retained, autoreleasepool},
         runtime::ProtocolObject,
@@ -18,6 +20,23 @@ mod proof {
         ptr,
         time::{Duration, Instant},
     };
+
+    fn pixel_buffer(frame: &Frame) -> &PixelBuffer {
+        match &frame.pixels {
+            FramePixels::PixelBuffer(buffer) => buffer,
+            _ => panic!("AVPlayer frames arrive in pixel buffers"),
+        }
+    }
+
+    /// The C view of a decoded frame; the renderer samples its buffer in place.
+    fn pixel_buffer_frame(frame: &Frame) -> NuxVideoPixelBufferFrame {
+        NuxVideoPixelBufferFrame {
+            struct_size: size_of::<NuxVideoPixelBufferFrame>() as u32,
+            generation: frame.generation,
+            presentation_seconds: frame.pts,
+            pixel_buffer: pixel_buffer(frame).as_ptr().as_ptr(),
+        }
+    }
 
     #[derive(Default)]
     struct Info {
@@ -193,22 +212,16 @@ mod proof {
                             step(player, 1, 3, generation, 0.0, decoder)
                         }
                         Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
-                            let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
-                            let view = NuxVideoFrame {
-                                struct_size: size_of::<NuxVideoFrame>() as u32,
-                                generation: frame.generation,
-                                presentation_seconds: frame.pts,
-                                width: frame.width,
-                                height: frame.height,
-                                row_bytes: frame.width * 4,
-                                pixels: NuxByteView {
-                                    data: rgba.as_ptr(),
-                                    len: rgba.len(),
-                                },
-                            };
-                            ok(nux_player_video_present_metal(renderer, player, 1, &view));
+                            let buffer = pixel_buffer(&frame);
+                            ok(nux_player_video_present_metal_pixel_buffer(
+                                renderer,
+                                player,
+                                1,
+                                &pixel_buffer_frame(&frame),
+                            ));
                             if frame.pts > 1.1 {
-                                assert!(rgba[2] > 200 && rgba[0] < 30);
+                                let pixel = buffer.first_pixel().expect("readable pixel buffer");
+                                assert!(pixel[2] > 200 && pixel[0] < 30);
                                 blue[index] = true;
                             }
                             frames[index] += 1;
@@ -385,21 +398,11 @@ mod proof {
                         step(player, catalog.id, 3, generation, 0.0, &mut decoder)
                     }
                     Some(Observation::Frame(frame) | Observation::SelectedSeekFrame(frame)) => {
-                        let rgba = frame.rgba().expect("AVPlayer frames are copied to RGBA");
-                        let pixels = NuxVideoFrame {
-                            struct_size: size_of::<NuxVideoFrame>() as u32,
-                            generation: frame.generation,
-                            presentation_seconds: frame.pts,
-                            width: frame.width,
-                            height: frame.height,
-                            row_bytes: frame.width * 4,
-                            pixels: NuxByteView {
-                                data: rgba.as_ptr(),
-                                len: rgba.len(),
-                            },
-                        };
-                        ok(nux_player_video_present_metal(
-                            renderer, player, catalog.id, &pixels,
+                        ok(nux_player_video_present_metal_pixel_buffer(
+                            renderer,
+                            player,
+                            catalog.id,
+                            &pixel_buffer_frame(&frame),
                         ));
                         ok(nux_player_visit_videos(
                             player,

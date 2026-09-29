@@ -224,7 +224,7 @@ void nux_video_apple_action(void *handle, int action, double value, uint64_t gen
     }
 }
 // Returns one observation at a time. 1=ready,2=playing,3=ended,4=frame,
-// 5=frame selected by a completed seek, -1=failure,0=no event. Decode surfaces are retained until copied/replaced.
+// 5=frame selected by a completed seek, -1=failure,0=no event. Decode surfaces are retained until taken/replaced.
 int nux_video_apple_poll(void *handle, uint64_t *generation, double *time,
                          uint32_t *width, uint32_t *height) {
     @autoreleasepool {
@@ -262,10 +262,25 @@ int nux_video_apple_poll(void *handle, uint64_t *generation, double *time,
         return selectedAfterSeek ? 5 : 4;
     }
 }
-bool nux_video_apple_copy_rgba(void *handle, uint8_t *out, size_t capacity) {
+// Hands the frame the last poll reported to the caller, who owns the returned
+// reference, or returns NULL when there is none.
+CVPixelBufferRef nux_video_apple_take_pixel_buffer(void *handle) {
     NuxVideoPlayer *p = (__bridge NuxVideoPlayer *)handle;
     CVPixelBufferRef frame = p.pendingFrame;
-    if (!frame) return false;
+    p.pendingFrame = NULL;
+    return frame;
+}
+void nux_video_apple_pixel_buffer_release(CVPixelBufferRef frame) { CVPixelBufferRelease(frame); }
+// Reads the top-left pixel of a 32BGRA frame as RGBA: a cheap color oracle.
+bool nux_video_apple_pixel_buffer_first_pixel(CVPixelBufferRef frame, uint8_t out[4]) {
+    if (CVPixelBufferLockBaseAddress(frame, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) return false;
+    const uint8_t *b = CVPixelBufferGetBaseAddress(frame);
+    if (b) { out[0]=b[2]; out[1]=b[1]; out[2]=b[0]; out[3]=b[3]; }
+    CVPixelBufferUnlockBaseAddress(frame, kCVPixelBufferLock_ReadOnly);
+    return b != NULL;
+}
+// Copies a 32BGRA frame to top-row-first RGBA for CPU checks.
+bool nux_video_apple_pixel_buffer_read_rgba(CVPixelBufferRef frame, uint8_t *out, size_t capacity) {
     size_t w = CVPixelBufferGetWidth(frame), h = CVPixelBufferGetHeight(frame);
     if (h == 0 || w > SIZE_MAX / h / 4 || capacity < w*h*4) return false;
     if (CVPixelBufferLockBaseAddress(frame, kCVPixelBufferLock_ReadOnly) != kCVReturnSuccess) return false;
@@ -277,7 +292,6 @@ bool nux_video_apple_copy_rgba(void *handle, uint8_t *out, size_t capacity) {
         r[0]=b[2]; r[1]=b[1]; r[2]=b[0]; r[3]=b[3];
     }
     CVPixelBufferUnlockBaseAddress(frame, kCVPixelBufferLock_ReadOnly);
-    CVPixelBufferRelease(frame); p.pendingFrame = NULL;
     return true;
 }
 bool nux_video_apple_clock(void *handle, uint64_t *generation, double *seconds, double *rate, bool *playing) {

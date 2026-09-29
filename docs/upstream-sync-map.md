@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `7e0b60b042abc7e66357c84e6e90919c7d1b1f50`
+- LAST_SYNCED_SHA: `899b20b23841de3834ab56c76351b3358eb590cd`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 129 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 129 require a Rust translation.
+  There are 128 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 128 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `899b20b23841de3834ab56c76351b3358eb590cd` | **NO RUST BEHAVIOR DELTA:** upstream's golden executable/deployment scripts decouple deferred recording from scripting, expose `--deferred`, warn on immediate fallback, and fix a Prospero C++ RTTI flag. Our deferred session/replay and runtime-file import GM are not gated on scripting and explicitly select deferred versus immediate execution; these upstream launcher/benchmark/console-build owners have no downstream counterpart. No new launcher, fallback or console support is introduced or claimed. | — |
 | `7e0b60b042abc7e66357c84e6e90919c7d1b1f50` | Translate tools-only shader compilation-mode switching, preserving the prior mode and GL/Vulkan forwarding. Translate the ubershader/specialized comparison scenes and frame-scoped mode restoration. Metal/WebGPU retain upstream's no-switch default; unsupported D3D backends are not introduced or claimed. | — |
 | `d619bc2a83f3c592a57eb58b9c83315142bcfbfc` | Translate the Vulkan frame-sync coordinator and its synchronizer dependency, including frame/fence state, completion caching, readback and resource cleanup. Preserve the four upstream coordinator scenarios and the approved Ash/Vulkan context boundary. The upstream commit adds utility APIs without switching production callsites; the product host's existing scheduling is not replaced by this delta. | — |
 | `947107bc5971acb208b68135437aa5e33023d619` | Add queued main view-model lookup and report successful main/global lookups through state-machine listeners. Route lookup failures to the state-machine error channel, preserving request IDs, listener association, existing-instance identity, locking and callback order; translate the bound/unbound/invalid lookup and cleared-global regressions. | — |

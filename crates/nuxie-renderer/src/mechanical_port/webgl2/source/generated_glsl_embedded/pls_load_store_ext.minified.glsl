@@ -25,14 +25,14 @@ __pixel_local_inEXT S1
 #else
 __pixel_local_outEXT S1
 #endif
-{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 l4;layout(r32ui)highp uint H7;};
+{layout(rgba8)mediump vec4 j0;layout(r32ui)highp uint h0;layout(rgba8)mediump vec4 l4;layout(r32ui)highp uint I7;};
 #ifndef GL_ARM_shader_framebuffer_fetch
 #ifdef UE
-layout(location=0)inout mediump vec4 Xa;
+layout(location=0)inout mediump vec4 Za;
 #endif
 #endif
 #ifdef CE
-layout(location=0)out mediump vec4 Xa;
+layout(location=0)out mediump vec4 Za;
 #endif
 void main(){
 #ifdef SE
@@ -46,17 +46,17 @@ j0=TE;
 #ifdef GL_ARM_shader_framebuffer_fetch
 j0=gl_LastFragColorARM;
 #else
-j0=Xa;
+j0=Za;
 #endif
 #endif
 #ifdef DE
-H7=0u;
+I7=0u;
 #endif
 #ifdef TF
 h0=0u;
 #endif
 #ifdef CE
-Xa=j0;
+Za=j0;
 #endif
 }
 #else

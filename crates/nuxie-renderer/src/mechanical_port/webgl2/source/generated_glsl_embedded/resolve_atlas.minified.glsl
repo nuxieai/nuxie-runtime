@@ -4,7 +4,7 @@ z1(VF,e0,F,B,v){g W;W.x=(B!=2)?-1.:3.;W.y=(B!=1)?-1.:3.;W.zw=d(.0,1.);A1(W);}
 #ifdef GB
 e ivec2 Rd(){return ivec2(floor(gl_FragCoord));}
 #ifdef WD
-layout(location=0)inout G p0;layout(location=1)out i m4;void main(){m4.x=uintBitsToFloat(p0.x);}
+layout(location=0)inout H p0;layout(location=1)out i m4;void main(){m4.x=uintBitsToFloat(p0.x);}
 #elif defined(XD)
 #ifdef DE
 __pixel_local_outEXT S1{layout(r32f)float p0;};
@@ -23,6 +23,6 @@ layout(binding=0,r32ui)uniform highp upixelLocalANGLE p0;layout(location=0)out i
 #elif defined(YD)
 layout(binding=0,r32i)uniform highp coherent iimage2D Y8;layout(location=0)out i m4;void main(){m4.x=float(imageLoad(Y8,Rd()).x)*(1./Tc);}
 #elif defined(VE)
-Z2(d3,0,YE);layout(location=0)out i m4;void main(){i P=q1(YE,Rd());m4.x=(P.x-P.y)*ta+(P.z-P.w)*255.;}
+Z2(d3,0,YE);layout(location=0)out i m4;void main(){i P=q1(YE,Rd());m4.x=(P.x-P.y)*va+(P.z-P.w)*255.;}
 #endif
 #endif

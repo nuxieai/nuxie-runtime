@@ -102,7 +102,7 @@ const GLSL_ENABLE_INSTANCE_INDEX: &str = "PE";
 const GLSL_ENABLE_KHR_BLEND: &str = "JE";
 const GLSL_FEATHER_ATLAS_BLIT: &str = "FB";
 const GLSL_FIXED_FUNCTION_COLOR_OUTPUT: &str = "Q";
-const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "DG";
+const GLSL_FRAMEBUFFER_BOTTOM_UP: &str = "EG";
 const GLSL_OPTIONALLY_FLAT: &str = "NB";
 const GLSL_RENDER_MODE_DEPTH_STENCIL: &str = "CB";
 const GLSL_RESOLVE_PLS: &str = "RC";
@@ -1878,7 +1878,7 @@ pub(crate) fn resizeAtomicCoverageBacking(
 
 fn shaderFeatureDefine(feature: gpu::ShaderFeatures) -> &'static str {
     match feature {
-        gpu::ShaderFeatures::ENABLE_CLIPPING => "I",
+        gpu::ShaderFeatures::ENABLE_CLIPPING => "J",
         gpu::ShaderFeatures::ENABLE_CLIP_RECT => "BB",
         gpu::ShaderFeatures::ENABLE_ADVANCED_BLEND => "AB",
         gpu::ShaderFeatures::ENABLE_FEATHER => "HB",
@@ -4672,7 +4672,7 @@ mod tests {
     fn shader_feature_dispatch_matches_the_current_nine_feature_map() {
         let exports = include_str!("../webgpu/source/generated_glsl/glsl.glsl.exports.h");
         let features = [
-            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "I"),
+            ("ENABLE_CLIPPING", gpu::ShaderFeatures::ENABLE_CLIPPING, "J"),
             (
                 "ENABLE_CLIP_RECT",
                 gpu::ShaderFeatures::ENABLE_CLIP_RECT,

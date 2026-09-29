@@ -1,4 +1,4 @@
-#define qc
+#define rc
 #ifndef GLSL_VERSION
 #define GLSL_VERSION __VERSION__
 #endif
@@ -10,21 +10,21 @@
 #define E mediump vec2
 #define A mediump vec3
 #define i mediump vec4
-#define Z6 mediump mat3x3
-#define a7 mediump mat2x3
-#define k5 mediump mat4x4
+#define a7 mediump mat3x3
+#define c7 mediump mat2x3
+#define H4 mediump mat4x4
 #define Y ivec2
 #define f6 ivec4
 #define a1 uvec2
-#define G uvec4
+#define H uvec4
 #define N mediump uint
 #define G4 bvec2
-#define r6 bvec3
+#define v6 bvec3
 #define z7 bvec4
 #define f0 mat2
 #define e
 #define Z0(l2) out l2
-#define X4(l2) inout l2
+#define Y4(l2) inout l2
 #ifdef GL_ANGLE_base_vertex_base_instance_shader_builtin
 #extension GL_ANGLE_base_vertex_base_instance_shader_builtin:require
 #endif
@@ -57,14 +57,14 @@
 #else
 #define y7(f,a) layout(std140)uniform a{
 #endif
-#define M8(a) }a;
+#define N8(a) }a;
 #define Bd(a) layout(push_constant)uniform a{
 #define Cd(Z,a) Z a;
 #define Dd(a) }a;
 #define g1(a)
 #define L(f,Z,a) layout(location=f)in Z a
 #define h1
-#define M(P8,F,a,Z)
+#define M(Q8,F,a,Z)
 #ifdef VERTEX
 #if GLSL_VERSION>=310
 #define X(f,Z,a) layout(location=f)out Z a
@@ -99,34 +99,34 @@
 #define E3
 #define F3
 #endif
-#define e5
 #define f5
+#define g5
 #ifdef TARGET_SPIRV
 #define F4(U,f,a) layout(set=U,binding=f)uniform highp utexture2D a
-#define h5(U,f,a) layout(set=U,binding=f)uniform highp texture2D a
+#define i5(U,f,a) layout(set=U,binding=f)uniform highp texture2D a
 #define Z2(U,f,a) layout(set=U,binding=f)uniform mediump texture2D a
 #define n5(U,f,a) layout(binding=f)uniform mediump texture2D a
 #if defined(FRAGMENT)&&defined(RENDER_MODE_DEPTH_STENCIL)
 #endif
 #elif GLSL_VERSION>=310
 #define F4(U,f,a) layout(binding=f)uniform highp usampler2D a
-#define h5(U,f,a) layout(binding=f)uniform highp sampler2D a
+#define i5(U,f,a) layout(binding=f)uniform highp sampler2D a
 #define Z2(U,f,a) layout(binding=f)uniform mediump sampler2D a
 #define n5(U,f,a) layout(binding=f)uniform mediump sampler2D a
 #else
 #define F4(U,f,a) uniform highp usampler2D a
-#define h5(U,f,a) uniform highp sampler2D a
+#define i5(U,f,a) uniform highp sampler2D a
 #define Z2(U,f,a) uniform mediump sampler2D a
 #define n5(U,f,a) uniform mediump sampler2D a
 #endif
 #ifdef TARGET_SPIRV
-#define v6(U,f,a) layout(set=U,binding=f)uniform mediump sampler a;
+#define w6(U,f,a) layout(set=U,binding=f)uniform mediump sampler a;
 #ifdef USE_WEBGPU_SAMPLERS
 #define c4(A7,a) layout(set=Rf,binding=A7)uniform mediump sampler a;
-#define X3(a) v6(d5,Qf,a)
+#define X3(a) w6(e5,Qf,a)
 #else
 #define c4(A7,a) layout(set=d3,binding=A7)uniform mediump sampler a;
-#define X3(a) v6(d5,W3,a)
+#define X3(a) w6(e5,W3,a)
 #endif
 #define w5(a,p,l) texture(sampler2D(a,p),l)
 #define o2(a,p,l,S0) textureLod(sampler2D(a,p),l,S0)
@@ -136,17 +136,17 @@
 #endif
 #else
 #define c4(A7,a)
-#define v6(U,f,a)
+#define w6(U,f,a)
 #define X3(a)
 #define w5(a,p,l) texture(a,l)
 #define o2(a,p,l,S0) textureLod(a,l,S0)
 #define x5(a,p,l,R1) texture(a,l,R1)
 #endif
-#define g8(k0,p,l) w5(k0,p,l)
-#define U6(k0,p,l,S0) o2(k0,p,l,S0)
+#define h8(k0,p,l) w5(k0,p,l)
+#define V6(k0,p,l,S0) o2(k0,p,l,S0)
 #define B7(k0,p,l,R1) x5(k0,p,l,R1)
 #define j6(U,f,a) n5(U,f,a)
-#define Y6(a,p,q,w6,R8,S0) o2(a,p,d(q,R8),S0)
+#define Z6(a,p,q,x6,S8,S0) o2(a,p,d(q,S8),S0)
 #define Sg(U,f,a) F4(U,f,a)
 #define I3
 #define d1
@@ -161,8 +161,8 @@
 #define R3
 #ifdef DISABLE_SHADER_STORAGE_BUFFERS
 #define O5(f,w1,a) F4(d3,f,a)
-#define J4(f,w1,a) Sg(d3,f,a)
-#define P5(f,w1,a) h5(d3,f,a)
+#define K4(f,w1,a) Sg(d3,f,a)
+#define P5(f,w1,a) i5(d3,f,a)
 #define J0(a,A0) q1(a,Y((A0)&Hc,(A0)>>Gc))
 #define Q5(a,A0) q1(a,Y((A0)&Hc,(A0)>>Gc)).xy
 #else
@@ -170,18 +170,18 @@
 #extension GL_ARB_shader_storage_buffer_object:require
 #endif
 #define O5(f,w1,a) layout(std430,binding=f)readonly buffer w1{a1 d2[];}a
-#define J4(f,w1,a) layout(std430,binding=f)readonly buffer w1{G d2[];}a
+#define K4(f,w1,a) layout(std430,binding=f)readonly buffer w1{H d2[];}a
 #define P5(f,w1,a) layout(std430,binding=f)readonly buffer w1{g d2[];}a
-#define Na(f,w1,a) layout(std430,binding=f)buffer w1{uint d2[];}a
+#define Pa(f,w1,a) layout(std430,binding=f)buffer w1{uint d2[];}a
 #define J0(a,A0) a.d2[A0]
 #define Q5(a,A0) a.d2[A0]
 #define Hd(a,A0) a.d2[A0]
 #define D7(a,A0,q) atomicMax(a.d2[A0],q)
-#define Oa(a,A0,q) atomicAdd(a.d2[A0],q)
+#define Qa(a,A0,q) atomicAdd(a.d2[A0],q)
 #define Tg(a,A0,q) atomicOr(a.d2[A0],q)
 #endif
 #ifdef PLS_IMPL_STORAGE_BUFFER
-#define M1(a) void main(){Y J=ivec2(floor(a0));int E0=int(L8(uvec2(J),(m.q6+(ua-1u))&~(ua-1u)));
+#define M1(a) void main(){Y G=ivec2(floor(a0));int E0=int(M8(uvec2(G),(m.r6+(wa-1u))&~(wa-1u)));
 #define Z1 }
 #define S3 ,int E0
 #define N1 ,E0
@@ -192,36 +192,36 @@
 #else
 #define E2(f,a) layout(std430,binding=f)coherent buffer a##Id{uint d2[];}a
 #endif
-#define Pa E2
+#define Ra E2
 #define V2(h) h.d2[E0]
 #define W2(h,D) h.d2[E0]=D
-#define Qa(h) unpackUnorm4x8(V2(h))
-#define Ra(h,D) W2(h,packUnorm4x8(D))
-#define Z4(h,q) atomicMax(h.d2[E0],q)
-#define a5(h,q) atomicAdd(h.d2[E0],q)
+#define Sa(h) unpackUnorm4x8(V2(h))
+#define Ta(h,D) W2(h,packUnorm4x8(D))
+#define a5(h,q) atomicMax(h.d2[E0],q)
+#define c5(h,q) atomicAdd(h.d2[E0],q)
 #elif defined(PLS_IMPL_STORAGE_TEXTURE)||defined(USING_PLS_STORAGE_TEXTURES)
 #ifdef GL_ARB_shader_image_load_store
 #extension GL_ARB_shader_image_load_store:require
 #endif
-#define M1(a) void main(){Y J=ivec2(floor(a0));
+#define M1(a) void main(){Y G=ivec2(floor(a0));
 #define Z1 }
-#define S3 ,Y J
-#define N1 ,J
+#define S3 ,Y G
+#define N1 ,G
 #ifdef TARGET_SPIRV
-#define Pa(f,a) layout(set=H3,binding=f,rgba8)uniform mediump coherent image2D a
+#define Ra(f,a) layout(set=H3,binding=f,rgba8)uniform mediump coherent image2D a
 #define E2(f,a) layout(set=H3,binding=f,r32ui)uniform highp coherent uimage2D a
-#define Sa(f,a) layout(set=H3,binding=f,rgb10_a2)uniform mediump coherent image2D a
+#define Ua(f,a) layout(set=H3,binding=f,rgb10_a2)uniform mediump coherent image2D a
 #else
-#define Pa(f,a) layout(binding=f,rgba8)uniform mediump coherent image2D a
+#define Ra(f,a) layout(binding=f,rgba8)uniform mediump coherent image2D a
 #define E2(f,a) layout(binding=f,r32ui)uniform highp coherent uimage2D a
-#define Sa(f,a) layout(binding=f,rgb10_a2)uniform mediump coherent image2D a;
+#define Ua(f,a) layout(binding=f,rgb10_a2)uniform mediump coherent image2D a;
 #endif
-#define V2(h) imageLoad(h,J).x
-#define W2(h,D) imageStore(h,J,uvec4(D))
-#define Qa(h) imageLoad(h,J)
-#define Ra(h,D) imageStore(h,J,D)
-#define Z4(h,q) imageAtomicMax(h,J,q)
-#define a5(h,q) imageAtomicAdd(h,J,q)
+#define V2(h) imageLoad(h,G).x
+#define W2(h,D) imageStore(h,G,uvec4(D))
+#define Sa(h) imageLoad(h,G)
+#define Ta(h,D) imageStore(h,G,D)
+#define a5(h,q) imageAtomicMax(h,G,q)
+#define c5(h,q) imageAtomicAdd(h,G,q)
 #else
 #define M1(a) void main()
 #define Z1
@@ -251,7 +251,7 @@
 #endif
 #define J1 __pixel_localEXT S1{
 #define x0(f,a) layout(rgba8)mediump vec4 a
-#define Ta(f,a) layout(rgb10_a2)mediump vec4 a
+#define Va(f,a) layout(rgb10_a2)mediump vec4 a
 #define j1(f,a) layout(r32ui)highp uint a
 #define K1 };
 #define I0(h) h
@@ -269,11 +269,11 @@
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
 #define J1
 #define K1
-#define x0 Pa
+#define x0 Ra
 #define j1 E2
-#define Ta Sa
-#define I0 Qa
-#define y0 Ra
+#define Va Ua
+#define I0 Sa
+#define y0 Ta
 #define Y0 V2
 #define c1 W2
 #define w2(h)
@@ -329,35 +329,35 @@
 #endif
 #ifdef ENABLE_INSTANCE_INDEX
 #ifdef TARGET_SPIRV
-#define S8 gl_InstanceIndex
+#define T8 gl_InstanceIndex
 #else
 #ifdef BASE_INSTANCE_UNIFORM_NAME
 uniform highp int BASE_INSTANCE_UNIFORM_NAME;
-#define S8 (gl_InstanceID+BASE_INSTANCE_UNIFORM_NAME)
+#define T8 (gl_InstanceID+BASE_INSTANCE_UNIFORM_NAME)
 #else
-#define S8 (gl_InstanceID+gl_BaseInstance)
+#define T8 (gl_InstanceID+gl_BaseInstance)
 #endif
 #endif
 #else
-#define S8 0
+#define T8 0
 #endif
-#define m6
+#define n6
 #define w3
-#define f7
+#define g7
 #define y5
-#define z1(a,e0,F,B,v) void main(){int B=gl_VertexID;int v=S8;
-#define S7(a,e0,F,n1,g0,B,v) z1(a,e0,F,B,v)
-#define J6(a,i3,j3,y3,z3,n1,g0,B) z1(a,i3,j3,B,v)
+#define z1(a,e0,F,B,v) void main(){int B=gl_VertexID;int v=T8;
+#define T7(a,e0,F,n1,g0,B,v) z1(a,e0,F,B,v)
+#define K6(a,i3,j3,y3,z3,n1,g0,B) z1(a,i3,j3,B,v)
 #define V(a,Z)
 #define c0(a)
 #define r(a,Z)
 #define A1(O0) gl_Position=O0;}
 #define a3(x1,a) layout(location=0)out x1 Ug;void main()
-#define x6(x1,a) a3(x1,a)
-#define y6 gl_FrontFacing
+#define y6(x1,a) a3(x1,a)
+#define z6 gl_FrontFacing
 #define I2(D) Ug=D
 #define a0 gl_FragCoord.xy
-#define L6
+#define M6
 #define U2
 #if defined(PLS_IMPL_STORAGE_TEXTURE)||defined(PLS_IMPL_STORAGE_BUFFER)
 #define Kd(F7,h,D) if(!(F7)){y0(h,D);}
@@ -371,15 +371,15 @@ uniform highp int BASE_INSTANCE_UNIFORM_NAME;
 #endif
 #define n3 Z1
 #if defined(TARGET_SPIRV)&&!defined(TARGET_WGSL)
-#define k7(a) layout(input_attachment_index=0,binding=S2,set=H3)uniform mediump subpassInputMS a
-#define T8(a) Dc(mat4(subpassLoad(a,0),subpassLoad(a,1),subpassLoad(a,2),subpassLoad(a,3)),gl_SampleMaskIn[0])
+#define k6(a) layout(input_attachment_index=0,binding=S2,set=H3)uniform mediump subpassInputMS a
+#define G7(a) ma(mat4(subpassLoad(a,0),subpassLoad(a,1),subpassLoad(a,2),subpassLoad(a,3)),gl_SampleMaskIn[0])
 #else
-#define k7(a) Z2(d3,Pf,a)
-#define T8(a) texelFetch(a,ivec2(floor(a0.xy)),0)
+#define k6(a) Z2(d3,Pf,a)
+#define G7(a) texelFetch(a,ivec2(floor(a0.xy)),0)
 #endif
-#define R0(C,H) ((C)*(H))
+#define R0(C,I) ((C)*(I))
 precision highp float;precision highp int;
 #if GLSL_VERSION<310
-e i Vg(uint u){G T1=G(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return g(T1)*(1./255.);}
+e i Vg(uint u){H T1=H(u&0xffu,(u>>8)&0xffu,(u>>16)&0xffu,u>>24);return g(T1)*(1./255.);}
 #define unpackUnorm4x8 Vg
 #endif

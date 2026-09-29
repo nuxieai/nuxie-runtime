@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `f1ec753f1ad9e64f0844f845ffc8d68d16d15bdb`
+- LAST_SYNCED_SHA: `a81a46debcec6110d7866ccbf123e935db1f4f5d`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 149 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 149 require a Rust translation.
+  There are 148 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 148 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `a81a46debcec6110d7866ccbf123e935db1f4f5d` | Translate the scoped autorelease-pool helper with Rust's closure-scoped Objective-C pool boundary and the non-Apple no-op branch; preserve the bare-thread and nested-pool retain-count regressions. The public delta contains no playback callsite edits, so the commit message's private CLI/native changes are not claimed as imported. | — |
 | `f1ec753f1ad9e64f0844f845ffc8d68d16d15bdb` | Translate the SVG factory and renderer utility owners, including path/gradient/image serialization, significant-digit precision, save/restore, opacity, blend grouping and deduplicated clip groups; preserve all upstream SVG regression cases. The upstream Emscripten-only SVG testing-window adapter and Canvas2D harness changes have no downstream testing-window counterpart; no Emscripten or Canvas2D backend is introduced or claimed. | — |
 | `bec99be4e4fecee71d0db012edeffdc561da319a` | Reconcile ahead-ported obscured text input with the complete upstream commit: bullet shaping, intact editing, word navigation, cursor/journal re-resolution, and handled-empty selection export that blocks ancestor clipboard fallback. Move reached property 1095 into runtime schema reconciliation and retire its forward overlay; preserve the full upstream regression cases. | [UNIV-2852](https://universe.basis.dev/issue/UNIV-2852) |
 | `c18b32511bfeaeee6b7c54e35152aea3fdbb5964` | Rename the depth/stencil interlock mechanism and its draw/shader vocabulary across shared renderer and supported backends, retaining MSAA sample-count and resolve concepts where upstream does. Preserve numeric enum and shader behavior; regenerate GLSL and update bindings, retain equivalent SPIR-V/WGSL payloads with renamed symbols, and record Metal's macro-only adaptation separately from historical captures. Enumerate build inputs from current translated owners so stale pre-rename cached files cannot enter the shader batch. Correct GL render-pass feature gates to match their owning context; no legacy aliases or new D3D backend. | — |

@@ -44,6 +44,11 @@
       "description": "Whether the text input is single line or multiline",
       "bindable": true
     },
+    "selectAllOnFocus": {
+      "type": "bool",
+      "initialValue": "false",
+      "key": { "int": 1099, "string": "selectallonfocus" }
+    },
     "obscured": {
       "type": "bool",
       "initialValue": "false",

@@ -3191,6 +3191,7 @@ pub enum CoreField {
     TextHeight,
     TextInputMultiline,
     TextInputObscured,
+    TextInputSelectAllOnFocus,
     TextInputAlignValue,
     TextInputVerticalAlignValue,
     TextInputSelectionRadius,
@@ -7348,6 +7349,7 @@ impl CoreRegistry {
             782 => CoreField::TextFollowPathModifierOrient,
             979 => CoreField::TextInputMultiline,
             1095 => CoreField::TextInputObscured,
+            1099 => CoreField::TextInputSelectAllOnFocus,
             703 => CoreField::TextFitFromBaseline,
             914 => CoreField::ScriptAssetIsModule,
             _ => return,
@@ -8103,6 +8105,7 @@ impl CoreRegistry {
             782 => CoreField::TextFollowPathModifierOrient,
             979 => CoreField::TextInputMultiline,
             1095 => CoreField::TextInputObscured,
+            1099 => CoreField::TextInputSelectAllOnFocus,
             703 => CoreField::TextFitFromBaseline,
             914 => CoreField::ScriptAssetIsModule,
             _ => return false,
@@ -8867,6 +8870,7 @@ impl CoreRegistry {
             779 => 4,
             782 => 4,
             979 => 4,
+            1099 => 4,
             703 => 4,
             914 => 4,
             575 => 2,
@@ -9496,6 +9500,7 @@ impl CoreRegistry {
             779 => 547,
             782 => 547,
             979 => 569,
+            1099 => 569,
             703 => 134,
             914 => 529,
             575 => 442,
@@ -49655,6 +49660,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
                         .notify_property_changed(1095);
                 }
             }
+            CoreField::TextInputSelectAllOnFocus => self.set_select_all_on_focus(value),
             _ => {}
         }
     }
@@ -49859,6 +49865,7 @@ impl CoreRegistryObject for crate::mechanical_port::source::text::text_input::Te
         match field {
             CoreField::TextInputMultiline => self.base.multiline(),
             CoreField::TextInputObscured => self.base.obscured(),
+            CoreField::TextInputSelectAllOnFocus => self.base.select_all_on_focus(),
             _ => false,
         }
     }

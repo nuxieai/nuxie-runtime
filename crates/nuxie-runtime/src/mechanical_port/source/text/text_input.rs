@@ -9,7 +9,8 @@ use crate::mechanical_port::source::{
     constraints::scrolling::scroll_constraint::ScrollConstraint,
     core::CoreHandle,
     core_context::CoreContext,
-    generated::text::text_input_base::TextInputBase,
+    focus_data::FocusData,
+    generated::text::text_input_base::{TextInputBase, TextInputBaseCallbacks},
     input::focusable::{Focusable, Key, KeyModifiers},
     layout::{
         layout_enums::{LayoutDirection, LayoutScaleType},
@@ -78,6 +79,16 @@ impl Default for TextInput {
 }
 
 impl TextInput {
+    pub fn set_select_all_on_focus(&mut self, value: bool) {
+        if self.base.set_select_all_on_focus_value(value) {
+            TextInputBaseCallbacks::select_all_on_focus_changed(self);
+            TextInputBaseCallbacks::notify_property_changed(
+                self,
+                TextInputBase::SELECT_ALL_ON_FOCUS_PROPERTY_KEY,
+            );
+        }
+    }
+
     pub fn draw(&mut self, _renderer: &mut Renderer) {}
     pub fn hit_test(&self) -> Option<CoreHandle> {
         None
@@ -598,8 +609,34 @@ impl TextInput {
         false
     }
     pub fn focused(&mut self) {
+        self.focused_with_focus_data(None);
+    }
+
+    // FocusData's callback already owns its mutable arena borrow. Pass that
+    // owner through so the first-child lookup can use it without reborrowing.
+    pub(crate) fn focused_with_focus_data(&mut self, focus_data: Option<&mut FocusData>) {
         self.focused = true;
+        if self.base.select_all_on_focus() || self.focused_by_traversal(focus_data) {
+            self.raw_text_input.select_all();
+        }
         self.mark_paint_dirty();
+    }
+
+    fn focused_by_traversal(&self, focus_data: Option<&mut FocusData>) -> bool {
+        let borrowed_owner = focus_data.as_ref().and_then(|data| {
+            crate::mechanical_port::source::core::CoreObject::core(&**data).handle()
+        });
+        let Some(child) = self.base.children().iter().find(|child| {
+            Some(*child) == borrowed_owner.as_ref() || child.is_type_of(FocusData::TYPE_KEY)
+        }) else {
+            return false;
+        };
+        let node = if Some(child) == borrowed_owner.as_ref() {
+            focus_data.map(FocusData::focus_node)
+        } else {
+            child.with_downcast_mut::<FocusData, _>(FocusData::focus_node)
+        };
+        node.is_some_and(|node| node.borrow().manager.is_traversing())
     }
     pub fn blurred(&mut self) {
         self.focused = false;

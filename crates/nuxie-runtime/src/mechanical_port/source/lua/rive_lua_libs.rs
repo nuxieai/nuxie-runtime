@@ -9,7 +9,7 @@ use std::{
 pub use super::renderer::lua_blob::push_blob as lua_push_blob;
 pub use super::renderer::lua_gpu::{
     lua_gpu_find_shader_asset, lua_gpu_load_shader_by_name, lua_gpu_push_shader_by_name,
-    rive_lua_close_orphan_render_pass,
+    rive_lua_enter_script_call_gpu_scope, rive_lua_exit_script_call_gpu_scope,
 };
 pub use super::{
     lua_listener_invocation::{
@@ -1271,6 +1271,21 @@ pub struct ScriptedCanvas {
     pub canvas_state: CanvasState,
     pub rive_renderer: Option<Box<RiveRenderer>>,
     pub renderer_ref: i32,
+    pub open_frame_ref: i32,
+}
+impl Default for ScriptedCanvas {
+    fn default() -> Self {
+        Self {
+            canvas: None,
+            state: std::ptr::null_mut(),
+            image_ref: LUA_NOREF,
+            render_context: None,
+            canvas_state: CanvasState::Idle,
+            rive_renderer: None,
+            renderer_ref: LUA_NOREF,
+            open_frame_ref: LUA_NOREF,
+        }
+    }
 }
 impl_lua_rive!(ScriptedCanvas, 50, "Canvas");
 pub struct ScriptedGPUCanvas {
@@ -2199,11 +2214,26 @@ pub struct TrackedViewModelInstance {
     pub registrations: i32,
 }
 
+/// GPU work inherited by a script call. Nested calls reclaim only their own work.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ScriptCallGpuScope {
+    pub open_canvas_frame_token: u64,
+    pub inherited_render_pass: Option<std::ptr::NonNull<OreRenderPass>>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct OpenCanvasFrame {
+    pub token: u64,
+    pub reference: i32,
+}
+
 pub struct ScriptingContextData {
     pub render_context: Option<*mut Factory>,
     pub owner_id: u64,
     pub ore_frame_open: bool,
     pub gpu_canvas_defer_only: bool,
+    pub open_canvas_frames: Vec<OpenCanvasFrame>,
+    pub next_open_canvas_frame_token: u64,
     pub previous_gl_context: isize,
     #[cfg(target_family = "wasm")]
     pub gl_handle: i32,
@@ -2232,6 +2262,8 @@ impl ScriptingContextData {
             owner_id: 0,
             ore_frame_open: false,
             gpu_canvas_defer_only: false,
+            open_canvas_frames: Vec::new(),
+            next_open_canvas_frame_token: 1,
             previous_gl_context: 0,
             #[cfg(target_family = "wasm")]
             gl_handle: 0,
@@ -2524,6 +2556,47 @@ pub trait ScriptingContext {
 
     fn ore_frame_open(&self) -> bool {
         self.data().ore_frame_open
+    }
+
+    fn register_open_canvas_frame(&mut self, reference: i32) {
+        let data = self.data_mut();
+        data.open_canvas_frames.push(OpenCanvasFrame {
+            token: data.next_open_canvas_frame_token,
+            reference,
+        });
+        data.next_open_canvas_frame_token = data.next_open_canvas_frame_token.wrapping_add(1);
+    }
+
+    fn unregister_open_canvas_frame(&mut self, reference: i32) {
+        let frames = &mut self.data_mut().open_canvas_frames;
+        if let Some(index) = frames.iter().position(|frame| frame.reference == reference) {
+            frames.remove(index);
+        }
+    }
+
+    fn open_canvas_frame_count(&self) -> usize {
+        self.data().open_canvas_frames.len()
+    }
+
+    /// The next registration token; zero selects every frame still open.
+    fn next_open_canvas_frame_token(&self) -> u64 {
+        self.data().next_open_canvas_frame_token
+    }
+
+    fn take_open_canvas_frames_from(&mut self, token: u64) -> Vec<i32> {
+        let frames = &mut self.data_mut().open_canvas_frames;
+        let mut taken = Vec::new();
+        let mut keep = 0;
+        for index in 0..frames.len() {
+            if frames[index].token >= token {
+                taken.push(frames[index].reference);
+            } else {
+                frames[keep] = frames[index];
+                keep += 1;
+            }
+        }
+        frames.truncate(keep);
+        taken
     }
 
     fn set_gpu_canvas_defer_only(&mut self, value: bool) {
@@ -2927,9 +3000,10 @@ pub fn rive_lua_error_handler(state: &mut LuaState) -> i32 {
 }
 
 pub fn rive_lua_pcall(state: &mut LuaState, argument_count: i32, result_count: i32) -> i32 {
+    let gpu_scope = rive_lua_enter_script_call_gpu_scope(state);
     let context = state.thread_data_mut::<dyn ScriptingContext>();
     let result = context.p_call(state, argument_count, result_count);
-    rive_lua_close_orphan_render_pass(state);
+    rive_lua_exit_script_call_gpu_scope(state, &gpu_scope);
     result
 }
 
@@ -2941,8 +3015,9 @@ pub fn rive_lua_pcall_with_context(
 ) -> i32 {
     let context = state.thread_data_mut::<dyn ScriptingContext>();
     let _scope = ScopedScriptedObjectContext::new(Some(context), Some(scripted_object));
+    let gpu_scope = rive_lua_enter_script_call_gpu_scope(state);
     let result = context.p_call(state, argument_count, result_count);
-    rive_lua_close_orphan_render_pass(state);
+    rive_lua_exit_script_call_gpu_scope(state, &gpu_scope);
     result
 }
 

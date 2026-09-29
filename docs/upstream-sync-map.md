@@ -7,14 +7,14 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 ## Current checkpoint
 
-- LAST_SYNCED_SHA: `6951a4b3d1344bf965c9975a8670730542fbada2`
+- LAST_SYNCED_SHA: `54ce53ddddb5daae38514e62a626f2bbccf3c062`
   This is the accounted checkpoint excluding explicitly deferred Wasm execution
   ([UNIV-3728](https://universe.basis.dev/issue/UNIV-3728)), not full-feature parity.
 - Current target: `8398db3199cea4cd3eba53747aac562b5c0df3da` (fetched 2026-09-28).
   The user authorized continuing one commit at a time through latest upstream;
   refresh the tip at catch-up and continue if it advances.
-  There are 107 upstream commits after the checkpoint; this is an inventory
-  count, not a claim that all 107 require a Rust translation.
+  There are 106 upstream commits after the checkpoint; this is an inventory
+  count, not a claim that all 106 require a Rust translation.
 - The 2026-09-28 audit accounts for all 58 upstream commits in
   `4ac7b32798da0482e441ef09304dc3b480ed3ee5..5892bb05be7ae966b751625b4ee12239e6860dc1`.
   The structural source-correspondence check covers 1,032 owners; it does not
@@ -37,6 +37,7 @@ document replaces the former large-cycle, scored-row, and ratchet workflow.
 
 | Upstream SHA | Applicable translated slices | Work |
 | --- | --- | --- |
+| `54ce53ddddb5daae38514e62a626f2bbccf3c062` | Scope protected Luau call cleanup to canvas frames and the render pass opened by that call: track monotonic frame registration tokens, snapshot inherited pass identity, and preserve enclosing calls' GPU work. Translate the nested-frame and render-pass regressions through the live native scripting boundary. | — |
 | `6951a4b3d1344bf965c9975a8670730542fbada2` | Consolidate each binding container's owning data context, remove duplicate artboard/state-machine/scripted-converter fields, and preserve context installation before callbacks and after clone bind construction. Delegate formula/group unbind to the base, releasing occurrence borrows before child observer cleanup; translate all three upstream ownership regressions and cover the Rust callback boundary. Preserve nullable formula parent semantics; operation converters do not register upstream's unsafe null dependent. Retire the obsolete local C++ nested-artboard semantic-UAF oracle patch: upstream already incorporates its replacement in `081f85a6`, so reference builds use upstream's implementation. | — |
 | `a2e27b91df9c59a0608ac198ccc7bc4a0d983ddb` | Add the Focusable text-acceptance contract, TextInput/FocusData overrides and primary-focus ancestor query, preserving false for ordinary focusables and no focus. Translate the mock focus-tree and authored TextInput regressions. The public delta contains these runtime APIs/tests, not the editor playback/layout implementation described by its title. | — |
 | `8551ef2b1f0fd288dea9ad99182b61c3537f8523` | Select all text on keyboard traversal, or on any newly granted focus when selectAllOnFocus is enabled. Translate the nested-restoring traversal flag, boolean property 1099 with false default, registry/schema/copy/deserialization wiring and all three upstream regressions, retaining ordinary pointer caret behavior. TransformComponent additions are editor-only copy/deserialization hooks, outside the admitted runtime profile. | — |

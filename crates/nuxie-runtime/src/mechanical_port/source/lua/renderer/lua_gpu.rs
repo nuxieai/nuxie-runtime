@@ -2135,6 +2135,13 @@ fn canvas_begin_frame(state: &mut LuaState) -> i32 {
         });
     canvas.rive_renderer = Some(RiveRenderer::new(canvas.render_context.as_mut().unwrap()));
     canvas.canvas_state = CanvasState::Rendering;
+    state.push_value(1);
+    let reference = state.create_ref(-1);
+    canvas.open_frame_ref = reference;
+    state.pop(1);
+    state
+        .thread_data_mut::<dyn ScriptingContext>()
+        .register_open_canvas_frame(reference);
     state.new_rive(ScriptedRenderer::new_non_owning(
         canvas.rive_renderer.as_mut().unwrap(),
     ));
@@ -2148,6 +2155,19 @@ fn canvas_end_frame(state: &mut LuaState) -> i32 {
     let canvas = state.to_rive_mut::<ScriptedCanvas>(1);
     if canvas.canvas_state != CanvasState::Rendering {
         state.error::<()>("Canvas:endFrame() called without beginFrame()");
+    }
+    canvas_end_frame_impl(state, canvas);
+    0
+}
+
+fn canvas_end_frame_impl(state: &mut LuaState, canvas: &mut ScriptedCanvas) {
+    if canvas.open_frame_ref != LUA_NOREF {
+        let reference = canvas.open_frame_ref;
+        if let Some(context) = state.thread_data_optional::<dyn ScriptingContext>() {
+            context.unregister_open_canvas_frame(reference);
+        }
+        state.unref(reference);
+        canvas.open_frame_ref = LUA_NOREF;
     }
     if let Some(reference) = canvas.renderer_ref.take() {
         state.push_ref(reference);
@@ -2172,7 +2192,6 @@ fn canvas_end_frame(state: &mut LuaState) -> i32 {
         .commit_command_buffer(command_buffer);
     canvas.rive_renderer = None;
     canvas.canvas_state = CanvasState::Idle;
-    0
 }
 
 fn canvas_index(state: &mut LuaState) -> i32 {
@@ -2344,8 +2363,25 @@ impl ScriptedImage {
     }
 }
 
-pub fn rive_lua_close_orphan_render_pass(state: &mut LuaState) {
-    let context = state.thread_data::<dyn ScriptingContext>();
+pub fn rive_lua_enter_script_call_gpu_scope(state: &mut LuaState) -> ScriptCallGpuScope {
+    let mut scope = ScriptCallGpuScope::default();
+    let Some(context) = state.thread_data_optional::<dyn ScriptingContext>() else {
+        return scope;
+    };
+    scope.open_canvas_frame_token = context.next_open_canvas_frame_token();
+    if let Some(ore) = context.ore_context() {
+        scope.inherited_render_pass = ore.active_render_pass().map(std::ptr::NonNull::from);
+    }
+    scope
+}
+
+fn close_orphan_render_pass(
+    state: &mut LuaState,
+    inherited_render_pass: Option<std::ptr::NonNull<OreRenderPass>>,
+) {
+    let Some(context) = state.thread_data_optional::<dyn ScriptingContext>() else {
+        return;
+    };
     let Some(ore) = context.ore_context() else {
         return;
     };
@@ -2355,9 +2391,46 @@ pub fn rive_lua_close_orphan_render_pass(state: &mut LuaState) {
     if pass.is_finished() {
         return;
     }
+    // The enclosing call retains its pass object, so its address cannot be
+    // reused while that call is suspended.
+    if inherited_render_pass == Some(std::ptr::NonNull::from(&mut *pass)) {
+        return;
+    }
     pass.finish();
     ore.set_active_render_pass(None);
     state.push_string("GPU render pass left open at script return. Call :finish() on render passes before returning.");
     context.print_error(state);
     state.pop(1);
+}
+
+fn close_orphan_canvas_frames(state: &mut LuaState, token: u64) {
+    let Some(context) = state.thread_data_optional::<dyn ScriptingContext>() else {
+        return;
+    };
+    let references = context.take_open_canvas_frames_from(token);
+    if references.is_empty() {
+        return;
+    }
+    for reference in references {
+        rive_lua_push_ref(state, reference);
+        if !state.is_nil(-1) {
+            if let Some(canvas) = state.try_to_rive_mut::<ScriptedCanvas>(-1) {
+                if canvas.canvas_state == CanvasState::Rendering {
+                    // This also releases the canvas's open-frame registry ref.
+                    canvas_end_frame_impl(state, canvas);
+                }
+            }
+        }
+        state.pop(1);
+    }
+    state.push_string(
+        "Canvas frame left open at script return. Call canvas:endFrame() before returning.",
+    );
+    context.print_error(state);
+    state.pop(1);
+}
+
+pub fn rive_lua_exit_script_call_gpu_scope(state: &mut LuaState, scope: &ScriptCallGpuScope) {
+    close_orphan_render_pass(state, scope.inherited_render_pass);
+    close_orphan_canvas_frames(state, scope.open_canvas_frame_token);
 }

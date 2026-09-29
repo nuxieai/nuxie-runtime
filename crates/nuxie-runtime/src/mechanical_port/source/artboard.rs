@@ -162,6 +162,8 @@ pub struct Artboard {
     resettables: Vec<CoreHandle>,
     scripted_objects: Vec<CoreHandle>,
     advancing_components: Vec<AdvancingComponentHandle>,
+    instance_value_binds_source: Option<CoreHandle>,
+    instance_value_binds_pending: bool,
     pub(crate) data_bind_container: DataBindContainer,
     // Shared-keyframe identity -> first serialized source bind. Built once;
     // source artboard bindings do not change during playback.
@@ -241,6 +243,8 @@ impl Default for Artboard {
             resettables: Vec::new(),
             scripted_objects: Vec::new(),
             advancing_components: Vec::new(),
+            instance_value_binds_source: None,
+            instance_value_binds_pending: false,
             data_bind_container: DataBindContainer::default(),
             key_frame_source_binds: RefCell::new(HashMap::new()),
             key_frame_source_binds_built: Cell::new(false),
@@ -3912,33 +3916,78 @@ impl Artboard {
             if !matches {
                 continue;
             }
-            let clone_handle = data_bind_handle.clone_occurrence_into(arena)?;
-            let (file, converter) = data_bind_handle
-                .with(|data_bind| {
-                    let data_bind = data_bind.as_data_bind()?;
-                    Some((data_bind.file(), data_bind.converter()))
-                })
-                .flatten()
-                .unwrap_or_default();
-            clone_handle.with_mut(|data_bind| {
-                if let Some(data_bind) = data_bind.as_data_bind_mut() {
-                    data_bind.set_target(clone.clone());
-                    data_bind.set_file(file);
-                    data_bind.initialize();
-                }
-            });
-            if let Some(converter) = converter {
-                let converter_clone = converter.clone_occurrence_into(arena)?;
-                clone_handle.with_mut(|data_bind| {
-                    data_bind
-                        .as_data_bind_mut()
-                        .unwrap()
-                        .set_converter(Some(converter_clone));
-                });
-            }
+            let clone_handle = crate::mechanical_port::source::data_bind::data_bind::DataBind::clone_with_target_into(data_bind_handle, clone.clone(), arena)?;
             container.add_data_bind(clone_handle);
         }
         Some(())
+    }
+
+    fn sync_instance_value_binds_handle(root: &CoreHandle) {
+        use crate::mechanical_port::source::{
+            data_bind::data_bind::DataBind, viewmodel::viewmodel_instance::ViewModelInstance,
+        };
+        let container = root.data_bind_container().expect("live Artboard container");
+        if container.is_processing_data_binds() {
+            root.with_downcast_mut::<Self, _>(|artboard| {
+                artboard.instance_value_binds_pending = true
+            });
+            return;
+        }
+        let instance = container
+            .data_bind_context()
+            .and_then(|context| context.with_context(DataContext::main_view_model_instance));
+        let previous_source = root
+            .with_downcast::<Self, _>(|artboard| artboard.instance_value_binds_source.clone())
+            .flatten();
+        if instance == previous_source {
+            return;
+        }
+        let previous = container.data_binds().to_vec();
+        for bind in previous {
+            if bind
+                .with(|bind| {
+                    bind.as_data_bind()
+                        .is_some_and(DataBind::is_instance_value_bind)
+                })
+                .unwrap_or(false)
+            {
+                container.remove_and_delete_data_bind(&bind);
+            }
+        }
+        root.with_downcast_mut::<Self, _>(|artboard| {
+            artboard.instance_value_binds_source = instance.clone()
+        });
+        let Some(instance) = instance else {
+            return;
+        };
+        let binds = instance
+            .with_downcast::<ViewModelInstance, _>(|instance| instance.value_data_binds().to_vec())
+            .unwrap_or_default();
+        let arena = root.retain_arena().expect("live Artboard arena");
+        for bind in binds {
+            let target = bind
+                .with(|bind| bind.as_data_bind().and_then(DataBind::target))
+                .flatten();
+            let cloned = DataBind::clone_with_target_into(&bind, target, &arena)
+                .expect("live instance value bind");
+            cloned.with_mut(|bind| bind.as_data_bind_mut().unwrap().mark_instance_value_bind());
+            container.add_data_bind(cloned);
+        }
+    }
+
+    pub fn main_view_model_instance_changed_handle(root: &CoreHandle) {
+        Self::sync_instance_value_binds_handle(root);
+    }
+
+    pub fn data_binds_processed_handle(root: &CoreHandle) {
+        let pending = root
+            .with_downcast_mut::<Self, _>(|artboard| {
+                std::mem::take(&mut artboard.instance_value_binds_pending)
+            })
+            .unwrap_or(false);
+        if pending {
+            Self::sync_instance_value_binds_handle(root);
+        }
     }
 
     pub fn internal_data_context_handle(root: &CoreHandle, value: RuntimeDataContextHandle) {
@@ -3952,6 +4001,7 @@ impl Artboard {
                 artboard.artboard_hosts.clone()
             })
             .expect("live Artboard");
+        Self::sync_instance_value_binds_handle(root);
         for host in hosts {
             let instance = host
                 .with(|owner| {
@@ -4009,6 +4059,7 @@ impl Artboard {
             root.with_downcast_mut::<Artboard, _>(|artboard| {
                 artboard.data_bind_container.set_data_bind_context(None);
             });
+            Self::sync_instance_value_binds_handle(root);
         }
         let (hosts, objects) = root
             .with_downcast::<Artboard, _>(|artboard| {
@@ -4074,8 +4125,7 @@ impl Artboard {
             .with_downcast::<Artboard, _>(Artboard::data_context)
             .flatten();
         if let Some(context) = context {
-            context
-                .with_context_mut(|context| context.set_main_view_model_instance(Some(instance)));
+            context.set_main_view_model_instance(Some(instance));
         } else {
             let context = RuntimeDataContextHandle::new(DataContext::new(Some(instance)));
             root.with_downcast_mut::<Artboard, _>(|artboard| {
@@ -4163,6 +4213,25 @@ impl Artboard {
                 });
             }
             self.data_bind_container.set_data_bind_context(None);
+            // This is clearDataContext's sync with a null main instance. The
+            // dying artboard cannot be borrowed through its retired handle.
+            if self.data_bind_container.is_processing_data_binds() {
+                self.instance_value_binds_pending = true;
+            } else if self.instance_value_binds_source.is_some() {
+                let previous = self.data_bind_container.data_binds().to_vec();
+                for bind in previous {
+                    if bind
+                        .with(|bind| {
+                            bind.as_data_bind()
+                                .is_some_and(|bind| bind.is_instance_value_bind())
+                        })
+                        .unwrap_or(false)
+                    {
+                        self.data_bind_container.remove_and_delete_data_bind(&bind);
+                    }
+                }
+                self.instance_value_binds_source = None;
+            }
         }
         for host in self.artboard_hosts.clone() {
             host.with_mut(|host| {

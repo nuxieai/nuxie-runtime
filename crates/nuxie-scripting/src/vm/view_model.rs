@@ -5215,8 +5215,8 @@ mod tests {
 
             let updated_first_root_context =
                 RuntimeDataContextHandle::new(DataContext::new(Some(updated_first_root.clone())));
+            first_context.set_main_view_model_instance(Some(updated_first_main.clone()));
             first_context.with_context_mut(|context| {
-                context.set_main_view_model_instance(Some(updated_first_main.clone()));
                 context.set_parent(Some(updated_first_root_context));
             });
             assert_eq!(

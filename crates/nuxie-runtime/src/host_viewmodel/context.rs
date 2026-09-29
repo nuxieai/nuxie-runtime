@@ -72,14 +72,12 @@ impl RuntimeOwnedViewModelContext {
     }
     pub fn set_main_handle(&mut self, main: RuntimeOwnedViewModelHandle) {
         self.file = Some(main.native_file());
-        self.context.with_context_mut(|context| {
-            context.set_main_view_model_instance(Some(main.native_handle()))
-        });
+        self.context
+            .set_main_view_model_instance(Some(main.native_handle()));
     }
     pub fn take_main(&mut self) -> Option<RuntimeOwnedViewModelHandle> {
         let main = self.main_handle()?;
-        self.context
-            .with_context_mut(DataContext::remove_main_view_model_instance);
+        self.context.remove_main_view_model_instance();
         Some(main)
     }
     pub fn handles(&self) -> std::vec::IntoIter<RuntimeOwnedViewModelHandle> {

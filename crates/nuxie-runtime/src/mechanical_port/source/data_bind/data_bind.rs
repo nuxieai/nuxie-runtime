@@ -1,5 +1,5 @@
 use crate::mechanical_port::source::{
-    core::CoreHandle,
+    core::{CoreArena, CoreHandle},
     data_bind::data_bind_container::DataBindContainerOwner,
     data_bind::data_values::data_type::DataType,
     data_bind_flags::DataBindFlags,
@@ -56,6 +56,7 @@ const IN_PERSISTING: u8 = 4;
 const SUPPRESS_DIRT: u8 = 8;
 const OBSERVING: u8 = 16;
 const TARGET_ORIGIN: u8 = 32;
+const INSTANCE_VALUE_BIND: u8 = 64;
 
 pub trait BindScriptInput {
     fn scripted_object(&self) -> Option<CoreHandle>;
@@ -263,6 +264,24 @@ impl DataBind {
                     stack.latest::<ArtboardImporter>(ArtboardBase::TYPE_KEY)
                 {
                     artboard.add_data_bind(owner.clone());
+                } else if target
+                    .with(|target| target.as_view_model_instance_value().is_some())
+                    .unwrap_or(false)
+                {
+                    use crate::mechanical_port::source::{
+                        generated::viewmodel::viewmodel_instance_base::ViewModelInstanceBase,
+                        importers::viewmodel_instance_importer::ViewModelInstanceImporter,
+                        viewmodel::viewmodel_instance::ViewModelInstance,
+                    };
+                    if let Some(importer) =
+                        stack.latest::<ViewModelInstanceImporter>(ViewModelInstanceBase::TYPE_KEY)
+                    {
+                        importer
+                            .view_model_instance()
+                            .with_downcast_mut::<ViewModelInstance, _>(|instance| {
+                                instance.add_value_data_bind(owner.clone())
+                            });
+                    }
                 }
             }
         }
@@ -854,6 +873,50 @@ impl DataBind {
         {
             container.add_dirty_data_bind_borrowed(self);
         }
+    }
+
+    pub fn clone_with_target_handle(
+        source: &CoreHandle,
+        target: Option<CoreHandle>,
+    ) -> Option<CoreHandle> {
+        Self::clone_with_target_into(source, target, &source.retain_arena()?)
+    }
+
+    pub(crate) fn clone_with_target_into(
+        source: &CoreHandle,
+        target: Option<CoreHandle>,
+        arena: &CoreArena,
+    ) -> Option<CoreHandle> {
+        let cloned = source.clone_occurrence_into(arena)?;
+        let (file, converter) = source
+            .with(|source| {
+                let bind = source.as_data_bind()?;
+                Some((bind.file(), bind.converter()))
+            })
+            .flatten()?;
+        cloned.with_mut(|cloned| {
+            let bind = cloned.as_data_bind_mut().unwrap();
+            bind.set_target(target);
+            bind.set_file(file);
+            bind.initialize();
+        });
+        if let Some(converter) = converter {
+            let converter = converter.clone_occurrence_into(arena)?;
+            cloned.with_mut(|cloned| {
+                cloned
+                    .as_data_bind_mut()
+                    .unwrap()
+                    .set_converter(Some(converter))
+            });
+        }
+        Some(cloned)
+    }
+
+    pub fn is_instance_value_bind(&self) -> bool {
+        self.has_flag(INSTANCE_VALUE_BIND)
+    }
+    pub fn mark_instance_value_bind(&mut self) {
+        self.set_flag(INSTANCE_VALUE_BIND, true);
     }
 
     pub fn initialize(&mut self) {

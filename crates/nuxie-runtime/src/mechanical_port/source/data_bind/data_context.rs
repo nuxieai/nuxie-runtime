@@ -39,6 +39,32 @@ impl RuntimeDataContextHandle {
         use_context(&mut self.0.borrow_mut())
     }
 
+    /// Mutate the shared occurrence and release its borrow before synchronous
+    /// notifications reenter it. Each setter completes its callbacks before the
+    /// next setter can run; changes are not coalesced across a closure or frame.
+    pub fn set_view_model_instance(&self, value: Option<CoreHandle>) {
+        self.mutate_main_instance(|context| context.set_view_model_instance_silently(value));
+    }
+
+    pub fn set_main_view_model_instance(&self, value: Option<CoreHandle>) {
+        self.mutate_main_instance(|context| context.set_main_view_model_instance_silently(value));
+    }
+
+    pub fn remove_main_view_model_instance(&self) {
+        self.mutate_main_instance(DataContext::remove_main_view_model_instance_silently);
+    }
+
+    fn mutate_main_instance(&self, mutate: impl FnOnce(&mut DataContext)) {
+        let containers = {
+            let mut context = self.0.borrow_mut();
+            mutate(&mut context);
+            context.dependent_containers.clone()
+        };
+        for container in containers {
+            container.main_view_model_instance_changed();
+        }
+    }
+
     pub fn ptr_eq(&self, other: &Self) -> bool {
         Rc::ptr_eq(&self.0, &other.0)
     }
@@ -220,8 +246,13 @@ impl DataContext {
     }
 
     pub fn set_view_model_instance(&mut self, value: Option<CoreHandle>) {
+        self.set_view_model_instance_silently(value);
+        self.notify_main_view_model_instance_changed();
+    }
+
+    fn set_view_model_instance_silently(&mut self, value: Option<CoreHandle>) {
         if self.global_slots.is_some() {
-            self.set_main_view_model_instance(value);
+            self.set_main_view_model_instance_silently(value);
             return;
         }
         if self.instances.is_empty() {
@@ -231,6 +262,13 @@ impl DataContext {
             self.detach_containers(&self.instances[0]);
             self.instances[0] = value;
             self.attach_containers(&self.instances[0]);
+        }
+    }
+
+    fn notify_main_view_model_instance_changed(&mut self) {
+        let containers = self.dependent_containers.clone();
+        for container in containers {
+            container.main_view_model_instance_changed();
         }
     }
 
@@ -357,6 +395,11 @@ impl DataContext {
     }
 
     pub fn remove_main_view_model_instance(&mut self) {
+        self.remove_main_view_model_instance_silently();
+        self.notify_main_view_model_instance_changed();
+    }
+
+    fn remove_main_view_model_instance_silently(&mut self) {
         let mut index = 0;
         while index < self.instances.len() {
             if self.slot_key_at(index) == NO_SLOT {
@@ -368,7 +411,12 @@ impl DataContext {
     }
 
     pub fn set_main_view_model_instance(&mut self, value: Option<CoreHandle>) {
-        self.remove_main_view_model_instance();
+        self.set_main_view_model_instance_silently(value);
+        self.notify_main_view_model_instance_changed();
+    }
+
+    fn set_main_view_model_instance_silently(&mut self, value: Option<CoreHandle>) {
+        self.remove_main_view_model_instance_silently();
         if let Some(value) = value {
             self.insert_instance_at(0, value, NO_SLOT);
         }

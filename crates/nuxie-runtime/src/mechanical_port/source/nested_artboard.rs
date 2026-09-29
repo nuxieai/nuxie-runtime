@@ -1235,9 +1235,7 @@ impl NestedArtboard {
             if context.with_context(|context| context.main_view_model_instance())
                 != view_model_instance
             {
-                context.with_context_mut(|context| {
-                    context.set_view_model_instance(view_model_instance)
-                });
+                context.set_view_model_instance(view_model_instance);
             }
         }
         instance.relink_data_context();

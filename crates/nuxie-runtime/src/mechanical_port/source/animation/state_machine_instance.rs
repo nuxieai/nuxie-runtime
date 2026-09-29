@@ -2334,6 +2334,27 @@ impl RuntimeStateMachineInstanceWeakHandle {
         }
     }
 
+    pub(crate) fn main_view_model_instance_changed(&self) {
+        let Some(machine) = self.upgrade() else {
+            return;
+        };
+        if let Some(artboard) = machine.2.upgrade() {
+            Artboard::main_view_model_instance_changed_handle(&artboard.core_handle());
+        }
+    }
+
+    pub(crate) fn drop_instance_value_binds_targeting(&self, target: &CoreHandle) {
+        let Some(machine) = self.upgrade() else {
+            return;
+        };
+        machine.1.drop_instance_value_binds_targeting(target);
+        if let Some(artboard) = machine.2.upgrade() {
+            if let Some(container) = artboard.core_handle().data_bind_container() {
+                container.drop_instance_value_binds_targeting(target);
+            }
+        }
+    }
+
     pub(crate) fn data_context_handle(&self) -> Option<RuntimeDataContextHandle> {
         let machine = self.upgrade()?;
         // The retained container exposes the single owning context without
@@ -4473,9 +4494,9 @@ impl StateMachineInstance {
             });
             return;
         }
-        self.data_context().unwrap().with_context_mut(|context| {
-            context.set_main_view_model_instance(Some(view_model_instance));
-        });
+        self.data_context()
+            .unwrap()
+            .set_main_view_model_instance(Some(view_model_instance));
     }
 
     pub fn set_global_view_model_instance(
@@ -4570,9 +4591,7 @@ impl StateMachineInstance {
                 })
                 .flatten();
             if let Some(main) = main {
-                data_context.with_context_mut(|context| {
-                    context.set_main_view_model_instance(Some(main));
-                });
+                data_context.set_main_view_model_instance(Some(main));
             }
         }
         let global_view_models = file
@@ -4760,6 +4779,22 @@ impl StateMachineInstance {
     pub fn relink_data_context(&mut self) {
         if let Some(artboard) = self.artboard_instance.upgrade() {
             artboard.relink_data_context();
+        }
+    }
+
+    pub fn main_view_model_instance_changed(&self) {
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            Artboard::main_view_model_instance_changed_handle(&artboard.core_handle());
+        }
+    }
+
+    pub fn drop_instance_value_binds_targeting(&self, target: &CoreHandle) {
+        self.data_bind_container
+            .drop_instance_value_binds_targeting(target);
+        if let Some(artboard) = self.artboard_instance.upgrade() {
+            if let Some(container) = artboard.core_handle().data_bind_container() {
+                container.drop_instance_value_binds_targeting(target);
+            }
         }
     }
 

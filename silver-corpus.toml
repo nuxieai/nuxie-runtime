@@ -3,7 +3,7 @@
 
 [corpus]
 version = 1
-upstream_ref = "a6b6723ba291f6f00888c09a1f975c6c23936095"
+upstream_ref = "9d2e7d04d1bd5ee5863c7155d059b1e7b5810148"
 expected_entries = 266
 expected_runtime = 218
 expected_scripted = 45
@@ -1460,7 +1460,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "FocusManager skips collapsed nodes and fully transparent nodes"
-producer_line = 2184
+producer_line = 2496
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1482,7 +1482,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus based transitions work"
-producer_line = 2750
+producer_line = 3062
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1504,7 +1504,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal listener actions"
-producer_line = 2510
+producer_line = 2822
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1526,7 +1526,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus traversal clears focus when it reaches edge of root scope"
-producer_line = 2561
+producer_line = 2873
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -1746,7 +1746,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus change with gamepad navigation"
-producer_line = 3380
+producer_line = 3692
 note = "Exact comparison contract for the literal gamepad/focus producer at 9cb2205f. Enrollment alone is not a validation result."
 
 [[case]]
@@ -1768,7 +1768,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Uncollapse and focus element on the same action"
-producer_line = 3414
+producer_line = 3726
 note = "Exact comparison contract for the literal gamepad/focus producer at 9cb2205f. Enrollment alone is not a validation result."
 
 [[case]]
@@ -2516,7 +2516,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focused elements receive keyboard inputs"
-producer_line = 2264
+producer_line = 2576
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -2538,7 +2538,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Keyboard inputs with different key combinations"
-producer_line = 2380
+producer_line = 2692
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]
@@ -3138,7 +3138,7 @@ status = "exact"
 producer_class = "runtime-literal"
 provenance_file = "tests/unit_tests/runtime/focus_test.cpp"
 provenance_test = "Focus is correctly built and updated for lists"
-producer_line = 2715
+producer_line = 3027
 note = "Rust renderer stream is operation-exact with the pinned C++ silver baseline after replaying the TEST_CASE actions."
 
 [[case]]

@@ -3,6 +3,225 @@
 //! Retained pointer identity and callback observations replace the former
 //! façade's arena IDs and synthetic event stream.
 
+// Eleven new focus_test.cpp cases from upstream 9d2e7d04. The mock observes
+// eligibility and callbacks; all traversal and root scoping use real owners.
+mod visibility_9d2e7d04 {
+    use super::*;
+    use nuxie_runtime::{Artboard, source::core::CoreArena};
+
+    struct Mock {
+        eligible: Cell<bool>,
+        focused: Cell<usize>,
+        blurred: Cell<usize>,
+        artboard: Option<CoreHandle>,
+    }
+    impl Focusable for Mock {
+        fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+            false
+        }
+        fn text_input(&mut self, _: &str) -> bool {
+            false
+        }
+        fn focused(&mut self) {
+            self.focused.set(self.focused.get() + 1);
+        }
+        fn blurred(&mut self) {
+            self.blurred.set(self.blurred.get() + 1);
+        }
+        fn is_eligible_for_focus_traversal(&self) -> bool {
+            self.eligible.get()
+        }
+        fn focusable_artboard(&self) -> Option<CoreHandle> {
+            self.artboard.clone()
+        }
+    }
+    fn node(
+        manager: &RuntimeFocusManagerHandle,
+        parent: Option<&FocusNodeRef>,
+        artboard: Option<CoreHandle>,
+    ) -> (FocusNodeRef, Rc<RefCell<Mock>>) {
+        let mock = Rc::new(RefCell::new(Mock {
+            eligible: Cell::new(true),
+            focused: Cell::new(0),
+            blurred: Cell::new(0),
+            artboard,
+        }));
+        let node = attached(manager, parent, FocusNode::new(Some(mock.clone())));
+        (node, mock)
+    }
+    fn manager() -> RuntimeFocusManagerHandle {
+        RuntimeFocusManagerHandle::new(FocusManager::new())
+    }
+    fn focus(manager: &RuntimeFocusManagerHandle, node: &FocusNodeRef) {
+        manager.with_focus_manager_mut(|m| m.set_focus(node.clone()));
+    }
+    fn is_primary(manager: &RuntimeFocusManagerHandle, node: &FocusNodeRef) {
+        assert_eq!(primary(manager), Some(node_key(node)));
+    }
+    fn drop_hidden(manager: &RuntimeFocusManagerHandle) {
+        manager.with_focus_manager_mut(|m| m.drop_focus_if_focus_target_hidden());
+    }
+    fn descend(manager: &RuntimeFocusManagerHandle, root: Option<CoreHandle>) {
+        manager.with_focus_manager_mut(|m| m.descend_focus_to_leaf(root));
+    }
+
+    #[test]
+    fn rehomes_focus_to_a_sibling_leaf_when_target_hides() {
+        let m = manager();
+        let (parent, p) = node(&m, None, None);
+        let (a, am) = node(&m, Some(&parent), None);
+        let (b, bm) = node(&m, Some(&parent), None);
+        focus(&m, &parent);
+        is_primary(&m, &a);
+        am.borrow().eligible.set(false);
+        drop_hidden(&m);
+        is_primary(&m, &b);
+        assert_eq!(am.borrow().blurred.get(), 1);
+        assert_eq!(bm.borrow().focused.get(), 1);
+        assert_eq!(p.borrow().blurred.get(), 0);
+        assert_eq!(p.borrow().focused.get(), 1);
+    }
+    #[test]
+    fn rehomes_focus_to_parent_when_only_remaining_stop() {
+        let m = manager();
+        let (parent, _) = node(&m, None, None);
+        let (leaf, lm) = node(&m, Some(&parent), None);
+        focus(&m, &parent);
+        is_primary(&m, &leaf);
+        lm.borrow().eligible.set(false);
+        drop_hidden(&m);
+        is_primary(&m, &parent);
+        assert_eq!(lm.borrow().blurred.get(), 1);
+    }
+    #[test]
+    fn walks_past_hidden_parent_to_eligible_grandparent() {
+        let m = manager();
+        let (grand, _) = node(&m, None, None);
+        let (parent, pm) = node(&m, Some(&grand), None);
+        let (leaf, lm) = node(&m, Some(&parent), None);
+        focus(&m, &grand);
+        is_primary(&m, &leaf);
+        lm.borrow().eligible.set(false);
+        pm.borrow().eligible.set(false);
+        drop_hidden(&m);
+        is_primary(&m, &grand);
+    }
+    #[test]
+    fn clears_focus_when_no_ancestor_can_hold_it() {
+        let m = manager();
+        let (parent, pm) = node(&m, None, None);
+        let (leaf, lm) = node(&m, Some(&parent), None);
+        focus(&m, &parent);
+        is_primary(&m, &leaf);
+        lm.borrow().eligible.set(false);
+        pm.borrow().eligible.set(false);
+        drop_hidden(&m);
+        assert_eq!(primary(&m), None);
+    }
+    #[test]
+    fn rehoming_does_not_land_on_nonfocusable_ancestor() {
+        let m = manager();
+        let (container, _) = node(&m, None, None);
+        container.borrow_mut().set_can_focus(false);
+        let (leaf, lm) = node(&m, Some(&container), None);
+        focus(&m, &leaf);
+        is_primary(&m, &leaf);
+        lm.borrow().eligible.set(false);
+        drop_hidden(&m);
+        assert_eq!(primary(&m), None);
+    }
+    #[test]
+    fn clears_rather_than_crossing_into_another_root_branch() {
+        let m = manager();
+        let (root_a, ra) = node(&m, None, None);
+        let (leaf_a, la) = node(&m, Some(&root_a), None);
+        let (root_b, _) = node(&m, None, None);
+        let (_, lb) = node(&m, Some(&root_b), None);
+        focus(&m, &root_a);
+        is_primary(&m, &leaf_a);
+        la.borrow().eligible.set(false);
+        ra.borrow().eligible.set(false);
+        drop_hidden(&m);
+        assert_eq!(primary(&m), None);
+        assert_eq!(lb.borrow().focused.get(), 0);
+    }
+    #[test]
+    fn clears_when_focused_root_node_hides() {
+        let m = manager();
+        let (root_a, ra) = node(&m, None, None);
+        let (_, rb) = node(&m, None, None);
+        focus(&m, &root_a);
+        is_primary(&m, &root_a);
+        ra.borrow().eligible.set(false);
+        drop_hidden(&m);
+        assert_eq!(primary(&m), None);
+        assert_eq!(rb.borrow().focused.get(), 0);
+    }
+    #[test]
+    fn descends_focus_to_child_that_becomes_eligible() {
+        let m = manager();
+        let (parent, pm) = node(&m, None, None);
+        let (child, cm) = node(&m, Some(&parent), None);
+        cm.borrow().eligible.set(false);
+        focus(&m, &parent);
+        is_primary(&m, &parent);
+        assert_eq!(pm.borrow().focused.get(), 1);
+        descend(&m, None);
+        is_primary(&m, &parent);
+        assert_eq!(cm.borrow().focused.get(), 0);
+        cm.borrow().eligible.set(true);
+        descend(&m, None);
+        is_primary(&m, &child);
+        assert_eq!(cm.borrow().focused.get(), 1);
+        assert_eq!(pm.borrow().blurred.get(), 0);
+        assert_eq!(pm.borrow().focused.get(), 1);
+        descend(&m, None);
+        is_primary(&m, &child);
+        assert_eq!(cm.borrow().focused.get(), 1);
+    }
+    fn root_scoped_descent(parent_has_root: bool) {
+        let arena = CoreArena::default();
+        let a = arena.insert(Artboard::default());
+        let b = arena.insert(Artboard::default());
+        let m = manager();
+        let (parent, _) = node(&m, None, parent_has_root.then(|| b.clone()));
+        let (child, cm) = node(&m, Some(&parent), Some(b.clone()));
+        cm.borrow().eligible.set(false);
+        focus(&m, &parent);
+        is_primary(&m, &parent);
+        cm.borrow().eligible.set(true);
+        descend(&m, Some(a));
+        is_primary(&m, &parent);
+        descend(&m, Some(b));
+        is_primary(&m, &child);
+    }
+    #[test]
+    fn only_descends_focus_for_root_that_just_updated() {
+        root_scoped_descent(true);
+    }
+    #[test]
+    fn scopes_descent_by_where_focus_would_land() {
+        root_scoped_descent(false);
+    }
+    #[test]
+    fn only_drops_hidden_target_for_its_own_root() {
+        let arena = CoreArena::default();
+        let a = arena.insert(Artboard::default());
+        let b = arena.insert(Artboard::default());
+        let m = manager();
+        let (parent, _) = node(&m, None, Some(b.clone()));
+        let (leaf_a, la) = node(&m, Some(&parent), Some(b.clone()));
+        let (leaf_b, _) = node(&m, Some(&parent), Some(b.clone()));
+        focus(&m, &parent);
+        is_primary(&m, &leaf_a);
+        la.borrow().eligible.set(false);
+        m.with_focus_manager_mut(|m| m.drop_focus_if_focus_target_hidden_for_root(Some(a)));
+        is_primary(&m, &leaf_a);
+        m.with_focus_manager_mut(|m| m.drop_focus_if_focus_target_hidden_for_root(Some(b)));
+        is_primary(&m, &leaf_b);
+    }
+}
+
 use nuxie_render_api::{PersistentFactory, RecordingFactory};
 use nuxie_runtime::source::{
     animation::state_machine_instance::RuntimeStateMachineInstanceHandle,

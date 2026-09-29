@@ -612,10 +612,9 @@ impl FocusData {
             .parent_handle()
             .and_then(|parent| {
                 parent.with(|parent| {
-                    parent.as_text_input().and_then(|text_input| {
-                        let text = text_input.selected_text();
-                        (text_input.base.obscured() || !text.is_empty()).then_some(text)
-                    })
+                    parent
+                        .as_text_input()
+                        .and_then(|text_input| text_input.selected_text())
                 })
             })
             .flatten()

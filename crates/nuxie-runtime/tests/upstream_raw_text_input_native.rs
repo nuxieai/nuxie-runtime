@@ -364,12 +364,14 @@ fn obscured_toggle_preserves_edit_history_and_invalidates_cursor_lines() {
     let factory = retained_factory();
     let mut input = RawTextInput::new();
     input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(32.0);
     input.insert("ab\ncd");
     input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(4)));
     input.update(&factory);
     assert_eq!(input.cursor().end().line_index(), 1);
     input.insert("!");
     input.update(&factory);
+    assert_eq!(input.text(), "ab\nc!d");
     input.set_obscured(true);
     assert_eq!(input.cursor().end().line_index(), u32::MAX);
     input.update(&factory);
@@ -377,6 +379,7 @@ fn obscured_toggle_preserves_edit_history_and_invalidates_cursor_lines() {
     input.update(&factory);
     assert_eq!(input.text(), "ab\ncd");
     assert_eq!(input.cursor().end().line_index(), 0);
+    assert!(input.cursor_visual_position().found());
     input.redo();
     assert_eq!(input.text(), "ab\nc!d");
     assert_eq!(input.cursor().end().line_index(), u32::MAX);
@@ -388,6 +391,7 @@ fn obscured_toggle_preserves_edit_history_and_invalidates_cursor_lines() {
 fn obscured_word_navigation_does_not_disclose_internal_spaces() {
     let mut input = RawTextInput::new();
     input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(32.0);
     input.insert("ab cd");
     input.set_obscured(true);
     input.update(&retained_factory());
@@ -397,6 +401,58 @@ fn obscured_word_navigation_does_not_disclose_internal_spaces() {
     input.set_cursor(Cursor::zero());
     input.cursor_right(CursorBoundary::Word, false);
     assert_eq!(input.cursor().end().code_point_index(), 5);
+}
+
+// Direct bec99be4 case: newlines mask too, and edits preserve the original text.
+#[test]
+fn obscured_input_shapes_as_bullets_over_intact_text() {
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(32.0);
+    input.insert("ab\ncd");
+    let factory = retained_factory();
+    input.update(&factory);
+    assert_eq!(input.shape().paragraphs().len(), 2);
+    input.set_obscured(true);
+    assert!(input.obscured());
+    input.update(&factory);
+    assert_eq!(input.shape().paragraphs().len(), 1);
+    let run = &input.shape().paragraphs()[0].runs[0];
+    assert!(run.glyphs.len() >= 5);
+    for index in 1..5 {
+        assert_eq!(run.glyphs[index], run.glyphs[0]);
+    }
+    assert_eq!(input.text(), "ab\ncd");
+    input.insert("!");
+    assert_eq!(input.text(), "ab\ncd!");
+    input.backspace(-1);
+    input.backspace(-1);
+    assert_eq!(input.text(), "ab\nc");
+    input.set_obscured(false);
+    input.update(&factory);
+    assert_eq!(input.shape().paragraphs().len(), 2);
+}
+
+#[test]
+fn obscured_toggle_re_resolves_cursor_lines() {
+    let mut input = RawTextInput::new();
+    input.set_font(Some(load_font("assets/fonts/Inter_18pt-Regular.ttf")));
+    input.set_font_size(32.0);
+    input.insert("ab\ncd");
+    let factory = retained_factory();
+    input.set_cursor(Cursor::collapsed(CursorPosition::unresolved(4)));
+    input.update(&factory);
+    assert_eq!(input.cursor().end().line_index(), 1);
+    assert!(input.cursor_visual_position().found());
+    input.set_obscured(true);
+    input.update(&factory);
+    assert_eq!(input.cursor().end().line_index(), 0);
+    assert_eq!(input.cursor().end().code_point_index(), 4);
+    assert!(input.cursor_visual_position().found());
+    input.set_obscured(false);
+    input.update(&factory);
+    assert_eq!(input.cursor().end().line_index(), 1);
+    assert!(input.cursor_visual_position().found());
 }
 
 fn load_font(relative_path: &str) -> FontRef {

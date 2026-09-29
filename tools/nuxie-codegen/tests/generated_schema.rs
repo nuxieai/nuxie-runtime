@@ -43,26 +43,27 @@ fn workspace_root() -> PathBuf {
 }
 
 #[test]
-fn reached_text_alignment_survives_retiring_the_forward_obscured_overlay() {
+fn reached_text_alignment_and_obscured_need_no_forward_overlay() {
     let read = |path: &str| -> Value {
         serde_json::from_str(&std::fs::read_to_string(workspace_root().join(path)).unwrap())
             .unwrap()
     };
     let current = read("defs/upstream-reconciliation/text/text_input.json");
-    let mut forward = read("defs/upstream-overlay/text/text_input.json");
+    assert!(
+        !workspace_root()
+            .join("defs/upstream-overlay/text/text_input.json")
+            .exists()
+    );
     assert_eq!(current["properties"]["alignValue"]["key"]["int"], 222);
     assert_eq!(
         current["properties"]["verticalAlignValue"]["key"]["int"],
         1094
     );
-    assert!(current["properties"].get("obscured").is_none());
-    let obscured = forward["properties"]
-        .as_object_mut()
-        .unwrap()
-        .remove("obscured")
-        .unwrap();
+    let obscured = &current["properties"]["obscured"];
     assert_eq!(obscured["key"]["int"], 1095);
-    assert_eq!(current, forward);
+    assert_eq!(obscured["type"], "bool");
+    assert_eq!(obscured["initialValue"], "false");
+    assert_eq!(obscured["bindable"], true);
 }
 
 fn reference_runtime_dir() -> PathBuf {

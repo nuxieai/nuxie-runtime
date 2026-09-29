@@ -584,11 +584,14 @@ impl TextInput {
         self.mark_shape_dirty();
         true
     }
-    pub fn selected_text(&self) -> String {
+    /// `Some` is upstream's handled result, including an empty secure selection.
+    /// `None` lets the focus lookup continue to an ancestor.
+    pub fn selected_text(&self) -> Option<String> {
         if self.base.obscured() {
-            String::new()
+            Some(String::new())
         } else {
-            self.raw_text_input.selected_text()
+            let text = self.raw_text_input.selected_text();
+            (!text.is_empty()).then_some(text)
         }
     }
     pub fn gamepad_dispatch(&mut self, _invocation: &ListenerInvocation) -> bool {

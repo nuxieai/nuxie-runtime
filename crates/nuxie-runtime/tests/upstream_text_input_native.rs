@@ -314,15 +314,125 @@ fn obscured_native_input_preserves_value_and_blocks_selection_export() {
     ));
     artboard.advance_default(0.0);
     with_input(&input, |input| input.raw_text_input().select_all());
-    assert_eq!(with_input(&input, |input| input.selected_text()), "hunter2");
+    assert_eq!(
+        with_input(&input, |input| input.selected_text()),
+        Some("hunter2".into())
+    );
     assert!(CoreRegistry::set_bool_handle(&input, 1095, true));
-    assert_eq!(with_input(&input, |input| input.selected_text()), "");
+    assert_eq!(
+        with_input(&input, |input| input.selected_text()),
+        Some(String::new())
+    );
     with_input(&input, |input| {
         assert_eq!(input.base.text(), "hunter2");
         assert!(input.raw_text_input().obscured());
     });
     assert!(CoreRegistry::set_bool_handle(&input, 1095, false));
-    assert_eq!(with_input(&input, |input| input.selected_text()), "hunter2");
+    assert_eq!(
+        with_input(&input, |input| input.selected_text()),
+        Some("hunter2".into())
+    );
+}
+
+// bec99be4: Option<String> is the Rust equivalent of handled + out string.
+#[test]
+fn obscured_text_input_keeps_selected_text_off_the_clipboard() {
+    let (_file, artboard, input) = input_fixture();
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hunter2".into())
+    });
+    artboard.advance_default(0.0);
+    with_input(&input, |input| input.raw_text_input().select_all());
+    let mut selected =
+        with_input(&input, |input| input.selected_text()).expect("handled selection");
+    assert_eq!(selected, "hunter2");
+    assert!(CoreRegistry::set_bool_handle(&input, 1095, true));
+    selected = "stale".into();
+    assert_eq!(selected, "stale");
+    // A handled empty result replaces stale clipboard contents, not None.
+    selected =
+        with_input(&input, |input| input.selected_text()).expect("handled obscured selection");
+    assert!(selected.is_empty());
+}
+
+#[test]
+fn obscured_text_input_stops_selection_lookup_at_itself() {
+    use nuxie_runtime::source::input::{
+        focus_manager::FocusManager, focus_node::FocusNode, focusable::Focusable,
+    };
+    use std::{cell::RefCell, rc::Rc};
+    struct SelectionAncestor;
+    impl Focusable for SelectionAncestor {
+        fn key_input(&mut self, _: Key, _: KeyModifiers, _: bool, _: bool) -> bool {
+            false
+        }
+        fn text_input(&mut self, _: &str) -> bool {
+            false
+        }
+        fn focused(&mut self) {}
+        fn blurred(&mut self) {}
+        fn selected_text(&self) -> Option<String> {
+            Some("ancestor selection".into())
+        }
+    }
+    let (_file, artboard, input) = input_fixture();
+    // Upstream creates a fresh node over TextInput's Focusable base, not its
+    // authored FocusData node (which adds eligibility and tree ownership).
+    struct InputFocusable(CoreHandle);
+    impl Focusable for InputFocusable {
+        fn key_input(
+            &mut self,
+            key: Key,
+            modifiers: KeyModifiers,
+            pressed: bool,
+            repeat: bool,
+        ) -> bool {
+            with_input(&self.0, |input| {
+                input.key_input(key, modifiers, pressed, repeat)
+            })
+        }
+        fn text_input(&mut self, text: &str) -> bool {
+            with_input(&self.0, |input| input.text_input(text))
+        }
+        fn focused(&mut self) {
+            with_input(&self.0, TextInput::focused);
+        }
+        fn blurred(&mut self) {
+            with_input(&self.0, TextInput::blurred);
+        }
+        fn selected_text(&self) -> Option<String> {
+            self.0
+                .with_downcast::<TextInput, _>(TextInput::selected_text)
+                .expect("live TextInput")
+        }
+        fn focusable_artboard(&self) -> Option<CoreHandle> {
+            self.0
+                .with_downcast::<TextInput, _>(TextInput::focusable_artboard)
+                .expect("live TextInput")
+        }
+        fn accepts_keyboard_input(&self) -> bool {
+            self.0
+                .with_downcast::<TextInput, _>(TextInput::accepts_keyboard_input)
+                .expect("live TextInput")
+        }
+    }
+    let input_node = FocusNode::new(Some(Rc::new(RefCell::new(InputFocusable(input.clone())))));
+    let ancestor_node = FocusNode::new(Some(Rc::new(RefCell::new(SelectionAncestor))));
+    FocusNode::add_child(&ancestor_node, input_node.clone());
+    let mut manager = FocusManager::new();
+    manager.set_focus(input_node);
+    with_input(&input, |input| {
+        input.raw_text_input().set_text("hunter2".into())
+    });
+    artboard.advance_default(0.0);
+    with_input(&input, |input| input.raw_text_input().select_all());
+    assert_eq!(manager.selected_text(), "hunter2");
+    with_input(&input, |input| input.raw_text_input().clear_selection());
+    assert_eq!(manager.selected_text(), "ancestor selection");
+    with_input(&input, |input| input.raw_text_input().select_all());
+    assert!(CoreRegistry::set_bool_handle(&input, 1095, true));
+    assert!(manager.selected_text().is_empty());
+    manager.clear_focus();
 }
 
 fn input_cursor(handle: &CoreHandle) -> Option<(u32, u32)> {
@@ -384,7 +494,7 @@ fn selected_text_reaches_host_through_focus_data_and_structural_focus_child() {
     });
     assert_eq!(
         with_input(&text_input, |input| input.selected_text()),
-        "é🦀"
+        Some("é🦀".into())
     );
     assert_eq!(
         manager.with_focus_manager(|manager| manager.selected_text()),
